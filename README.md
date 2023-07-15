@@ -83,6 +83,25 @@ Traditional RAG approaches often rely on batch processing and static data summar
     <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
 </p>
 
+## Project Structure
+
+The repository is organized as follows:
+
+- **graphiti_core/**: Core library for building and querying knowledge graphs, including modules for embedding, LLM clients, cross-encoders, models, prompts, and utilities.
+- **server/**: FastAPI-based REST API service for interacting with Graphiti. See [server/README.md](./server/README.md) for details.
+- **mcp_server/**: Model Context Protocol (MCP) server implementation for Graphiti, enabling AI assistants to interact with the knowledge graph. See [mcp_server/README.md](./mcp_server/README.md).
+- **examples/**: Practical, runnable examples demonstrating Graphiti's capabilities:
+  - `quickstart/`: Basic usage and setup (see its README for details)
+  - `ecommerce/`, `podcast/`, `wizard_of_oz/`, `langgraph-agent/`: Advanced and domain-specific examples
+  - `data/`: Example datasets
+- **tests/**: Unit and integration tests for core modules, LLM clients, embedders, and utilities.
+- **signatures/version1/cla.json**: Stores contributor license agreement (CLA) signatures for tracking contributors.
+
+Other notable files:
+- **CONTRIBUTING.md**: Guidelines for contributing to Graphiti.
+- **.env.example**: Example environment variable configuration.
+- **Dockerfile**, **docker-compose.yml**: For containerized deployment and development.
+
 ## Graphiti vs. GraphRAG
 
 | Aspect                     | GraphRAG                              | Graphiti                                         |
@@ -309,10 +328,12 @@ Graphiti is under active development. We aim to maintain API stability while wor
 
 ## Contributing
 
-We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
-to [CONTRIBUTING](CONTRIBUTING.md).
+We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer to [CONTRIBUTING](CONTRIBUTING.md).
+
+> **Note:** All contributors are tracked in `signatures/version1/cla.json` as part of the CLA process.
+
+Graphiti uses Ruff for linting and formatting, Mypy for static type checking, and Pytest for testing. Please run `make check` before submitting a pull request to ensure code quality.
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel! For questions, you can also use [GitHub Issues](https://github.com/getzep/graphiti/issues).
