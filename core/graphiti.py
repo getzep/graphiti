@@ -45,13 +45,13 @@ class Graphiti:
         new_edges: list[SemanticEdge],
         relevant_schema: dict[str, any],
         previous_episodes: list[EpisodicNode],
-    ): ...
+    ) -> list[SemanticEdge]: ...
 
     async def process_episode(
         self,
-        name: str,
-        episode_body: str,
+        source: str,
+        content: str,
         source_description: str,
         reference_time: datetime = None,
-        episode_type="string",
+        content_type="string",
     ): ...

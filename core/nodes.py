@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import uuid1
+
+from openai import OpenAI
 from pydantic import BaseModel
 from neo4j import AsyncDriver
 import logging
@@ -56,7 +58,7 @@ class EpisodicNode(Node):
 class SemanticNode(Node):
     summary: str  # regional summary of surrounding edges
 
-    async def update_summary(self, driver: AsyncDriver): ...
+    async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
     async def save(self, driver: AsyncDriver):
         if self.uuid is None:
