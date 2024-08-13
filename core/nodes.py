@@ -15,8 +15,7 @@ class Node(BaseModel, ABC):
     transaction_from: datetime
 
     @abstractmethod
-    async def save(self, driver: AsyncDriver):
-        ...
+    async def save(self, driver: AsyncDriver): ...
 
 
 class EpisodicNode(Node):
@@ -29,19 +28,26 @@ class EpisodicNode(Node):
     async def save(self, driver: AsyncDriver):
         if self.uuid is None:
             uuid = uuid1()
-            logger.info(f'Created uuid: {uuid} for node with name: {self.name}')
+            logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
             self.uuid = str(uuid)
 
-        result = await driver.execute_query("""
+        result = await driver.execute_query(
+            """
         MERGE (n:Episodic {uuid: $uuid})
         SET n = {uuid: $uuid, name: $name, source_description: $source_description, content: $content, 
         semantic_edges: $semantic_edges, transaction_from: $transaction_from, valid_from: $valid_from}
         RETURN n.uuid AS uuid""",
-                                      uuid=self.uuid, name=self.name, source_description=self.source_description,
-                                      content=self.content, semantic_edges=self.semantic_edges,
-                                      transaction_from=self.transaction_from, valid_from=self.valid_from, _database='neo4j')
+            uuid=self.uuid,
+            name=self.name,
+            source_description=self.source_description,
+            content=self.content,
+            semantic_edges=self.semantic_edges,
+            transaction_from=self.transaction_from,
+            valid_from=self.valid_from,
+            _database="neo4j",
+        )
 
-        logger.info(f'Saved Node to neo4j: {self.uuid}')
+        logger.info(f"Saved Node to neo4j: {self.uuid}")
         print(self.uuid)
 
         return result
@@ -50,20 +56,25 @@ class EpisodicNode(Node):
 class SemanticNode(Node):
     summary: str  # regional summary of surrounding edges
 
+    async def update_summary(self, driver: AsyncDriver): ...
+
     async def save(self, driver: AsyncDriver):
         if self.uuid is None:
             uuid = uuid1()
-            logger.info(f'Created uuid: {uuid} for node with name: {self.name}')
+            logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
             self.uuid = str(uuid)
 
-        result = await driver.execute_query("""
+        result = await driver.execute_query(
+            """
         MERGE (n:Semantic {uuid: $uuid})
         SET n = {uuid: $uuid, name: $name, summary: $summary, transaction_from: $transaction_from}
         RETURN n.uuid AS uuid""",
-                                      uuid=self.uuid, name=self.name, summary=self.summary,
-                                      transaction_from=self.transaction_from)
+            uuid=self.uuid,
+            name=self.name,
+            summary=self.summary,
+            transaction_from=self.transaction_from,
+        )
 
-        logger.info(f'Saved Node to neo4j: {self.uuid}')
+        logger.info(f"Saved Node to neo4j: {self.uuid}")
 
         return result
-
