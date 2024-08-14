@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 import logging
-
+from typing import Callable
 from neo4j import AsyncGraphDatabase
 
 from core.nodes import SemanticNode, EpisodicNode, Node
@@ -89,33 +89,43 @@ class Graphiti:
         source_description: str,
         reference_time: datetime = None,
         episode_type="string",
+        success_callback: Callable | None = None,
+        error_callback: Callable | None = None,
     ):
         """Process an episode and update the graph"""
-        nodes: list[Node] = []
-        edges: list[Edge] = []
-        previous_episodes = await self.retrieve_episodes(last_n=3)
-        episode = EpisodicNode()
-        await episode.save(self.driver)
-        relevant_schema = await self.retrieve_relevant_schema(episode.content)
-        new_nodes = await self.extract_new_nodes(
-            episode, relevant_schema, previous_episodes
-        )
-        nodes.extend(new_nodes)
-        new_edges = await self.extract_new_edges(
-            episode, new_nodes, relevant_schema, previous_episodes
-        )
-        edges.extend(new_edges)
-        episodic_edges = build_episodic_edges(nodes, episode, datetime.now())
-        edges.extend(episodic_edges)
+        try:
+            nodes: list[Node] = []
+            edges: list[Edge] = []
+            previous_episodes = await self.retrieve_episodes(last_n=3)
+            episode = EpisodicNode()
+            await episode.save(self.driver)
+            relevant_schema = await self.retrieve_relevant_schema(episode.content)
+            new_nodes = await self.extract_new_nodes(
+                episode, relevant_schema, previous_episodes
+            )
+            nodes.extend(new_nodes)
+            new_edges = await self.extract_new_edges(
+                episode, new_nodes, relevant_schema, previous_episodes
+            )
+            edges.extend(new_edges)
+            episodic_edges = build_episodic_edges(nodes, episode, datetime.now())
+            edges.extend(episodic_edges)
 
-        invalidated_edges = await self.invalidate_edges(
-            episode, new_nodes, new_edges, relevant_schema, previous_episodes
-        )
+            invalidated_edges = await self.invalidate_edges(
+                episode, new_nodes, new_edges, relevant_schema, previous_episodes
+            )
 
-        edges.extend(invalidated_edges)
+            edges.extend(invalidated_edges)
 
-        await asyncio.all_tasks([node.save(self.driver) for node in nodes])
-        await asyncio.all_tasks([edge.save(self.driver) for edge in edges])
-        for node in nodes:
-            if isinstance(node, SemanticNode):
-                await node.update_summary(self.driver)
+            await asyncio.gather(*[node.save(self.driver) for node in nodes])
+            await asyncio.gather(*[edge.save(self.driver) for edge in edges])
+            for node in nodes:
+                if isinstance(node, SemanticNode):
+                    await node.update_summary(self.driver)
+            if success_callback:
+                await success_callback(episode)
+        except Exception as e:
+            if error_callback:
+                await error_callback(episode, e)
+            else:
+                raise e
