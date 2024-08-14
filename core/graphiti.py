@@ -6,6 +6,7 @@ from neo4j import AsyncGraphDatabase
 
 from core.nodes import SemanticNode, EpisodicNode, Node
 from core.edges import SemanticEdge, Edge
+from core.utils import bfs, similarity_search, fulltext_search, build_episodic_edges
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +50,19 @@ class Graphiti:
 
     async def search(self, query: str, config) -> (
             list)[Tuple[SemanticNode, list[SemanticEdge]]]:
-        (nodes, edges) = facts_similarity_search(query, embedder)
-        (nodes, edges) = nodes_text_Search(query)
-        [(node, edges), ...] = bfs(nodes, edges, k=bfs_depth)
+        (vec_nodes, vec_edges) = similarity_search(query, embedder)
+        (text_nodes, text_edges) = fulltext_search(query)
+
+        nodes = vec_nodes.extend(text_nodes)
+        edges = vec_edges.extend(text_edges)
+
+        results = bfs(nodes, edges, k=1)
 
         episode_ids = ["Mode of episode ids"]
 
         episodes = get_episodes(episode_ids[:episode_count])
 
         return [(node, edges)], episodes
-
 
     async def get_relevant_schema(self, episode: EpisodicNode, previous_episodes: list[EpisodicNode]) -> (
             list)[Tuple[SemanticNode, list[SemanticEdge]]]:
