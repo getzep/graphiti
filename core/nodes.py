@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import uuid1
 
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from neo4j import AsyncDriver
 import logging
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: str | None
+    uuid: Field(default_factory=lambda: uuid1().hex)
     name: str
     labels: list[str]
     transaction_from: datetime
@@ -28,11 +28,6 @@ class EpisodicNode(Node):
     valid_from: datetime = None  # datetime of when the original document was created
 
     async def save(self, driver: AsyncDriver):
-        if self.uuid is None:
-            uuid = uuid1()
-            logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
-            self.uuid = str(uuid)
-
         result = await driver.execute_query(
             """
         MERGE (n:Episodic {uuid: $uuid})
@@ -61,11 +56,6 @@ class SemanticNode(Node):
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
     async def save(self, driver: AsyncDriver):
-        if self.uuid is None:
-            uuid = uuid1()
-            logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
-            self.uuid = str(uuid)
-
         result = await driver.execute_query(
             """
         MERGE (n:Semantic {uuid: $uuid})
