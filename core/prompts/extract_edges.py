@@ -56,8 +56,8 @@ def v1(context: dict[str, any]) -> list[Message]:
                     "source_node": "Name of the source semantic node",
                     "target_node": "Name of the target semantic node",
                     "fact": "Detailed description of the relationship",
-                    "valid_from": "YYYY-MM-DDTHH:MM:SSZ or null if not explicitly mentioned",
-                    "valid_to": "YYYY-MM-DDTHH:MM:SSZ or null if ongoing or not explicitly mentioned"
+                    "valid_at": "YYYY-MM-DDTHH:MM:SSZ or null if not explicitly mentioned",
+                    "invalid_at": "YYYY-MM-DDTHH:MM:SSZ or null if ongoing or not explicitly mentioned"
                 }}
             ]
         }}

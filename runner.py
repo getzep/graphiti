@@ -1,4 +1,5 @@
 from core import Graphiti
+from core.utils.maintenance.graph_data_operations import clear_data
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -38,7 +39,8 @@ def setup_logging():
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    await client.clear_data()
+    await clear_data(client.driver)
+    # await client.build_indices()
     await client.add_episode(
         name="Message 1",
         episode_body="Paul: I love apples",
@@ -49,16 +51,16 @@ async def main():
         episode_body="Paul: I love bananas",
         source_description="WhatsApp Message",
     )
-    # await client.process_episode_stub(
-    #     name="Message 3",
-    #     episode_body="Assistant: The best type of apples available are Fuji apples",
-    #     source_description="WhatsApp Message",
-    # )
-    # await client.process_episode_stub(
-    #     name="Message 4",
-    #     episode_body="Paul: Oh, I actually hate those",
-    #     source_description="WhatsApp Message",
-    # )
+    await client.add_episode(
+        name="Message 3",
+        episode_body="Assistant: The best type of apples available are Fuji apples",
+        source_description="WhatsApp Message",
+    )
+    await client.add_episode(
+        name="Message 4",
+        episode_body="Paul: Oh, I actually hate those",
+        source_description="WhatsApp Message",
+    )
 
 
 asyncio.run(main())

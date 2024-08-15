@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from core.nodes import SemanticNode, EpisodicNode
+from core.nodes import EntityNode, EpisodicNode
 import logging
 from core.llm_client import LLMClient
 
@@ -14,7 +14,7 @@ async def extract_new_nodes(
     episode: EpisodicNode,
     relevant_schema: dict[str, any],
     previous_episodes: list[EpisodicNode],
-) -> list[SemanticNode]:
+) -> list[EntityNode]:
     # Prepare context for LLM
     existing_nodes = [
         {"name": node_name, "label": node_info["label"], "uuid": node_info["uuid"]}
@@ -24,13 +24,13 @@ async def extract_new_nodes(
     context = {
         "episode_content": episode.content,
         "episode_timestamp": (
-            episode.valid_from.isoformat() if episode.valid_from else None
+            episode.valid_at.isoformat() if episode.valid_at else None
         ),
         "existing_nodes": existing_nodes,
         "previous_episodes": [
             {
                 "content": ep.content,
-                "timestamp": ep.valid_from.isoformat() if ep.valid_from else None,
+                "timestamp": ep.valid_at.isoformat() if ep.valid_at else None,
             }
             for ep in previous_episodes
         ],
@@ -40,8 +40,8 @@ async def extract_new_nodes(
         prompt_library.extract_nodes.v1(context)
     )
     new_nodes_data = llm_response.get("new_nodes", [])
-
-    # Convert the extracted data into SemanticNode objects
+    logger.info(f"Extracted new nodes: {new_nodes_data}")
+    # Convert the extracted data into EntityNode objects
     new_nodes = []
     for node_data in new_nodes_data:
         # Check if the node already exists
@@ -49,11 +49,11 @@ async def extract_new_nodes(
             existing_node["name"] == node_data["name"]
             for existing_node in existing_nodes
         ):
-            new_node = SemanticNode(
+            new_node = EntityNode(
                 name=node_data["name"],
                 labels=node_data["labels"],
                 summary=node_data["summary"],
-                transaction_from=datetime.now(),
+                created_at=datetime.now(),
             )
             new_nodes.append(new_node)
             logger.info(f"Created new node: {new_node.name} (UUID: {new_node.uuid})")

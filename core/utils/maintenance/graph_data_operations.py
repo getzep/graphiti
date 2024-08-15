@@ -1,5 +1,3 @@
-import json
-from typing import List
 from datetime import datetime, timezone
 
 from core.nodes import EpisodicNode
@@ -83,7 +81,7 @@ async def retrieve_episodes(
                 transaction_from=datetime.fromtimestamp(
                     record["timestamp"].to_native().timestamp(), timezone.utc
                 ),
-                valid_from=(
+                valid_at=(
                     datetime.fromtimestamp(
                         record["reference_timestamp"].to_native().timestamp(),
                         timezone.utc,

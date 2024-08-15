@@ -26,7 +26,8 @@ class EpisodicNode(Node):
     source_description: str = Field(description="description of the data source")
     content: str = Field(description="raw episode data")
     entity_edges: list[str] = Field(
-        description="list of entity edges referenced in this episode"
+        description="list of entity edges referenced in this episode",
+        default_factory=list,
     )
     valid_at: datetime | None = Field(
         description="datetime of when the original document was created",
