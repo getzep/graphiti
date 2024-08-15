@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: Field(default_factory=lambda: uuid1().hex)
+    uuid: str = Field(default_factory=lambda: uuid1().hex)
     name: str
     labels: list[str]
-    transaction_from: datetime
+    created_at: datetime
 
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
@@ -24,23 +24,23 @@ class EpisodicNode(Node):
     source: str  # source type
     source_description: str  # description of the data source
     content: str  # raw episode data
-    semantic_edges: list[str]  # list of semantic edges referenced in this episode
-    valid_from: datetime = None  # datetime of when the original document was created
+    entity_edges: list[str]  # list of entity edge ids referenced in this episode
+    valid_at: datetime = None  # datetime of when the original document was created
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
         MERGE (n:Episodic {uuid: $uuid})
         SET n = {uuid: $uuid, name: $name, source_description: $source_description, content: $content, 
-        semantic_edges: $semantic_edges, transaction_from: $transaction_from, valid_from: $valid_from}
+        entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
             source_description=self.source_description,
             content=self.content,
-            semantic_edges=self.semantic_edges,
-            transaction_from=self.transaction_from,
-            valid_from=self.valid_from,
+            entity_edges=self.entity_edges,
+            created_at=self.created_at,
+            valid_at=self.valid_at,
             _database="neo4j",
         )
 
@@ -50,7 +50,7 @@ class EpisodicNode(Node):
         return result
 
 
-class SemanticNode(Node):
+class EntityNode(Node):
     summary: str  # regional summary of surrounding edges
 
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
@@ -58,13 +58,13 @@ class SemanticNode(Node):
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
-        MERGE (n:Semantic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, summary: $summary, transaction_from: $transaction_from}
+        MERGE (n:Entity {uuid: $uuid})
+        SET n = {uuid: $uuid, name: $name, summary: $summary, created_at: $created_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
             summary=self.summary,
-            transaction_from=self.transaction_from,
+            created_at=self.created_at,
         )
 
         logger.info(f"Saved Node to neo4j: {self.uuid}")
