@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
 from datetime import datetime
 from neo4j import AsyncDriver
-from uuid import uuid1
+from uuid import uuid4
 import logging
 
 from core.nodes import Node
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class Edge(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: uuid1().hex)
+    uuid: str = Field(default_factory=lambda: str(uuid4()))
     source_node: Node
     target_node: Node
     created_at: datetime
@@ -22,6 +22,11 @@ class Edge(BaseModel, ABC):
 
 class EpisodicEdge(Edge):
     async def save(self, driver: AsyncDriver):
+        if self.uuid is None:
+            uuid = uuid4()
+            logger.info(f"Created uuid: {uuid} for episodic edge")
+            self.uuid = str(uuid)
+
         result = await driver.execute_query(
             """
         MATCH (episode:Episodic {uuid: $episode_uuid}) 
@@ -45,13 +50,25 @@ class EpisodicEdge(Edge):
 
 
 class EntityEdge(Edge):
-    name: str
-    fact: str
-    fact_embedding: list[float] = None
-    episodes: list[str] = None  # list of episode ids that reference these entity edges
-    expired_at: datetime = None  # datetime of when the node was invalidated
-    valid_at: datetime = None  # datetime of when the fact became true
-    invalid_at: datetime = None  # datetime of when the fact stopped being true
+    name: str = Field(description="name of the edge, relation name")
+    fact: str = Field(
+        description="fact representing the edge and nodes that it connects"
+    )
+    fact_embedding: list[float] | None = Field(
+        default=None, description="embedding of the fact"
+    )
+    episodes: list[str] | None = Field(
+        default=None, description="list of episode ids that reference these entity edges"
+    )
+    expired_at: datetime | None = Field(
+        default=None, description="datetime of when the node was invalidated"
+    )
+    valid_at: datetime | None = Field(
+        default=None, description="datetime of when the fact became true"
+    )
+    invalid_at: datetime | None = Field(
+        default=None, description="datetime of when the fact stopped being true"
+    )
 
     def generate_embedding(self, embedder, model="text-embedding-3-large"):
         text = self.fact.replace("\n", " ")
@@ -62,6 +79,7 @@ class EntityEdge(Edge):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
+
             """
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 

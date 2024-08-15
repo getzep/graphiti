@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from pydantic import Field
 from datetime import datetime
-from uuid import uuid1
+from uuid import uuid4
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -11,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: uuid1().hex)
+    uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    labels: list[str]
+    labels: list[str] = Field(default_factory=list)
     created_at: datetime
 
     @abstractmethod
@@ -21,11 +22,17 @@ class Node(BaseModel, ABC):
 
 
 class EpisodicNode(Node):
-    source: str  # source type
-    source_description: str  # description of the data source
-    content: str  # raw episode data
-    entity_edges: list[str]  # list of entity edge ids referenced in this episode
-    valid_at: datetime = None  # datetime of when the original document was created
+    source: str = Field(description="source type")
+    source_description: str = Field(description="description of the data source")
+    content: str = Field(description="raw episode data")
+    entity_edges: list[str] = Field(
+        description="list of entity edges referenced in this episode",
+        default_factory=list,
+    )
+    valid_at: datetime | None = Field(
+        description="datetime of when the original document was created",
+        default=None,
+    )
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
@@ -51,7 +58,9 @@ class EpisodicNode(Node):
 
 
 class EntityNode(Node):
-    summary: str  # regional summary of surrounding edges
+    summary: str = Field(description="regional summary of surrounding edges")
+
+    async def update_summary(self, driver: AsyncDriver): ...
 
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
