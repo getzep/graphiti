@@ -12,6 +12,8 @@ from core.graphiti import Graphiti
 from core.nodes import EpisodicNode, EntityNode
 from datetime import datetime
 
+from core.utils import fulltext_search
+
 pytest_plugins = ("pytest_asyncio",)
 
 load_dotenv()
@@ -24,7 +26,7 @@ NEO4j_PASSWORD = os.getenv("NEO4J_PASSWORD")
 @pytest.mark.asyncio
 async def test_graphiti_init():
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
-    await graphiti.build_indices()
+    print(await fulltext_search("Bob summary", graphiti.driver))
     graphiti.close()
 
 
@@ -57,16 +59,16 @@ async def test_graph_integration():
     bob_node = EntityNode(name="Bob", labels=[], created_at=now, summary="Bob summary")
 
     episodic_edge_1 = EpisodicEdge(
-        source_node=episode, target_node=alice_node, created_at=now
+        source_node_uuid=episode, target_node_uuid=alice_node, created_at=now
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node=episode, target_node=bob_node, created_at=now
+        source_node_uuid=episode, target_node_uuid=bob_node, created_at=now
     )
 
     entity_edge = EntityEdge(
-        source_node=alice_node,
-        target_node=bob_node,
+        source_node_uuid=alice_node.uuid,
+        target_node_uuid=bob_node.uuid,
         created_at=now,
         name="likes",
         fact="Alice likes Bob",
