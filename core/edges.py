@@ -14,7 +14,7 @@ class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     source_node: Node
     target_node: Node
-    transaction_from: datetime
+    created_at: datetime
 
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
@@ -30,14 +30,14 @@ class EpisodicEdge(Edge):
         result = await driver.execute_query(
             """
         MATCH (episode:Episodic {uuid: $episode_uuid}) 
-        MATCH (node:Semantic {uuid: $semantic_uuid}) 
+        MATCH (node:Entity {uuid: $entity_uuid}) 
         MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
-        SET r = {uuid: $uuid, transaction_from: $transaction_from}
+        SET r = {uuid: $uuid, created_at: $created_at}
         RETURN r.uuid AS uuid""",
             episode_uuid=self.source_node.uuid,
-            semantic_uuid=self.target_node.uuid,
+            entity_uuid=self.target_node.uuid,
             uuid=self.uuid,
-            transaction_from=self.transaction_from,
+            created_at=self.created_at,
         )
 
         logger.info(f"Saved edge to neo4j: {self.uuid}")
@@ -49,24 +49,24 @@ class EpisodicEdge(Edge):
 #  Right now we have all edge nodes as type RELATES_TO
 
 
-class SemanticEdge(Edge):
+class EntityEdge(Edge):
     name: str = Field(description="name of the edge, relation name")
     fact: str = Field(
-        description="fact repesending the edge and nodes that it connects"
+        description="fact representing the edge and nodes that it connects"
     )
     fact_embedding: list[float] | None = Field(
         default=None, description="embedding of the fact"
     )
     episodes: list[str] | None = Field(
-        default=None, description="list of episodes that reference these semantic edges"
+        default=None, description="list of episode ids that reference these entity edges"
     )
-    transaction_to: datetime | None = Field(
+    expired_at: datetime | None = Field(
         default=None, description="datetime of when the node was invalidated"
     )
-    valid_from: datetime | None = Field(
+    valid_at: datetime | None = Field(
         default=None, description="datetime of when the fact became true"
     )
-    valid_to: datetime | None = Field(
+    invalid_at: datetime | None = Field(
         default=None, description="datetime of when the fact stopped being true"
     )
 
@@ -79,13 +79,14 @@ class SemanticEdge(Edge):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
+
             """
-        MATCH (source:Semantic {uuid: $source_uuid}) 
-        MATCH (target:Semantic {uuid: $target_uuid}) 
+        MATCH (source:Entity {uuid: $source_uuid}) 
+        MATCH (target:Entity {uuid: $target_uuid}) 
         MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
         SET r = {uuid: $uuid, name: $name, fact: $fact, fact_embedding: $fact_embedding, 
-        episodes: $episodes, transaction_from: $transaction_from, transaction_to: $transaction_to, 
-        valid_from: $valid_from, valid_to: $valid_to}
+        episodes: $episodes, created_at: $created_at, expired_at: $expired_at, 
+        valid_at: $valid_at, invalid_at: $invalid_at}
         RETURN r.uuid AS uuid""",
             source_uuid=self.source_node.uuid,
             target_uuid=self.target_node.uuid,
@@ -94,10 +95,10 @@ class SemanticEdge(Edge):
             fact=self.fact,
             fact_embedding=self.fact_embedding,
             episodes=self.episodes,
-            transaction_from=self.transaction_from,
-            transaction_to=self.transaction_to,
-            valid_from=self.valid_from,
-            valid_to=self.valid_to,
+            created_at=self.created_at,
+            expired_at=self.expired_at,
+            valid_at=self.valid_at,
+            invalid_at=self.invalid_at,
         )
 
         logger.info(f"Saved Node to neo4j: {self.uuid}")
