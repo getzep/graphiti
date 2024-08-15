@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from pydantic import Field
 from datetime import datetime
-from uuid import uuid1
+from uuid import uuid4
 from pydantic import BaseModel
 from neo4j import AsyncDriver
 import logging
@@ -9,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: str | None
+    uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str
-    labels: list[str]
+    labels: list[str] = Field(default_factory=list)
     transaction_from: datetime
 
     @abstractmethod
@@ -19,18 +20,18 @@ class Node(BaseModel, ABC):
 
 
 class EpisodicNode(Node):
-    source: str  # source type
-    source_description: str  # description of the data source
-    content: str  # raw episode data
-    semantic_edges: list[str]  # list of semantic edges referenced in this episode
-    valid_from: datetime = None  # datetime of when the original document was created
+    source: str = Field(description="source type")
+    source_description: str = Field(description="description of the data source")
+    content: str = Field(description="raw episode data")
+    semantic_edges: list[str] = Field(
+        description="list of semantic edges referenced in this episode"
+    )
+    valid_from: datetime | None = Field(
+        description="datetime of when the original document was created",
+        default=None,
+    )
 
     async def save(self, driver: AsyncDriver):
-        if self.uuid is None:
-            uuid = uuid1()
-            logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
-            self.uuid = str(uuid)
-
         result = await driver.execute_query(
             """
         MERGE (n:Episodic {uuid: $uuid})
@@ -54,13 +55,13 @@ class EpisodicNode(Node):
 
 
 class SemanticNode(Node):
-    summary: str  # regional summary of surrounding edges
+    summary: str = Field(description="regional summary of surrounding edges")
 
     async def update_summary(self, driver: AsyncDriver): ...
 
     async def save(self, driver: AsyncDriver):
         if self.uuid is None:
-            uuid = uuid1()
+            uuid = uuid4()
             logger.info(f"Created uuid: {uuid} for node with name: {self.name}")
             self.uuid = str(uuid)
 
