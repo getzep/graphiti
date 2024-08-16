@@ -5,6 +5,7 @@ from neo4j import AsyncDriver
 from uuid import uuid4
 import logging
 
+from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import Node
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class EntityEdge(Edge):
     def generate_embedding(self, embedder, model="text-embedding-3-small"):
         text = self.fact.replace("\n", " ")
         embedding = embedder.create(input=[text], model=model).data[0].embedding
-        self.fact_embedding = embedding
+        self.fact_embedding = embedding[:EMBEDDING_DIM]
 
         return embedding
 

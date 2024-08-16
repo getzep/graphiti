@@ -13,15 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    semantic_nodes: List[EntityNode],
+    entity_nodes: List[EntityNode],
     episode: EpisodicNode,
     transaction_from: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
-    for node in semantic_nodes:
+    for node in entity_nodes:
         edge = EpisodicEdge(
-            source_node=episode, target_node=node, created_at=transaction_from
+            source_node_uuid=episode.uuid,
+            target_node_uuid=node.uuid,
+            created_at=transaction_from,
         )
         edges.append(edge)
 
@@ -112,8 +114,8 @@ async def extract_new_edges(
             )
 
             new_edge = EntityEdge(
-                source_node=source_node,
-                target_node=target_node,
+                source_node_uuid=source_node.uuid,
+                target_node_uuid=target_node.uuid,
                 name=edge_data["relation_type"],
                 fact=edge_data["fact"],
                 episodes=[episode.uuid],

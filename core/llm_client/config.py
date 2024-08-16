@@ -1,3 +1,6 @@
+EMBEDDING_DIM = 1024
+
+
 class LLMConfig:
     """
     Configuration class for the Language Learning Model (LLM).

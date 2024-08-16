@@ -16,6 +16,7 @@ from core.utils import (
     retrieve_episodes,
 )
 from core.llm_client import LLMClient, OpenAIClient, LLMConfig
+from core.utils.search.search_utils import similarity_search, fulltext_search, bfs
 
 logger = logging.getLogger(__name__)
 
@@ -161,22 +162,21 @@ class Graphiti:
             """
         )
 
-    async def search(
-        self, query: str, config
-    ) -> (list)[tuple[EntityNode, list[EntityEdge]]]:
-        (vec_nodes, vec_edges) = similarity_search(query, embedder)
-        (text_nodes, text_edges) = fulltext_search(query)
+    async def search(self, query: str) -> list[tuple[EntityNode, list[EntityEdge]]]:
+        edges = await similarity_search(query, self.driver, self.llm_client.embeddings)
+        nodes = await fulltext_search(query, self.driver)
 
-        nodes = vec_nodes.extend(text_nodes)
-        edges = vec_edges.extend(text_edges)
+        node_ids = [node.uuid for node in nodes]
 
-        results = bfs(nodes, edges, k=1)
+        for edge in edges:
+            node_ids.append(edge.source_node_uuid)
+            node_ids.append(edge.target_node_uuid)
 
-        episode_ids = ["Mode of episode ids"]
+        node_ids = list(dict.fromkeys(node_ids))
 
-        episodes = get_episodes(episode_ids[:episode_count])
+        context = await bfs(node_ids, self.driver)
 
-        return [(node, edges)], episodes
+        return context
 
     # Invalidate edges that are no longer valid
     async def invalidate_edges(

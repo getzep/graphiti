@@ -3,12 +3,13 @@ import logging
 from neo4j import AsyncDriver
 
 from core.edges import EpisodicEdge, EntityEdge, Edge
+from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import EntityNode, EpisodicNode, Node
 
 logger = logging.getLogger(__name__)
 
 
-async def bfs(node_ids: list[int], driver: AsyncDriver):
+async def bfs(node_ids: list[str], driver: AsyncDriver):
     records, _, _ = driver.execute_query(
         """
         MATCH (n WHERE n.uuid in $node_ids)-[r]->(m:Entity)
@@ -62,7 +63,9 @@ async def similarity_search(
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     text = query.replace("\n", " ")
-    search_vector = embedder.create(input=[text], model=model).data[0].embedding
+    search_vector = (
+        embedder.create(input=[text], model=model).data[0].embedding[:EMBEDDING_DIM]
+    )
 
     records, _, _ = driver.execute_query(
         """
