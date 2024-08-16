@@ -40,6 +40,7 @@ async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
+
     # await client.build_indices()
     await client.add_episode(
         name="Message 1",
