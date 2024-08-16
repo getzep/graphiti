@@ -1,5 +1,4 @@
 import logging
-from typing import Tuple
 
 from neo4j import AsyncDriver
 
@@ -9,12 +8,53 @@ from core.nodes import EntityNode, EpisodicNode, Node
 logger = logging.getLogger(__name__)
 
 
-async def bfs(
-    nodes: list[Node], edges: list[Edge], k: int
-) -> Tuple[list[EntityNode], list[EntityEdge]]: ...
+async def bfs(node_ids: list[int], driver: AsyncDriver):
+    records, _, _ = driver.execute_query(
+        """
+        MATCH (n WHERE n.uuid in $node_ids)-[r]->(m:Entity)
+        RETURN
+            n.uuid AS source_node_uuid,
+            n.name AS source_name, 
+            n.summary AS source_summary,
+            m.uuid AS target_node_uuid,
+            m.name AS target_name, 
+            m.summary AS target_summary,
+            r.uuid AS uuid,
+            r.created_at AS created_at,
+            r.name AS name,
+            r.fact AS fact,
+            r.fact_embedding AS fact_embedding,
+            r.episodes AS episodes,
+            r.expired_at AS expired_at,
+            r.valid_at AS valid_at,
+            r.invalid_at AS invalid_at
+        
+    """,
+        node_ids=node_ids,
+    )
 
+    context = {}
 
-# Breadth first search over nodes and edges with desired depth
+    for record in records:
+        n_uuid = record["source_node_uuid"]
+        if n_uuid in context:
+            context[n_uuid]["facts"].append(record["fact"])
+        else:
+            context[n_uuid] = {
+                "name": record["source_name"],
+                "summary": record["source_summary"],
+                "facts": [record["fact"]],
+            }
+
+        m_uuid = record["target_node_uuid"]
+        if m_uuid not in context:
+            context[n_uuid] = {
+                "name": record["target_name"],
+                "summary": record["target_summary"],
+                "facts": [],
+            }
+
+    return context
 
 
 async def similarity_search(
@@ -61,7 +101,11 @@ async def fulltext_search(query: str, driver: AsyncDriver) -> list[EntityNode]:
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
     RETURN 
-    node.uuid As uuid, node.name AS name, node.labels AS labels, node.created_at AS created_at, node.summary AS summary
+        node.uuid As uuid, 
+        node.name AS name, 
+        node.labels AS labels, 
+        node.created_at AS created_at, 
+        node.summary AS summary
     ORDER BY score DESC
     LIMIT 10
     """,
@@ -75,20 +119,3 @@ async def fulltext_search(query: str, driver: AsyncDriver) -> list[EntityNode]:
     logger.info(f"fulltext search results. QUERY:{query}. RESULT: {nodes}")
 
     return nodes
-
-
-def build_episodic_edges(
-    entity_nodes: list[EntityNode], episode: EpisodicNode
-) -> list[EpisodicEdge]:
-    edges: list[EpisodicEdge] = []
-
-    for node in entity_nodes:
-        edges.append(
-            EpisodicEdge(
-                source_node_uuid=episode,
-                target_node_uuid=node,
-                created_at=episode.created_at,
-            )
-        )
-
-    return edges

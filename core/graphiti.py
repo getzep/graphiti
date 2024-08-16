@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 import logging
-from typing import Callable, LiteralString, Tuple
+from typing import Callable, LiteralString
 from neo4j import AsyncGraphDatabase
 from dotenv import load_dotenv
 import os

@@ -37,8 +37,8 @@ class EpisodicEdge(Edge):
         MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
         SET r = {uuid: $uuid, created_at: $created_at}
         RETURN r.uuid AS uuid""",
-            episode_uuid=self.source_node_uuid.uuid,
-            entity_uuid=self.target_node_uuid.uuid,
+            episode_uuid=self.source_node_uuid,
+            entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
             created_at=self.created_at,
         )

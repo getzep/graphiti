@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: str(uuid4()))
+    uuid: str = Field(default_factory=lambda: uuid4().hex)
     name: str
     labels: list[str] = Field(default_factory=list)
     created_at: datetime
