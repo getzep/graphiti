@@ -34,7 +34,7 @@ async def extract_new_edges(
     new_nodes: list[EntityNode],
     relevant_schema: dict[str, any],
     previous_episodes: list[EpisodicNode],
-) -> list[EntityEdge]:
+) -> tuple[list[EntityEdge], list[EntityNode]]:
     # Prepare context for LLM
     context = {
         "episode_content": episode.content,
@@ -58,6 +58,7 @@ async def extract_new_edges(
         prompt_library.extract_edges.v1(context)
     )
     new_edges_data = llm_response.get("new_edges", [])
+    logger.info(f"Extracted new edges: {new_edges_data}")
 
     # Convert the extracted data into EntityEdge objects
     new_edges = []
@@ -125,4 +126,9 @@ async def extract_new_edges(
                 f"Created new edge: {new_edge.name} from {source_node.name} (UUID: {source_node.uuid}) to {target_node.name} (UUID: {target_node.uuid})"
             )
 
-    return new_edges
+    affected_nodes = set()
+
+    for edge in new_edges:
+        affected_nodes.add(edge.source_node)
+        affected_nodes.add(edge.target_node)
+    return new_edges, list(affected_nodes)

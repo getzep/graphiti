@@ -67,29 +67,38 @@ async def retrieve_episodes(
     driver: AsyncDriver, last_n: int, sources: list[str] | None = "messages"
 ) -> list[EpisodicNode]:
     """Retrieve the last n episodic nodes from the graph"""
-    async with driver.session() as session:
-        query = """
-            MATCH (e:EpisodicNode)
-            RETURN e.content as text, e.timestamp as timestamp, e.reference_timestamp as reference_timestamp
-            ORDER BY e.timestamp DESC
-            LIMIT $num_episodes
-            """
-        result = await session.run(query, num_episodes=last_n)
-        episodes = [
-            EpisodicNode(
-                content=record["text"],
-                transaction_from=datetime.fromtimestamp(
-                    record["timestamp"].to_native().timestamp(), timezone.utc
-                ),
-                valid_at=(
-                    datetime.fromtimestamp(
-                        record["reference_timestamp"].to_native().timestamp(),
-                        timezone.utc,
-                    )
-                    if record["reference_timestamp"] is not None
-                    else None
-                ),
-            )
-            async for record in result
-        ]
-        return list(reversed(episodes))  # Return in chronological order
+    query = """
+        MATCH (e:Episodic)
+        RETURN e.content as content,
+            e.created_at as created_at,
+            e.valid_at as valid_at,
+            e.uuid as uuid,
+            e.name as name,
+            e.source_description as source_description,
+            e.source as source
+        ORDER BY e.created_at DESC
+        LIMIT $num_episodes
+        """
+    result = await driver.execute_query(query, num_episodes=last_n)
+    episodes = [
+        EpisodicNode(
+            content=record["content"],
+            created_at=datetime.fromtimestamp(
+                record["created_at"].to_native().timestamp(), timezone.utc
+            ),
+            valid_at=(
+                datetime.fromtimestamp(
+                    record["valid_at"].to_native().timestamp(),
+                    timezone.utc,
+                )
+                if record["valid_at"] is not None
+                else None
+            ),
+            uuid=record["uuid"],
+            source=record["source"],
+            name=record["name"],
+            source_description=record["source_description"],
+        )
+        for record in result.records
+    ]
+    return list(reversed(episodes))  # Return in chronological order

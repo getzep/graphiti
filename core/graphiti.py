@@ -87,17 +87,25 @@ class Graphiti:
                 created_at=datetime.now(),
                 valid_at=reference_time,
             )
-            await episode.save(self.driver)
+            # await episode.save(self.driver)
             relevant_schema = await self.retrieve_relevant_schema(episode.content)
             new_nodes = await extract_new_nodes(
                 self.llm_client, episode, relevant_schema, previous_episodes
             )
             nodes.extend(new_nodes)
-            new_edges = await extract_new_edges(
+            new_edges, affected_nodes = await extract_new_edges(
                 self.llm_client, episode, new_nodes, relevant_schema, previous_episodes
             )
             edges.extend(new_edges)
-            episodic_edges = build_episodic_edges(nodes, episode, datetime.now())
+            episodic_edges = build_episodic_edges(
+                # There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them
+                list(set(nodes + affected_nodes)),
+                episode,
+                datetime.now(),
+            )
+            # Important to append the episode to the nodes at the end so that self referencing episodic edges are not built
+            nodes.append(episode)
+            logger.info(f"Built episodic edges: {episodic_edges}")
             edges.extend(episodic_edges)
 
             # invalidated_edges = await self.invalidate_edges(

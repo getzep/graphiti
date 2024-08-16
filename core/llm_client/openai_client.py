@@ -3,6 +3,10 @@ from openai import AsyncOpenAI
 from .client import LLMClient
 from .config import LLMConfig
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class OpenAIClient(LLMClient):
     def __init__(self, config: LLMConfig):
@@ -20,5 +24,5 @@ class OpenAIClient(LLMClient):
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            print(f"Error in generating LLM response: {e}")
+            logger.error(f"Error in generating LLM response: {e}")
             raise

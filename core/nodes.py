@@ -20,6 +20,14 @@ class Node(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
+    def __hash__(self):
+        return hash(self.uuid)
+
+    def __eq__(self, other):
+        if isinstance(other, Node):
+            return self.uuid == other.uuid
+        return False
+
 
 class EpisodicNode(Node):
     source: str = Field(description="source type")
@@ -38,7 +46,7 @@ class EpisodicNode(Node):
         result = await driver.execute_query(
             """
         MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, source_description: $source_description, content: $content, 
+        SET n = {uuid: $uuid, name: $name, source_description: $source_description, source: $source, content: $content, 
         entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
@@ -48,11 +56,11 @@ class EpisodicNode(Node):
             entity_edges=self.entity_edges,
             created_at=self.created_at,
             valid_at=self.valid_at,
+            source=self.source,
             _database="neo4j",
         )
 
         logger.info(f"Saved Node to neo4j: {self.uuid}")
-        print(self.uuid)
 
         return result
 

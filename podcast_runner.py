@@ -5,6 +5,7 @@ import os
 import asyncio
 import logging
 import sys
+from transcript_parser import parse_podcast_messages
 
 load_dotenv()
 
@@ -40,28 +41,14 @@ async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
-
-    # await client.build_indices()
-    await client.add_episode(
-        name="Message 1",
-        episode_body="Paul: I love apples",
-        source_description="WhatsApp Message",
-    )
-    await client.add_episode(
-        name="Message 2",
-        episode_body="Paul: I love bananas",
-        source_description="WhatsApp Message",
-    )
-    await client.add_episode(
-        name="Message 3",
-        episode_body="Assistant: The best type of apples available are Fuji apples",
-        source_description="WhatsApp Message",
-    )
-    await client.add_episode(
-        name="Message 4",
-        episode_body="Paul: Oh, I actually hate those",
-        source_description="WhatsApp Message",
-    )
+    messages = parse_podcast_messages()
+    for i, message in enumerate(messages[3:14]):
+        await client.add_episode(
+            name=f"Message {i}",
+            episode_body=f"{message.speaker_name} ({message.role}): {message.content}",
+            reference_time=message.actual_timestamp,
+            source_description="Podcast Transcript",
+        )
 
 
 asyncio.run(main())
