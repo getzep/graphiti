@@ -19,6 +19,14 @@ class Edge(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
+    def __hash__(self):
+        return hash(self.uuid)
+
+    def __eq__(self, other):
+        if isinstance(other, Node):
+            return self.uuid == other.uuid
+        return False
+
 
 class EpisodicEdge(Edge):
     async def save(self, driver: AsyncDriver):
@@ -58,7 +66,8 @@ class EntityEdge(Edge):
         default=None, description="embedding of the fact"
     )
     episodes: list[str] | None = Field(
-        default=None, description="list of episode ids that reference these entity edges"
+        default=None,
+        description="list of episode ids that reference these entity edges",
     )
     expired_at: datetime | None = Field(
         default=None, description="datetime of when the node was invalidated"
@@ -79,7 +88,6 @@ class EntityEdge(Edge):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-
             """
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 
