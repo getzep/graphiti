@@ -65,10 +65,9 @@ async def edge_similarity_search(
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
         """
+                CALL db.index.vector.queryRelationships("fact_embedding", 5, $search_vector)
+                YIELD relationship AS r, score
                 MATCH (n)-[r:RELATES_TO]->(m)
-                WHERE r.fact_embedding IS NOT NULL
-                WITH n, m, r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
-                WHERE score > 0.8
                 RETURN
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
@@ -118,16 +117,14 @@ async def entity_similarity_search(
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
-                MATCH (n:Entity)
-                WHERE n.name_embedding IS NOT NULL
-                WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
-                WHERE score > 0.8
+                CALL db.index.vector.queryNodes("name_embedding", 5, $search_vector)
+                YIELD node AS n, score
                 RETURN
                     n.uuid As uuid, 
                     n.name AS name, 
                     n.created_at AS created_at, 
                     n.summary AS summary
-                ORDER BY score DESC LIMIT 3
+                ORDER BY score DESC
                 """,
         search_vector=search_vector,
     )
