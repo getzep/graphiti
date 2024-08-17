@@ -1,13 +1,11 @@
 import asyncio
 import logging
-import numpy as np
 from datetime import datetime
 
 from neo4j import AsyncDriver
 
-from core.edges import EpisodicEdge, EntityEdge, Edge
-from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import EntityNode, EpisodicNode, Node
+from core.edges import EntityEdge
+from core.nodes import EntityNode
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +68,7 @@ async def edge_similarity_search(
                 MATCH (n)-[r:RELATES_TO]->(m)
                 WHERE r.fact_embedding IS NOT NULL
                 WITH n, m, r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
-                WHERE score > 0.5
+                WHERE score > 0.8
                 RETURN
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
@@ -191,7 +189,9 @@ async def edge_fulltext_search(query: str, driver: AsyncDriver) -> list[EntityEd
 
     records, _, _ = await driver.execute_query(
         """
-                CALL db.index.fulltext.queryNodes("name_and_fact", $query) YIELD r, score
+                CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
+                YIELD relationship AS r, score
+                MATCH (n:Entity)-[r]->(m:Entity)
                 RETURN
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
@@ -265,6 +265,7 @@ async def get_relevant_edges(
 
     results = await asyncio.gather(
         *[edge_similarity_search(edge.fact_embedding, driver) for edge in edges],
+        *[edge_fulltext_search(edge.fact, driver) for edge in edges],
     )
 
     for result in results:
