@@ -57,7 +57,7 @@ async def extract_new_edges(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_edges.v2(context)
+        prompt_library.extract_edges.v1(context)
     )
     new_edges_data = llm_response.get("new_edges", [])
     logger.info(f"Extracted new edges: {new_edges_data}")
@@ -114,8 +114,8 @@ async def extract_new_edges(
             )
 
             new_edge = EntityEdge(
-                source_node_uuid=source_node.uuid,
-                target_node_uuid=target_node.uuid,
+                source_node=source_node,
+                target_node=target_node,
                 name=edge_data["relation_type"],
                 fact=edge_data["fact"],
                 episodes=[episode.uuid],
@@ -130,6 +130,9 @@ async def extract_new_edges(
 
     affected_nodes = set()
 
+    for edge in new_edges:
+        affected_nodes.add(edge.source_node)
+        affected_nodes.add(edge.target_node)
     return new_edges, list(affected_nodes)
 
 
