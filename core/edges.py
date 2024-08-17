@@ -75,9 +75,9 @@ class EntityEdge(Edge):
         default=None, description="datetime of when the fact stopped being true"
     )
 
-    def generate_embedding(self, embedder, model="text-embedding-3-small"):
+    async def generate_embedding(self, embedder, model="text-embedding-3-small"):
         text = self.fact.replace("\n", " ")
-        embedding = embedder.create(input=[text], model=model).data[0].embedding
+        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
         self.fact_embedding = embedding[:EMBEDDING_DIM]
 
         return embedding
