@@ -45,7 +45,7 @@ class Graphiti:
             self.llm_client = OpenAIClient(
                 LLMConfig(
                     api_key=os.getenv("OPENAI_API_KEY"),
-                    model="gpt-4o",
+                    model="gpt-4o-mini",
                     base_url="https://api.openai.com/v1",
                 )
             )

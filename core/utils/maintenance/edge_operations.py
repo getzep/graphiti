@@ -148,7 +148,10 @@ async def extract_edges(
         "episode_timestamp": (
             episode.valid_at.isoformat() if episode.valid_at else None
         ),
-        "nodes": [{"name": node.name, "summary": node.summary} for node in nodes],
+        "nodes": [
+            {"uuid": node.uuid, "name": node.name, "summary": node.summary}
+            for node in nodes
+        ],
         "previous_episodes": [
             {
                 "content": ep.content,

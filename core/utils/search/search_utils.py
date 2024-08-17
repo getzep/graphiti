@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import numpy as np
 from datetime import datetime
 
 from neo4j import AsyncDriver
@@ -239,22 +241,36 @@ async def get_relevant_nodes(
     nodes: list[EntityNode],
     driver: AsyncDriver,
 ) -> list[EntityNode]:
-    relevant_nodes = []
+    relevant_nodes: dict[str, EntityNode] = {}
 
-    for node in nodes:
-        relevant_nodes.extend(await entity_fulltext_search(node.name, driver))
-        relevant_nodes.extend(
-            await entity_similarity_search(node.name_embedding, driver)
-        )
-    return relevant_nodes
+    results = await asyncio.gather(
+        *[entity_fulltext_search(node.name, driver) for node in nodes],
+        *[entity_similarity_search(node.name_embedding, driver) for node in nodes],
+    )
+
+    for result in results:
+        for node in result:
+            relevant_nodes[node.uuid] = node
+
+    logger.info(f"Found relevant nodes: {relevant_nodes.keys()}")
+
+    return relevant_nodes.values()
 
 
 async def get_relevant_edges(
     edges: list[EntityEdge],
     driver: AsyncDriver,
 ) -> list[EntityEdge]:
-    relevant_edges = []
+    relevant_edges: dict[str, EntityEdge] = {}
 
-    for edge in edges:
-        relevant_edges.extend(await edge_similarity_search(edge.fact_embedding, driver))
-    return relevant_edges
+    results = await asyncio.gather(
+        *[edge_similarity_search(edge.fact_embedding, driver) for edge in edges],
+    )
+
+    for result in results:
+        for edge in result:
+            relevant_edges[edge.uuid] = edge
+
+    logger.info(f"Found relevant nodes: {relevant_edges.keys()}")
+
+    return relevant_edges.values()
