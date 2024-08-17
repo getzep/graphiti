@@ -16,13 +16,10 @@ async def extract_new_nodes(
     previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
     # Prepare context for LLM
-    if len(relevant_schema) > 0:
-        existing_nodes = [
-            {"name": node_name, "label": node_info["label"], "uuid": node_info["uuid"]}
-            for node_name, node_info in relevant_schema["nodes"].items()
-        ]
-    else:
-        existing_nodes = []
+    existing_nodes = [
+        {"name": node_name, "label": node_info["label"], "uuid": node_info["uuid"]}
+        for node_name, node_info in relevant_schema["nodes"].items()
+    ]
 
     context = {
         "episode_content": episode.content,
@@ -40,7 +37,7 @@ async def extract_new_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.v2(context)
+        prompt_library.extract_nodes.v1(context)
     )
     new_nodes_data = llm_response.get("new_nodes", [])
     logger.info(f"Extracted new nodes: {new_nodes_data}")
