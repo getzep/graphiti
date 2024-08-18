@@ -7,11 +7,13 @@ from .models import Message, PromptVersion, PromptFunction
 class Prompt(Protocol):
     v1: PromptVersion
     v2: PromptVersion
+    v3: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
     v2: PromptFunction
+    v3: PromptFunction
 
 
 def v1(context: dict[str, any]) -> list[Message]:
@@ -103,4 +105,37 @@ def v2(context: dict[str, any]) -> list[Message]:
     ]
 
 
-versions: Versions = {"v1": v1, "v2": v2}
+def v3(context: dict[str, any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
+
+    user_prompt = f"""
+Given the following conversation, extract entity nodes that are explicitly or implicitly mentioned:
+
+Conversation:
+{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+{context["episode_content"]}
+
+Guidelines:
+1. ALWAYS extract the speaker/actor as the first node. The speaker is the part before the colon in each line of dialogue.
+2. Extract other significant entities, concepts, or actors mentioned in the conversation.
+3. Provide concise but informative summaries for each extracted node.
+4. Avoid creating nodes for relationships or actions.
+
+Respond with a JSON object in the following format:
+{{
+    "new_nodes": [
+        {{
+            "name": "Unique identifier for the node (use the speaker's name for speaker nodes)",
+            "labels": ["Entity", "Speaker" for speaker nodes, "OptionalAdditionalLabel"],
+            "summary": "Brief summary of the node's role or significance"
+        }}
+    ]
+}}
+"""
+    return [
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
+    ]
+
+
+versions: Versions = {"v1": v1, "v2": v2, "v3": v3}

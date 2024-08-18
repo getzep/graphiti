@@ -113,11 +113,15 @@ class Graphiti:
             await asyncio.gather(
                 *[node.generate_name_embedding(embedder) for node in extracted_nodes]
             )
-
             existing_nodes = await get_relevant_nodes(extracted_nodes, self.driver)
-
+            logger.info(
+                f"Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}"
+            )
             new_nodes = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
+            )
+            logger.info(
+                f"Deduped touched nodes: {[(n.name, n.uuid) for n in new_nodes]}"
             )
             nodes.extend(new_nodes)
 
@@ -130,10 +134,16 @@ class Graphiti:
             )
 
             existing_edges = await get_relevant_edges(extracted_edges, self.driver)
+            logger.info(f"Existing edges: {[(e.name, e.uuid) for e in existing_edges]}")
+            logger.info(
+                f"Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}"
+            )
 
             new_edges = await dedupe_extracted_edges(
                 self.llm_client, extracted_edges, existing_edges
             )
+
+            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in new_edges]}")
 
             entity_edges.extend(new_edges)
             episodic_edges.extend(

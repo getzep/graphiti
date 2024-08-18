@@ -49,7 +49,7 @@ async def main():
     )
     await client.add_episode(
         name="Message 2",
-        episode_body="Paul: I love bananas",
+        episode_body="Paul: I own many bananas",
         source_description="WhatsApp Message",
     )
     await client.add_episode(
