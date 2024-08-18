@@ -13,15 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    semantic_nodes: List[EntityNode],
+    entity_nodes: List[EntityNode],
     episode: EpisodicNode,
     transaction_from: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
-    for node in semantic_nodes:
+    for node in entity_nodes:
         edge = EpisodicEdge(
-            source_node=episode, target_node=node, created_at=transaction_from
+            source_node_uuid=episode.uuid,
+            target_node_uuid=node.uuid,
+            created_at=transaction_from,
         )
         edges.append(edge)
 
@@ -132,3 +134,94 @@ async def extract_new_edges(
         affected_nodes.add(edge.source_node)
         affected_nodes.add(edge.target_node)
     return new_edges, list(affected_nodes)
+
+
+async def extract_edges(
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    nodes: list[EntityNode],
+    previous_episodes: list[EpisodicNode],
+) -> list[EntityEdge]:
+    # Prepare context for LLM
+    context = {
+        "episode_content": episode.content,
+        "episode_timestamp": (
+            episode.valid_at.isoformat() if episode.valid_at else None
+        ),
+        "nodes": [
+            {"uuid": node.uuid, "name": node.name, "summary": node.summary}
+            for node in nodes
+        ],
+        "previous_episodes": [
+            {
+                "content": ep.content,
+                "timestamp": ep.valid_at.isoformat() if ep.valid_at else None,
+            }
+            for ep in previous_episodes
+        ],
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_edges.v2(context)
+    )
+    edges_data = llm_response.get("edges", [])
+    logger.info(f"Extracted new edges: {edges_data}")
+
+    # Convert the extracted data into EntityEdge objects
+    edges = []
+    for edge_data in edges_data:
+        edge = EntityEdge(
+            source_node_uuid=edge_data["source_node_uuid"],
+            target_node_uuid=edge_data["target_node_uuid"],
+            name=edge_data["relation_type"],
+            fact=edge_data["fact"],
+            episodes=[episode.uuid],
+            created_at=datetime.now(),
+            valid_at=edge_data["valid_at"],
+            invalid_at=edge_data["invalid_at"],
+        )
+        edges.append(edge)
+        logger.info(
+            f"Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})"
+        )
+
+    return edges
+
+
+async def dedupe_extracted_edges(
+    llm_client: LLMClient,
+    extracted_edges: list[EntityEdge],
+    existing_edges: list[EntityEdge],
+) -> list[EntityEdge]:
+    # Create edge map
+    edge_map = {}
+    for edge in existing_edges:
+        edge_map[edge.name] = edge
+    for edge in extracted_edges:
+        if edge.name in edge_map.keys():
+            continue
+        edge_map[edge.name] = edge
+
+    # Prepare context for LLM
+    context = {
+        "extracted_edges": [
+            {"name": edge.name, "fact": edge.fact} for edge in extracted_edges
+        ],
+        "existing_edges": [
+            {"name": edge.name, "fact": edge.fact} for edge in extracted_edges
+        ],
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.v1(context)
+    )
+    new_edges_data = llm_response.get("new_edges", [])
+    logger.info(f"Extracted new edges: {new_edges_data}")
+
+    # Get full edge data
+    edges = []
+    for edge_data in new_edges_data:
+        edge = edge_map[edge_data["name"]]
+        edges.append(edge)
+
+    return edges

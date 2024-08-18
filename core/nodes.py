@@ -8,11 +8,13 @@ from pydantic import BaseModel, Field
 from neo4j import AsyncDriver
 import logging
 
+from core.llm_client.config import EMBEDDING_DIM
+
 logger = logging.getLogger(__name__)
 
 
 class Node(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: str(uuid4()))
+    uuid: str = Field(default_factory=lambda: uuid4().hex)
     name: str
     labels: list[str] = Field(default_factory=list)
     created_at: datetime
@@ -66,21 +68,32 @@ class EpisodicNode(Node):
 
 
 class EntityNode(Node):
+    name_embedding: list[float] | None = Field(
+        default=None, description="embedding of the name"
+    )
     summary: str = Field(description="regional summary of surrounding edges")
 
     async def update_summary(self, driver: AsyncDriver): ...
 
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
+    async def generate_name_embedding(self, embedder, model="text-embedding-3-small"):
+        text = self.name.replace("\n", " ")
+        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
+        self.name_embedding = embedding[:EMBEDDING_DIM]
+
+        return embedding
+
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
         MERGE (n:Entity {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, summary: $summary, created_at: $created_at}
+        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, summary: $summary, created_at: $created_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
             summary=self.summary,
+            name_embedding=self.name_embedding,
             created_at=self.created_at,
         )
 
