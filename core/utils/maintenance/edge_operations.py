@@ -178,8 +178,8 @@ async def extract_edges(
                 fact=edge_data["fact"],
                 episodes=[episode.uuid],
                 created_at=datetime.now(),
-                valid_at=edge_data["valid_at"],
-                invalid_at=edge_data["invalid_at"],
+                valid_at=None,
+                invalid_at=None,
             )
             edges.append(edge)
             logger.info(
