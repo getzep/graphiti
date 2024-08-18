@@ -5,15 +5,16 @@ from neo4j import AsyncDriver
 from uuid import uuid4
 import logging
 
+from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import Node
 
 logger = logging.getLogger(__name__)
 
 
 class Edge(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: str(uuid4()))
-    source_node: Node
-    target_node: Node
+    uuid: str = Field(default_factory=lambda: uuid4().hex)
+    source_node_uuid: str
+    target_node_uuid: str
     created_at: datetime
 
     @abstractmethod
@@ -30,11 +31,6 @@ class Edge(BaseModel, ABC):
 
 class EpisodicEdge(Edge):
     async def save(self, driver: AsyncDriver):
-        if self.uuid is None:
-            uuid = uuid4()
-            logger.info(f"Created uuid: {uuid} for episodic edge")
-            self.uuid = str(uuid)
-
         result = await driver.execute_query(
             """
         MATCH (episode:Episodic {uuid: $episode_uuid}) 
@@ -42,8 +38,8 @@ class EpisodicEdge(Edge):
         MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
         SET r = {uuid: $uuid, created_at: $created_at}
         RETURN r.uuid AS uuid""",
-            episode_uuid=self.source_node.uuid,
-            entity_uuid=self.target_node.uuid,
+            episode_uuid=self.source_node_uuid,
+            entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
             created_at=self.created_at,
         )
@@ -79,10 +75,10 @@ class EntityEdge(Edge):
         default=None, description="datetime of when the fact stopped being true"
     )
 
-    def generate_embedding(self, embedder, model="text-embedding-3-large"):
+    async def generate_embedding(self, embedder, model="text-embedding-3-small"):
         text = self.fact.replace("\n", " ")
-        embedding = embedder.create(input=[text], model=model).data[0].embedding
-        self.fact_embedding = embedding
+        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
+        self.fact_embedding = embedding[:EMBEDDING_DIM]
 
         return embedding
 
@@ -96,8 +92,8 @@ class EntityEdge(Edge):
         episodes: $episodes, created_at: $created_at, expired_at: $expired_at, 
         valid_at: $valid_at, invalid_at: $invalid_at}
         RETURN r.uuid AS uuid""",
-            source_uuid=self.source_node.uuid,
-            target_uuid=self.target_node.uuid,
+            source_uuid=self.source_node_uuid,
+            target_uuid=self.target_node_uuid,
             uuid=self.uuid,
             name=self.name,
             fact=self.fact,

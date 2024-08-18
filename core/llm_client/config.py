@@ -1,3 +1,6 @@
+EMBEDDING_DIM = 1024
+
+
 class LLMConfig:
     """
     Configuration class for the Language Learning Model (LLM).
@@ -10,7 +13,7 @@ class LLMConfig:
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-4o",
+        model: str = "gpt-4o-mini",
         base_url: str = "https://api.openai.com",
     ):
         """
@@ -21,7 +24,7 @@ class LLMConfig:
                            This is required for making authorized requests.
 
             model (str, optional): The specific LLM model to use for generating responses.
-                                   Defaults to "gpt-4o", which appears to be a custom model name.
+                                   Defaults to "gpt-4o-mini", which appears to be a custom model name.
                                    Common values might include "gpt-3.5-turbo" or "gpt-4".
 
             base_url (str, optional): The base URL of the LLM API service.

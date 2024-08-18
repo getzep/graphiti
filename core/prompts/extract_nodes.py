@@ -6,10 +6,12 @@ from .models import Message, PromptVersion, PromptFunction
 
 class Prompt(Protocol):
     v1: PromptVersion
+    v2: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
+    v2: PromptFunction
 
 
 def v1(context: dict[str, any]) -> list[Message]:
@@ -60,6 +62,45 @@ def v1(context: dict[str, any]) -> list[Message]:
     ]
 
 
-versions: Versions = {
-    "v1": v1,
-}
+def v2(context: dict[str, any]) -> list[Message]:
+    return [
+        Message(
+            role="system",
+            content="You are a helpful assistant that extracts graph nodes from provided context.",
+        ),
+        Message(
+            role="user",
+            content=f"""
+        Given the following context, extract new entity nodes that need to be added to the knowledge graph:
+
+        Previous Episodes:
+        {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+
+        New Episode:
+        Content: {context["episode_content"]}
+
+        Extract new entity nodes based on the content of the current episode, while considering the context from previous episodes.
+
+        Guidelines:
+        1. Focus on entities, concepts, or actors that are central to the current episode.
+        2. Avoid creating nodes for relationships or actions (these will be handled as edges later).
+        3. Provide a brief but informative summary for each node.
+
+        Respond with a JSON object in the following format:
+        {{
+            "new_nodes": [
+                {{
+                    "name": "Unique identifier for the node",
+                    "labels": ["Entity", "OptionalAdditionalLabel"],
+                    "summary": "Brief summary of the node's role or significance"
+                }}
+            ]
+        }}
+
+        If no new nodes need to be added, return an empty list for "new_nodes".
+        """,
+        ),
+    ]
+
+
+versions: Versions = {"v1": v1, "v2": v2}
