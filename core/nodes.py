@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pydantic import Field
+from time import time
 from datetime import datetime
 from uuid import uuid4
 
@@ -80,9 +80,12 @@ class EntityNode(Node):
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
     async def generate_name_embedding(self, embedder, model="text-embedding-3-small"):
+        start = time()
         text = self.name.replace("\n", " ")
         embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
         self.name_embedding = embedding[:EMBEDDING_DIM]
+        end = time()
+        logger.info(f"embedded {text} in {end-start} ms")
 
         return embedding
 

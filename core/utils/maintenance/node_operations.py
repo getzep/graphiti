@@ -1,4 +1,5 @@
 from datetime import datetime
+from time import time
 
 from core.nodes import EntityNode, EpisodicNode
 import logging
@@ -68,6 +69,8 @@ async def extract_nodes(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
+    start = time()
+
     # Prepare context for LLM
     context = {
         "episode_content": episode.content,
@@ -87,7 +90,9 @@ async def extract_nodes(
         prompt_library.extract_nodes.v3(context)
     )
     new_nodes_data = llm_response.get("new_nodes", [])
-    logger.info(f"Extracted new nodes: {new_nodes_data}")
+
+    end = time()
+    logger.info(f"Extracted new nodes: {new_nodes_data} in {(end - start) * 1000} ms")
     # Convert the extracted data into EntityNode objects
     new_nodes = []
     for node_data in new_nodes_data:
@@ -108,6 +113,8 @@ async def dedupe_extracted_nodes(
     extracted_nodes: list[EntityNode],
     existing_nodes: list[EntityNode],
 ) -> list[EntityNode]:
+    start = time()
+
     # build node map
     node_map = {}
     for node in existing_nodes:
@@ -136,7 +143,9 @@ async def dedupe_extracted_nodes(
     )
 
     new_nodes_data = llm_response.get("new_nodes", [])
-    logger.info(f"Deduplicated nodes: {new_nodes_data}")
+
+    end = time()
+    logger.info(f"Deduplicated nodes: {new_nodes_data} in {(end - start) * 1000} ms")
 
     # Get full node data
     nodes = []

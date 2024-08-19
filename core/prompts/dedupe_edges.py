@@ -43,7 +43,6 @@ def v1(context: dict[str, any]) -> list[Message]:
         {{
             "new_edges": [
                 {{
-                    "name": "Unique identifier for the edge",
                     "fact": "one sentence description of the fact"
                 }}
             ]

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
+from time import time
 
 from neo4j import AsyncDriver
 
@@ -238,18 +239,70 @@ async def get_relevant_nodes(
     nodes: list[EntityNode],
     driver: AsyncDriver,
 ) -> list[EntityNode]:
+    start = time()
     relevant_nodes: dict[str, EntityNode] = {}
+    # BM25 search to get top nodes
+    uuids = [node.uuid for node in nodes]
+    records, _, _ = await driver.execute_query(
+        """
+    MATCH (n) WHERE n.uuid IN $uuids
+    CALL db.index.fulltext.queryNodes("name_and_summary", n.name) 
+    YIELD node
+    RETURN DISTINCT
+        node.uuid As uuid, 
+        node.name AS name, 
+        node.created_at AS created_at, 
+        node.summary AS summary
+    """,
+        uuids=uuids,
+    )
+    nodes: list[EntityNode] = []
 
-    results = await asyncio.gather(
-        *[entity_fulltext_search(node.name, driver) for node in nodes],
-        *[entity_similarity_search(node.name_embedding, driver) for node in nodes],
+    for record in records:
+        nodes.append(
+            EntityNode(
+                uuid=record["uuid"],
+                name=record["name"],
+                labels=[],
+                created_at=datetime.now(),
+                summary=record["summary"],
+            )
+        )
+
+    # vector similarity search over entity names
+    records, _, _ = await driver.execute_query(
+        """
+            MATCH (n) WHERE n.uuid IN $uuids
+            CALL db.index.vector.queryNodes("name_embedding", 3, n.name_embedding)
+            YIELD node AS n
+            RETURN DISTINCT
+                n.uuid As uuid, 
+                n.name AS name, 
+                n.created_at AS created_at, 
+                n.summary AS summary
+            """,
+        uuids=uuids,
     )
 
-    for result in results:
+    for record in records:
+        nodes.append(
+            EntityNode(
+                uuid=record["uuid"],
+                name=record["name"],
+                labels=[],
+                created_at=datetime.now(),
+                summary=record["summary"],
+            )
+        )
+
+    for node in nodes:
         for node in result:
             relevant_nodes[node.uuid] = node
 
-    logger.info(f"Found relevant nodes: {relevant_nodes.keys()}")
+    end = time()
+    logger.info(
+        f"Found relevant nodes: {relevant_nodes.keys()} in {(end - start) * 1000} ms"
+    )
 
     return relevant_nodes.values()
 
@@ -258,6 +311,7 @@ async def get_relevant_edges(
     edges: list[EntityEdge],
     driver: AsyncDriver,
 ) -> list[EntityEdge]:
+    start = time()
     relevant_edges: dict[str, EntityEdge] = {}
 
     results = await asyncio.gather(
@@ -269,6 +323,9 @@ async def get_relevant_edges(
         for edge in result:
             relevant_edges[edge.uuid] = edge
 
-    logger.info(f"Found relevant nodes: {relevant_edges.keys()}")
+    end = time()
+    logger.info(
+        f"Found relevant nodes: {relevant_edges.keys()} in {(end - start) * 1000} ms"
+    )
 
     return list(relevant_edges.values())

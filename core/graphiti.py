@@ -4,6 +4,7 @@ import logging
 from typing import Callable, LiteralString
 from neo4j import AsyncGraphDatabase
 from dotenv import load_dotenv
+from time import time
 import os
 
 from core.llm_client.config import EMBEDDING_DIM
@@ -75,6 +76,8 @@ class Graphiti:
     ):
         """Process an episode and update the graph"""
         try:
+            start = time()
+
             nodes: list[EntityNode] = []
             entity_edges: list[EntityEdge] = []
             episodic_edges: list[EpisodicEdge] = []
@@ -175,6 +178,9 @@ class Graphiti:
             await asyncio.gather(*[node.save(self.driver) for node in nodes])
             await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
             await asyncio.gather(*[edge.save(self.driver) for edge in entity_edges])
+
+            end = time()
+            logger.info(f"Completed add_episode in {(end-start) * 1000} ms")
             # for node in nodes:
             #     if isinstance(node, EntityNode):
             #         await node.update_summary(self.driver)

@@ -44,7 +44,6 @@ def v1(context: dict[str, any]) -> list[Message]:
             "new_nodes": [
                 {{
                     "name": "Unique identifier for the node",
-                    "summary": "Brief summary of the node's role or significance"
                 }}
             ]
         }}

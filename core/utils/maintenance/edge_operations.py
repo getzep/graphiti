@@ -1,6 +1,7 @@
 import json
 from typing import List
 from datetime import datetime
+from time import time
 
 from pydantic import BaseModel
 
@@ -144,6 +145,8 @@ async def extract_edges(
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
 ) -> list[EntityEdge]:
+    start = time()
+
     # Prepare context for LLM
     context = {
         "episode_content": episode.content,
@@ -167,7 +170,9 @@ async def extract_edges(
         prompt_library.extract_edges.v2(context)
     )
     edges_data = llm_response.get("edges", [])
-    logger.info(f"Extracted new edges: {edges_data}")
+
+    end = time()
+    logger.info(f"Extracted new edges: {edges_data} in {(end - start) * 1000} ms")
 
     # Convert the extracted data into EntityEdge objects
     edges = []
@@ -199,11 +204,11 @@ async def dedupe_extracted_edges(
     # Create edge map
     edge_map = {}
     for edge in existing_edges:
-        edge_map[edge.name] = edge
+        edge_map[edge.fact] = edge
     for edge in extracted_edges:
-        if edge.name in edge_map.keys():
+        if edge.fact in edge_map.keys():
             continue
-        edge_map[edge.name] = edge
+        edge_map[edge.fact] = edge
 
     # Prepare context for LLM
     context = {
@@ -224,7 +229,7 @@ async def dedupe_extracted_edges(
     # Get full edge data
     edges = []
     for edge_data in new_edges_data:
-        edge = edge_map[edge_data["name"]]
+        edge = edge_map[edge_data["fact"]]
         edges.append(edge)
 
     return edges
