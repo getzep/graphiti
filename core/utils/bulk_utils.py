@@ -10,7 +10,9 @@ from core.nodes import EpisodicNode, EntityNode
 from core.utils import retrieve_episodes
 from core.utils.maintenance.edge_operations import extract_edges, build_episodic_edges
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
-from core.utils.maintenance.node_operations import extract_nodes
+from core.utils.maintenance.node_operations import extract_nodes, dedupe_nodes
+
+CHUNK_SIZE = 20
 
 
 class BulkEpisode(BaseModel):
@@ -70,3 +72,17 @@ async def extract_nodes_and_edges_bulk(
     ] = zip(extracted_nodes_bulk, extracted_edges_bulk, episodic_edges_bulk)
 
     return nodes_and_edges_bulk
+
+
+async def compress_nodes_bulk(
+    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
+):
+    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+
+    results = await asyncio.gather(
+        *[dedupe_nodes(llm_client, chunk) for chunk in node_chunks]
+    )
+
+    compressed_nodes: list[EntityNode] = []
+    for node_chunk, uuid_map_chunk in results:
+        compressed_nodes += node_chunk

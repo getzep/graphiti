@@ -6,10 +6,12 @@ from .models import Message, PromptVersion, PromptFunction
 
 class Prompt(Protocol):
     v1: PromptVersion
+    node_list: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
+    node_list: PromptVersion
 
 
 def v1(context: dict[str, any]) -> list[Message]:
@@ -52,4 +54,43 @@ def v1(context: dict[str, any]) -> list[Message]:
     ]
 
 
-versions: Versions = {"v1": v1}
+def node_list(context: dict[str, any]) -> list[Message]:
+    return [
+        Message(
+            role="system",
+            content="You are a helpful assistant that de-duplicates nodes from node lists.",
+        ),
+        Message(
+            role="user",
+            content=f"""
+        Given the following context, deduplicate a list of nodes:
+
+        Nodes:
+        {json.dumps(context['nodes'], indent=2)}
+
+        Task:
+        1. If any of the nodes in the list are duplicates of each other, group those nodes together in a list
+        3. Respond with the resulting list of duplicate node lists
+
+        Guidelines:
+        1. Use both the name and summary of nodes to determine if they are duplicates, 
+            duplicate nodes may have different names
+        2. Each uuid from the list of nodes should appear EXACTLY once in your response
+        3. make sure the updated summary is brief
+
+        Respond with a JSON object in the following format:
+        {{
+            "nodes": [
+                {{
+                    "uuid": "a97ed1e188834a59b93968fc75e43e71",
+                    "duplicate_uuids":  ["uuid of node that is a duplicate of a97ed1e188834a59b93968fc75e43e71"],
+                    "summary": "brief summary that combines information from the summaries of the node and its duplicates"
+                }}
+            ]
+        }}
+        """,
+        ),
+    ]
+
+
+versions: Versions = {"v1": v1, "node_list": node_list}

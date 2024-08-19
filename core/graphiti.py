@@ -307,7 +307,9 @@ class Graphiti:
             episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
 
             # extract all nodes and edges
-            await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
+            nodes_and_edges = await extract_nodes_and_edges_bulk(
+                self.llm_client, episode_pairs
+            )
 
             end = time()
             logger.info(f"Completed add_episode in {(end-start) * 1000} ms")

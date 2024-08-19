@@ -154,3 +154,47 @@ async def dedupe_extracted_nodes(
         nodes.append(node)
 
     return nodes
+
+
+async def dedupe_nodes(
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
+) -> tuple[list[EntityNode], dict[str, str]]:
+    start = time()
+
+    # build node map
+    node_map = {}
+    for node in nodes:
+        node_map[node.uuid] = node
+
+    # Prepare context for LLM
+    nodes_context = [
+        {"uuid": node.uuid, "name": node.name, "summary": node.summary}
+        for node in nodes
+    ]
+
+    context = {
+        "nodes": nodes_context,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_nodes.node_list(context)
+    )
+
+    nodes_data = llm_response.get("nodes", [])
+
+    end = time()
+    logger.info(f"Deduplicated nodes: {nodes_data} in {(end - start) * 1000} ms")
+
+    # Get full node data
+    nodes = []
+    uuid_map: dict[str, str] = {}
+    for node_data in nodes_data:
+        node = node_map[node_data["uuid"]]
+        node.summary = node_data["summary"]
+        nodes.append(node)
+
+        for uuid in node_data["duplicate_uuids"]:
+            uuid_map[uuid] = node_data["uuid"]
+
+    return nodes, uuid_map
