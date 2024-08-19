@@ -240,71 +240,28 @@ async def get_relevant_nodes(
     driver: AsyncDriver,
 ) -> list[EntityNode]:
     start = time()
-    relevant_nodes: dict[str, EntityNode] = {}
-    # BM25 search to get top nodes
-    uuids = [node.uuid for node in nodes]
-    records, _, _ = await driver.execute_query(
-        """
-    MATCH (n) WHERE n.uuid IN $uuids
-    CALL db.index.fulltext.queryNodes("name_and_summary", n.name) 
-    YIELD node
-    RETURN DISTINCT
-        node.uuid As uuid, 
-        node.name AS name, 
-        node.created_at AS created_at, 
-        node.summary AS summary
-    """,
-        uuids=uuids,
-    )
-    nodes: list[EntityNode] = []
+    relevant_nodes: list[EntityNode] = []
+    relevant_node_uuids = set()
 
-    for record in records:
-        nodes.append(
-            EntityNode(
-                uuid=record["uuid"],
-                name=record["name"],
-                labels=[],
-                created_at=datetime.now(),
-                summary=record["summary"],
-            )
-        )
-
-    # vector similarity search over entity names
-    records, _, _ = await driver.execute_query(
-        """
-            MATCH (n) WHERE n.uuid IN $uuids
-            CALL db.index.vector.queryNodes("name_embedding", 3, n.name_embedding)
-            YIELD node AS n
-            RETURN DISTINCT
-                n.uuid As uuid, 
-                n.name AS name, 
-                n.created_at AS created_at, 
-                n.summary AS summary
-            """,
-        uuids=uuids,
+    results = await asyncio.gather(
+        *[entity_fulltext_search(node.name, driver) for node in nodes],
+        *[entity_similarity_search(node.name_embedding, driver) for node in nodes],
     )
 
-    for record in records:
-        nodes.append(
-            EntityNode(
-                uuid=record["uuid"],
-                name=record["name"],
-                labels=[],
-                created_at=datetime.now(),
-                summary=record["summary"],
-            )
-        )
-
-    for node in nodes:
+    for result in results:
         for node in result:
-            relevant_nodes[node.uuid] = node
+            if node.uuid in relevant_node_uuids:
+                continue
+
+            relevant_node_uuids.add(node.uuid)
+            relevant_nodes.append(node)
 
     end = time()
     logger.info(
-        f"Found relevant nodes: {relevant_nodes.keys()} in {(end - start) * 1000} ms"
+        f"Found relevant nodes: {relevant_node_uuids} in {(end - start) * 1000} ms"
     )
 
-    return relevant_nodes.values()
+    return relevant_nodes
 
 
 async def get_relevant_edges(
@@ -312,7 +269,8 @@ async def get_relevant_edges(
     driver: AsyncDriver,
 ) -> list[EntityEdge]:
     start = time()
-    relevant_edges: dict[str, EntityEdge] = {}
+    relevant_edges: list[EntityEdge] = []
+    relevant_edge_uuids = set()
 
     results = await asyncio.gather(
         *[edge_similarity_search(edge.fact_embedding, driver) for edge in edges],
@@ -321,11 +279,15 @@ async def get_relevant_edges(
 
     for result in results:
         for edge in result:
-            relevant_edges[edge.uuid] = edge
+            if edge.uuid in relevant_edge_uuids:
+                continue
+
+            relevant_edge_uuids.add(edge.uuid)
+            relevant_edges.append(edge)
 
     end = time()
     logger.info(
-        f"Found relevant nodes: {relevant_edges.keys()} in {(end - start) * 1000} ms"
+        f"Found relevant nodes: {relevant_edge_uuids} in {(end - start) * 1000} ms"
     )
 
     return list(relevant_edges.values())
