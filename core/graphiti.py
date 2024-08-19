@@ -9,22 +9,22 @@ import os
 
 from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import EntityNode, EpisodicNode, Node
-from core.edges import EntityEdge, EpisodicEdge
+from core.edges import EntityEdge, Edge, EpisodicEdge
 from core.utils import (
     build_episodic_edges,
+    retrieve_relevant_schema,
+    clear_data,
     retrieve_episodes,
 )
 from core.llm_client import LLMClient, OpenAIClient, LLMConfig
-from core.utils.maintenance.edge_operations import (
-    extract_edges,
-    dedupe_extracted_edges,
+from core.utils.bulk_utils import (
+    BulkEpisode,
+    extract_nodes_and_edges_bulk,
+    retrieve_previous_episodes_bulk,
 )
-
+from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
+from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
-from core.utils.maintenance.temporal_operations import (
-    prepare_edges_for_invalidation,
-    invalidate_edges,
-)
 from core.utils.search.search_utils import (
     edge_similarity_search,
     entity_fulltext_search,
@@ -59,17 +59,35 @@ class Graphiti:
         self.driver.close()
 
     async def retrieve_episodes(
-        self, last_n: int, sources: list[str] | None = "messages"
+        self,
+        reference_time: datetime,
+        last_n: int,
+        sources: list[str] | None = "messages",
     ) -> list[EpisodicNode]:
         """Retrieve the last n episodic nodes from the graph"""
-        return await retrieve_episodes(self.driver, last_n, sources)
+        return await retrieve_episodes(self.driver, reference_time, last_n, sources)
+
+    async def retrieve_relevant_schema(self, query: str = None) -> dict[str, any]:
+        """Retrieve relevant nodes and edges to a specific query"""
+        return await retrieve_relevant_schema(self.driver, query)
+        ...
+
+    # Invalidate edges that are no longer valid
+    async def invalidate_edges(
+        self,
+        episode: EpisodicNode,
+        new_nodes: list[EntityNode],
+        new_edges: list[EntityEdge],
+        relevant_schema: dict[str, any],
+        previous_episodes: list[EpisodicNode],
+    ): ...
 
     async def add_episode(
         self,
         name: str,
         episode_body: str,
         source_description: str,
-        reference_time: datetime = None,
+        reference_time: datetime,
         episode_type="string",
         success_callback: Callable | None = None,
         error_callback: Callable | None = None,
@@ -84,7 +102,9 @@ class Graphiti:
             embedder = self.llm_client.client.embeddings
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(last_n=3)
+            previous_episodes = await self.retrieve_episodes(
+                reference_time, last_n=EPISODE_WINDOW_LEN
+            )
             episode = EpisodicNode(
                 name=name,
                 labels=[],
@@ -94,6 +114,7 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
+            # relevant_schema = await self.retrieve_relevant_schema(episode.content)
 
             extracted_nodes = await extract_nodes(
                 self.llm_client, episode, previous_episodes
@@ -130,32 +151,13 @@ class Graphiti:
                 f"Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}"
             )
 
-            deduped_edges = await dedupe_extracted_edges(
+            new_edges = await dedupe_extracted_edges(
                 self.llm_client, extracted_edges, existing_edges
             )
 
-            (
-                old_edges_with_nodes_pending_invalidation,
-                new_edges_with_nodes,
-            ) = prepare_edges_for_invalidation(
-                existing_edges=existing_edges, new_edges=deduped_edges, nodes=nodes
-            )
+            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in new_edges]}")
 
-            invalidated_edges = await invalidate_edges(
-                self.llm_client,
-                old_edges_with_nodes_pending_invalidation,
-                new_edges_with_nodes,
-            )
-
-            entity_edges.extend(invalidated_edges)
-
-            logger.info(
-                f"Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}"
-            )
-
-            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
-
-            entity_edges.extend(deduped_edges)
+            entity_edges.extend(new_edges)
             episodic_edges.extend(
                 build_episodic_edges(
                     # There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them
@@ -273,3 +275,49 @@ class Graphiti:
         context = await bfs(node_ids, self.driver)
 
         return context
+
+    async def add_episode_bulk(
+        self,
+        bulk_episodes: list[BulkEpisode],
+        success_callback: Callable | None = None,
+        error_callback: Callable | None = None,
+    ):
+        try:
+            start = time()
+            embedder = self.llm_client.client.embeddings
+            now = datetime.now()
+
+            episodes = [
+                EpisodicNode(
+                    name=episode.name,
+                    labels=[],
+                    source="messages",
+                    content=episode.content,
+                    source_description=episode.source_description,
+                    created_at=now,
+                    valid_at=episode.reference_time,
+                )
+                for episode in bulk_episodes
+            ]
+
+            # Save all the episodes
+            await asyncio.gather(*[episode.save(self.driver) for episode in episodes])
+
+            # Get previous episode context for each episode
+            episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
+
+            # extract all nodes and edges
+            await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
+
+            end = time()
+            logger.info(f"Completed add_episode in {(end-start) * 1000} ms")
+            # for node in nodes:
+            #     if isinstance(node, EntityNode):
+            #         await node.update_summary(self.driver)
+            if success_callback:
+                await success_callback(episode)
+        except Exception as e:
+            if error_callback:
+                await error_callback(episode, e)
+            else:
+                raise e

@@ -4,6 +4,7 @@ from core.nodes import EpisodicNode
 from neo4j import AsyncDriver
 import logging
 
+EPISODE_WINDOW_LEN = 3
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,15 @@ async def clear_data(driver: AsyncDriver):
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver, last_n: int, sources: list[str] | None = "messages"
+    driver: AsyncDriver,
+    reference_time: datetime,
+    last_n: int,
+    sources: list[str] | None = "messages",
 ) -> list[EpisodicNode]:
     """Retrieve the last n episodic nodes from the graph"""
-    query = """
-        MATCH (e:Episodic)
+    result = await driver.execute_query(
+        """
+        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
         RETURN e.content as content,
             e.created_at as created_at,
             e.valid_at as valid_at,
@@ -32,8 +37,10 @@ async def retrieve_episodes(
             e.source as source
         ORDER BY e.created_at DESC
         LIMIT $num_episodes
-        """
-    result = await driver.execute_query(query, num_episodes=last_n)
+        """,
+        reference_time=reference_time,
+        num_episodes=last_n,
+    )
     episodes = [
         EpisodicNode(
             content=record["content"],

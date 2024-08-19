@@ -10,6 +10,8 @@ from core.nodes import EntityNode
 
 logger = logging.getLogger(__name__)
 
+RELEVANT_SCHEMA_LIMIT = 3
+
 
 async def bfs(node_ids: list[str], driver: AsyncDriver):
     records, _, _ = await driver.execute_query(
@@ -61,7 +63,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver
+    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
@@ -81,9 +83,10 @@ async def edge_similarity_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
-                ORDER BY score DESC LIMIT 10
+                ORDER BY score DESC LIMIT $limit
                 """,
         search_vector=search_vector,
+        limit=limit,
     )
 
     edges: list[EntityEdge] = []
@@ -107,18 +110,16 @@ async def edge_similarity_search(
 
         edges.append(edge)
 
-    logger.info(f"similarity search results. RESULT: {[edge.uuid for edge in edges]}")
-
     return edges
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver
+    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
-                CALL db.index.vector.queryNodes("name_embedding", 5, $search_vector)
+                CALL db.index.vector.queryNodes("name_embedding", $limit, $search_vector)
                 YIELD node AS n, score
                 RETURN
                     n.uuid As uuid, 
@@ -128,6 +129,7 @@ async def entity_similarity_search(
                 ORDER BY score DESC
                 """,
         search_vector=search_vector,
+        limit=limit,
     )
     nodes: list[EntityNode] = []
 
@@ -142,12 +144,12 @@ async def entity_similarity_search(
             )
         )
 
-    logger.info(f"name semantic search results. RESULT: {nodes}")
-
     return nodes
 
 
-async def entity_fulltext_search(query: str, driver: AsyncDriver) -> list[EntityNode]:
+async def entity_fulltext_search(
+    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = query + "~"
     records, _, _ = await driver.execute_query(
@@ -159,9 +161,10 @@ async def entity_fulltext_search(query: str, driver: AsyncDriver) -> list[Entity
         node.created_at AS created_at, 
         node.summary AS summary
     ORDER BY score DESC
-    LIMIT 10
+    LIMIT $limit
     """,
         query=fuzzy_query,
+        limit=limit,
     )
     nodes: list[EntityNode] = []
 
@@ -176,12 +179,12 @@ async def entity_fulltext_search(query: str, driver: AsyncDriver) -> list[Entity
             )
         )
 
-    logger.info(f"fulltext search results. QUERY:{query}. RESULT: {nodes}")
-
     return nodes
 
 
-async def edge_fulltext_search(query: str, driver: AsyncDriver) -> list[EntityEdge]:
+async def edge_fulltext_search(
+    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = query + "~"
 
@@ -202,9 +205,10 @@ async def edge_fulltext_search(query: str, driver: AsyncDriver) -> list[EntityEd
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
-                ORDER BY score DESC LIMIT 10
+                ORDER BY score DESC LIMIT $limit
                 """,
         query=fuzzy_query,
+        limit=limit,
     )
 
     edges: list[EntityEdge] = []
@@ -227,10 +231,6 @@ async def edge_fulltext_search(query: str, driver: AsyncDriver) -> list[EntityEd
         )
 
         edges.append(edge)
-
-    logger.info(
-        f"similarity search results. QUERY:{query}. RESULT: {[edge.uuid for edge in edges]}"
-    )
 
     return edges
 

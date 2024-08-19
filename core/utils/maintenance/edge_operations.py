@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def build_episodic_edges(
     entity_nodes: List[EntityNode],
     episode: EpisodicNode,
-    transaction_from: datetime,
+    created_at: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
@@ -26,7 +26,7 @@ def build_episodic_edges(
         edge = EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
-            created_at=transaction_from,
+            created_at=created_at,
         )
         edges.append(edge)
 
