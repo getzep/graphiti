@@ -135,17 +135,18 @@ def v2(context: dict[str, any]) -> list[Message]:
         Message(
             role="user",
             content=f"""
-        Given the following context, extract new edges (relationships) that need to be added to the knowledge graph:
+        Given the following context, extract edges (relationships) that need to be added to the knowledge graph:
         Nodes:
         {json.dumps(context['nodes'], indent=2)}
 
-        New Episode:
-        Content: {context['episode_content']}
+        
 
-        Previous Episodes:
+        Episodes:
         {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+        {context['episode_content']} <-- New Episode
+        
 
-        Extract new entity edges based on the content of the current episode, the given nodes, and context from previous episodes.
+        Extract entity edges based on the content of the current episode, the given nodes, and context from previous episodes.
 
         Guidelines:
         1. Create edges only between the provided nodes.
@@ -168,7 +169,7 @@ def v2(context: dict[str, any]) -> list[Message]:
             ]
         }}
 
-        If no new edges need to be added, return an empty list for "new_edges".
+        If no edges need to be added, return an empty list for "edges".
         """,
         ),
     ]

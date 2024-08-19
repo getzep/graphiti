@@ -170,20 +170,21 @@ async def extract_edges(
     # Convert the extracted data into EntityEdge objects
     edges = []
     for edge_data in edges_data:
-        edge = EntityEdge(
-            source_node_uuid=edge_data["source_node_uuid"],
-            target_node_uuid=edge_data["target_node_uuid"],
-            name=edge_data["relation_type"],
-            fact=edge_data["fact"],
-            episodes=[episode.uuid],
-            created_at=datetime.now(),
-            valid_at=edge_data["valid_at"],
-            invalid_at=edge_data["invalid_at"],
-        )
-        edges.append(edge)
-        logger.info(
-            f"Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})"
-        )
+        if edge_data["target_node_uuid"] and edge_data["source_node_uuid"]:
+            edge = EntityEdge(
+                source_node_uuid=edge_data["source_node_uuid"],
+                target_node_uuid=edge_data["target_node_uuid"],
+                name=edge_data["relation_type"],
+                fact=edge_data["fact"],
+                episodes=[episode.uuid],
+                created_at=datetime.now(),
+                valid_at=None,
+                invalid_at=None,
+            )
+            edges.append(edge)
+            logger.info(
+                f"Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})"
+            )
 
     return edges
 

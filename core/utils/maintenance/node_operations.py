@@ -84,7 +84,7 @@ async def extract_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.v2(context)
+        prompt_library.extract_nodes.v3(context)
     )
     new_nodes_data = llm_response.get("new_nodes", [])
     logger.info(f"Extracted new nodes: {new_nodes_data}")
