@@ -24,6 +24,7 @@ from core.utils.bulk_utils import (
     compress_nodes,
     dedupe_nodes_bulk,
     resolve_edge_pointers,
+    dedupe_edges_bulk,
 )
 from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
@@ -327,14 +328,23 @@ class Graphiti:
             await asyncio.gather(*[node.save(self.driver) for node in nodes])
 
             # re-map edge pointers so that they don't point to discard dupe nodes
-            extracted_edges = resolve_edge_pointers(extracted_edges, uuid_map)
-            episodic_edges = resolve_edge_pointers(episodic_edges, uuid_map)
+            extracted_edges: list[EntityEdge] = resolve_edge_pointers(
+                extracted_edges, uuid_map
+            )
+            episodic_edges: list[EpisodicEdge] = resolve_edge_pointers(
+                episodic_edges, uuid_map
+            )
 
             # save episodic edges to KG
             await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
 
             # Dedupe extracted edges
-            edges = await dedupe_edges_bulk
+            edges = await dedupe_edges_bulk(
+                self.driver, self.llm_client, extracted_edges
+            )
+
+            # save edges to KG
+            await asyncio.gather(*[edge.save() for edge in edges])
 
             end = time()
             logger.info(f"Completed add_episode_bulk in {(end-start) * 1000} ms")

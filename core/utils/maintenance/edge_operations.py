@@ -233,3 +233,40 @@ async def dedupe_extracted_edges(
         edges.append(edge)
 
     return edges
+
+
+async def dedupe_edge_list(
+    llm_client: LLMClient,
+    edges: list[EntityEdge],
+) -> list[EntityEdge]:
+    start = time()
+
+    # Create edge map
+    edge_map = {}
+    for edge in edges:
+        edge_map[edge.uuid] = edge
+
+    # Prepare context for LLM
+    context = {
+        "edges": [
+            {"uuid": edge.uuid, "name": edge.name, "fact": edge.fact} for edge in edges
+        ]
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.edge_list(context)
+    )
+    unique_edges_data = llm_response.get("unique_edges", [])
+
+    end = time()
+    logger.info(
+        f"Extracted edge duplicates: {unique_edges_data} in {(end - start)*1000} ms "
+    )
+
+    # Get full edge data
+    unique_edges = []
+    for edge_data in unique_edges_data:
+        uuid = edge_data["uuid"]
+        unique_edges.append(edge_map[uuid])
+
+    return unique_edges

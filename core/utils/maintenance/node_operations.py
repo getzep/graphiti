@@ -192,14 +192,14 @@ async def dedupe_node_list(
     logger.info(f"Deduplicated nodes: {nodes_data} in {(end - start) * 1000} ms")
 
     # Get full node data
-    nodes = []
+    node_dedupes = []
     uuid_map: dict[str, str] = {}
     for node_data in nodes_data:
         node = node_map[node_data["uuid"]]
         node.summary = node_data["summary"]
-        nodes.append(node)
+        node_dedupes.append(node)
 
         for uuid in node_data["duplicate_uuids"]:
             uuid_map[uuid] = node_data["uuid"]
 
-    return nodes, uuid_map
+    return node_dedupes, uuid_map

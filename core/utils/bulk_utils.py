@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict
 from datetime import datetime
 
 from neo4j import AsyncDriver
@@ -8,14 +9,19 @@ from core.edges import EpisodicEdge, EntityEdge, Edge
 from core.llm_client import LLMClient
 from core.nodes import EpisodicNode, EntityNode
 from core.utils import retrieve_episodes
-from core.utils.maintenance.edge_operations import extract_edges, build_episodic_edges
+from core.utils.maintenance.edge_operations import (
+    extract_edges,
+    build_episodic_edges,
+    dedupe_edge_list,
+    dedupe_extracted_edges,
+)
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 from core.utils.maintenance.node_operations import (
     extract_nodes,
     dedupe_node_list,
     dedupe_extracted_nodes,
 )
-from core.utils.search.search_utils import get_relevant_nodes
+from core.utils.search.search_utils import get_relevant_nodes, get_relevant_edges
 
 CHUNK_SIZE = 20
 
@@ -95,7 +101,7 @@ async def dedupe_nodes_bulk(
         llm_client, extracted_nodes, uuid_map
     )
 
-    existing_nodes = await get_relevant_nodes(extracted_nodes, driver)
+    existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
 
     nodes, partial_uuid_map = dedupe_extracted_nodes(
         llm_client, compressed_nodes, existing_nodes
@@ -110,7 +116,13 @@ async def dedupe_edges_bulk(
     driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # Compress edges
-    compressed_edges = compress_edges()
+    compressed_edges = await compress_edges(llm_client, extracted_edges)
+
+    existing_edges = await get_relevant_edges(compressed_edges, driver)
+
+    edges = await dedupe_extracted_edges(llm_client, compressed_edges, existing_edges)
+
+    return edges
 
 
 async def compress_nodes(
@@ -137,16 +149,19 @@ async def compress_nodes(
 
 async def compress_edges(
     llm_client: LLMClient, edges: list[EntityEdge]
-) -> list[EntityNode]:
-    edge_chunks = [edges[i : i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
+) -> list[EntityEdge]:
+    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
+    for edge in edges:
+        uuid_key = edge.source_node_uuid + edge.target_node_uuid
+        edge_chunk_map[uuid_key].append(edge)
 
     results = await asyncio.gather(
-        *[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks]
+        *[dedupe_edge_list(llm_client, chunk) for _, chunk in edge_chunk_map]
     )
 
     compressed_edges: list[EntityEdge] = []
-    for node_chunk, uuid_map_chunk in results:
-        compressed_edges += node_chunk
+    for edge_chunk in results:
+        compressed_edges += edge_chunk
 
     # Check if we have removed all duplicates
     if len(compressed_edges) == len(edges):
@@ -167,7 +182,7 @@ def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
     return compressed_map
 
 
-def resolve_edge_pointers(edges: list[Edge], uuid_map: dict[str, str]) -> list[Edge]:
+def resolve_edge_pointers(edges: list[Edge], uuid_map: dict[str, str]):
     resolved_edges: list[Edge] = []
     for edge in edges:
         source_uuid = edge.source_node_uuid
