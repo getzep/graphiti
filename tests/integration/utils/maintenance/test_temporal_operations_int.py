@@ -1,7 +1,5 @@
 import pytest
 
-pytestmark = pytest.mark.integration
-
 import asyncio
 from datetime import datetime, timedelta
 from core.utils.maintenance.temporal_operations import invalidate_edges, EdgeWithNodes
@@ -13,14 +11,15 @@ import os
 
 load_dotenv()
 
-# Set up the LLM client (TODO: in the future we might want to run tests using non-openai models as well)
-llm_client = OpenAIClient(
-    LLMConfig(
-        api_key=os.getenv("TEST_OPENAI_API_KEY"),
-        model=os.getenv("TEST_OPENAI_MODEL"),
-        base_url="https://api.openai.com/v1",
+
+def setup_llm_client():
+    return OpenAIClient(
+        LLMConfig(
+            api_key=os.getenv("TEST_OPENAI_API_KEY"),
+            model=os.getenv("TEST_OPENAI_MODEL"),
+            base_url="https://api.openai.com/v1",
+        )
     )
-)
 
 
 # Helper function to create test data
@@ -57,10 +56,13 @@ def create_test_data():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges():
     existing_edge, new_edge = create_test_data()
 
-    invalidated_edges = await invalidate_edges(llm_client, [existing_edge], [new_edge])
+    invalidated_edges = await invalidate_edges(
+        setup_llm_client(), [existing_edge], [new_edge]
+    )
 
     assert len(invalidated_edges) == 1
     assert invalidated_edges[0].uuid == existing_edge.edge.uuid
@@ -68,15 +70,17 @@ async def test_invalidate_edges():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_no_invalidation():
     existing_edge, _ = create_test_data()
 
-    invalidated_edges = await invalidate_edges(llm_client, [existing_edge], [])
+    invalidated_edges = await invalidate_edges(setup_llm_client(), [existing_edge], [])
 
     assert len(invalidated_edges) == 0
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_multiple_existing():
     existing_edge1, new_edge = create_test_data()
     existing_edge2, _ = create_test_data()
@@ -85,7 +89,7 @@ async def test_invalidate_edges_multiple_existing():
     existing_edge2.edge.fact = "Alice knows Bob"
 
     invalidated_edges = await invalidate_edges(
-        llm_client, [existing_edge1, existing_edge2], [new_edge]
+        setup_llm_client(), [existing_edge1, existing_edge2], [new_edge]
     )
 
     assert len(invalidated_edges) == 1
@@ -145,6 +149,7 @@ def create_complex_test_data():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_complex():
     existing_edges, nodes = create_complex_test_data()
 
@@ -162,7 +167,9 @@ async def test_invalidate_edges_complex():
         target_node=nodes[1],
     )
 
-    invalidated_edges = await invalidate_edges(llm_client, existing_edges, [new_edge])
+    invalidated_edges = await invalidate_edges(
+        setup_llm_client(), existing_edges, [new_edge]
+    )
 
     assert len(invalidated_edges) == 1
     assert invalidated_edges[0].uuid == "e1"
@@ -170,6 +177,7 @@ async def test_invalidate_edges_complex():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_temporal_update():
     existing_edges, nodes = create_complex_test_data()
 
@@ -187,7 +195,9 @@ async def test_invalidate_edges_temporal_update():
         target_node=nodes[3],
     )
 
-    invalidated_edges = await invalidate_edges(llm_client, existing_edges, [new_edge])
+    invalidated_edges = await invalidate_edges(
+        setup_llm_client(), existing_edges, [new_edge]
+    )
 
     assert len(invalidated_edges) == 1
     assert invalidated_edges[0].uuid == "e3"
@@ -195,6 +205,7 @@ async def test_invalidate_edges_temporal_update():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_multiple_invalidations():
     existing_edges, nodes = create_complex_test_data()
 
@@ -225,7 +236,7 @@ async def test_invalidate_edges_multiple_invalidations():
     )
 
     invalidated_edges = await invalidate_edges(
-        llm_client, existing_edges, [new_edge1, new_edge2]
+        setup_llm_client(), existing_edges, [new_edge1, new_edge2]
     )
 
     assert len(invalidated_edges) == 2
@@ -235,6 +246,7 @@ async def test_invalidate_edges_multiple_invalidations():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_no_effect():
     existing_edges, nodes = create_complex_test_data()
 
@@ -252,12 +264,15 @@ async def test_invalidate_edges_no_effect():
         target_node=nodes[3],
     )
 
-    invalidated_edges = await invalidate_edges(llm_client, existing_edges, [new_edge])
+    invalidated_edges = await invalidate_edges(
+        setup_llm_client(), existing_edges, [new_edge]
+    )
 
     assert len(invalidated_edges) == 0
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_partial_update():
     existing_edges, nodes = create_complex_test_data()
 
@@ -275,7 +290,9 @@ async def test_invalidate_edges_partial_update():
         target_node=nodes[3],
     )
 
-    invalidated_edges = await invalidate_edges(llm_client, existing_edges, [new_edge])
+    invalidated_edges = await invalidate_edges(
+        setup_llm_client(), existing_edges, [new_edge]
+    )
 
     assert (
         len(invalidated_edges) == 0
@@ -283,7 +300,8 @@ async def test_invalidate_edges_partial_update():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_invalidate_edges_empty_inputs():
-    invalidated_edges = await invalidate_edges(llm_client, [], [])
+    invalidated_edges = await invalidate_edges(setup_llm_client(), [], [])
 
     assert len(invalidated_edges) == 0

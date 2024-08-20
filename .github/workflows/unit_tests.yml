@@ -36,4 +36,4 @@ jobs:
       env:
         PYTHONPATH: ${{ github.workspace }}
       run: |
-        poetry run pytest tests/unit -v
+        poetry run pytest -m "not integration"
