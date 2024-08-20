@@ -24,4 +24,4 @@ jobs:
       env:
         PYTHONPATH: ${{ github.workspace }}
       run: |
-        poetry run pytest tests -v -m "not integration"
+        poetry run pytest tests -v -k "not integration and not test_temporal_operations_int"
