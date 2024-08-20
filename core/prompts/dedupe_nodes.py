@@ -6,11 +6,13 @@ from .models import Message, PromptVersion, PromptFunction
 
 class Prompt(Protocol):
     v1: PromptVersion
+    v2: PromptVersion
     node_list: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
+    v2: PromptFunction
     node_list: PromptVersion
 
 
@@ -46,6 +48,46 @@ def v1(context: dict[str, any]) -> list[Message]:
             "new_nodes": [
                 {{
                     "name": "Unique identifier for the node",
+                }}
+            ]
+        }}
+        """,
+        ),
+    ]
+
+
+def v2(context: dict[str, any]) -> list[Message]:
+    return [
+        Message(
+            role="system",
+            content="You are a helpful assistant that de-duplicates nodes from node lists.",
+        ),
+        Message(
+            role="user",
+            content=f"""
+        Given the following context, deduplicate nodes from a list of new nodes given a list of existing nodes:
+
+        Existing Nodes:
+        {json.dumps(context['existing_nodes'], indent=2)}
+
+        New Nodes:
+        {json.dumps(context['extracted_nodes'], indent=2)}
+
+        Task:
+        If any node in New Nodes is a duplicate of a node in Existing Nodes, add their uuids to the output list
+
+        Guidelines:
+        1. Use both the name and summary of nodes to determine if they are duplicates, 
+            duplicate nodes may have different names
+        2. In the output, uuid should always be the uuid of the New Node that is a duplicate. duplicate_of should be
+            the uuid of the Existing Node.
+
+        Respond with a JSON object in the following format:
+        {{
+            "duplicates": [
+                {{
+                    "uuid": "Unique identifier for the node",
+                    "duplicate_of": "uuid of the existing node"
                 }}
             ]
         }}
@@ -93,4 +135,4 @@ def node_list(context: dict[str, any]) -> list[Message]:
     ]
 
 
-versions: Versions = {"v1": v1, "node_list": node_list}
+versions: Versions = {"v1": v1, "v2": v2, "node_list": node_list}

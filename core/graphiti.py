@@ -21,6 +21,9 @@ from core.utils.bulk_utils import (
     BulkEpisode,
     extract_nodes_and_edges_bulk,
     retrieve_previous_episodes_bulk,
+    compress_nodes,
+    dedupe_nodes_bulk,
+    resolve_edge_pointers,
 )
 from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
@@ -129,7 +132,7 @@ class Graphiti:
             logger.info(
                 f"Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}"
             )
-            new_nodes = await dedupe_extracted_nodes(
+            new_nodes, _ = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
             )
             logger.info(
@@ -279,8 +282,6 @@ class Graphiti:
     async def add_episode_bulk(
         self,
         bulk_episodes: list[BulkEpisode],
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
     ):
         try:
             start = time()
@@ -306,22 +307,37 @@ class Graphiti:
             # Get previous episode context for each episode
             episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
 
-            # extract all nodes and edges
-            nodes_and_edges = await extract_nodes_and_edges_bulk(
-                self.llm_client, episode_pairs
+            # Extract all nodes and edges
+            extracted_nodes, extracted_edges, episodic_edges = (
+                await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
             )
 
-            extracted_nodes, extracted_edges, episodic_edges = nodes_and_edges
+            # Generate embeddings
+            await asyncio.gather(
+                *[node.generate_name_embedding(embedder) for node in extracted_nodes],
+                *[edge.generate_embedding(embedder) for edge in extracted_edges],
+            )
+
+            # Dedupe extracted nodes
+            nodes, uuid_map = await dedupe_nodes_bulk(
+                self.driver, self.llm_client, extracted_nodes, {}
+            )
+
+            # save nodes to KG
+            await asyncio.gather(*[node.save(self.driver) for node in nodes])
+
+            # re-map edge pointers so that they don't point to discard dupe nodes
+            extracted_edges = resolve_edge_pointers(extracted_edges, uuid_map)
+            episodic_edges = resolve_edge_pointers(episodic_edges, uuid_map)
+
+            # save episodic edges to KG
+            await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
+
+            # Dedupe extracted edges
+            edges = await dedupe_edges_bulk
 
             end = time()
-            logger.info(f"Completed add_episode in {(end-start) * 1000} ms")
-            # for node in nodes:
-            #     if isinstance(node, EntityNode):
-            #         await node.update_summary(self.driver)
-            if success_callback:
-                await success_callback(episode)
+            logger.info(f"Completed add_episode_bulk in {(end-start) * 1000} ms")
+
         except Exception as e:
-            if error_callback:
-                await error_callback(episode, e)
-            else:
-                raise e
+            raise e

@@ -112,25 +112,23 @@ async def dedupe_extracted_nodes(
     llm_client: LLMClient,
     extracted_nodes: list[EntityNode],
     existing_nodes: list[EntityNode],
-) -> list[EntityNode]:
+) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 
-    # build node map
+    # build existing node map
     node_map = {}
     for node in existing_nodes:
-        node_map[node.name] = node
-    for node in extracted_nodes:
-        if node.name in node_map.keys():
-            continue
-        node_map[node.name] = node
+        node_map[node.uuid] = node
 
     # Prepare context for LLM
     existing_nodes_context = [
-        {"name": node.name, "summary": node.summary} for node in existing_nodes
+        {"uuid": node.uuid, "name": node.name, "summary": node.summary}
+        for node in existing_nodes
     ]
 
     extracted_nodes_context = [
-        {"name": node.name, "summary": node.summary} for node in extracted_nodes
+        {"uuid": node.uuid, "name": node.name, "summary": node.summary}
+        for node in extracted_nodes
     ]
 
     context = {
@@ -139,24 +137,31 @@ async def dedupe_extracted_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_nodes.v1(context)
+        prompt_library.dedupe_nodes.v2(context)
     )
 
-    new_nodes_data = llm_response.get("new_nodes", [])
+    duplicate_data = llm_response.get("duplicates", [])
 
     end = time()
-    logger.info(f"Deduplicated nodes: {new_nodes_data} in {(end - start) * 1000} ms")
+    logger.info(f"Deduplicated nodes: {duplicate_data} in {(end - start) * 1000} ms")
 
-    # Get full node data
+    uuid_map = {}
+    for duplicate in duplicate_data:
+        uuid_map[duplicate["uuid"]] = duplicate["duplicate_of"]
+
     nodes = []
-    for node_data in new_nodes_data:
-        node = node_map[node_data["name"]]
+    for node in extracted_nodes:
+        if node.uuid in uuid_map:
+            existing_uuid = uuid_map[node.uuid]
+            existing_node = node_map[existing_uuid]
+            nodes.append(existing_node)
+            continue
         nodes.append(node)
 
-    return nodes
+    return nodes, uuid_map
 
 
-async def dedupe_nodes(
+async def dedupe_node_list(
     llm_client: LLMClient,
     nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
