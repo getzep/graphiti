@@ -81,6 +81,7 @@ def v2(context: dict[str, any]) -> list[Message]:
             duplicate nodes may have different names
         2. In the output, uuid should always be the uuid of the New Node that is a duplicate. duplicate_of should be
             the uuid of the Existing Node.
+        3. Do not confuse a name that is a number (like a year) with the uuid of the node
 
         Respond with a JSON object in the following format:
         {{

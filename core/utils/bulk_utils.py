@@ -37,46 +37,46 @@ class BulkEpisode(BaseModel):
 async def retrieve_previous_episodes_bulk(
     driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
-    episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]] = zip(
-        episodes,
-        await asyncio.gather(
-            *[
-                retrieve_episodes(driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN)
-                for episode in episodes
-            ]
-        ),
+    previous_episodes_list = await asyncio.gather(
+        *[
+            retrieve_episodes(driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN)
+            for episode in episodes
+        ]
     )
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]] = [
+        (episode, previous_episodes_list[i]) for i, episode in enumerate(episodes)
+    ]
 
-    return episode_pairs
+    return episode_tuples
 
 
 async def extract_nodes_and_edges_bulk(
-    llm_client: LLMClient, episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]]
+    llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await asyncio.gather(
         *[
             extract_nodes(llm_client, episode, previous_episodes)
-            for episode, previous_episodes in episode_pairs
+            for episode, previous_episodes in episode_tuples
         ]
     )
 
-    episodes, previous_episodes_list = zip(*episode_pairs)
-
-    triplets: list[tuple[EpisodicNode, list[EpisodicNode], list[EntityNode]]] = zip(
-        episodes, previous_episodes_list, extracted_nodes_bulk
-    )
+    episodes, previous_episodes_list = [episode[0] for episode in episode_tuples], [
+        episode[1] for episode in episode_tuples
+    ]
 
     extracted_edges_bulk = await asyncio.gather(
         *[
-            extract_edges(llm_client, episode, extracted_nodes, previous_episodes)
-            for episode, previous_episodes, extracted_nodes in triplets
+            extract_edges(
+                llm_client, episode, extracted_nodes_bulk[i], previous_episodes_list[i]
+            )
+            for i, episode in enumerate(episodes)
         ]
     )
 
     episodic_edges: list[EpisodicEdge] = []
-    for episode, _, extracted_nodes in triplets:
+    for i, episode in enumerate(episodes):
         episodic_edges += build_episodic_edges(
-            extracted_nodes, episode, episode.created_at
+            extracted_nodes_bulk[i], episode, episode.created_at
         )
 
     nodes: list[EntityNode] = []
@@ -97,13 +97,13 @@ async def dedupe_nodes_bulk(
     uuid_map: dict[str, str],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
-    compressed_nodes, compressed_map = compress_nodes(
+    compressed_nodes, compressed_map = await compress_nodes(
         llm_client, extracted_nodes, uuid_map
     )
 
     existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
 
-    nodes, partial_uuid_map = dedupe_extracted_nodes(
+    nodes, partial_uuid_map = await dedupe_extracted_nodes(
         llm_client, compressed_nodes, existing_nodes
     )
 
@@ -173,7 +173,7 @@ async def compress_edges(
 def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
     # make sure all uuid values aren't mapped to other uuids
     compressed_map = {}
-    for key, uuid in uuid_map:
+    for key, uuid in uuid_map.items():
         curr_value = uuid
         while curr_value in uuid_map.keys():
             curr_value = uuid_map[curr_value]
