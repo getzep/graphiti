@@ -41,7 +41,7 @@ async def retrieve_previous_episodes_bulk(
 
 async def extract_nodes_and_edges_bulk(
     llm_client: LLMClient, episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]]
-) -> list[tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]]:
+) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await asyncio.gather(
         *[
             extract_nodes(llm_client, episode, previous_episodes)
@@ -62,21 +62,38 @@ async def extract_nodes_and_edges_bulk(
         ]
     )
 
-    episodic_edges_bulk: list[list[EpisodicEdge]] = [
-        build_episodic_edges(extracted_nodes, episode, episode.created_at)
-        for episode, _, extracted_nodes in triplets
-    ]
+    episodic_edges: list[EpisodicEdge] = []
+    for episode, _, extracted_nodes in triplets:
+        episodic_edges += build_episodic_edges(
+            extracted_nodes, episode, episode.created_at
+        )
 
-    nodes_and_edges_bulk: list[
-        tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]
-    ] = zip(extracted_nodes_bulk, extracted_edges_bulk, episodic_edges_bulk)
+    nodes: list[EntityNode] = []
+    for extracted_nodes in extracted_nodes_bulk:
+        nodes += extracted_nodes
 
-    return nodes_and_edges_bulk
+    edges: list[EntityEdge] = []
+    for extracted_edges in extracted_edges_bulk:
+        edges += extracted_edges
+
+    return nodes, edges, episodic_edges
+
+
+def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
+    # make sure all uuid values aren't mapped to other uuids
+    compressed_map = {}
+    for key, uuid in uuid_map:
+        curr_value = uuid
+        while curr_value in uuid_map.keys():
+            curr_value = uuid_map[curr_value]
+
+        compressed_map[key] = curr_value
+    return compressed_map
 
 
 async def compress_nodes_bulk(
     llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
-):
+) -> tuple[list[EntityNode], dict[str, str]]:
     node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
     results = await asyncio.gather(
@@ -86,3 +103,11 @@ async def compress_nodes_bulk(
     compressed_nodes: list[EntityNode] = []
     for node_chunk, uuid_map_chunk in results:
         compressed_nodes += node_chunk
+        uuid_map.update(uuid_map_chunk)
+
+    # Check if we have removed all duplicates
+    if len(compressed_nodes) == len(nodes):
+        compressed_uuid_map = compress_uuid_map(uuid_map)
+        return compressed_nodes, compressed_uuid_map
+
+    return await compress_nodes_bulk(llm_client, compressed_nodes, uuid_map)

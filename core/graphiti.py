@@ -311,6 +311,8 @@ class Graphiti:
                 self.llm_client, episode_pairs
             )
 
+            extracted_nodes, extracted_edges, episodic_edges = nodes_and_edges
+
             end = time()
             logger.info(f"Completed add_episode in {(end-start) * 1000} ms")
             # for node in nodes:
