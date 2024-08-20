@@ -26,12 +26,19 @@ from .dedupe_edges import (
     versions as dedupe_edges_versions,
 )
 
+from .invalidate_edges import (
+    Prompt as InvalidateEdgesPrompt,
+    Versions as InvalidateEdgesVersions,
+    versions as invalidate_edges_versions,
+)
+
 
 class PromptLibrary(Protocol):
     extract_nodes: ExtractNodesPrompt
     dedupe_nodes: DedupeNodesPrompt
     extract_edges: ExtractEdgesPrompt
     dedupe_edges: DedupeEdgesPrompt
+    invalidate_edges: InvalidateEdgesPrompt
 
 
 class PromptLibraryImpl(TypedDict):
@@ -39,6 +46,7 @@ class PromptLibraryImpl(TypedDict):
     dedupe_nodes: DedupeNodesVersions
     extract_edges: ExtractEdgesVersions
     dedupe_edges: DedupeEdgesVersions
+    invalidate_edges: InvalidateEdgesVersions
 
 
 class VersionWrapper:
@@ -66,6 +74,7 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
     "dedupe_nodes": dedupe_nodes_versions,
     "extract_edges": extract_edges_versions,
     "dedupe_edges": dedupe_edges_versions,
+    "invalidate_edges": invalidate_edges_versions,
 }
 
 prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)

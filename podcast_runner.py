@@ -42,7 +42,7 @@ async def main():
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     messages = parse_podcast_messages()
-    for i, message in enumerate(messages[3:14]):
+    for i, message in enumerate(messages[3:50]):
         await client.add_episode(
             name=f"Message {i}",
             episode_body=f"{message.speaker_name} ({message.role}): {message.content}",
