@@ -3,6 +3,9 @@ import sys
 import os
 
 import pytest
+
+pytestmark = pytest.mark.integration
+
 import asyncio
 from dotenv import load_dotenv
 
