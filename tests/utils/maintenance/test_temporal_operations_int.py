@@ -1,4 +1,7 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
 import asyncio
 from datetime import datetime, timedelta
 from core.utils.maintenance.temporal_operations import invalidate_edges, EdgeWithNodes
