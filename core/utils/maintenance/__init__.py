@@ -13,4 +13,5 @@ __all__ = [
     "clear_data",
     "retrieve_relevant_schema",
     "retrieve_episodes",
+    "invalidate_edges",
 ]
