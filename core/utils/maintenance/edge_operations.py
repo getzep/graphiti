@@ -2,6 +2,8 @@ import json
 from typing import List
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from core.nodes import EntityNode, EpisodicNode
 from core.edges import EpisodicEdge, EntityEdge
 import logging

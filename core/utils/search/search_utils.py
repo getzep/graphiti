@@ -271,4 +271,4 @@ async def get_relevant_edges(
 
     logger.info(f"Found relevant nodes: {relevant_edges.keys()}")
 
-    return relevant_edges.values()
+    return list(relevant_edges.values())

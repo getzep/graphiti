@@ -71,7 +71,9 @@ class EntityNode(Node):
     name_embedding: list[float] | None = Field(
         default=None, description="embedding of the name"
     )
-    summary: str = Field(description="regional summary of surrounding edges")
+    summary: str = Field(
+        description="regional summary of surrounding edges", default_factory=str
+    )
 
     async def update_summary(self, driver: AsyncDriver): ...
 

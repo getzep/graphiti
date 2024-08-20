@@ -8,18 +8,22 @@ import os
 
 from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import EntityNode, EpisodicNode, Node
-from core.edges import EntityEdge, Edge, EpisodicEdge
+from core.edges import EntityEdge, EpisodicEdge
 from core.utils import (
     build_episodic_edges,
-    retrieve_relevant_schema,
-    extract_new_edges,
-    extract_new_nodes,
-    clear_data,
     retrieve_episodes,
 )
 from core.llm_client import LLMClient, OpenAIClient, LLMConfig
-from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
+from core.utils.maintenance.edge_operations import (
+    extract_edges,
+    dedupe_extracted_edges,
+)
+
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
+from core.utils.maintenance.temporal_operations import (
+    prepare_edges_for_invalidation,
+    invalidate_edges,
+)
 from core.utils.search.search_utils import (
     edge_similarity_search,
     entity_fulltext_search,
@@ -59,21 +63,6 @@ class Graphiti:
         """Retrieve the last n episodic nodes from the graph"""
         return await retrieve_episodes(self.driver, last_n, sources)
 
-    async def retrieve_relevant_schema(self, query: str = None) -> dict[str, any]:
-        """Retrieve relevant nodes and edges to a specific query"""
-        return await retrieve_relevant_schema(self.driver, query)
-        ...
-
-    # Invalidate edges that are no longer valid
-    async def invalidate_edges(
-        self,
-        episode: EpisodicNode,
-        new_nodes: list[EntityNode],
-        new_edges: list[EntityEdge],
-        relevant_schema: dict[str, any],
-        previous_episodes: list[EpisodicNode],
-    ): ...
-
     async def add_episode(
         self,
         name: str,
@@ -102,7 +91,6 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
-            # relevant_schema = await self.retrieve_relevant_schema(episode.content)
 
             extracted_nodes = await extract_nodes(
                 self.llm_client, episode, previous_episodes
@@ -139,13 +127,32 @@ class Graphiti:
                 f"Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}"
             )
 
-            new_edges = await dedupe_extracted_edges(
+            deduped_edges = await dedupe_extracted_edges(
                 self.llm_client, extracted_edges, existing_edges
             )
 
-            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in new_edges]}")
+            (
+                old_edges_with_nodes_pending_invalidation,
+                new_edges_with_nodes,
+            ) = prepare_edges_for_invalidation(
+                existing_edges=existing_edges, new_edges=deduped_edges, nodes=nodes
+            )
 
-            entity_edges.extend(new_edges)
+            invalidated_edges = await invalidate_edges(
+                self.llm_client,
+                old_edges_with_nodes_pending_invalidation,
+                new_edges_with_nodes,
+            )
+
+            entity_edges.extend(invalidated_edges)
+
+            logger.info(
+                f"Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}"
+            )
+
+            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
+
+            entity_edges.extend(deduped_edges)
             episodic_edges.extend(
                 build_episodic_edges(
                     # There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them

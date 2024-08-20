@@ -49,19 +49,29 @@ async def main():
     )
     await client.add_episode(
         name="Message 2",
-        episode_body="Paul: I own many bananas",
+        episode_body="Paul: I hate apples now",
         source_description="WhatsApp Message",
     )
     await client.add_episode(
         name="Message 3",
-        episode_body="Assistant: The best type of apples available are Fuji apples",
+        episode_body="Jane: I am married to Paul",
         source_description="WhatsApp Message",
     )
     await client.add_episode(
         name="Message 4",
-        episode_body="Paul: Oh, I actually hate those",
+        episode_body="Paul: I have divorced Jane",
         source_description="WhatsApp Message",
     )
+    # await client.add_episode(
+    #     name="Message 3",
+    #     episode_body="Assistant: The best type of apples available are Fuji apples",
+    #     source_description="WhatsApp Message",
+    # )
+    # await client.add_episode(
+    #     name="Message 4",
+    #     episode_body="Paul: Oh, I actually hate those",
+    #     source_description="WhatsApp Message",
+    # )
 
 
 asyncio.run(main())
