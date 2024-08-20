@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
@@ -211,7 +211,7 @@ def test_prepare_invalidation_context_sorting():
         target_node_uuid="1",
         name="LIKES",
         fact="Node2 likes Node1",
-        created_at=now.replace(hour=now.hour + 1),
+        created_at=now + timedelta(hours=1),
     )
 
     # Create EdgeWithNodes objects
