@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
-    EdgeWithNodes,
 )
 from core.edges import EntityEdge
 from core.nodes import EntityNode
@@ -59,7 +58,6 @@ def create_test_data():
     }
 
 
-# Test cases
 def test_prepare_edges_for_invalidation_basic():
     test_data = create_test_data()
 
@@ -74,8 +72,9 @@ def test_prepare_edges_for_invalidation_basic():
 
     # Check if the edges are correctly associated with nodes
     for edge_with_nodes in existing_edges_pending_invalidation + new_edges_with_nodes:
-        assert edge_with_nodes.source_node is not None
-        assert edge_with_nodes.target_node is not None
+        assert isinstance(edge_with_nodes[0], EntityNode)
+        assert isinstance(edge_with_nodes[1], EntityEdge)
+        assert isinstance(edge_with_nodes[2], EntityNode)
 
 
 def test_prepare_edges_for_invalidation_no_existing_edges():
@@ -145,9 +144,9 @@ def test_prepare_invalidation_context():
         created_at=now,
     )
 
-    # Create EdgeWithNodes objects
-    existing_edge = EdgeWithNodes(edge=edge1, source_node=node1, target_node=node2)
-    new_edge = EdgeWithNodes(edge=edge2, source_node=node2, target_node=node3)
+    # Create NodeEdgeNodeTriplet objects
+    existing_edge = (node1, edge1, node2)
+    new_edge = (node2, edge2, node3)
 
     # Prepare test input
     existing_edges = [existing_edge]
@@ -214,9 +213,8 @@ def test_prepare_invalidation_context_sorting():
         created_at=now + timedelta(hours=1),
     )
 
-    # Create EdgeWithNodes objects
-    edge_with_nodes1 = EdgeWithNodes(edge=edge1, source_node=node1, target_node=node2)
-    edge_with_nodes2 = EdgeWithNodes(edge=edge2, source_node=node2, target_node=node1)
+    edge_with_nodes1 = (node1, edge1, node2)
+    edge_with_nodes2 = (node2, edge2, node1)
 
     # Prepare test input
     existing_edges = [edge_with_nodes1, edge_with_nodes2]

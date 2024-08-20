@@ -1,11 +1,12 @@
 import pytest
 
-import asyncio
 from datetime import datetime, timedelta
-from core.utils.maintenance.temporal_operations import invalidate_edges, EdgeWithNodes
+from core.utils.maintenance.temporal_operations import (
+    invalidate_edges,
+)
 from core.edges import EntityEdge
 from core.nodes import EntityNode
-from core.llm_client import LLMClient, OpenAIClient, LLMConfig
+from core.llm_client import OpenAIClient, LLMConfig
 from dotenv import load_dotenv
 import os
 
@@ -48,9 +49,8 @@ def create_test_data():
         created_at=now,
     )
 
-    # Create EdgeWithNodes objects
-    existing_edge = EdgeWithNodes(edge=edge1, source_node=node1, target_node=node2)
-    new_edge = EdgeWithNodes(edge=edge2, source_node=node1, target_node=node2)
+    existing_edge = (node1, edge1, node2)
+    new_edge = (node1, edge2, node2)
 
     return existing_edge, new_edge
 
@@ -65,7 +65,7 @@ async def test_invalidate_edges():
     )
 
     assert len(invalidated_edges) == 1
-    assert invalidated_edges[0].uuid == existing_edge.edge.uuid
+    assert invalidated_edges[0].uuid == existing_edge[1].uuid
     assert invalidated_edges[0].expired_at is not None
 
 
@@ -84,16 +84,16 @@ async def test_invalidate_edges_no_invalidation():
 async def test_invalidate_edges_multiple_existing():
     existing_edge1, new_edge = create_test_data()
     existing_edge2, _ = create_test_data()
-    existing_edge2.edge.uuid = "e3"
-    existing_edge2.edge.name = "KNOWS"
-    existing_edge2.edge.fact = "Alice knows Bob"
+    existing_edge2[1].uuid = "e3"
+    existing_edge2[1].name = "KNOWS"
+    existing_edge2[1].fact = "Alice knows Bob"
 
     invalidated_edges = await invalidate_edges(
         setup_llm_client(), [existing_edge1, existing_edge2], [new_edge]
     )
 
     assert len(invalidated_edges) == 1
-    assert invalidated_edges[0].uuid == existing_edge1.edge.uuid
+    assert invalidated_edges[0].uuid == existing_edge1[1].uuid
     assert invalidated_edges[0].expired_at is not None
 
 
@@ -135,10 +135,9 @@ def create_complex_test_data():
         created_at=now - timedelta(days=2),
     )
 
-    # Create EdgeWithNodes objects
-    existing_edge1 = EdgeWithNodes(edge=edge1, source_node=node1, target_node=node2)
-    existing_edge2 = EdgeWithNodes(edge=edge2, source_node=node1, target_node=node3)
-    existing_edge3 = EdgeWithNodes(edge=edge3, source_node=node2, target_node=node4)
+    existing_edge1 = (node1, edge1, node2)
+    existing_edge2 = (node1, edge2, node3)
+    existing_edge3 = (node2, edge3, node4)
 
     return [existing_edge1, existing_edge2, existing_edge3], [
         node1,
@@ -154,8 +153,9 @@ async def test_invalidate_edges_complex():
     existing_edges, nodes = create_complex_test_data()
 
     # Create a new edge that contradicts an existing one
-    new_edge = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge = (
+        nodes[0],
+        EntityEdge(
             uuid="e4",
             source_node_uuid="1",
             target_node_uuid="2",
@@ -163,8 +163,7 @@ async def test_invalidate_edges_complex():
             fact="Alice dislikes Bob",
             created_at=datetime.now(),
         ),
-        source_node=nodes[0],
-        target_node=nodes[1],
+        nodes[1],
     )
 
     invalidated_edges = await invalidate_edges(
@@ -182,8 +181,9 @@ async def test_invalidate_edges_temporal_update():
     existing_edges, nodes = create_complex_test_data()
 
     # Create a new edge that updates an existing one with new information
-    new_edge = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge = (
+        nodes[1],
+        EntityEdge(
             uuid="e5",
             source_node_uuid="2",
             target_node_uuid="4",
@@ -191,8 +191,7 @@ async def test_invalidate_edges_temporal_update():
             fact="Bob left his job at Company XYZ",
             created_at=datetime.now(),
         ),
-        source_node=nodes[1],
-        target_node=nodes[3],
+        nodes[3],
     )
 
     invalidated_edges = await invalidate_edges(
@@ -210,8 +209,9 @@ async def test_invalidate_edges_multiple_invalidations():
     existing_edges, nodes = create_complex_test_data()
 
     # Create new edges that invalidate multiple existing edges
-    new_edge1 = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge1 = (
+        nodes[0],
+        EntityEdge(
             uuid="e6",
             source_node_uuid="1",
             target_node_uuid="2",
@@ -219,11 +219,11 @@ async def test_invalidate_edges_multiple_invalidations():
             fact="Alice and Bob are now enemies",
             created_at=datetime.now(),
         ),
-        source_node=nodes[0],
-        target_node=nodes[1],
+        nodes[1],
     )
-    new_edge2 = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge2 = (
+        nodes[0],
+        EntityEdge(
             uuid="e7",
             source_node_uuid="1",
             target_node_uuid="3",
@@ -231,8 +231,7 @@ async def test_invalidate_edges_multiple_invalidations():
             fact="Alice ended her friendship with Charlie",
             created_at=datetime.now(),
         ),
-        source_node=nodes[0],
-        target_node=nodes[2],
+        nodes[2],
     )
 
     invalidated_edges = await invalidate_edges(
@@ -251,8 +250,9 @@ async def test_invalidate_edges_no_effect():
     existing_edges, nodes = create_complex_test_data()
 
     # Create a new edge that doesn't invalidate any existing edges
-    new_edge = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge = (
+        nodes[2],
+        EntityEdge(
             uuid="e8",
             source_node_uuid="3",
             target_node_uuid="4",
@@ -260,8 +260,7 @@ async def test_invalidate_edges_no_effect():
             fact="Charlie applied to Company XYZ",
             created_at=datetime.now(),
         ),
-        source_node=nodes[2],
-        target_node=nodes[3],
+        nodes[3],
     )
 
     invalidated_edges = await invalidate_edges(
@@ -277,8 +276,9 @@ async def test_invalidate_edges_partial_update():
     existing_edges, nodes = create_complex_test_data()
 
     # Create a new edge that partially updates an existing one
-    new_edge = EdgeWithNodes(
-        edge=EntityEdge(
+    new_edge = (
+        nodes[1],
+        EntityEdge(
             uuid="e9",
             source_node_uuid="2",
             target_node_uuid="4",
@@ -286,8 +286,7 @@ async def test_invalidate_edges_partial_update():
             fact="Bob changed his position at Company XYZ",
             created_at=datetime.now(),
         ),
-        source_node=nodes[1],
-        target_node=nodes[3],
+        nodes[3],
     )
 
     invalidated_edges = await invalidate_edges(
