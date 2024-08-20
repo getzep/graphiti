@@ -313,6 +313,8 @@ class Graphiti:
                 await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
             )
 
+            logger.info(f"extracted edges: {extracted_edges}")
+
             # Generate embeddings
             await asyncio.gather(
                 *[node.generate_name_embedding(embedder) for node in extracted_nodes],
@@ -344,7 +346,7 @@ class Graphiti:
             )
 
             # save edges to KG
-            await asyncio.gather(*[edge.save() for edge in edges])
+            await asyncio.gather(*[edge.save(self.driver) for edge in edges])
 
             end = time()
             logger.info(f"Completed add_episode_bulk in {(end-start) * 1000} ms")

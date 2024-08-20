@@ -287,7 +287,7 @@ async def get_relevant_edges(
 
     end = time()
     logger.info(
-        f"Found relevant nodes: {relevant_edge_uuids} in {(end - start) * 1000} ms"
+        f"Found relevant edges: {relevant_edge_uuids} in {(end - start) * 1000} ms"
     )
 
     return list(relevant_edges.values())

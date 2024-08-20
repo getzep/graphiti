@@ -23,7 +23,7 @@ from core.utils.maintenance.node_operations import (
 )
 from core.utils.search.search_utils import get_relevant_nodes, get_relevant_edges
 
-CHUNK_SIZE = 20
+CHUNK_SIZE = 10
 
 
 class BulkEpisode(BaseModel):
@@ -156,7 +156,7 @@ async def compress_edges(
         edge_chunk_map[uuid_key].append(edge)
 
     results = await asyncio.gather(
-        *[dedupe_edge_list(llm_client, chunk) for _, chunk in edge_chunk_map]
+        *[dedupe_edge_list(llm_client, chunk) for _, chunk in edge_chunk_map.items()]
     )
 
     compressed_edges: list[EntityEdge] = []
@@ -183,7 +183,6 @@ def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
 
 
 def resolve_edge_pointers(edges: list[Edge], uuid_map: dict[str, str]):
-    resolved_edges: list[Edge] = []
     for edge in edges:
         source_uuid = edge.source_node_uuid
         target_uuid = edge.target_node_uuid
@@ -194,4 +193,4 @@ def resolve_edge_pointers(edges: list[Edge], uuid_map: dict[str, str]):
             uuid_map[target_uuid] if target_uuid in uuid_map else target_uuid
         )
 
-    return resolved_edges
+    return edges

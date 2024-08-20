@@ -112,22 +112,20 @@ def node_list(context: dict[str, any]) -> list[Message]:
         {json.dumps(context['nodes'], indent=2)}
 
         Task:
-        1. If any of the nodes in the list are duplicates of each other, group those nodes together in a list
-        3. Respond with the resulting list of duplicate node lists
+        1. Group nodes together such that all duplicate nodes are in the same list of names
+        2. All dupolicate names should be grouped together in the same list
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if they are duplicates, 
             duplicate nodes may have different names
-        2. Each uuid from the list of nodes should appear EXACTLY once in your response
-        3. make sure the updated summary is brief
+        2. Each name from the list of nodes should appear EXACTLY once in your response
+        3. If a node has no duplicates, it should appear in the response in a list of only one name
 
         Respond with a JSON object in the following format:
         {{
             "nodes": [
                 {{
-                    "uuid": "a97ed1e188834a59b93968fc75e43e71",
-                    "duplicate_uuids":  ["uuid of node that is a duplicate of a97ed1e188834a59b93968fc75e43e71"],
-                    "summary": "brief summary that combines information from the summaries of the node and its duplicates"
+                    "names": ["a97ed1e188834a59b93968fc75e43e71", "uuid of node that is a duplicate of a97ed1e188834a59b93968fc75e43e71"],
                 }}
             ]
         }}

@@ -63,7 +63,7 @@ def edge_list(context: dict[str, any]) -> list[Message]:
         Message(
             role="user",
             content=f"""
-        Given the following context, find all of the duplicates i na list of edges:
+        Given the following context, find all of the duplicates in a list of edges:
 
         Edges:
         {json.dumps(context['edges'], indent=2)}
