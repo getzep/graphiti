@@ -183,6 +183,7 @@ class Graphiti:
             )
 
             logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
+            entity_edges.extend(deduped_edges)
 
             new_edges = await dedupe_extracted_edges(
                 self.llm_client, extracted_edges, existing_edges
