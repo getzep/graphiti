@@ -109,6 +109,7 @@ async def dedupe_extracted_nodes(
     existing_nodes: list[EntityNode],
 ) -> list[EntityNode]:
     # build node map
+    brand_new_nodes_map = {}
     node_map = {}
     for node in existing_nodes:
         node_map[node.name] = node
@@ -116,7 +117,7 @@ async def dedupe_extracted_nodes(
         if node.name in node_map.keys():
             continue
         node_map[node.name] = node
-
+        brand_new_nodes_map[node.name] = node
     # Prepare context for LLM
     existing_nodes_context = [
         {"name": node.name, "summary": node.summary} for node in existing_nodes
@@ -139,9 +140,22 @@ async def dedupe_extracted_nodes(
     logger.info(f"Deduplicated nodes: {new_nodes_data}")
 
     # Get full node data
-    nodes = []
+    adjusted_nodes = []
     for node_data in new_nodes_data:
         node = node_map[node_data["name"]]
-        nodes.append(node)
+        adjusted_nodes.append(node)
 
-    return nodes
+    brand_new_nodes = []
+    for node in new_nodes_data:
+        if node["name"] in brand_new_nodes_map.keys():
+            brand_new_nodes.append(brand_new_nodes_map[node["name"]])
+    logger.info(f"Brand new nodes: {[(n.name, n.uuid) for n in brand_new_nodes]}")
+
+    adjusted_existing_nodes = []
+    for node in new_nodes_data:
+        if node["name"] not in brand_new_nodes_map.keys():
+            adjusted_existing_nodes.append(node_map[node["name"]])
+    logger.info(
+        f"Adjusted existing nodes: {[(n.name, n.uuid) for n in adjusted_existing_nodes]}"
+    )
+    return adjusted_nodes, (adjusted_existing_nodes, brand_new_nodes)

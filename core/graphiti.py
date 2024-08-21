@@ -95,6 +95,9 @@ class Graphiti:
             extracted_nodes = await extract_nodes(
                 self.llm_client, episode, previous_episodes
             )
+            logger.info(
+                f"Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}"
+            )
 
             # Calculate Embeddings
 
@@ -105,16 +108,16 @@ class Graphiti:
             logger.info(
                 f"Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}"
             )
-            new_nodes = await dedupe_extracted_nodes(
+            touched_nodes, (_, brand_new_nodes) = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
             )
             logger.info(
-                f"Deduped touched nodes: {[(n.name, n.uuid) for n in new_nodes]}"
+                f"Adjusted touched nodes: {[(n.name, n.uuid) for n in touched_nodes]}"
             )
-            nodes.extend(new_nodes)
+            nodes.extend(touched_nodes)
 
             extracted_edges = await extract_edges(
-                self.llm_client, episode, new_nodes, previous_episodes
+                self.llm_client, episode, touched_nodes, previous_episodes
             )
 
             await asyncio.gather(
@@ -131,6 +134,11 @@ class Graphiti:
                 self.llm_client, extracted_edges, existing_edges
             )
 
+            edge_touched_node_uuids = [n.uuid for n in brand_new_nodes]
+            for edge in deduped_edges:
+                edge_touched_node_uuids.append(edge.source_node_uuid)
+                edge_touched_node_uuids.append(edge.target_node_uuid)
+
             (
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
@@ -144,7 +152,16 @@ class Graphiti:
                 new_edges_with_nodes,
             )
 
+            for edge in invalidated_edges:
+                edge_touched_node_uuids.append(edge.source_node_uuid)
+                edge_touched_node_uuids.append(edge.target_node_uuid)
+
             entity_edges.extend(invalidated_edges)
+
+            edge_touched_node_uuids = list(set(edge_touched_node_uuids))
+            edge_touched_nodes = [
+                node for node in nodes if node.uuid in edge_touched_node_uuids
+            ]
 
             logger.info(
                 f"Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}"
@@ -153,10 +170,13 @@ class Graphiti:
             logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
 
             entity_edges.extend(deduped_edges)
+            logger.info(
+                f"building episodic edges to nodes {[(n.name, n.uuid) for n in edge_touched_nodes]}"
+            )
             episodic_edges.extend(
                 build_episodic_edges(
                     # There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them
-                    nodes,
+                    edge_touched_nodes,
                     episode,
                     now,
                 )
