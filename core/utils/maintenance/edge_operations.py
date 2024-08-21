@@ -1,6 +1,7 @@
 import json
 from typing import List
 from datetime import datetime
+from time import time
 
 from pydantic import BaseModel
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 def build_episodic_edges(
     entity_nodes: List[EntityNode],
     episode: EpisodicNode,
-    transaction_from: datetime,
+    created_at: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
@@ -25,7 +26,7 @@ def build_episodic_edges(
         edge = EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
-            created_at=transaction_from,
+            created_at=created_at,
         )
         edges.append(edge)
 
@@ -144,6 +145,8 @@ async def extract_edges(
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
 ) -> list[EntityEdge]:
+    start = time()
+
     # Prepare context for LLM
     context = {
         "episode_content": episode.content,
@@ -167,7 +170,9 @@ async def extract_edges(
         prompt_library.extract_edges.v2(context)
     )
     edges_data = llm_response.get("edges", [])
-    logger.info(f"Extracted new edges: {edges_data}")
+
+    end = time()
+    logger.info(f"Extracted new edges: {edges_data} in {(end - start) * 1000} ms")
 
     # Convert the extracted data into EntityEdge objects
     edges = []
@@ -199,11 +204,11 @@ async def dedupe_extracted_edges(
     # Create edge map
     edge_map = {}
     for edge in existing_edges:
-        edge_map[edge.name] = edge
+        edge_map[edge.fact] = edge
     for edge in extracted_edges:
-        if edge.name in edge_map.keys():
+        if edge.fact in edge_map.keys():
             continue
-        edge_map[edge.name] = edge
+        edge_map[edge.fact] = edge
 
     # Prepare context for LLM
     context = {
@@ -224,7 +229,40 @@ async def dedupe_extracted_edges(
     # Get full edge data
     edges = []
     for edge_data in new_edges_data:
-        edge = edge_map[edge_data["name"]]
+        edge = edge_map[edge_data["fact"]]
         edges.append(edge)
 
     return edges
+
+
+async def dedupe_edge_list(
+    llm_client: LLMClient,
+    edges: list[EntityEdge],
+) -> list[EntityEdge]:
+    start = time()
+
+    # Create edge map
+    edge_map = {}
+    for edge in edges:
+        edge_map[edge.fact] = edge
+
+    # Prepare context for LLM
+    context = {"edges": [{"name": edge.name, "fact": edge.fact} for edge in edges]}
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.edge_list(context)
+    )
+    unique_edges_data = llm_response.get("unique_edges", [])
+
+    end = time()
+    logger.info(
+        f"Extracted edge duplicates: {unique_edges_data} in {(end - start)*1000} ms "
+    )
+
+    # Get full edge data
+    unique_edges = []
+    for edge_data in unique_edges_data:
+        fact = edge_data["fact"]
+        unique_edges.append(edge_map[fact])
+
+    return unique_edges
