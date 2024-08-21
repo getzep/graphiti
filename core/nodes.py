@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pydantic import Field
+from time import time
 from datetime import datetime
 from uuid import uuid4
 
@@ -35,13 +35,12 @@ class EpisodicNode(Node):
     source: str = Field(description="source type")
     source_description: str = Field(description="description of the data source")
     content: str = Field(description="raw episode data")
+    valid_at: datetime = Field(
+        description="datetime of when the original document was created",
+    )
     entity_edges: list[str] = Field(
         description="list of entity edges referenced in this episode",
         default_factory=list,
-    )
-    valid_at: datetime | None = Field(
-        description="datetime of when the original document was created",
-        default=None,
     )
 
     async def save(self, driver: AsyncDriver):
@@ -80,9 +79,12 @@ class EntityNode(Node):
     async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
     async def generate_name_embedding(self, embedder, model="text-embedding-3-small"):
+        start = time()
         text = self.name.replace("\n", " ")
         embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
         self.name_embedding = embedding[:EMBEDDING_DIM]
+        end = time()
+        logger.info(f"embedded {text} in {end-start} ms")
 
         return embedding
 

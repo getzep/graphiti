@@ -1,4 +1,5 @@
 from core import Graphiti
+from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
 from dotenv import load_dotenv
 import os
@@ -37,18 +38,33 @@ def setup_logging():
     return logger
 
 
-async def main():
+async def main(use_bulk: bool = True):
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     messages = parse_podcast_messages()
-    for i, message in enumerate(messages[3:50]):
-        await client.add_episode(
+
+    if not use_bulk:
+        for i, message in enumerate(messages[3:14]):
+            await client.add_episode(
+                name=f"Message {i}",
+                episode_body=f"{message.speaker_name} ({message.role}): {message.content}",
+                reference_time=message.actual_timestamp,
+                source_description="Podcast Transcript",
+            )
+
+    episodes: list[BulkEpisode] = [
+        BulkEpisode(
             name=f"Message {i}",
-            episode_body=f"{message.speaker_name} ({message.role}): {message.content}",
-            reference_time=message.actual_timestamp,
+            content=f"{message.speaker_name} ({message.role}): {message.content}",
             source_description="Podcast Transcript",
+            episode_type="string",
+            reference_time=message.actual_timestamp,
         )
+        for i, message in enumerate(messages[3:7])
+    ]
+
+    await client.add_episode_bulk(episodes)
 
 
 asyncio.run(main())

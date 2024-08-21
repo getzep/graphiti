@@ -6,10 +6,12 @@ from .models import Message, PromptVersion, PromptFunction
 
 class Prompt(Protocol):
     v1: PromptVersion
+    edge_list: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
+    edge_list: PromptFunction
 
 
 def v1(context: dict[str, any]) -> list[Message]:
@@ -43,7 +45,6 @@ def v1(context: dict[str, any]) -> list[Message]:
         {{
             "new_edges": [
                 {{
-                    "name": "Unique identifier for the edge",
                     "fact": "one sentence description of the fact"
                 }}
             ]
@@ -53,4 +54,40 @@ def v1(context: dict[str, any]) -> list[Message]:
     ]
 
 
-versions: Versions = {"v1": v1}
+def edge_list(context: dict[str, any]) -> list[Message]:
+    return [
+        Message(
+            role="system",
+            content="You are a helpful assistant that de-duplicates edges from edge lists.",
+        ),
+        Message(
+            role="user",
+            content=f"""
+        Given the following context, find all of the duplicates in a list of edges:
+
+        Edges:
+        {json.dumps(context['edges'], indent=2)}
+
+        Task:
+        If any edge in Edges is a duplicate of another edge, return the fact of only one of the duplicate edges
+
+        Guidelines:
+        1. Use both the name and fact of edges to determine if they are duplicates, 
+            edges with the same name may not be duplicates
+        2. The final list should have only unique facts. If 3 edges are all duplicates of each other, only one of their
+            facts should be in the response
+
+        Respond with a JSON object in the following format:
+        {{
+            "unique_edges": [
+                {{
+                    "fact": "fact of a unique edge",
+                }}
+            ]
+        }}
+        """,
+        ),
+    ]
+
+
+versions: Versions = {"v1": v1, "edge_list": edge_list}
