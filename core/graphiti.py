@@ -29,6 +29,10 @@ from core.utils.bulk_utils import (
 from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
+from core.utils.maintenance.temporal_operations import (
+    invalidate_edges,
+    prepare_edges_for_invalidation,
+)
 from core.utils.search.search_utils import (
     edge_similarity_search,
     entity_fulltext_search,
@@ -154,6 +158,31 @@ class Graphiti:
             logger.info(
                 f"Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}"
             )
+
+            deduped_edges = await dedupe_extracted_edges(
+                self.llm_client, extracted_edges, existing_edges
+            )
+
+            (
+                old_edges_with_nodes_pending_invalidation,
+                new_edges_with_nodes,
+            ) = prepare_edges_for_invalidation(
+                existing_edges=existing_edges, new_edges=deduped_edges, nodes=nodes
+            )
+
+            invalidated_edges = await invalidate_edges(
+                self.llm_client,
+                old_edges_with_nodes_pending_invalidation,
+                new_edges_with_nodes,
+            )
+
+            entity_edges.extend(invalidated_edges)
+
+            logger.info(
+                f"Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}"
+            )
+
+            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
 
             new_edges = await dedupe_extracted_edges(
                 self.llm_client, extracted_edges, existing_edges
