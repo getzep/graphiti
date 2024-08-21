@@ -115,10 +115,8 @@ def node_list(context: dict[str, any]) -> list[Message]:
         2. All dupolicate names should be grouped together in the same list
 
         Guidelines:
-        1. Use both the name and summary of nodes to determine if they are duplicates, 
-            duplicate nodes may have different names
-        2. Each name from the list of nodes should appear EXACTLY once in your response
-        3. If a node has no duplicates, it should appear in the response in a list of only one name
+        1. Each name from the list of nodes should appear EXACTLY once in your response
+        2. If a node has no duplicates, it should appear in the response in a list of only one name
 
         Respond with a JSON object in the following format:
         {{
