@@ -290,4 +290,4 @@ async def get_relevant_edges(
         f"Found relevant edges: {relevant_edge_uuids} in {(end - start) * 1000} ms"
     )
 
-    return list(relevant_edges.values())
+    return relevant_edges

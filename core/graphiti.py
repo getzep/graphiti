@@ -12,8 +12,6 @@ from core.nodes import EntityNode, EpisodicNode, Node
 from core.edges import EntityEdge, Edge, EpisodicEdge
 from core.utils import (
     build_episodic_edges,
-    retrieve_relevant_schema,
-    clear_data,
     retrieve_episodes,
 )
 from core.llm_client import LLMClient, OpenAIClient, LLMConfig
@@ -75,11 +73,6 @@ class Graphiti:
         """Retrieve the last n episodic nodes from the graph"""
         return await retrieve_episodes(self.driver, reference_time, last_n, sources)
 
-    async def retrieve_relevant_schema(self, query: str = None) -> dict[str, any]:
-        """Retrieve relevant nodes and edges to a specific query"""
-        return await retrieve_relevant_schema(self.driver, query)
-        ...
-
     # Invalidate edges that are no longer valid
     async def invalidate_edges(
         self,
@@ -122,7 +115,6 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
-            # relevant_schema = await self.retrieve_relevant_schema(episode.content)
 
             extracted_nodes = await extract_nodes(
                 self.llm_client, episode, previous_episodes
