@@ -244,14 +244,10 @@ async def dedupe_edge_list(
     # Create edge map
     edge_map = {}
     for edge in edges:
-        edge_map[edge.uuid] = edge
+        edge_map[edge.fact] = edge
 
     # Prepare context for LLM
-    context = {
-        "edges": [
-            {"uuid": edge.uuid, "name": edge.name, "fact": edge.fact} for edge in edges
-        ]
-    }
+    context = {"edges": [{"name": edge.name, "fact": edge.fact} for edge in edges]}
 
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_edges.edge_list(context)
@@ -266,7 +262,7 @@ async def dedupe_edge_list(
     # Get full edge data
     unique_edges = []
     for edge_data in unique_edges_data:
-        uuid = edge_data["uuid"]
-        unique_edges.append(edge_map[uuid])
+        fact = edge_data["fact"]
+        unique_edges.append(edge_map[fact])
 
     return unique_edges

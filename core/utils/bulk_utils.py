@@ -94,12 +94,11 @@ async def dedupe_nodes_bulk(
     driver: AsyncDriver,
     llm_client: LLMClient,
     extracted_nodes: list[EntityNode],
-    uuid_map: dict[str, str],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
-    compressed_nodes, compressed_map = await compress_nodes(
-        llm_client, extracted_nodes, uuid_map
-    )
+    nodes, uuid_map = node_name_match(extracted_nodes)
+
+    compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
 
     existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
 
@@ -107,7 +106,7 @@ async def dedupe_nodes_bulk(
         llm_client, compressed_nodes, existing_nodes
     )
 
-    compressed_map = {**compressed_map, **partial_uuid_map}
+    compressed_map.update(partial_uuid_map)
 
     return nodes, compressed_map
 
@@ -125,6 +124,19 @@ async def dedupe_edges_bulk(
     return edges
 
 
+def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str, str]]:
+    uuid_map = {}
+    name_map = {}
+    for node in nodes:
+        if node.name in name_map:
+            uuid_map[node.uuid] = name_map[node.name].uuid
+            continue
+
+        name_map[node.name] = node
+
+    return [node for node in name_map.values()], uuid_map
+
+
 async def compress_nodes(
     llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
@@ -134,29 +146,27 @@ async def compress_nodes(
         *[dedupe_node_list(llm_client, chunk) for chunk in node_chunks]
     )
 
+    extended_map = dict(uuid_map)
     compressed_nodes: list[EntityNode] = []
     for node_chunk, uuid_map_chunk in results:
         compressed_nodes += node_chunk
-        uuid_map.update(uuid_map_chunk)
+        extended_map.update(uuid_map_chunk)
 
     # Check if we have removed all duplicates
     if len(compressed_nodes) == len(nodes):
-        compressed_uuid_map = compress_uuid_map(uuid_map)
+        compressed_uuid_map = compress_uuid_map(extended_map)
         return compressed_nodes, compressed_uuid_map
 
-    return await compress_nodes(llm_client, compressed_nodes, uuid_map)
+    return await compress_nodes(llm_client, compressed_nodes, extended_map)
 
 
 async def compress_edges(
     llm_client: LLMClient, edges: list[EntityEdge]
 ) -> list[EntityEdge]:
-    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
-    for edge in edges:
-        uuid_key = edge.source_node_uuid + edge.target_node_uuid
-        edge_chunk_map[uuid_key].append(edge)
+    edge_chunks = [edges[i : i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
 
     results = await asyncio.gather(
-        *[dedupe_edge_list(llm_client, chunk) for _, chunk in edge_chunk_map.items()]
+        *[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks]
     )
 
     compressed_edges: list[EntityEdge] = []

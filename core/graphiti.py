@@ -202,36 +202,19 @@ class Graphiti:
         index_queries: list[LiteralString] = [
             "CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)",
             "CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)",
-            "CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.uuid)",
-            "CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[r:MENTIONS]-() ON (r.uuid)",
+            "CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)",
+            "CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)",
             "CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)",
             "CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)",
             "CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)",
             "CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)",
-            "CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.name)",
-            "CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.created_at)",
-            "CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.expired_at)",
-            "CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.valid_at)",
-            "CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.invalid_at)",
-        ]
-        # Add the range indices
-        for query in index_queries:
-            await self.driver.execute_query(query)
-
-        # Add the semantic indices
-        await self.driver.execute_query(
-            """
-            CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]
-            """
-        )
-
-        await self.driver.execute_query(
-            """
-            CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON EACH [r.name, r.fact]
-            """
-        )
-
-        await self.driver.execute_query(
+            "CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)",
+            "CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)",
+            "CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)",
+            "CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)",
+            "CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)",
+            "CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]",
+            "CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact]",
             """
             CREATE VECTOR INDEX fact_embedding IF NOT EXISTS
             FOR ()-[r:RELATES_TO]-() ON (r.fact_embedding)
@@ -239,10 +222,7 @@ class Graphiti:
              `vector.dimensions`: 1024,
              `vector.similarity_function`: 'cosine'
             }}
-            """
-        )
-
-        await self.driver.execute_query(
+            """,
             """
             CREATE VECTOR INDEX name_embedding IF NOT EXISTS
             FOR (n:Entity) ON (n.name_embedding)
@@ -250,7 +230,19 @@ class Graphiti:
              `vector.dimensions`: 1024,
              `vector.similarity_function`: 'cosine'
             }}
+            """,
             """
+            CREATE CONSTRAINT entity_name IF NOT EXISTS
+            FOR (n:Entity) REQUIRE n.name IS UNIQUE
+            """,
+            """
+            CREATE CONSTRAINT edge_facts IF NOT EXISTS
+            FOR ()-[e:RELATES_TO]-() REQUIRE e.fact IS UNIQUE
+            """,
+        ]
+
+        await asyncio.gather(
+            *[self.driver.execute_query(query) for query in index_queries]
         )
 
     async def search(self, query: str) -> list[tuple[EntityNode, list[EntityEdge]]]:
@@ -313,8 +305,6 @@ class Graphiti:
                 await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
             )
 
-            logger.info(f"extracted edges: {extracted_edges}")
-
             # Generate embeddings
             await asyncio.gather(
                 *[node.generate_name_embedding(embedder) for node in extracted_nodes],
@@ -323,7 +313,7 @@ class Graphiti:
 
             # Dedupe extracted nodes
             nodes, uuid_map = await dedupe_nodes_bulk(
-                self.driver, self.llm_client, extracted_nodes, {}
+                self.driver, self.llm_client, extracted_nodes
             )
 
             # save nodes to KG
@@ -344,6 +334,9 @@ class Graphiti:
             edges = await dedupe_edges_bulk(
                 self.driver, self.llm_client, extracted_edges
             )
+            logger.info(f"extracted edge length: {len(edges)}")
+
+            # invalidate edges
 
             # save edges to KG
             await asyncio.gather(*[edge.save(self.driver) for edge in edges])

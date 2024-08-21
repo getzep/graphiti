@@ -69,19 +69,19 @@ def edge_list(context: dict[str, any]) -> list[Message]:
         {json.dumps(context['edges'], indent=2)}
 
         Task:
-        If any edge in Edges is a duplicate of another edge, return the uuid of only one of the duplicate edges
+        If any edge in Edges is a duplicate of another edge, return the fact of only one of the duplicate edges
 
         Guidelines:
         1. Use both the name and fact of edges to determine if they are duplicates, 
             edges with the same name may not be duplicates
-        2. The final list should have only unique edges. If 3 edges are all duplicates of each other, only one of their
-            uuid's should be in the response
+        2. The final list should have only unique facts. If 3 edges are all duplicates of each other, only one of their
+            facts should be in the response
 
         Respond with a JSON object in the following format:
         {{
             "unique_edges": [
                 {{
-                    "uuid": "Unique identifier for the edge",
+                    "fact": "fact of a unique edge",
                 }}
             ]
         }}

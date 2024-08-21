@@ -118,17 +118,15 @@ async def dedupe_extracted_nodes(
     # build existing node map
     node_map = {}
     for node in existing_nodes:
-        node_map[node.uuid] = node
+        node_map[node.name] = node
 
     # Prepare context for LLM
     existing_nodes_context = [
-        {"uuid": node.uuid, "name": node.name, "summary": node.summary}
-        for node in existing_nodes
+        {"name": node.name, "summary": node.summary} for node in existing_nodes
     ]
 
     extracted_nodes_context = [
-        {"uuid": node.uuid, "name": node.name, "summary": node.summary}
-        for node in extracted_nodes
+        {"name": node.name, "summary": node.summary} for node in extracted_nodes
     ]
 
     context = {
@@ -147,13 +145,15 @@ async def dedupe_extracted_nodes(
 
     uuid_map = {}
     for duplicate in duplicate_data:
-        uuid_map[duplicate["uuid"]] = duplicate["duplicate_of"]
+        uuid = node_map[duplicate["name"]].uuid
+        uuid_value = node_map[duplicate["duplicate_of"]].uuid
+        uuid_map[uuid] = uuid_value
 
     nodes = []
     for node in extracted_nodes:
         if node.uuid in uuid_map:
-            existing_uuid = uuid_map[node.uuid]
-            existing_node = node_map[existing_uuid]
+            existing_name = uuid_map[node.name]
+            existing_node = node_map[existing_name]
             nodes.append(existing_node)
             continue
         nodes.append(node)

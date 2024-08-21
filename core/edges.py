@@ -111,6 +111,6 @@ class EntityEdge(Edge):
             invalid_at=self.invalid_at,
         )
 
-        logger.info(f"Saved Node to neo4j: {self.uuid}")
+        logger.info(f"Saved edge to neo4j: {self.uuid}")
 
         return result
