@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
 from datetime import datetime
+from time import time
 from neo4j import AsyncDriver
 from uuid import uuid4
 import logging
@@ -76,9 +77,14 @@ class EntityEdge(Edge):
     )
 
     async def generate_embedding(self, embedder, model="text-embedding-3-small"):
+        start = time()
+
         text = self.fact.replace("\n", " ")
         embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
         self.fact_embedding = embedding[:EMBEDDING_DIM]
+
+        end = time()
+        logger.info(f"embedded {text} in {end-start} ms")
 
         return embedding
 
@@ -105,6 +111,6 @@ class EntityEdge(Edge):
             invalid_at=self.invalid_at,
         )
 
-        logger.info(f"Saved Node to neo4j: {self.uuid}")
+        logger.info(f"Saved edge to neo4j: {self.uuid}")
 
         return result
