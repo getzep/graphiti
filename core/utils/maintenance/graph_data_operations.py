@@ -1,9 +1,9 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import LiteralString
 
 from neo4j import AsyncDriver
+from typing_extensions import LiteralString
 
 from core.nodes import EpisodicNode
 
