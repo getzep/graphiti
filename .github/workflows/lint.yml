@@ -9,7 +9,7 @@ on:
 jobs:
   ruff:
     environment: development
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
