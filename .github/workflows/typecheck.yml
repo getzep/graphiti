@@ -1,0 +1,39 @@
+name: MyPy Type Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --with dev
+      - name: Run MyPy
+        run: |
+          poetry run mypy --install-types --non-interactive .
+          poetry run mypy . --show-column-numbers --show-error-codes --pretty --no-color-output | 
+          python -c "import re,sys;[print(re.sub(r'^(.+):(\\d+):(\\d+):', r'\\1:\\2:\\3:error:', l.strip())) for l in sys.stdin if l.strip()]"

@@ -22,7 +22,7 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-# 	$(MYPY) .
+	$(MYPY) .
 
 # Run tests
 test:
