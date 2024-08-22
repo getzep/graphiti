@@ -22,7 +22,6 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) --install-types --non-interactive .
 	$(MYPY) . --show-column-numbers --show-error-codes --pretty 
 
 # Run tests
