@@ -5,6 +5,7 @@ PYTHON = python3
 POETRY = poetry
 PYTEST = $(POETRY) run pytest
 RUFF = $(POETRY) run ruff
+MYPY = $(POETRY) run mypy
 
 # Default target
 all: format lint test
@@ -15,16 +16,17 @@ install:
 
 # Format code
 format:
-	$(POETRY) run ruff check --select I --fix
-	$(POETRY) run ruff format
+	$(RUFF) check --select I --fix
+	$(RUFF) format
 
 # Lint code
 lint:
-	$(POETRY) run ruff check
+	$(RUFF) check
+# 	$(MYPY) .
 
 # Run tests
 test:
-	$(POETRY) run pytest
+	$(PYTEST)
 
 # Run format, lint, and test
 check: format lint test

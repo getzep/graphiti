@@ -24,6 +24,7 @@ ruff = "^0.6.2"
 
 [tool.poetry.group.dev.dependencies]
 pydantic = "^2.8.2"
+mypy = "^1.11.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -31,3 +32,28 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "tab"
+docstring-code-format = true
