@@ -63,10 +63,38 @@ async def build_indices_and_constraints(driver: AsyncDriver):
         }}
         """,
 	]
+	# drop constraints (if exists)
+	drop_constraints: list[LiteralString] = [
+		'DROP CONSTRAINT entity_name IF EXISTS',
+		'DROP CONSTRAINT edge_facts IF EXISTS',
+	]
+	for query in drop_constraints:
+		await driver.execute_query(query)
+
+	# drop all indices and constraints
+	drop_queries: list[LiteralString] = [
+		'DROP INDEX entity_name IF EXISTS',
+		'DROP INDEX edge_facts IF EXISTS',
+		'DROP INDEX entity_uuid IF EXISTS',
+		'DROP INDEX episode_uuid IF EXISTS',
+		'DROP INDEX relation_uuid IF EXISTS',
+		'DROP INDEX mention_uuid IF EXISTS',
+		'DROP INDEX name_entity_index IF EXISTS',
+		'DROP INDEX created_at_entity_index IF EXISTS',
+		'DROP INDEX created_at_episodic_index IF EXISTS',
+		'DROP INDEX valid_at_episodic_index IF EXISTS',
+		'DROP INDEX name_and_summary IF EXISTS',
+		'DROP INDEX name_and_fact IF EXISTS',
+		'DROP INDEX fact_embedding IF EXISTS',
+		'DROP INDEX name_embedding IF EXISTS',
+	]
+
+	for query in drop_queries:
+		await driver.execute_query(query)
+
 	index_queries: list[LiteralString] = (
 		constraints + range_indices + fulltext_indices + vector_indices
 	)
-
 	await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
 
 

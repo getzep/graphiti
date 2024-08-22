@@ -41,43 +41,45 @@ async def main():
 	setup_logging()
 	client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 	await clear_data(client.driver)
+	await client.build_indices_and_constraints()
 
-	# await client.build_indices()
+	# await client.add_episode(
+	# 	name='Message 3',
+	# 	episode_body='Jane: I am married to Paul',
+	# 	source_description='WhatsApp Message',
+	# 	reference_time=datetime.now(),
+	# )
+	# await client.add_episode(
+	# 	name='Message 4',
+	# 	episode_body='Paul: I have divorced Jane',
+	# 	source_description='WhatsApp Message',
+	# 	reference_time=datetime.now(),
+	# )
+	# await client.add_episode(
+	# 	name='Message 5',
+	# 	episode_body='Jane: I  miss Paul',
+	# 	source_description='WhatsApp Message',
+	# 	reference_time=datetime.now(),
+	# )
+	# await client.add_episode(
+	# 	name='Message 6',
+	# 	episode_body='Jane: I dont miss Paul anymore, I hate him',
+	# 	source_description='WhatsApp Message',
+	# 	reference_time=datetime.now(),
+	# )
+
 	await client.add_episode(
 		name='Message 3',
-		episode_body='Jane: I am married to Paul',
+		episode_body='Assistant: The best type of apples available are Fuji apples',
 		source_description='WhatsApp Message',
 		reference_time=datetime.now(),
 	)
 	await client.add_episode(
 		name='Message 4',
-		episode_body='Paul: I have divorced Jane',
+		episode_body='Paul: Oh, I actually hate those',
 		source_description='WhatsApp Message',
 		reference_time=datetime.now(),
 	)
-	await client.add_episode(
-		name='Message 5',
-		episode_body='Jane: I  miss Paul',
-		source_description='WhatsApp Message',
-		reference_time=datetime.now(),
-	)
-	await client.add_episode(
-		name='Message 6',
-		episode_body='Jane: I dont miss Paul anymore, I hate him',
-		source_description='WhatsApp Message',
-		reference_time=datetime.now(),
-	)
-
-	# await client.add_episode(
-	#     name="Message 3",
-	#     episode_body="Assistant: The best type of apples available are Fuji apples",
-	#     source_description="WhatsApp Message",
-	# )
-	# await client.add_episode(
-	#     name="Message 4",
-	#     episode_body="Paul: Oh, I actually hate those",
-	#     source_description="WhatsApp Message",
-	# )
 
 
 asyncio.run(main())
