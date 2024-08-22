@@ -98,7 +98,7 @@ async def dedupe_nodes_bulk(
 
 	existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
 
-	nodes, partial_uuid_map = await dedupe_extracted_nodes(
+	nodes, partial_uuid_map, _ = await dedupe_extracted_nodes(
 		llm_client, compressed_nodes, existing_nodes
 	)
 

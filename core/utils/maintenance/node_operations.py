@@ -108,6 +108,11 @@ async def dedupe_extracted_nodes(
 	for node in existing_nodes:
 		node_map[node.name] = node
 
+	# Temp hack
+	new_nodes_map = {}
+	for node in extracted_nodes:
+		new_nodes_map[node.name] = node
+
 	# Prepare context for LLM
 	existing_nodes_context = [
 		{'name': node.name, 'summary': node.summary} for node in existing_nodes
@@ -131,20 +136,25 @@ async def dedupe_extracted_nodes(
 
 	uuid_map = {}
 	for duplicate in duplicate_data:
-		uuid = node_map[duplicate['name']].uuid
+		uuid = new_nodes_map[duplicate['name']].uuid
 		uuid_value = node_map[duplicate['duplicate_of']].uuid
 		uuid_map[uuid] = uuid_value
 
 	nodes = []
+	brand_new_nodes = []
 	for node in extracted_nodes:
 		if node.uuid in uuid_map:
-			existing_name = uuid_map[node.name]
-			existing_node = node_map[existing_name]
+			existing_uuid = uuid_map[node.uuid]
+			# TODO(Preston): This is a bit of a hack I implemented because we were getting incorrect uuids for existing nodes,
+			# can you revisit the node dedup function and make it somewhat cleaner and add more comments/tests please?
+			# find an existing node by the uuid from the nodes_map (each key is name, so we need to iterate by uuid value)
+			existing_node = next((v for k, v in node_map.items() if v.uuid == existing_uuid), None)
 			nodes.append(existing_node)
 			continue
+		brand_new_nodes.append(node)
 		nodes.append(node)
 
-	return nodes, uuid_map
+	return nodes, uuid_map, brand_new_nodes
 
 
 async def dedupe_node_list(
