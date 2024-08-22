@@ -90,8 +90,8 @@ class Graphiti:
         name: str,
         episode_body: str,
         source_description: str,
-        reference_time: datetime,
-        episode_type="string",
+        reference_time: datetime | None = None,
+        episode_type: str | None = "string",  # TODO: this field isn't used yet?
         success_callback: Callable | None = None,
         error_callback: Callable | None = None,
     ):
