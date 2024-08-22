@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from time import time
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, time as neo4j_time
 
 from core.edges import EntityEdge
 from core.nodes import EntityNode, EpisodicNode
@@ -12,6 +12,10 @@ from core.nodes import EntityNode, EpisodicNode
 logger = logging.getLogger(__name__)
 
 RELEVANT_SCHEMA_LIMIT = 3
+
+
+def parse_db_date(neo_date: neo4j_time.Date | None) -> datetime | None:
+    return neo_date.to_native() if neo_date else None
 
 
 async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode]):
@@ -125,10 +129,6 @@ async def edge_similarity_search(
     now = datetime.now()
 
     for record in records:
-        expired_at = record["expired_at"].to_native() if record["expired_at"] else None
-        valid_at = record["valid_at"].to_native() if record["valid_at"] else None
-        invalid_at = record["invalid_at"].to_native() if record["invalid_at"] else None
-
         edge = EntityEdge(
             uuid=record["uuid"],
             source_node_uuid=record["source_node_uuid"],
@@ -138,9 +138,9 @@ async def edge_similarity_search(
             episodes=record["episodes"],
             fact_embedding=record["fact_embedding"],
             created_at=record["created_at"].to_native(),
-            expired_at=expired_at,
-            valid_at=valid_at,
-            invalid_at=invalid_at,
+            expired_at=parse_db_date(record["expired_at"]),
+            valid_at=parse_db_date(record["valid_at"]),
+            invalid_at=parse_db_date(record["invalid_at"]),
         )
 
         edges.append(edge)
@@ -251,10 +251,6 @@ async def edge_fulltext_search(
     now = datetime.now()
 
     for record in records:
-        expired_at = record["expired_at"].to_native() if record["expired_at"] else None
-        valid_at = record["valid_at"].to_native() if record["valid_at"] else None
-        invalid_at = record["invalid_at"].to_native() if record["invalid_at"] else None
-
         edge = EntityEdge(
             uuid=record["uuid"],
             source_node_uuid=record["source_node_uuid"],
@@ -264,9 +260,9 @@ async def edge_fulltext_search(
             episodes=record["episodes"],
             fact_embedding=record["fact_embedding"],
             created_at=record["created_at"].to_native(),
-            expired_at=expired_at,
-            valid_at=valid_at,
-            invalid_at=invalid_at,
+            expired_at=parse_db_date(record["expired_at"]),
+            valid_at=parse_db_date(record["valid_at"]),
+            invalid_at=parse_db_date(record["invalid_at"]),
         )
 
         edges.append(edge)
