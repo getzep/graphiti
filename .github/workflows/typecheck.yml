@@ -8,16 +8,16 @@ on:
 
 jobs:
   mypy:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04
     environment: development
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
+        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Set up Python
-        id: setup-python
+      - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.8.0
@@ -35,7 +35,6 @@ jobs:
         run: poetry install --no-interaction --with dev
       - name: Run MyPy
         run: |
-          poetry run mypy --install-types --non-interactive .
           poetry run mypy . --show-column-numbers --show-error-codes --pretty | \
           sed -E '
                 s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
