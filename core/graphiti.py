@@ -295,9 +295,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def search(
-        self, query: str, timestamp: datetime, config: SearchConfig
-    ) -> list[tuple[EntityNode, list[EntityEdge]]]:
+    async def search(self, query: str, timestamp: datetime, config: SearchConfig):
         return await search(
             self.driver, self.llm_client.client.embeddings, query, timestamp, config
         )

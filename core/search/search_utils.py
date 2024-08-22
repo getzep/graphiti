@@ -102,7 +102,7 @@ async def edge_similarity_search(
                 CALL db.index.vector.queryRelationships("fact_embedding", 5, $search_vector)
                 YIELD relationship AS r, score
                 MATCH (n)-[r:RELATES_TO]->(m)
-                RETURN DISTINCT
+                RETURN
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
@@ -152,7 +152,7 @@ async def entity_similarity_search(
         """
                 CALL db.index.vector.queryNodes("name_embedding", $limit, $search_vector)
                 YIELD node AS n, score
-                RETURN DISTINCT
+                RETURN
                     n.uuid As uuid, 
                     n.name AS name, 
                     n.created_at AS created_at, 
@@ -186,7 +186,7 @@ async def entity_fulltext_search(
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
-    RETURN DISTINCT
+    RETURN
         node.uuid As uuid, 
         node.name AS name, 
         node.created_at AS created_at, 
@@ -224,7 +224,7 @@ async def edge_fulltext_search(
                 CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                 YIELD relationship AS r, score
                 MATCH (n:Entity)-[r]->(m:Entity)
-                RETURN DISTINCT
+                RETURN 
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
@@ -329,7 +329,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
     scores: dict[str, int] = defaultdict(int)
     for result in results:
         for i, uuid in enumerate(result):
-            scores[uuid] += 1 / i + rank_const
+            scores[uuid] += 1 / (i + rank_const)
 
     scored_uuids = [term for term in scores.items()]
     scored_uuids.sort(key=lambda term: term[1])

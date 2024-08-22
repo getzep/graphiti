@@ -1,12 +1,14 @@
 import asyncio
 import logging
 from datetime import datetime
+from time import time
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import EntityEdge
+from core.edges import EntityEdge, Edge
 from core.llm_client.config import EMBEDDING_DIM
+from core.nodes import Node
 from core.search.search_utils import (
     edge_similarity_search,
     edge_fulltext_search,
@@ -29,7 +31,9 @@ class SearchConfig(BaseModel):
 
 async def search(
     driver: AsyncDriver, embedder, query: str, timestamp: datetime, config: SearchConfig
-):
+) -> dict[str, [Node | Edge]]:
+    start = time()
+
     episodes = []
     nodes = []
     edges = []
@@ -63,15 +67,36 @@ async def search(
         raise Exception("Multiple searches enabled without a reranker")
 
     elif config.reranker:
+        edge_uuid_map = {}
+        search_result_uuids = []
+
+        for result in search_results:
+            result_uuids = []
+            for edge in result:
+                result_uuids.append(edge.uuid)
+                edge_uuid_map[edge.uuid] = edge
+
+            search_result_uuids.append(result_uuids)
+
         search_result_uuids = [
             [edge.uuid for edge in result] for result in search_results
         ]
-        edges.extend(rrf(search_result_uuids))
+
+        reranked_uuids = rrf(search_result_uuids)
+
+        reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
+        edges.extend(reranked_edges)
 
     context = {
         "episodes": episodes,
         "nodes": nodes,
         "edges": edges,
     }
+
+    end = time()
+
+    logger.info(
+        f"search returned context for query {query} in {(end - start) * 1000} ms"
+    )
 
     return context
