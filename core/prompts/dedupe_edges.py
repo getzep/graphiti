@@ -1,30 +1,29 @@
 import json
-from typing import TypedDict, Protocol
+from typing import Protocol, TypedDict
 
-from .models import Message, PromptVersion, PromptFunction
+from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
+	v1: PromptVersion
     v2: PromptVersion
-    edge_list: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
+	v1: PromptFunction
+	v2: PromptFunction
     edge_list: PromptFunction
 
 
 def v1(context: dict[str, any]) -> list[Message]:
-    return [
-        Message(
-            role="system",
-            content="You are a helpful assistant that de-duplicates relationship from edge lists.",
-        ),
-        Message(
-            role="user",
-            content=f"""
+	return [
+		Message(
+			role='system',
+			content='You are a helpful assistant that de-duplicates relationship from edge lists.',
+		),
+		Message(
+			role='user',
+			content=f"""
         Given the following context, deduplicate edges from a list of new edges given a list of existing edges:
 
         Existing Edges:
@@ -52,8 +51,8 @@ def v1(context: dict[str, any]) -> list[Message]:
             ]
         }}
         """,
-        ),
-    ]
+		),
+	]
 
 
 def v2(context: dict[str, any]) -> list[Message]:
@@ -99,14 +98,14 @@ def v2(context: dict[str, any]) -> list[Message]:
 
 
 def edge_list(context: dict[str, any]) -> list[Message]:
-    return [
-        Message(
-            role="system",
-            content="You are a helpful assistant that de-duplicates edges from edge lists.",
-        ),
-        Message(
-            role="user",
-            content=f"""
+	return [
+		Message(
+			role='system',
+			content='You are a helpful assistant that de-duplicates edges from edge lists.',
+		),
+		Message(
+			role='user',
+			content=f"""
         Given the following context, find all of the duplicates in a list of edges:
 
         Edges:
@@ -130,8 +129,8 @@ def edge_list(context: dict[str, any]) -> list[Message]:
             ]
         }}
         """,
-        ),
-    ]
+		),
+	]
 
 
 versions: Versions = {"v1": v1, "v2": v2, "edge_list": edge_list}
