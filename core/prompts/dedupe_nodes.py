@@ -112,7 +112,7 @@ def node_list(context: dict[str, any]) -> list[Message]:
 
         Task:
         1. Group nodes together such that all duplicate nodes are in the same list of names
-        2. All dupolicate names should be grouped together in the same list
+        2. All duplicate names should be grouped together in the same list
 
         Guidelines:
         1. Each name from the list of nodes should appear EXACTLY once in your response

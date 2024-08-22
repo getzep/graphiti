@@ -61,7 +61,7 @@ async def main(use_bulk: bool = True):
             episode_type="string",
             reference_time=message.actual_timestamp,
         )
-        for i, message in enumerate(messages[3:7])
+        for i, message in enumerate(messages[3:14])
     ]
 
     await client.add_episode_bulk(episodes)
