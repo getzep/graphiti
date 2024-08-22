@@ -5,24 +5,24 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
-    v2: PromptVersion
+	v1: PromptVersion
+	v2: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
+	v1: PromptFunction
+	v2: PromptFunction
 
 
 def v1(context: dict[str, any]) -> list[Message]:
-    return [
-        Message(
-            role="system",
-            content="You are a helpful assistant that extracts graph edges from provided context.",
-        ),
-        Message(
-            role="user",
-            content=f"""
+	return [
+		Message(
+			role='system',
+			content='You are a helpful assistant that extracts graph edges from provided context.',
+		),
+		Message(
+			role='user',
+			content=f"""
         Given the following context, extract new semantic edges (relationships) that need to be added to the knowledge graph:
 
         Current Graph Structure:
@@ -66,19 +66,19 @@ def v1(context: dict[str, any]) -> list[Message]:
 
         If no new edges need to be added, return an empty list for "new_edges".
         """,
-        ),
-    ]
+		),
+	]
 
 
 def v2(context: dict[str, any]) -> list[Message]:
-    return [
-        Message(
-            role="system",
-            content="You are a helpful assistant that extracts graph edges from provided context.",
-        ),
-        Message(
-            role="user",
-            content=f"""
+	return [
+		Message(
+			role='system',
+			content='You are a helpful assistant that extracts graph edges from provided context.',
+		),
+		Message(
+			role='user',
+			content=f"""
         Given the following context, extract edges (relationships) that need to be added to the knowledge graph:
         Nodes:
         {json.dumps(context['nodes'], indent=2)}
@@ -115,8 +115,8 @@ def v2(context: dict[str, any]) -> list[Message]:
 
         If no edges need to be added, return an empty list for "edges".
         """,
-        ),
-    ]
+		),
+	]
 
 
-versions: Versions = {"v1": v1, "v2": v2}
+versions: Versions = {'v1': v1, 'v2': v2}
