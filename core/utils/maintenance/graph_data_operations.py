@@ -1,10 +1,11 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import LiteralString
 
-from core.nodes import EpisodicNode
 from neo4j import AsyncDriver
-import logging
+
+from core.nodes import EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
 

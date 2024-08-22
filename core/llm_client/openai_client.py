@@ -1,9 +1,10 @@
 import json
+import logging
+
 from openai import AsyncOpenAI
+
 from .client import LLMClient
 from .config import LLMConfig
-
-import logging
 
 logger = logging.getLogger(__name__)
 

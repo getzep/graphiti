@@ -1,10 +1,11 @@
+import logging
 from datetime import datetime
 from typing import List
-from core.llm_client import LLMClient
+
 from core.edges import EntityEdge
+from core.llm_client import LLMClient
 from core.nodes import EntityNode
 from core.prompts import prompt_library
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,8 @@ def prepare_edges_for_invalidation(
     new_edges: list[EntityEdge],
     nodes: list[EntityNode],
 ) -> tuple[list[NodeEdgeNodeTriplet], list[NodeEdgeNodeTriplet]]:
-    existing_edges_pending_invalidation = []
-    new_edges_with_nodes = []
+    existing_edges_pending_invalidation = []  # TODO: this is not yet used?
+    new_edges_with_nodes = []  # TODO: this is not yet used?
 
     existing_edges_pending_invalidation = []
     new_edges_with_nodes = []
@@ -45,7 +46,7 @@ async def invalidate_edges(
     existing_edges_pending_invalidation: List[NodeEdgeNodeTriplet],
     new_edges: List[NodeEdgeNodeTriplet],
 ) -> List[EntityEdge]:
-    invalidated_edges = []
+    invalidated_edges = []  # TODO: this is not yet used?
 
     context = prepare_invalidation_context(
         existing_edges_pending_invalidation, new_edges

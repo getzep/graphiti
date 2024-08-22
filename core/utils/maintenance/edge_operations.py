@@ -1,16 +1,13 @@
 import json
-from typing import List
+import logging
 from datetime import datetime
 from time import time
+from typing import List
 
-from pydantic import BaseModel
-
-from core.nodes import EntityNode, EpisodicNode
-from core.edges import EpisodicEdge, EntityEdge
-import logging
-
-from core.prompts import prompt_library
+from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
+from core.nodes import EntityNode, EpisodicNode
+from core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +203,7 @@ async def dedupe_extracted_edges(
     for edge in existing_edges:
         edge_map[edge.fact] = edge
     for edge in extracted_edges:
-        if edge.fact in edge_map.keys():
+        if edge.fact in edge_map:
             continue
         edge_map[edge.fact] = edge
 

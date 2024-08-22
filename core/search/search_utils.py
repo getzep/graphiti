@@ -73,7 +73,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
     for record in records:
         n_uuid = record["source_node_uuid"]
-        if n_uuid in context.keys():
+        if n_uuid in context:
             context[n_uuid]["facts"].append(record["fact"])
         else:
             context[n_uuid] = {

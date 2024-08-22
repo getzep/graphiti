@@ -1,9 +1,7 @@
 import logging
 
-from neo4j import AsyncDriver
-
-from core.edges import EpisodicEdge, EntityEdge, Edge
-from core.nodes import EntityNode, EpisodicNode, Node
+from core.edges import EpisodicEdge
+from core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 

@@ -1,25 +1,24 @@
 import logging
-import sys
 import os
+import sys
 
 import pytest
 
-from core.search.search import SearchConfig
 
-pytestmark = pytest.mark.integration
+
 
 import asyncio
-from dotenv import load_dotenv
+from datetime import datetime
 
+from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from openai import OpenAI
 
-from core.edges import EpisodicEdge, EntityEdge
+from core.edges import EntityEdge, EpisodicEdge
 from core.graphiti import Graphiti
-from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import EpisodicNode, EntityNode
-from datetime import datetime
+from core.nodes import EntityNode, EpisodicNode
 
+pytestmark = pytest.mark.integration
 
 pytest_plugins = ("pytest_asyncio",)
 
