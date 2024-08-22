@@ -24,12 +24,17 @@ from core.utils.bulk_utils import (
     resolve_edge_pointers,
     dedupe_edges_bulk,
 )
-from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
+from core.utils.maintenance.edge_operations import (
+    extract_edges,
+    dedupe_extracted_edges_v2,
+    dedupe_extracted_edges,
+)
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
     prepare_edges_for_invalidation,
+    extract_node_and_edge_triplets,
 )
 from core.utils.search.search_utils import (
     edge_similarity_search,
@@ -154,8 +159,16 @@ class Graphiti:
                 f"Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}"
             )
 
+            # deduped_edges = await dedupe_extracted_edges_v2(
+            #     self.llm_client,
+            #     extract_node_and_edge_triplets(extracted_edges, nodes),
+            #     extract_node_and_edge_triplets(existing_edges, nodes),
+            # )
+
             deduped_edges = await dedupe_extracted_edges(
-                self.llm_client, extracted_edges, existing_edges
+                self.llm_client,
+                extracted_edges,
+                existing_edges,
             )
 
             edge_touched_node_uuids = [n.uuid for n in brand_new_nodes]
@@ -174,6 +187,8 @@ class Graphiti:
                 self.llm_client,
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
+                episode,
+                previous_episodes,
             )
 
             for edge in invalidated_edges:

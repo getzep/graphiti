@@ -57,13 +57,13 @@ async def main():
     )
     await client.add_episode(
         name="Message 5",
-        episode_body="Jane: I still love Paul",
+        episode_body="Jane: I  miss Paul",
         source_description="WhatsApp Message",
         reference_time=datetime.now(),
     )
     await client.add_episode(
         name="Message 6",
-        episode_body="Paul: I have divorced Jane",
+        episode_body="Jane: I dont miss Paul anymore, I hate him",
         source_description="WhatsApp Message",
         reference_time=datetime.now(),
     )

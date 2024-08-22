@@ -19,15 +19,15 @@ def v1(context: dict[str, any]) -> list[Message]:
         Message(
             role="user",
             content=f"""
-                Based on the provided existing edges and new edges with their timestamps, determine which existing relationships, if any, should be invalidated due to explicit contradictions in the new edges.
-                
-                Important guidelines:
-                1. Only mark a relationship as invalid if there is an explicit, direct contradiction in the new edges.
-                2. Do not make any assumptions or inferences about relationships.
-                3. Do not invalidate edges based on implied changes or personal interpretations.
-                4. A new edge does not automatically invalidate an existing edge unless it directly states the opposite.
-                5. Different types of relationships can coexist and do not automatically invalidate each other.
-                6. Do not invalidate relationships merely because they weren't mentioned in new edges.
+               Based on the provided existing edges and new edges with their timestamps, determine which existing relationships, if any, should be invalidated due to contradictions or updates in the new edges.
+                Only mark a relationship as invalid if there is clear evidence from new edges that the relationship is no longer true.
+                Do not invalidate relationships merely because they weren't mentioned in new edges. You may use the current episode and previous episodes as well as the facts of each edge to understand the context of the relationships.
+
+                Previous Episodes:
+                {context['previous_episodes']}
+
+                Current Episode:
+                {context['current_episode']}
 
                 Existing Edges (sorted by timestamp, newest first):
                 {context['existing_edges']}
@@ -35,14 +35,14 @@ def v1(context: dict[str, any]) -> list[Message]:
                 New Edges:
                 {context['new_edges']}
 
-                Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (TIMESTAMP)"
+                Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (fact: EDGE_FACT), TIMESTAMP)"
 
                 For each existing edge that should be invalidated, respond with a JSON object in the following format:
                 {{
                     "invalidated_edges": [
                         {{
                             "edge_uuid": "The UUID of the edge to be invalidated (the part before the | character)",
-                            "reason": "Brief explanation citing the specific new edge that directly contradicts this edge"
+                            "fact": "Updated fact of the edge"
                         }}
                     ]
                 }}
