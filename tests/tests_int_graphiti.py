@@ -4,6 +4,8 @@ import os
 
 import pytest
 
+from core.search.search import SearchConfig
+
 pytestmark = pytest.mark.integration
 
 import asyncio
@@ -51,16 +53,13 @@ def setup_logging():
     return logger
 
 
-def format_context(context):
+def format_context(facts):
     formatted_string = ""
-    for uuid, data in context.items():
-        formatted_string += f"UUID: {uuid}\n"
-        formatted_string += f"  Name: {data['name']}\n"
-        formatted_string += f"  Summary: {data['summary']}\n"
-        formatted_string += "  Facts:\n"
-        for fact in data["facts"]:
-            formatted_string += f"    - {fact}\n"
-        formatted_string += "\n"
+    formatted_string += "FACTS:\n"
+    for fact in facts:
+        formatted_string += f"  - {fact}\n"
+    formatted_string += "\n"
+
     return formatted_string.strip()
 
 
@@ -68,19 +67,18 @@ def format_context(context):
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
-    await graphiti.build_indices()
 
-    context = await graphiti.search("Freakenomics guest")
+    facts = await graphiti.search("Freakenomics guest")
 
-    logger.info("QUERY: Freakenomics guest" + "RESULT:" + format_context(context))
+    logger.info("\nQUERY: Freakenomics guest\n" + format_context(facts))
 
-    context = await graphiti.search("tania tetlow")
+    facts = await graphiti.search("tania tetlow\n")
 
-    logger.info("QUERY: Tania Tetlow" + "RESULT:" + format_context(context))
+    logger.info("\nQUERY: Tania Tetlow\n" + format_context(facts))
 
-    context = await graphiti.search("issues with higher ed")
+    facts = await graphiti.search("issues with higher ed")
 
-    logger.info("QUERY: issues with higher ed" + "RESULT:" + format_context(context))
+    logger.info("\nQUERY: issues with higher ed\n" + format_context(facts))
     graphiti.close()
 
 

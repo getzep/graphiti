@@ -1,15 +1,15 @@
 import asyncio
 from datetime import datetime
 import logging
-from typing import Callable, LiteralString
+from typing import Callable
 from neo4j import AsyncGraphDatabase
 from dotenv import load_dotenv
 from time import time
 import os
 
-from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import EntityNode, EpisodicNode, Node
-from core.edges import EntityEdge, Edge, EpisodicEdge
+from core.nodes import EntityNode, EpisodicNode
+from core.edges import EntityEdge, EpisodicEdge
+from core.search.search import SearchConfig, hybrid_search
 from core.utils import (
     build_episodic_edges,
     retrieve_episodes,
@@ -19,22 +19,21 @@ from core.utils.bulk_utils import (
     BulkEpisode,
     extract_nodes_and_edges_bulk,
     retrieve_previous_episodes_bulk,
-    compress_nodes,
     dedupe_nodes_bulk,
     resolve_edge_pointers,
     dedupe_edges_bulk,
 )
 from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
-from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
+from core.utils.maintenance.graph_data_operations import (
+    EPISODE_WINDOW_LEN,
+    build_indices_and_constraints,
+)
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
     prepare_edges_for_invalidation,
 )
-from core.utils.search.search_utils import (
-    edge_similarity_search,
-    entity_fulltext_search,
-    bfs,
+from core.search.search_utils import (
     get_relevant_nodes,
     get_relevant_edges,
 )
@@ -64,10 +63,13 @@ class Graphiti:
     def close(self):
         self.driver.close()
 
+    async def build_indices_and_constraints(self):
+        await build_indices_and_constraints(self.driver)
+
     async def retrieve_episodes(
         self,
         reference_time: datetime,
-        last_n: int,
+        last_n: int = EPISODE_WINDOW_LEN,
         sources: list[str] | None = "messages",
     ) -> list[EpisodicNode]:
         """Retrieve the last n episodic nodes from the graph"""
@@ -103,9 +105,7 @@ class Graphiti:
             embedder = self.llm_client.client.embeddings
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(
-                reference_time, last_n=EPISODE_WINDOW_LEN
-            )
+            previous_episodes = await self.retrieve_episodes(reference_time)
             episode = EpisodicNode(
                 name=name,
                 labels=[],
@@ -220,80 +220,6 @@ class Graphiti:
             else:
                 raise e
 
-    async def build_indices(self):
-        index_queries: list[LiteralString] = [
-            "CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)",
-            "CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)",
-            "CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)",
-            "CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)",
-            "CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)",
-            "CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)",
-            "CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)",
-            "CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)",
-            "CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)",
-            "CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)",
-            "CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)",
-            "CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)",
-            "CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)",
-            "CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]",
-            "CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact]",
-            """
-            CREATE VECTOR INDEX fact_embedding IF NOT EXISTS
-            FOR ()-[r:RELATES_TO]-() ON (r.fact_embedding)
-            OPTIONS {indexConfig: {
-             `vector.dimensions`: 1024,
-             `vector.similarity_function`: 'cosine'
-            }}
-            """,
-            """
-            CREATE VECTOR INDEX name_embedding IF NOT EXISTS
-            FOR (n:Entity) ON (n.name_embedding)
-            OPTIONS {indexConfig: {
-             `vector.dimensions`: 1024,
-             `vector.similarity_function`: 'cosine'
-            }}
-            """,
-            """
-            CREATE CONSTRAINT entity_name IF NOT EXISTS
-            FOR (n:Entity) REQUIRE n.name IS UNIQUE
-            """,
-            """
-            CREATE CONSTRAINT edge_facts IF NOT EXISTS
-            FOR ()-[e:RELATES_TO]-() REQUIRE e.fact IS UNIQUE
-            """,
-        ]
-
-        await asyncio.gather(
-            *[self.driver.execute_query(query) for query in index_queries]
-        )
-
-    async def search(self, query: str) -> list[tuple[EntityNode, list[EntityEdge]]]:
-        text = query.replace("\n", " ")
-        search_vector = (
-            (
-                await self.llm_client.client.embeddings.create(
-                    input=[text], model="text-embedding-3-small"
-                )
-            )
-            .data[0]
-            .embedding[:EMBEDDING_DIM]
-        )
-
-        edges = await edge_similarity_search(search_vector, self.driver)
-        nodes = await entity_fulltext_search(query, self.driver)
-
-        node_ids = [node.uuid for node in nodes]
-
-        for edge in edges:
-            node_ids.append(edge.source_node_uuid)
-            node_ids.append(edge.target_node_uuid)
-
-        node_ids = list(dict.fromkeys(node_ids))
-
-        context = await bfs(node_ids, self.driver)
-
-        return context
-
     async def add_episode_bulk(
         self,
         bulk_episodes: list[BulkEpisode],
@@ -368,3 +294,24 @@ class Graphiti:
 
         except Exception as e:
             raise e
+
+    async def search(self, query: str, num_results=10):
+        search_config = SearchConfig(num_episodes=0, num_results=num_results)
+        edges = (
+            await hybrid_search(
+                self.driver,
+                self.llm_client.client.embeddings,
+                query,
+                datetime.now(),
+                search_config,
+            )
+        )["edges"]
+
+        facts = [edge.fact for edge in edges]
+
+        return facts
+
+    async def _search(self, query: str, timestamp: datetime, config: SearchConfig):
+        return await hybrid_search(
+            self.driver, self.llm_client.client.embeddings, query, timestamp, config
+        )

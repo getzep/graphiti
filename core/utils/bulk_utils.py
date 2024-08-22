@@ -1,5 +1,4 @@
 import asyncio
-from collections import defaultdict
 from datetime import datetime
 
 from neo4j import AsyncDriver
@@ -21,7 +20,7 @@ from core.utils.maintenance.node_operations import (
     dedupe_node_list,
     dedupe_extracted_nodes,
 )
-from core.utils.search.search_utils import get_relevant_nodes, get_relevant_edges
+from core.search.search_utils import get_relevant_nodes, get_relevant_edges
 
 CHUNK_SIZE = 10
 

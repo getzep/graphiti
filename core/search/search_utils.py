@@ -1,23 +1,54 @@
 import asyncio
 import logging
+from collections import defaultdict
 from datetime import datetime
 from time import time
 
 from neo4j import AsyncDriver
 
 from core.edges import EntityEdge
-from core.nodes import EntityNode
+from core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 
 RELEVANT_SCHEMA_LIMIT = 3
 
 
+async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode]):
+    episode_uuids = [episode.uuid for episode in episodes]
+    records, _, _ = await driver.execute_query(
+        """
+        MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
+        RETURN DISTINCT
+            n.uuid As uuid, 
+            n.name AS name, 
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+        uuids=episode_uuids,
+    )
+
+    nodes: list[EntityNode] = []
+
+    for record in records:
+        nodes.append(
+            EntityNode(
+                uuid=record["uuid"],
+                name=record["name"],
+                labels=["Entity"],
+                created_at=datetime.now(),
+                summary=record["summary"],
+            )
+        )
+
+    return nodes
+
+
 async def bfs(node_ids: list[str], driver: AsyncDriver):
     records, _, _ = await driver.execute_query(
         """
         MATCH (n WHERE n.uuid in $node_ids)-[r]->(m)
-        RETURN
+        RETURN DISTINCT
             n.uuid AS source_node_uuid,
             n.name AS source_name, 
             n.summary AS source_summary,
@@ -138,7 +169,7 @@ async def entity_similarity_search(
             EntityNode(
                 uuid=record["uuid"],
                 name=record["name"],
-                labels=[],
+                labels=["Entity"],
                 created_at=datetime.now(),
                 summary=record["summary"],
             )
@@ -155,7 +186,7 @@ async def entity_fulltext_search(
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
-    RETURN 
+    RETURN
         node.uuid As uuid, 
         node.name AS name, 
         node.created_at AS created_at, 
@@ -173,7 +204,7 @@ async def entity_fulltext_search(
             EntityNode(
                 uuid=record["uuid"],
                 name=record["name"],
-                labels=[],
+                labels=["Entity"],
                 created_at=datetime.now(),
                 summary=record["summary"],
             )
@@ -193,7 +224,7 @@ async def edge_fulltext_search(
                 CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                 YIELD relationship AS r, score
                 MATCH (n:Entity)-[r]->(m:Entity)
-                RETURN
+                RETURN 
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
@@ -291,3 +322,18 @@ async def get_relevant_edges(
     )
 
     return relevant_edges
+
+
+# takes in a list of rankings of uuids
+def rrf(results: list[list[str]], rank_const=1) -> list[str]:
+    scores: dict[str, int] = defaultdict(int)
+    for result in results:
+        for i, uuid in enumerate(result):
+            scores[uuid] += 1 / (i + rank_const)
+
+    scored_uuids = [term for term in scores.items()]
+    scored_uuids.sort(reverse=True, key=lambda term: term[1])
+
+    sorted_uuids = [term[0] for term in scored_uuids]
+
+    return sorted_uuids
