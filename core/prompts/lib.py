@@ -1,95 +1,95 @@
 from typing import Protocol, TypedDict
 
 from .dedupe_edges import (
-    Prompt as DedupeEdgesPrompt,
+	Prompt as DedupeEdgesPrompt,
 )
 from .dedupe_edges import (
-    Versions as DedupeEdgesVersions,
+	Versions as DedupeEdgesVersions,
 )
 from .dedupe_edges import (
-    versions as dedupe_edges_versions,
+	versions as dedupe_edges_versions,
 )
 from .dedupe_nodes import (
-    Prompt as DedupeNodesPrompt,
+	Prompt as DedupeNodesPrompt,
 )
 from .dedupe_nodes import (
-    Versions as DedupeNodesVersions,
+	Versions as DedupeNodesVersions,
 )
 from .dedupe_nodes import (
-    versions as dedupe_nodes_versions,
+	versions as dedupe_nodes_versions,
 )
 from .extract_edges import (
-    Prompt as ExtractEdgesPrompt,
+	Prompt as ExtractEdgesPrompt,
 )
 from .extract_edges import (
-    Versions as ExtractEdgesVersions,
+	Versions as ExtractEdgesVersions,
 )
 from .extract_edges import (
-    versions as extract_edges_versions,
+	versions as extract_edges_versions,
 )
 from .extract_nodes import (
-    Prompt as ExtractNodesPrompt,
+	Prompt as ExtractNodesPrompt,
 )
 from .extract_nodes import (
-    Versions as ExtractNodesVersions,
+	Versions as ExtractNodesVersions,
 )
 from .extract_nodes import (
-    versions as extract_nodes_versions,
+	versions as extract_nodes_versions,
 )
 from .invalidate_edges import (
-    Prompt as InvalidateEdgesPrompt,
+	Prompt as InvalidateEdgesPrompt,
 )
 from .invalidate_edges import (
-    Versions as InvalidateEdgesVersions,
+	Versions as InvalidateEdgesVersions,
 )
 from .invalidate_edges import (
-    versions as invalidate_edges_versions,
+	versions as invalidate_edges_versions,
 )
 from .models import Message, PromptFunction
 
 
 class PromptLibrary(Protocol):
-    extract_nodes: ExtractNodesPrompt
-    dedupe_nodes: DedupeNodesPrompt
-    extract_edges: ExtractEdgesPrompt
-    dedupe_edges: DedupeEdgesPrompt
-    invalidate_edges: InvalidateEdgesPrompt
+	extract_nodes: ExtractNodesPrompt
+	dedupe_nodes: DedupeNodesPrompt
+	extract_edges: ExtractEdgesPrompt
+	dedupe_edges: DedupeEdgesPrompt
+	invalidate_edges: InvalidateEdgesPrompt
 
 
 class PromptLibraryImpl(TypedDict):
-    extract_nodes: ExtractNodesVersions
-    dedupe_nodes: DedupeNodesVersions
-    extract_edges: ExtractEdgesVersions
-    dedupe_edges: DedupeEdgesVersions
-    invalidate_edges: InvalidateEdgesVersions
+	extract_nodes: ExtractNodesVersions
+	dedupe_nodes: DedupeNodesVersions
+	extract_edges: ExtractEdgesVersions
+	dedupe_edges: DedupeEdgesVersions
+	invalidate_edges: InvalidateEdgesVersions
 
 
 class VersionWrapper:
-    def __init__(self, func: PromptFunction):
-        self.func = func
+	def __init__(self, func: PromptFunction):
+		self.func = func
 
-    def __call__(self, context: dict[str, any]) -> list[Message]:
-        return self.func(context)
+	def __call__(self, context: dict[str, any]) -> list[Message]:
+		return self.func(context)
 
 
 class PromptTypeWrapper:
-    def __init__(self, versions: dict[str, PromptFunction]):
-        for version, func in versions.items():
-            setattr(self, version, VersionWrapper(func))
+	def __init__(self, versions: dict[str, PromptFunction]):
+		for version, func in versions.items():
+			setattr(self, version, VersionWrapper(func))
 
 
 class PromptLibraryWrapper:
-    def __init__(self, library: PromptLibraryImpl):
-        for prompt_type, versions in library.items():
-            setattr(self, prompt_type, PromptTypeWrapper(versions))
+	def __init__(self, library: PromptLibraryImpl):
+		for prompt_type, versions in library.items():
+			setattr(self, prompt_type, PromptTypeWrapper(versions))
 
 
 PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
-    "extract_nodes": extract_nodes_versions,
-    "dedupe_nodes": dedupe_nodes_versions,
-    "extract_edges": extract_edges_versions,
-    "dedupe_edges": dedupe_edges_versions,
-    "invalidate_edges": invalidate_edges_versions,
+	'extract_nodes': extract_nodes_versions,
+	'dedupe_nodes': dedupe_nodes_versions,
+	'extract_edges': extract_edges_versions,
+	'dedupe_edges': dedupe_edges_versions,
+	'invalidate_edges': invalidate_edges_versions,
 }
 
 prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)
