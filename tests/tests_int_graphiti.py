@@ -53,21 +53,11 @@ def setup_logging():
     return logger
 
 
-def format_context(context):
+def format_context(facts):
     formatted_string = ""
-    episodes = context["episodes"]
-    nodes = context["nodes"]
-    edges = context["edges"]
-
-    "Entities:\n"
-    for node in nodes:
-        formatted_string += f"  UUID: {node.uuid}\n"
-        formatted_string += f"    Name: {node.name}\n"
-        formatted_string += f"    Summary: {node.summary}\n"
-
-    formatted_string += "Facts:\n"
-    for edge in edges:
-        formatted_string += f"  - {edge.fact}\n"
+    formatted_string += "FACTS:\n"
+    for fact in facts:
+        formatted_string += f"  - {fact}\n"
     formatted_string += "\n"
 
     return formatted_string.strip()
@@ -78,23 +68,17 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
 
-    search_config = SearchConfig()
+    facts = await graphiti.search("Freakenomics guest")
 
-    context = await graphiti.search("Freakenomics guest", datetime.now(), search_config)
+    logger.info("\nQUERY: Freakenomics guest\n" + format_context(facts))
 
-    logger.info("\nQUERY: Freakenomics guest" + "\nRESULT:\n" + format_context(context))
+    facts = await graphiti.search("tania tetlow\n")
 
-    context = await graphiti.search("tania tetlow", datetime.now(), search_config)
+    logger.info("\nQUERY: Tania Tetlow\n" + format_context(facts))
 
-    logger.info("\nQUERY: Tania Tetlow" + "\nRESULT:\n" + format_context(context))
+    facts = await graphiti.search("issues with higher ed")
 
-    context = await graphiti.search(
-        "issues with higher ed", datetime.now(), search_config
-    )
-
-    logger.info(
-        "\nQUERY: issues with higher ed" + "\nRESULT:\n" + format_context(context)
-    )
+    logger.info("\nQUERY: issues with higher ed\n" + format_context(facts))
     graphiti.close()
 
 

@@ -332,7 +332,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
             scores[uuid] += 1 / (i + rank_const)
 
     scored_uuids = [term for term in scores.items()]
-    scored_uuids.sort(key=lambda term: term[1])
+    scored_uuids.sort(reverse=True, key=lambda term: term[1])
 
     sorted_uuids = [term[0] for term in scored_uuids]
 

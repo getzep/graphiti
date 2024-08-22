@@ -9,7 +9,7 @@ import os
 
 from core.nodes import EntityNode, EpisodicNode
 from core.edges import EntityEdge, EpisodicEdge
-from core.search.search import search, SearchConfig
+from core.search.search import SearchConfig, hybrid_search
 from core.utils import (
     build_episodic_edges,
     retrieve_episodes,
@@ -295,7 +295,25 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def search(self, query: str, timestamp: datetime, config: SearchConfig):
-        return await search(
+    async def search(self, query: str, num_results=10):
+        search_config = SearchConfig(num_episodes=0, num_results=num_results)
+        edges = (
+            await hybrid_search(
+                self.driver,
+                self.llm_client.client.embeddings,
+                query,
+                datetime.now(),
+                search_config,
+            )
+        )["edges"]
+
+        facts = [edge.fact for edge in edges]
+
+        return facts
+
+    async def hybrid_search(
+        self, query: str, timestamp: datetime, config: SearchConfig
+    ):
+        return await hybrid_search(
             self.driver, self.llm_client.client.embeddings, query, timestamp, config
         )
