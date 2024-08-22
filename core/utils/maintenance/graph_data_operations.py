@@ -13,17 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: AsyncDriver):
-	constraints: list[LiteralString] = [
-		"""
-        CREATE CONSTRAINT entity_name IF NOT EXISTS
-        FOR (n:Entity) REQUIRE n.name IS UNIQUE
-        """,
-		"""
-        CREATE CONSTRAINT edge_facts IF NOT EXISTS
-        FOR ()-[e:RELATES_TO]-() REQUIRE e.fact IS UNIQUE
-        """,
-	]
-
 	range_indices: list[LiteralString] = [
 		'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
 		'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
@@ -64,7 +53,7 @@ async def build_indices_and_constraints(driver: AsyncDriver):
         """,
 	]
 	index_queries: list[LiteralString] = (
-		constraints + range_indices + fulltext_indices + vector_indices
+		range_indices + fulltext_indices + vector_indices
 	)
 
 	await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
