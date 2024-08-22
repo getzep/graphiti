@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from core.edges import EntityEdge
-from core.nodes import EntityNode
+from core.nodes import EntityNode, EpisodicNode
 from core.utils.maintenance.temporal_operations import (
 	prepare_edges_for_invalidation,
 	prepare_invalidation_context,
@@ -114,7 +114,6 @@ def test_prepare_edges_for_invalidation_missing_nodes():
 
 
 def test_prepare_invalidation_context():
-	# Create test data
 	now = datetime.now()
 
 	# Create nodes
@@ -148,15 +147,49 @@ def test_prepare_invalidation_context():
 	existing_edges = [existing_edge]
 	new_edges = [new_edge]
 
+	# Create a current episode and previous episodes
+	current_episode = EpisodicNode(
+		name='Current Episode',
+		content='This is the current episode content.',
+		created_at=now,
+		valid_at=now,
+		source='test',
+		source_description='Test episode for unit testing',
+	)
+	previous_episodes = [
+		EpisodicNode(
+			name='Previous Episode 1',
+			content='This is the content of previous episode 1.',
+			created_at=now - timedelta(days=1),
+			valid_at=now - timedelta(days=1),
+			source='test',
+			source_description='Test previous episode 1 for unit testing',
+		),
+		EpisodicNode(
+			name='Previous Episode 2',
+			content='This is the content of previous episode 2.',
+			created_at=now - timedelta(days=2),
+			valid_at=now - timedelta(days=2),
+			source='test',
+			source_description='Test previous episode 2 for unit testing',
+		),
+	]
+
 	# Call the function
-	result = prepare_invalidation_context(existing_edges, new_edges)
+	result = prepare_invalidation_context(
+		existing_edges, new_edges, current_episode, previous_episodes
+	)
 
 	# Assert the result
 	assert isinstance(result, dict)
 	assert 'existing_edges' in result
 	assert 'new_edges' in result
+	assert 'current_episode' in result
+	assert 'previous_episodes' in result
 	assert len(result['existing_edges']) == 1
 	assert len(result['new_edges']) == 1
+	assert result['current_episode'] == current_episode.content
+	assert len(result['previous_episodes']) == 2
 
 	# Check the format of the existing edge
 	existing_edge_str = result['existing_edges'][0]
@@ -176,12 +209,25 @@ def test_prepare_invalidation_context():
 
 
 def test_prepare_invalidation_context_empty_input():
-	result = prepare_invalidation_context([], [])
+	now = datetime.now()
+	current_episode = EpisodicNode(
+		name='Current Episode',
+		content='Empty episode',
+		created_at=now,
+		valid_at=now,
+		source='test',
+		source_description='Test empty episode for unit testing',
+	)
+	result = prepare_invalidation_context([], [], current_episode, [])
 	assert isinstance(result, dict)
 	assert 'existing_edges' in result
 	assert 'new_edges' in result
+	assert 'current_episode' in result
+	assert 'previous_episodes' in result
 	assert len(result['existing_edges']) == 0
 	assert len(result['new_edges']) == 0
+	assert result['current_episode'] == current_episode.content
+	assert len(result['previous_episodes']) == 0
 
 
 def test_prepare_invalidation_context_sorting():
@@ -215,13 +261,36 @@ def test_prepare_invalidation_context_sorting():
 	# Prepare test input
 	existing_edges = [edge_with_nodes1, edge_with_nodes2]
 
+	# Create a current episode and previous episodes
+	current_episode = EpisodicNode(
+		name='Current Episode',
+		content='This is the current episode content.',
+		created_at=now,
+		valid_at=now,
+		source='test',
+		source_description='Test episode for unit testing',
+	)
+	previous_episodes = [
+		EpisodicNode(
+			name='Previous Episode',
+			content='This is the content of a previous episode.',
+			created_at=now - timedelta(days=1),
+			valid_at=now - timedelta(days=1),
+			source='test',
+			source_description='Test previous episode for unit testing',
+		),
+	]
+
 	# Call the function
-	result = prepare_invalidation_context(existing_edges, [])
+	result = prepare_invalidation_context(existing_edges, [], current_episode, previous_episodes)
 
 	# Assert the result
 	assert len(result['existing_edges']) == 2
 	assert edge2.uuid in result['existing_edges'][0]  # The newer edge should be first
 	assert edge1.uuid in result['existing_edges'][1]  # The older edge should be second
+	assert result['current_episode'] == current_episode.content
+	assert len(result['previous_episodes']) == 1
+	assert result['previous_episodes'][0] == previous_episodes[0].content
 
 
 # Run the tests

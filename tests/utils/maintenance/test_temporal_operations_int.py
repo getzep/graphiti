@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from core.edges import EntityEdge
 from core.llm_client import LLMConfig, OpenAIClient
-from core.nodes import EntityNode
+from core.nodes import EntityNode, EpisodicNode
 from core.utils.maintenance.temporal_operations import (
 	invalidate_edges,
 )
@@ -24,7 +24,6 @@ def setup_llm_client():
 	)
 
 
-# Helper function to create test data
 def create_test_data():
 	now = datetime.now()
 
@@ -53,15 +52,39 @@ def create_test_data():
 	existing_edge = (node1, edge1, node2)
 	new_edge = (node1, edge2, node2)
 
-	return existing_edge, new_edge
+	# Create current episode
+	current_episode = EpisodicNode(
+		name='Current Episode',
+		content='Alice now dislikes Bob',
+		created_at=now,
+		valid_at=now,
+		source='test',
+		source_description='Test episode for unit testing',
+	)
+
+	# Create previous episodes
+	previous_episodes = [
+		EpisodicNode(
+			name='Previous Episode',
+			content='Alice liked Bob',
+			created_at=now - timedelta(days=1),
+			valid_at=now - timedelta(days=1),
+			source='test',
+			source_description='Test previous episode for unit testing',
+		)
+	]
+
+	return existing_edge, new_edge, current_episode, previous_episodes
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_invalidate_edges():
-	existing_edge, new_edge = create_test_data()
+	existing_edge, new_edge, current_episode, previous_episodes = create_test_data()
 
-	invalidated_edges = await invalidate_edges(setup_llm_client(), [existing_edge], [new_edge])
+	invalidated_edges = await invalidate_edges(
+		setup_llm_client(), [existing_edge], [new_edge], current_episode, previous_episodes
+	)
 
 	assert len(invalidated_edges) == 1
 	assert invalidated_edges[0].uuid == existing_edge[1].uuid
@@ -71,9 +94,11 @@ async def test_invalidate_edges():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_invalidate_edges_no_invalidation():
-	existing_edge, _ = create_test_data()
+	existing_edge, _, current_episode, previous_episodes = create_test_data()
 
-	invalidated_edges = await invalidate_edges(setup_llm_client(), [existing_edge], [])
+	invalidated_edges = await invalidate_edges(
+		setup_llm_client(), [existing_edge], [], current_episode, previous_episodes
+	)
 
 	assert len(invalidated_edges) == 0
 
