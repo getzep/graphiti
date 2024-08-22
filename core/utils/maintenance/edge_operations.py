@@ -4,8 +4,6 @@ from datetime import datetime
 from time import time
 from typing import List
 
-from pydantic import BaseModel
-
 from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
 from core.nodes import EntityNode, EpisodicNode
@@ -191,7 +189,7 @@ async def dedupe_extracted_edges(
 	for edge in existing_edges:
 		edge_map[edge.fact] = edge
 	for edge in extracted_edges:
-		if edge.fact in edge_map.keys():
+		if edge.fact in edge_map:
 			continue
 		edge_map[edge.fact] = edge
 
