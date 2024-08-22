@@ -311,9 +311,7 @@ class Graphiti:
 
         return facts
 
-    async def hybrid_search(
-        self, query: str, timestamp: datetime, config: SearchConfig
-    ):
+    async def _search(self, query: str, timestamp: datetime, config: SearchConfig):
         return await hybrid_search(
             self.driver, self.llm_client.client.embeddings, query, timestamp, config
         )
