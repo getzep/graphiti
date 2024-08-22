@@ -7,9 +7,8 @@ from typing import List
 from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
 from core.nodes import EntityNode, EpisodicNode
-from core.edges import EpisodicEdge, EntityEdge
-from core.utils.maintenance.temporal_operations import NodeEdgeNodeTriplet
 from core.prompts import prompt_library
+from core.utils.maintenance.temporal_operations import NodeEdgeNodeTriplet
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +196,7 @@ async def dedupe_extracted_edges_v2(
     for n1, edge, n2 in existing_edges:
         edge_map[create_edge_identifier(n1, edge, n2)] = edge
     for n1, edge, n2 in extracted_edges:
-        if create_edge_identifier(n1, edge, n2) in edge_map.keys():
+        if create_edge_identifier(n1, edge, n2) in edge_map:
             continue
         edge_map[create_edge_identifier(n1, edge, n2)] = edge
 

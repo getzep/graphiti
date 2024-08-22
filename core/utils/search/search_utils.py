@@ -3,7 +3,8 @@ import logging
 from datetime import datetime
 from time import time
 
-from neo4j import AsyncDriver, time as neo4j_time
+from neo4j import AsyncDriver
+from neo4j import time as neo4j_time
 
 from core.edges import EntityEdge
 from core.nodes import EntityNode
@@ -42,7 +43,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
     for record in records:
         n_uuid = record["source_node_uuid"]
-        if n_uuid in context.keys():
+        if n_uuid in context:
             context[n_uuid]["facts"].append(record["fact"])
         else:
             context[n_uuid] = {
