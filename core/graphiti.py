@@ -180,7 +180,14 @@ class Graphiti:
 				edge_touched_node_uuids.append(edge.source_node_uuid)
 				edge_touched_node_uuids.append(edge.target_node_uuid)
 
-			entity_edges.extend(invalidated_edges)
+			edges_to_save = invalidated_edges
+
+			# There may be an overlap between deduped and invalidated edges, so we want to make sure to save the invalidated one
+			for deduped_edge in deduped_edges:
+				if deduped_edge.uuid not in [edge.uuid for edge in invalidated_edges]:
+					edges_to_save.append(deduped_edge)
+
+			entity_edges.extend(edges_to_save)
 
 			edge_touched_node_uuids = list(set(edge_touched_node_uuids))
 			involved_nodes = [node for node in nodes if node.uuid in edge_touched_node_uuids]
@@ -190,7 +197,6 @@ class Graphiti:
 			logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
 
 			logger.info(f'Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}')
-			entity_edges.extend(deduped_edges)
 
 			episodic_edges.extend(
 				build_episodic_edges(
@@ -202,12 +208,6 @@ class Graphiti:
 			)
 			# Important to append the episode to the nodes at the end so that self referencing episodic edges are not built
 			logger.info(f'Built episodic edges: {episodic_edges}')
-
-			# invalidated_edges = await self.invalidate_edges(
-			#     episode, new_nodes, new_edges, relevant_schema, previous_episodes
-			# )
-
-			# edges.extend(invalidated_edges)
 
 			# Future optimization would be using batch operations to save nodes and edges
 			await episode.save(self.driver)
