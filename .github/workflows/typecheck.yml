@@ -1,0 +1,43 @@
+name: MyPy Type Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  mypy:
+    runs-on: depot-ubuntu-22.04
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --with dev
+      - name: Run MyPy
+        shell: bash
+        run: |
+          set -o pipefail
+          poetry run mypy . --show-column-numbers --show-error-codes | sed -E '
+            s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
+            s/^(.*):([0-9]+):([0-9]+): note: (.+)/::notice file=\1,line=\2,endLine=\2,col=\3,title=Note::\4/;
+          '
