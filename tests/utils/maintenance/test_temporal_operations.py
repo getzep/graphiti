@@ -1,11 +1,13 @@
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
+
+from core.edges import EntityEdge
+from core.nodes import EntityNode
 from core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
 )
-from core.edges import EntityEdge
-from core.nodes import EntityNode
 
 
 # Helper function to create test data

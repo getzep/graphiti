@@ -1,10 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field
 from datetime import datetime
 from time import time
-from neo4j import AsyncDriver
 from uuid import uuid4
-import logging
+
+from neo4j import AsyncDriver
+from pydantic import BaseModel, Field
 
 from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import Node

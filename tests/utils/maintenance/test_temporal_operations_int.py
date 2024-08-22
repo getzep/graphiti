@@ -1,14 +1,15 @@
-import pytest
-
+import os
 from datetime import datetime, timedelta
+
+import pytest
+from dotenv import load_dotenv
+
+from core.edges import EntityEdge
+from core.llm_client import LLMConfig, OpenAIClient
+from core.nodes import EntityNode
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
 )
-from core.edges import EntityEdge
-from core.nodes import EntityNode
-from core.llm_client import OpenAIClient, LLMConfig
-from dotenv import load_dotenv
-import os
 
 load_dotenv()
 

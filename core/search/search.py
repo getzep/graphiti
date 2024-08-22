@@ -6,12 +6,12 @@ from time import time
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import EntityEdge, Edge
+from core.edges import Edge, EntityEdge
 from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import Node
 from core.search.search_utils import (
-    edge_similarity_search,
     edge_fulltext_search,
+    edge_similarity_search,
     get_mentioned_nodes,
     rrf,
 )

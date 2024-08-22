@@ -1,8 +1,9 @@
+import os
 import re
 from datetime import datetime, timedelta
-import os
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import List
+
+from pydantic import BaseModel
 
 
 class Speaker(BaseModel):
@@ -38,7 +39,7 @@ def parse_timestamp(timestamp: str) -> timedelta:
 def parse_conversation_file(
     file_path: str, speakers: List[Speaker]
 ) -> list[ParsedMessage]:
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         content = file.read()
 
     messages = content.split("\n\n")
