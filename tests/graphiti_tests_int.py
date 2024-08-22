@@ -68,19 +68,20 @@ def format_context(context):
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
-    await graphiti.build_indices()
 
     context = await graphiti.search("Freakenomics guest")
 
-    logger.info("QUERY: Freakenomics guest" + "RESULT:" + format_context(context))
+    logger.info("\nQUERY: Freakenomics guest" + "\nRESULT:\n" + format_context(context))
 
     context = await graphiti.search("tania tetlow")
 
-    logger.info("QUERY: Tania Tetlow" + "RESULT:" + format_context(context))
+    logger.info("\nQUERY: Tania Tetlow" + "\nRESULT:\n" + format_context(context))
 
     context = await graphiti.search("issues with higher ed")
 
-    logger.info("QUERY: issues with higher ed" + "RESULT:" + format_context(context))
+    logger.info(
+        "\nQUERY: issues with higher ed" + "\nRESULT:\n" + format_context(context)
+    )
     graphiti.close()
 
 
