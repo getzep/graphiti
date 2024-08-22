@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from core import Graphiti
 from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
-from transcript_parser import parse_podcast_messages
+from examples.podcast.transcript_parser import parse_podcast_messages
 
 load_dotenv()
 
