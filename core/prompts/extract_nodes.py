@@ -1,7 +1,7 @@
 import json
-from typing import TypedDict, Protocol
+from typing import Protocol, TypedDict
 
-from .models import Message, PromptVersion, PromptFunction
+from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):

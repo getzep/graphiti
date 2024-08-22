@@ -1,36 +1,51 @@
-from typing import TypedDict, Protocol
-from .models import Message, PromptFunction
-from typing import TypedDict, Protocol
-from .models import Message, PromptFunction
-from .extract_nodes import (
-    Prompt as ExtractNodesPrompt,
-    Versions as ExtractNodesVersions,
-    versions as extract_nodes_versions,
-)
-
-from .dedupe_nodes import (
-    Prompt as DedupeNodesPrompt,
-    Versions as DedupeNodesVersions,
-    versions as dedupe_nodes_versions,
-)
-
-from .extract_edges import (
-    Prompt as ExtractEdgesPrompt,
-    Versions as ExtractEdgesVersions,
-    versions as extract_edges_versions,
-)
+from typing import Protocol, TypedDict
 
 from .dedupe_edges import (
     Prompt as DedupeEdgesPrompt,
+)
+from .dedupe_edges import (
     Versions as DedupeEdgesVersions,
+)
+from .dedupe_edges import (
     versions as dedupe_edges_versions,
 )
-
+from .dedupe_nodes import (
+    Prompt as DedupeNodesPrompt,
+)
+from .dedupe_nodes import (
+    Versions as DedupeNodesVersions,
+)
+from .dedupe_nodes import (
+    versions as dedupe_nodes_versions,
+)
+from .extract_edges import (
+    Prompt as ExtractEdgesPrompt,
+)
+from .extract_edges import (
+    Versions as ExtractEdgesVersions,
+)
+from .extract_edges import (
+    versions as extract_edges_versions,
+)
+from .extract_nodes import (
+    Prompt as ExtractNodesPrompt,
+)
+from .extract_nodes import (
+    Versions as ExtractNodesVersions,
+)
+from .extract_nodes import (
+    versions as extract_nodes_versions,
+)
 from .invalidate_edges import (
     Prompt as InvalidateEdgesPrompt,
+)
+from .invalidate_edges import (
     Versions as InvalidateEdgesVersions,
+)
+from .invalidate_edges import (
     versions as invalidate_edges_versions,
 )
+from .models import Message, PromptFunction
 
 
 class PromptLibrary(Protocol):

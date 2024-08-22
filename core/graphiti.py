@@ -1,29 +1,34 @@
 import asyncio
-from datetime import datetime
 import logging
-from typing import Callable
-from neo4j import AsyncGraphDatabase
-from dotenv import load_dotenv
-from time import time
 import os
+from datetime import datetime
+from time import time
+from typing import Callable
 
-from core.nodes import EntityNode, EpisodicNode
+from dotenv import load_dotenv
+from neo4j import AsyncGraphDatabase
+
 from core.edges import EntityEdge, EpisodicEdge
+from core.llm_client import LLMClient, LLMConfig, OpenAIClient
+from core.nodes import EntityNode, EpisodicNode
 from core.search.search import SearchConfig, hybrid_search
+from core.search.search_utils import (
+    get_relevant_edges,
+    get_relevant_nodes,
+)
 from core.utils import (
     build_episodic_edges,
     retrieve_episodes,
 )
-from core.llm_client import LLMClient, OpenAIClient, LLMConfig
 from core.utils.bulk_utils import (
     BulkEpisode,
-    extract_nodes_and_edges_bulk,
-    retrieve_previous_episodes_bulk,
-    dedupe_nodes_bulk,
-    resolve_edge_pointers,
     dedupe_edges_bulk,
+    dedupe_nodes_bulk,
+    extract_nodes_and_edges_bulk,
+    resolve_edge_pointers,
+    retrieve_previous_episodes_bulk,
 )
-from core.utils.maintenance.edge_operations import extract_edges, dedupe_extracted_edges
+from core.utils.maintenance.edge_operations import dedupe_extracted_edges, extract_edges
 from core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     build_indices_and_constraints,
@@ -32,10 +37,6 @@ from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extra
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
     prepare_edges_for_invalidation,
-)
-from core.search.search_utils import (
-    get_relevant_nodes,
-    get_relevant_edges,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,8 @@ class Graphiti:
         name: str,
         episode_body: str,
         source_description: str,
-        reference_time: datetime,
-        episode_type="string",
+        reference_time: datetime | None = None,
+        episode_type: str | None = "string",  # TODO: this field isn't used yet?
         success_callback: Callable | None = None,
         error_callback: Callable | None = None,
     ):
@@ -249,9 +250,11 @@ class Graphiti:
             episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
 
             # Extract all nodes and edges
-            extracted_nodes, extracted_edges, episodic_edges = (
-                await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
-            )
+            (
+                extracted_nodes,
+                extracted_edges,
+                episodic_edges,
+            ) = await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
 
             # Generate embeddings
             await asyncio.gather(
