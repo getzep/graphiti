@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime
 from time import time
@@ -6,7 +5,7 @@ from time import time
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import Edge, EntityEdge
+from core.edges import Edge
 from core.llm_client.config import EMBEDDING_DIM
 from core.nodes import Node
 from core.search.search_utils import (

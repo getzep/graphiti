@@ -4,23 +4,23 @@ from datetime import datetime
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import EpisodicEdge, EntityEdge, Edge
+from core.edges import Edge, EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
-from core.nodes import EpisodicNode, EntityNode
+from core.nodes import EntityNode, EpisodicNode
+from core.search.search_utils import get_relevant_edges, get_relevant_nodes
 from core.utils import retrieve_episodes
 from core.utils.maintenance.edge_operations import (
-    extract_edges,
     build_episodic_edges,
     dedupe_edge_list,
     dedupe_extracted_edges,
+    extract_edges,
 )
 from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 from core.utils.maintenance.node_operations import (
-    extract_nodes,
-    dedupe_node_list,
     dedupe_extracted_nodes,
+    dedupe_node_list,
+    extract_nodes,
 )
-from core.search.search_utils import get_relevant_nodes, get_relevant_edges
 
 CHUNK_SIZE = 10
 
@@ -59,9 +59,10 @@ async def extract_nodes_and_edges_bulk(
         ]
     )
 
-    episodes, previous_episodes_list = [episode[0] for episode in episode_tuples], [
-        episode[1] for episode in episode_tuples
-    ]
+    episodes, previous_episodes_list = (
+        [episode[0] for episode in episode_tuples],
+        [episode[1] for episode in episode_tuples],
+    )
 
     extracted_edges_bulk = await asyncio.gather(
         *[

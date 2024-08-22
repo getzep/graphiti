@@ -4,9 +4,8 @@ import sys
 
 import pytest
 
-from core.search.search import SearchConfig
 
-pytestmark = pytest.mark.integration
+
 
 import asyncio
 from datetime import datetime
@@ -18,6 +17,8 @@ from openai import OpenAI
 from core.edges import EntityEdge, EpisodicEdge
 from core.graphiti import Graphiti
 from core.nodes import EntityNode, EpisodicNode
+
+pytestmark = pytest.mark.integration
 
 pytest_plugins = ("pytest_asyncio",)
 
