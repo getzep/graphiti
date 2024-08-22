@@ -28,7 +28,10 @@ from core.utils.bulk_utils import (
 	resolve_edge_pointers,
 	retrieve_previous_episodes_bulk,
 )
-from core.utils.maintenance.edge_operations import dedupe_extracted_edges, extract_edges
+from core.utils.maintenance.edge_operations import (
+	dedupe_extracted_edges,
+	extract_edges,
+)
 from core.utils.maintenance.graph_data_operations import (
 	EPISODE_WINDOW_LEN,
 	build_indices_and_constraints,
@@ -116,6 +119,7 @@ class Graphiti:
 			)
 
 			extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
+			logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
 			# Calculate Embeddings
 
@@ -124,14 +128,14 @@ class Graphiti:
 			)
 			existing_nodes = await get_relevant_nodes(extracted_nodes, self.driver)
 			logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-			new_nodes, _ = await dedupe_extracted_nodes(
+			touched_nodes, _, brand_new_nodes = await dedupe_extracted_nodes(
 				self.llm_client, extracted_nodes, existing_nodes
 			)
-			logger.info(f'Deduped touched nodes: {[(n.name, n.uuid) for n in new_nodes]}')
-			nodes.extend(new_nodes)
+			logger.info(f'Adjusted touched nodes: {[(n.name, n.uuid) for n in touched_nodes]}')
+			nodes.extend(touched_nodes)
 
 			extracted_edges = await extract_edges(
-				self.llm_client, episode, new_nodes, previous_episodes
+				self.llm_client, episode, touched_nodes, previous_episodes
 			)
 
 			await asyncio.gather(*[edge.generate_embedding(embedder) for edge in extracted_edges])
@@ -140,9 +144,22 @@ class Graphiti:
 			logger.info(f'Existing edges: {[(e.name, e.uuid) for e in existing_edges]}')
 			logger.info(f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}')
 
+			# deduped_edges = await dedupe_extracted_edges_v2(
+			#     self.llm_client,
+			#     extract_node_and_edge_triplets(extracted_edges, nodes),
+			#     extract_node_and_edge_triplets(existing_edges, nodes),
+			# )
+
 			deduped_edges = await dedupe_extracted_edges(
-				self.llm_client, extracted_edges, existing_edges
+				self.llm_client,
+				extracted_edges,
+				existing_edges,
 			)
+
+			edge_touched_node_uuids = [n.uuid for n in brand_new_nodes]
+			for edge in deduped_edges:
+				edge_touched_node_uuids.append(edge.source_node_uuid)
+				edge_touched_node_uuids.append(edge.target_node_uuid)
 
 			(
 				old_edges_with_nodes_pending_invalidation,
@@ -155,38 +172,42 @@ class Graphiti:
 				self.llm_client,
 				old_edges_with_nodes_pending_invalidation,
 				new_edges_with_nodes,
+				episode,
+				previous_episodes,
 			)
 
-			entity_edges.extend(invalidated_edges)
+			for edge in invalidated_edges:
+				edge_touched_node_uuids.append(edge.source_node_uuid)
+				edge_touched_node_uuids.append(edge.target_node_uuid)
+
+			edges_to_save = invalidated_edges
+
+			# There may be an overlap between deduped and invalidated edges, so we want to make sure to save the invalidated one
+			for deduped_edge in deduped_edges:
+				if deduped_edge.uuid not in [edge.uuid for edge in invalidated_edges]:
+					edges_to_save.append(deduped_edge)
+
+			entity_edges.extend(edges_to_save)
+
+			edge_touched_node_uuids = list(set(edge_touched_node_uuids))
+			involved_nodes = [node for node in nodes if node.uuid in edge_touched_node_uuids]
+
+			logger.info(f'Edge touched nodes: {[(n.name, n.uuid) for n in involved_nodes]}')
 
 			logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
 
 			logger.info(f'Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}')
-			entity_edges.extend(deduped_edges)
 
-			new_edges = await dedupe_extracted_edges(
-				self.llm_client, extracted_edges, existing_edges
-			)
-
-			logger.info(f'Deduped edges: {[(e.name, e.uuid) for e in new_edges]}')
-
-			entity_edges.extend(new_edges)
 			episodic_edges.extend(
 				build_episodic_edges(
 					# There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them
-					nodes,
+					involved_nodes,
 					episode,
 					now,
 				)
 			)
 			# Important to append the episode to the nodes at the end so that self referencing episodic edges are not built
 			logger.info(f'Built episodic edges: {episodic_edges}')
-
-			# invalidated_edges = await self.invalidate_edges(
-			#     episode, new_nodes, new_edges, relevant_schema, previous_episodes
-			# )
-
-			# edges.extend(invalidated_edges)
 
 			# Future optimization would be using batch operations to save nodes and edges
 			await episode.save(self.driver)
