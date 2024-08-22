@@ -132,7 +132,7 @@ class Graphiti:
             logger.info(
                 f"Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}"
             )
-            touched_nodes, _, (_, brand_new_nodes) = await dedupe_extracted_nodes(
+            touched_nodes, _, brand_new_nodes = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
             )
             logger.info(
@@ -183,9 +183,13 @@ class Graphiti:
             entity_edges.extend(invalidated_edges)
 
             edge_touched_node_uuids = list(set(edge_touched_node_uuids))
-            edge_touched_nodes = [
+            involved_nodes = [
                 node for node in nodes if node.uuid in edge_touched_node_uuids
             ]
+
+            logger.info(
+                f"Edge touched nodes: {[(n.name, n.uuid) for n in involved_nodes]}"
+            )
 
             logger.info(
                 f"Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}"
@@ -194,17 +198,10 @@ class Graphiti:
             logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}")
             entity_edges.extend(deduped_edges)
 
-            new_edges = await dedupe_extracted_edges(
-                self.llm_client, extracted_edges, existing_edges
-            )
-
-            logger.info(f"Deduped edges: {[(e.name, e.uuid) for e in new_edges]}")
-
-            entity_edges.extend(new_edges)
             episodic_edges.extend(
                 build_episodic_edges(
                     # There may be an overlap between new_nodes and affected_nodes, so we're deduplicating them
-                    edge_touched_nodes,
+                    involved_nodes,
                     episode,
                     now,
                 )

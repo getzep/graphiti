@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from time import time
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, time as neo4j_time
 
 from core.edges import EntityEdge
 from core.nodes import EntityNode
@@ -91,8 +91,6 @@ async def edge_similarity_search(
 
     edges: list[EntityEdge] = []
 
-    now = datetime.now()
-
     for record in records:
         edge = EntityEdge(
             uuid=record["uuid"],
@@ -102,10 +100,10 @@ async def edge_similarity_search(
             name=record["name"],
             episodes=record["episodes"],
             fact_embedding=record["fact_embedding"],
-            created_at=now,
-            expired_at=now,
-            valid_at=now,
-            invalid_At=now,
+            created_at=safely_parse_db_date(record["created_at"]),
+            expired_at=safely_parse_db_date(record["expired_at"]),
+            valid_at=safely_parse_db_date(record["valid_at"]),
+            invalid_At=safely_parse_db_date(record["invalid_at"]),
         )
 
         edges.append(edge)
@@ -139,7 +137,7 @@ async def entity_similarity_search(
                 uuid=record["uuid"],
                 name=record["name"],
                 labels=[],
-                created_at=datetime.now(),
+                created_at=safely_parse_db_date(record["created_at"]),
                 summary=record["summary"],
             )
         )
@@ -174,7 +172,7 @@ async def entity_fulltext_search(
                 uuid=record["uuid"],
                 name=record["name"],
                 labels=[],
-                created_at=datetime.now(),
+                created_at=safely_parse_db_date(record["created_at"]),
                 summary=record["summary"],
             )
         )
@@ -213,8 +211,6 @@ async def edge_fulltext_search(
 
     edges: list[EntityEdge] = []
 
-    now = datetime.now()
-
     for record in records:
         edge = EntityEdge(
             uuid=record["uuid"],
@@ -224,15 +220,21 @@ async def edge_fulltext_search(
             name=record["name"],
             episodes=record["episodes"],
             fact_embedding=record["fact_embedding"],
-            created_at=now,
-            expired_at=now,
-            valid_at=now,
-            invalid_At=now,
+            created_at=safely_parse_db_date(record["created_at"]),
+            expired_at=safely_parse_db_date(record["expired_at"]),
+            valid_at=safely_parse_db_date(record["valid_at"]),
+            invalid_At=safely_parse_db_date(record["invalid_at"]),
         )
 
         edges.append(edge)
 
     return edges
+
+
+def safely_parse_db_date(date_str: neo4j_time.Date) -> datetime:
+    if date_str:
+        return datetime.fromisoformat(date_str.iso_format())
+    return None
 
 
 async def get_relevant_nodes(

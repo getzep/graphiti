@@ -219,7 +219,7 @@ async def dedupe_extracted_edges(
             {"name": edge.name, "fact": edge.fact} for edge in extracted_edges
         ],
     }
-
+    logger.info(prompt_library.dedupe_edges.v1(context))
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_edges.v1(context)
     )

@@ -50,9 +50,11 @@ async def invalidate_edges(
     context = prepare_invalidation_context(
         existing_edges_pending_invalidation, new_edges
     )
+    logger.info(prompt_library.invalidate_edges.v1(context))
     llm_response = await llm_client.generate_response(
         prompt_library.invalidate_edges.v1(context)
     )
+    logger.info(f"invalidate_edges LLM response: {llm_response}")
 
     edges_to_invalidate = llm_response.get("invalidated_edges", [])
     invalidated_edges = process_edge_invalidation_llm_response(

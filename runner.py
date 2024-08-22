@@ -5,6 +5,7 @@ import os
 import asyncio
 import logging
 import sys
+from datetime import datetime
 
 load_dotenv()
 
@@ -43,24 +44,28 @@ async def main():
 
     # await client.build_indices()
     await client.add_episode(
-        name="Message 1",
-        episode_body="Paul: I love apples",
-        source_description="WhatsApp Message",
-    )
-    await client.add_episode(
-        name="Message 2",
-        episode_body="Paul: I hate apples now",
-        source_description="WhatsApp Message",
-    )
-    await client.add_episode(
         name="Message 3",
         episode_body="Jane: I am married to Paul",
         source_description="WhatsApp Message",
+        reference_time=datetime.now(),
     )
     await client.add_episode(
         name="Message 4",
         episode_body="Paul: I have divorced Jane",
         source_description="WhatsApp Message",
+        reference_time=datetime.now(),
+    )
+    await client.add_episode(
+        name="Message 5",
+        episode_body="Jane: I still love Paul",
+        source_description="WhatsApp Message",
+        reference_time=datetime.now(),
+    )
+    await client.add_episode(
+        name="Message 6",
+        episode_body="Paul: I have divorced Jane",
+        source_description="WhatsApp Message",
+        reference_time=datetime.now(),
     )
 
     # await client.add_episode(

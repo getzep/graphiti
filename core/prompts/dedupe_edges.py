@@ -40,6 +40,7 @@ def v1(context: dict[str, any]) -> list[Message]:
         Guidelines:
         1. Use both the name and fact of edges to determine if they are duplicates, 
             duplicate edges may have different names
+        2. If you encounter facts that are semantically equivalent or very similar, keep the original edge
 
         Respond with a JSON object in the following format:
         {{
