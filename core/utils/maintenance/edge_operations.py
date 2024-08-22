@@ -232,7 +232,7 @@ async def dedupe_edge_list(
 	unique_edges_data = llm_response.get('unique_edges', [])
 
 	end = time()
-	logger.info(f'Extracted edge duplicates: {unique_edges_data} in {(end - start)*1000} ms ')
+	logger.info(f'Extracted edge duplicates: {unique_edges_data} in {(end - start) * 1000} ms ')
 
 	# Get full edge data
 	unique_edges = []
