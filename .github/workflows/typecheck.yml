@@ -37,4 +37,4 @@ jobs:
         run: |
           poetry run mypy --install-types --non-interactive .
           poetry run mypy . --show-column-numbers --show-error-codes --pretty | \
-          sed -E 's/(.*?):([0-9]+):([0-9]+): error: (.*) \[(.*)\]/::error file=\1,line=\2,col=\3::\4 [\5]/; s/(.*?):([0-9]+):([0-9]+): warning: (.*) \[(.*)\]/::warning file=\1,line=\2,col=\3::\4 [\5]/'
+          sed -E 's/^(.*?):([0-9]+):([0-9]+): error: (.*) \[(.*)\]/::error file=\1,line=\2,col=\3::\4 [\5]/; s/^(.*?):([0-9]+):([0-9]+): warning: (.*) \[(.*)\]/::warning file=\1,line=\2,col=\3::\4 [\5]/'
