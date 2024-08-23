@@ -56,7 +56,7 @@ class Graphiti:
 		else:
 			self.llm_client = OpenAIClient(
 				LLMConfig(
-					api_key=os.getenv('OPENAI_API_KEY'),
+					api_key=os.getenv('OPENAI_API_KEY', default=''),
 					model='gpt-4o-mini',
 					base_url='https://api.openai.com/v1',
 				)
@@ -72,28 +72,16 @@ class Graphiti:
 		self,
 		reference_time: datetime,
 		last_n: int = EPISODE_WINDOW_LEN,
-		sources: list[str] | None = 'messages',
 	) -> list[EpisodicNode]:
 		"""Retrieve the last n episodic nodes from the graph"""
-		return await retrieve_episodes(self.driver, reference_time, last_n, sources)
-
-	# Invalidate edges that are no longer valid
-	async def invalidate_edges(
-		self,
-		episode: EpisodicNode,
-		new_nodes: list[EntityNode],
-		new_edges: list[EntityEdge],
-		relevant_schema: dict[str, any],
-		previous_episodes: list[EpisodicNode],
-	): ...
+		return await retrieve_episodes(self.driver, reference_time, last_n)
 
 	async def add_episode(
 		self,
 		name: str,
 		episode_body: str,
 		source_description: str,
-		reference_time: datetime | None = None,
-		episode_type: str | None = 'string',  # TODO: this field isn't used yet?
+		reference_time: datetime,
 		success_callback: Callable | None = None,
 		error_callback: Callable | None = None,
 	):
@@ -104,7 +92,7 @@ class Graphiti:
 			nodes: list[EntityNode] = []
 			entity_edges: list[EntityEdge] = []
 			episodic_edges: list[EpisodicEdge] = []
-			embedder = self.llm_client.client.embeddings
+			embedder = self.llm_client.get_embedder()
 			now = datetime.now()
 
 			previous_episodes = await self.retrieve_episodes(reference_time)
@@ -234,7 +222,7 @@ class Graphiti:
 	):
 		try:
 			start = time()
-			embedder = self.llm_client.client.embeddings
+			embedder = self.llm_client.get_embedder()
 			now = datetime.now()
 
 			episodes = [
@@ -276,14 +264,22 @@ class Graphiti:
 			await asyncio.gather(*[node.save(self.driver) for node in nodes])
 
 			# re-map edge pointers so that they don't point to discard dupe nodes
-			extracted_edges: list[EntityEdge] = resolve_edge_pointers(extracted_edges, uuid_map)
-			episodic_edges: list[EpisodicEdge] = resolve_edge_pointers(episodic_edges, uuid_map)
+			extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
+				extracted_edges, uuid_map
+			)
+			episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
+				episodic_edges, uuid_map
+			)
 
 			# save episodic edges to KG
-			await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
+			await asyncio.gather(
+				*[edge.save(self.driver) for edge in episodic_edges_with_resolved_pointers]
+			)
 
 			# Dedupe extracted edges
-			edges = await dedupe_edges_bulk(self.driver, self.llm_client, extracted_edges)
+			edges = await dedupe_edges_bulk(
+				self.driver, self.llm_client, extracted_edges_with_resolved_pointers
+			)
 			logger.info(f'extracted edge length: {len(edges)}')
 
 			# invalidate edges
@@ -302,12 +298,12 @@ class Graphiti:
 		edges = (
 			await hybrid_search(
 				self.driver,
-				self.llm_client.client.embeddings,
+				self.llm_client.get_embedder(),
 				query,
 				datetime.now(),
 				search_config,
 			)
-		)['edges']
+		).edges
 
 		facts = [edge.fact for edge in edges]
 
@@ -315,5 +311,5 @@ class Graphiti:
 
 	async def _search(self, query: str, timestamp: datetime, config: SearchConfig):
 		return await hybrid_search(
-			self.driver, self.llm_client.client.embeddings, query, timestamp, config
+			self.driver, self.llm_client.get_embedder(), query, timestamp, config
 		)

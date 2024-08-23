@@ -1,4 +1,4 @@
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 from pydantic import BaseModel
 
@@ -9,7 +9,7 @@ class Message(BaseModel):
 
 
 class PromptVersion(Protocol):
-	def __call__(self, context: dict[str, any]) -> list[Message]: ...
+	def __call__(self, context: dict[str, Any]) -> list[Message]: ...
 
 
-PromptFunction = Callable[[dict[str, any]], list[Message]]
+PromptFunction = Callable[[dict[str, Any]], list[Message]]

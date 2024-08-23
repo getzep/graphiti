@@ -5,9 +5,9 @@ from time import time
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import Edge
+from core.edges import EntityEdge
 from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import Node
+from core.nodes import EntityNode, EpisodicNode
 from core.search.search_utils import (
 	edge_fulltext_search,
 	edge_similarity_search,
@@ -28,9 +28,15 @@ class SearchConfig(BaseModel):
 	reranker: str = 'rrf'
 
 
+class SearchResults(BaseModel):
+	episodes: list[EpisodicNode]
+	nodes: list[EntityNode]
+	edges: list[EntityEdge]
+
+
 async def hybrid_search(
 	driver: AsyncDriver, embedder, query: str, timestamp: datetime, config: SearchConfig
-) -> dict[str, [Node | Edge]]:
+) -> SearchResults:
 	start = time()
 
 	episodes = []
@@ -86,11 +92,7 @@ async def hybrid_search(
 		reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 		edges.extend(reranked_edges)
 
-	context = {
-		'episodes': episodes,
-		'nodes': nodes,
-		'edges': edges,
-	}
+	context = SearchResults(episodes=episodes, nodes=nodes, edges=edges)
 
 	end = time()
 

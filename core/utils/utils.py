@@ -14,8 +14,8 @@ def build_episodic_edges(
 	for node in entity_nodes:
 		edges.append(
 			EpisodicEdge(
-				source_node_uuid=episode,
-				target_node_uuid=node,
+				source_node_uuid=episode.uuid,
+				target_node_uuid=node.uuid,
 				created_at=episode.created_at,
 			)
 		)
