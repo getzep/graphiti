@@ -5,9 +5,9 @@ from time import time
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import Edge
+from core.edges import EntityEdge
 from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import Node
+from core.nodes import EpisodicNode, EntityNode
 from core.search.search_utils import (
 	edge_fulltext_search,
 	edge_similarity_search,
@@ -29,9 +29,9 @@ class SearchConfig(BaseModel):
 
 
 class SearchResults(BaseModel):
-	episodes: list[str]
-	nodes: list[str]
-	edges: list[str]
+	episodes: list[EpisodicNode]
+	nodes: list[EntityNode]
+	edges: list[EntityEdge]
 
 
 async def hybrid_search(

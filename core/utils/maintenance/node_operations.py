@@ -1,5 +1,4 @@
 import logging
-import typing
 from datetime import datetime
 from time import time
 
