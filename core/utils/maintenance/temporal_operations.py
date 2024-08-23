@@ -140,7 +140,6 @@ async def extract_edge_dates(
 		'previous_episodes': [ep.content for ep in previous_episodes],
 		'reference_timestamp': reference_time.isoformat(),
 	}
-	test = prompt_library.extract_edge_dates.v1(context)
 	llm_response = await llm_client.generate_response(prompt_library.extract_edge_dates.v1(context))
 
 	valid_at = llm_response.get('valid_at')
