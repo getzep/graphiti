@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .models import Message, PromptFunction, PromptVersion
 
@@ -7,6 +7,7 @@ from .models import Message, PromptFunction, PromptVersion
 class Prompt(Protocol):
 	v1: PromptVersion
 	v2: PromptVersion
+	edge_list: PromptVersion
 
 
 class Versions(TypedDict):
@@ -15,7 +16,7 @@ class Versions(TypedDict):
 	edge_list: PromptFunction
 
 
-def v1(context: dict[str, any]) -> list[Message]:
+def v1(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -55,7 +56,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v2(context: dict[str, any]) -> list[Message]:
+def v2(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -97,7 +98,7 @@ def v2(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def edge_list(context: dict[str, any]) -> list[Message]:
+def edge_list(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',

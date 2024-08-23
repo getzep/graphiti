@@ -1,4 +1,4 @@
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .dedupe_edges import (
 	Prompt as DedupeEdgesPrompt,
@@ -68,7 +68,7 @@ class VersionWrapper:
 	def __init__(self, func: PromptFunction):
 		self.func = func
 
-	def __call__(self, context: dict[str, any]) -> list[Message]:
+	def __call__(self, context: dict[str, Any]) -> list[Message]:
 		return self.func(context)
 
 
@@ -81,7 +81,7 @@ class PromptTypeWrapper:
 class PromptLibraryWrapper:
 	def __init__(self, library: PromptLibraryImpl):
 		for prompt_type, versions in library.items():
-			setattr(self, prompt_type, PromptTypeWrapper(versions))
+			setattr(self, prompt_type, PromptTypeWrapper(versions))  # type: ignore[arg-type]
 
 
 PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
@@ -91,5 +91,4 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
 	'dedupe_edges': dedupe_edges_versions,
 	'invalidate_edges': invalidate_edges_versions,
 }
-
-prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)
+prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)  # type: ignore[assignment]

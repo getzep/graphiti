@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 from collections import defaultdict
 from datetime import datetime
 from time import time
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 
 
-def parse_db_date(neo_date: neo4j_time.Date | None) -> datetime | None:
+def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
 	return neo_date.to_native() if neo_date else None
 
 
@@ -41,7 +42,7 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -74,7 +75,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 		node_ids=node_ids,
 	)
 
-	context = {}
+	context: dict[str, typing.Any] = {}
 
 	for record in records:
 		n_uuid = record['source_node_uuid']
@@ -173,7 +174,7 @@ async def entity_similarity_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -208,7 +209,7 @@ async def entity_fulltext_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -277,7 +278,11 @@ async def get_relevant_nodes(
 
 	results = await asyncio.gather(
 		*[entity_fulltext_search(node.name, driver) for node in nodes],
-		*[entity_similarity_search(node.name_embedding, driver) for node in nodes],
+		*[
+			entity_similarity_search(node.name_embedding, driver)
+			for node in nodes
+			if node.name_embedding is not None
+		],
 	)
 
 	for result in results:
@@ -303,7 +308,11 @@ async def get_relevant_edges(
 	relevant_edge_uuids = set()
 
 	results = await asyncio.gather(
-		*[edge_similarity_search(edge.fact_embedding, driver) for edge in edges],
+		*[
+			edge_similarity_search(edge.fact_embedding, driver)
+			for edge in edges
+			if edge.fact_embedding is not None
+		],
 		*[edge_fulltext_search(edge.fact, driver) for edge in edges],
 	)
 

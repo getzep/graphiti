@@ -1,15 +1,15 @@
 from .maintenance import (
 	build_episodic_edges,
 	clear_data,
-	extract_new_edges,
-	extract_new_nodes,
+	extract_edges,
+	extract_nodes,
 	retrieve_episodes,
 )
 
 __all__ = [
-	'extract_new_edges',
+	'extract_edges',
 	'build_episodic_edges',
-	'extract_new_nodes',
+	'extract_nodes',
 	'clear_data',
 	'retrieve_episodes',
 ]

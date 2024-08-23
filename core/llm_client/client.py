@@ -1,5 +1,7 @@
+import typing
 from abc import ABC, abstractmethod
 
+from ..prompts.models import Message
 from .config import LLMConfig
 
 
@@ -9,5 +11,9 @@ class LLMClient(ABC):
 		pass
 
 	@abstractmethod
-	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, any]:
+	def get_embedder(self) -> typing.Any:
+		pass
+
+	@abstractmethod
+	async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
 		pass

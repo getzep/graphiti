@@ -1,15 +1,15 @@
-from .edge_operations import build_episodic_edges, extract_new_edges
+from .edge_operations import build_episodic_edges, extract_edges
 from .graph_data_operations import (
 	clear_data,
 	retrieve_episodes,
 )
-from .node_operations import extract_new_nodes
+from .node_operations import extract_nodes
 from .temporal_operations import invalidate_edges
 
 __all__ = [
-	'extract_new_edges',
+	'extract_edges',
 	'build_episodic_edges',
-	'extract_new_nodes',
+	'extract_nodes',
 	'clear_data',
 	'retrieve_episodes',
 	'invalidate_edges',
