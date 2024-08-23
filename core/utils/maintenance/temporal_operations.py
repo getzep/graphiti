@@ -123,17 +123,13 @@ def process_edge_invalidation_llm_response(
 
 async def extract_edge_dates(
     llm_client: LLMClient,
-    edge_triplet: NodeEdgeNodeTriplet,
+    edge: EntityEdge,
     reference_time: datetime,
     current_episode: EpisodicNode,
     previous_episodes: List[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None, str]:
-    source_node, edge, target_node = edge_triplet
-
     context = {
-        'source_node': source_node.name,
         'edge_name': edge.name,
-        'target_node': target_node.name,
         'edge_fact': edge.fact,
         'current_episode': current_episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],

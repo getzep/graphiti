@@ -21,9 +21,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
             Edge:
-            Source Node: {context['source_node']}
             Edge Name: {context['edge_name']}
-            Target Node: {context['target_node']}
             Fact: {context['edge_fact']}
 
             Current Episode: {context['current_episode']}
