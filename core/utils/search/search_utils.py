@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 from datetime import datetime
 from time import time
 
@@ -39,7 +40,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 		node_ids=node_ids,
 	)
 
-	context = {}
+	context: dict[str, typing.Any] = {}
 
 	for record in records:
 		n_uuid = record['source_node_uuid']
@@ -101,10 +102,10 @@ async def edge_similarity_search(
 			name=record['name'],
 			episodes=record['episodes'],
 			fact_embedding=record['fact_embedding'],
-			created_at=safely_parse_db_date(record['created_at']),
+			created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
 			expired_at=safely_parse_db_date(record['expired_at']),
 			valid_at=safely_parse_db_date(record['valid_at']),
-			invalid_At=safely_parse_db_date(record['invalid_at']),
+			invalid_at=safely_parse_db_date(record['invalid_at']),
 		)
 
 		edges.append(edge)
@@ -138,7 +139,7 @@ async def entity_similarity_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=[],
-				created_at=safely_parse_db_date(record['created_at']),
+				created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
 				summary=record['summary'],
 			)
 		)
@@ -173,7 +174,7 @@ async def entity_fulltext_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=[],
-				created_at=safely_parse_db_date(record['created_at']),
+				created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
 				summary=record['summary'],
 			)
 		)
@@ -221,10 +222,10 @@ async def edge_fulltext_search(
 			name=record['name'],
 			episodes=record['episodes'],
 			fact_embedding=record['fact_embedding'],
-			created_at=safely_parse_db_date(record['created_at']),
+			created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
 			expired_at=safely_parse_db_date(record['expired_at']),
 			valid_at=safely_parse_db_date(record['valid_at']),
-			invalid_At=safely_parse_db_date(record['invalid_at']),
+			invalid_at=safely_parse_db_date(record['invalid_at']),
 		)
 
 		edges.append(edge)
@@ -232,7 +233,7 @@ async def edge_fulltext_search(
 	return edges
 
 
-def safely_parse_db_date(date_str: neo4j_time.Date) -> datetime:
+def safely_parse_db_date(date_str: neo4j_time.Date) -> datetime | None:
 	if date_str:
 		return datetime.fromisoformat(date_str.iso_format())
 	return None
@@ -248,7 +249,11 @@ async def get_relevant_nodes(
 
 	results = await asyncio.gather(
 		*[entity_fulltext_search(node.name, driver) for node in nodes],
-		*[entity_similarity_search(node.name_embedding, driver) for node in nodes],
+		*[
+			entity_similarity_search(node.name_embedding, driver)
+			for node in nodes
+			if node.name_embedding
+		],
 	)
 
 	for result in results:
@@ -274,7 +279,11 @@ async def get_relevant_edges(
 	relevant_edge_uuids = set()
 
 	results = await asyncio.gather(
-		*[edge_similarity_search(edge.fact_embedding, driver) for edge in edges],
+		*[
+			edge_similarity_search(edge.fact_embedding, driver)
+			for edge in edges
+			if edge.fact_embedding is not None
+		],
 		*[edge_fulltext_search(edge.fact, driver) for edge in edges],
 	)
 

@@ -1,4 +1,5 @@
 import asyncio
+import typing
 from datetime import datetime
 
 from neo4j import AsyncDriver
@@ -38,7 +39,9 @@ async def retrieve_previous_episodes_bulk(
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
 	previous_episodes_list = await asyncio.gather(
 		*[
-			retrieve_episodes(driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN)
+			retrieve_episodes(
+				driver, episode.valid_at or episode.created_at, last_n=EPISODE_WINDOW_LEN
+			)
 			for episode in episodes
 		]
 	)
@@ -121,8 +124,8 @@ async def dedupe_edges_bulk(
 
 
 def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str, str]]:
-	uuid_map = {}
-	name_map = {}
+	uuid_map: dict[str, str] = {}
+	name_map: dict[str, EntityNode] = {}
 	for node in nodes:
 		if node.name in name_map:
 			uuid_map[node.uuid] = name_map[node.name].uuid
@@ -182,7 +185,10 @@ def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
 	return compressed_map
 
 
-def resolve_edge_pointers(edges: list[Edge], uuid_map: dict[str, str]):
+E = typing.TypeVar('E', bound=Edge)
+
+
+def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
 	for edge in edges:
 		source_uuid = edge.source_node_uuid
 		target_uuid = edge.target_node_uuid

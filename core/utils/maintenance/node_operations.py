@@ -101,16 +101,16 @@ async def dedupe_extracted_nodes(
 	llm_client: LLMClient,
 	extracted_nodes: list[EntityNode],
 	existing_nodes: list[EntityNode],
-) -> tuple[list[EntityNode], dict[str, str]]:
+) -> tuple[list[EntityNode], dict[str, str], list[EntityNode]]:
 	start = time()
 
 	# build existing node map
-	node_map = {}
+	node_map: dict[str, EntityNode] = {}
 	for node in existing_nodes:
 		node_map[node.name] = node
 
 	# Temp hack
-	new_nodes_map = {}
+	new_nodes_map: dict[str, EntityNode] = {}
 	for node in extracted_nodes:
 		new_nodes_map[node.name] = node
 
@@ -135,14 +135,14 @@ async def dedupe_extracted_nodes(
 	end = time()
 	logger.info(f'Deduplicated nodes: {duplicate_data} in {(end - start) * 1000} ms')
 
-	uuid_map = {}
+	uuid_map: dict[str, str] = {}
 	for duplicate in duplicate_data:
 		uuid = new_nodes_map[duplicate['name']].uuid
 		uuid_value = node_map[duplicate['duplicate_of']].uuid
 		uuid_map[uuid] = uuid_value
 
-	nodes = []
-	brand_new_nodes = []
+	nodes: list[EntityNode] = []
+	brand_new_nodes: list[EntityNode] = []
 	for node in extracted_nodes:
 		if node.uuid in uuid_map:
 			existing_uuid = uuid_map[node.uuid]
@@ -150,7 +150,9 @@ async def dedupe_extracted_nodes(
 			# can you revisit the node dedup function and make it somewhat cleaner and add more comments/tests please?
 			# find an existing node by the uuid from the nodes_map (each key is name, so we need to iterate by uuid value)
 			existing_node = next((v for k, v in node_map.items() if v.uuid == existing_uuid), None)
-			nodes.append(existing_node)
+			if existing_node:
+				nodes.append(existing_node)
+
 			continue
 		brand_new_nodes.append(node)
 		nodes.append(node)

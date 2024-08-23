@@ -30,7 +30,7 @@ class SearchConfig(BaseModel):
 
 async def hybrid_search(
 	driver: AsyncDriver, embedder, query: str, timestamp: datetime, config: SearchConfig
-) -> dict[str, [Node | Edge]]:
+) -> dict[str, list[Node | Edge]]:
 	start = time()
 
 	episodes = []

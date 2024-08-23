@@ -11,5 +11,9 @@ class LLMClient(ABC):
 		pass
 
 	@abstractmethod
+	def get_embedder(self) -> typing.Any:
+		pass
+
+	@abstractmethod
 	async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
 		pass

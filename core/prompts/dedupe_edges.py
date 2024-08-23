@@ -7,6 +7,7 @@ from .models import Message, PromptFunction, PromptVersion
 class Prompt(Protocol):
 	v1: PromptVersion
 	v2: PromptVersion
+	edge_list: PromptVersion
 
 
 class Versions(TypedDict):

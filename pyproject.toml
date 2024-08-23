@@ -2,7 +2,10 @@
 name = "graphiti"
 version = "0.0.1"
 description = "Graph building library"
-authors = ["Paul Paliychuk <paul@getzep.com>", "Preston Rasmussen <preston@getzep.com>"]
+authors = [
+    "Paul Paliychuk <paul@getzep.com>",
+    "Preston Rasmussen <preston@getzep.com>",
+]
 readme = "README.md"
 
 [tool.poetry.dependencies]

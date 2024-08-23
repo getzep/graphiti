@@ -8,7 +8,6 @@ from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
 from core.nodes import EntityNode, EpisodicNode
 from core.prompts import prompt_library
-from core.utils.maintenance.temporal_operations import NodeEdgeNodeTriplet
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +57,7 @@ async def extract_new_edges(
 	logger.info(f'Extracted new edges: {new_edges_data}')
 
 	# Convert the extracted data into EntityEdge objects
-	new_edges = []
+	new_edges: list[EntityEdge] = []
 	for edge_data in new_edges_data:
 		source_node = next(
 			(node for node in new_nodes if node.name == edge_data['source_node']),
@@ -106,8 +105,8 @@ async def extract_new_edges(
 			)
 
 			new_edge = EntityEdge(
-				source_node=source_node,
-				target_node=target_node,
+				source_node_uuid=source_node.uuid,
+				target_node_uuid=target_node.uuid,
 				name=edge_data['relation_type'],
 				fact=edge_data['fact'],
 				episodes=[episode.uuid],
@@ -120,12 +119,19 @@ async def extract_new_edges(
 				f'Created new edge: {new_edge.name} from {source_node.name} (UUID: {source_node.uuid}) to {target_node.name} (UUID: {target_node.uuid})'
 			)
 
-	affected_nodes = set()
+	affected_nodes_uuids: list[str] = []
 
 	for edge in new_edges:
-		affected_nodes.add(edge.source_node)
-		affected_nodes.add(edge.target_node)
-	return new_edges, list(affected_nodes)
+		affected_nodes_uuids.append(edge.source_node_uuid)
+		affected_nodes_uuids.append(edge.target_node_uuid)
+
+	affected_nodes_uuids = list(set(affected_nodes_uuids))
+	affected_nodes: list[EntityNode] = []
+	for node_uuid in affected_nodes_uuids:
+		node = next((node for node in new_nodes if node.uuid == node_uuid), None)
+		if node:
+			affected_nodes.append(node)
+	return new_edges, affected_nodes
 
 
 async def extract_edges(
@@ -186,43 +192,43 @@ def create_edge_identifier(
 	return f'{source_node.name}-{edge.name}-{target_node.name}'
 
 
-async def dedupe_extracted_edges_v2(
-	llm_client: LLMClient,
-	extracted_edges: list[NodeEdgeNodeTriplet],
-	existing_edges: list[NodeEdgeNodeTriplet],
-) -> list[NodeEdgeNodeTriplet]:
-	# Create edge map
-	edge_map = {}
-	for n1, edge, n2 in existing_edges:
-		edge_map[create_edge_identifier(n1, edge, n2)] = edge
-	for n1, edge, n2 in extracted_edges:
-		if create_edge_identifier(n1, edge, n2) in edge_map:
-			continue
-		edge_map[create_edge_identifier(n1, edge, n2)] = edge
+# async def dedupe_extracted_edges_v2(
+# 	llm_client: LLMClient,
+# 	extracted_edges: list[NodeEdgeNodeTriplet],
+# 	existing_edges: list[NodeEdgeNodeTriplet],
+# ) -> list[NodeEdgeNodeTriplet]:
+# 	# Create edge map
+# 	edge_map = {}
+# 	for n1, edge, n2 in existing_edges:
+# 		edge_map[create_edge_identifier(n1, edge, n2)] = edge
+# 	for n1, edge, n2 in extracted_edges:
+# 		if create_edge_identifier(n1, edge, n2) in edge_map:
+# 			continue
+# 		edge_map[create_edge_identifier(n1, edge, n2)] = edge
 
-	# Prepare context for LLM
-	context = {
-		'extracted_edges': [
-			{'triplet': create_edge_identifier(n1, edge, n2), 'fact': edge.fact}
-			for n1, edge, n2 in extracted_edges
-		],
-		'existing_edges': [
-			{'triplet': create_edge_identifier(n1, edge, n2), 'fact': edge.fact}
-			for n1, edge, n2 in extracted_edges
-		],
-	}
-	logger.info(prompt_library.dedupe_edges.v2(context))
-	llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v2(context))
-	new_edges_data = llm_response.get('new_edges', [])
-	logger.info(f'Extracted new edges: {new_edges_data}')
+# 	# Prepare context for LLM
+# 	context = {
+# 		'extracted_edges': [
+# 			{'triplet': create_edge_identifier(n1, edge, n2), 'fact': edge.fact}
+# 			for n1, edge, n2 in extracted_edges
+# 		],
+# 		'existing_edges': [
+# 			{'triplet': create_edge_identifier(n1, edge, n2), 'fact': edge.fact}
+# 			for n1, edge, n2 in extracted_edges
+# 		],
+# 	}
+# 	logger.info(prompt_library.dedupe_edges.v2(context))
+# 	llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v2(context))
+# 	new_edges_data = llm_response.get('new_edges', [])
+# 	logger.info(f'Extracted new edges: {new_edges_data}')
 
-	# Get full edge data
-	edges = []
-	for edge_data in new_edges_data:
-		edge = edge_map[edge_data['triplet']]
-		edges.append(edge)
+# 	# Get full edge data
+# 	edges = []
+# 	for edge_data in new_edges_data:
+# 		edge = edge_map[edge_data['triplet']]
+# 		edges.append(edge)
 
-	return edges
+# 	return edges
 
 
 async def dedupe_extracted_edges(
