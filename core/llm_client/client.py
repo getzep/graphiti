@@ -1,8 +1,8 @@
 import typing
 from abc import ABC, abstractmethod
 
+from ..prompts.models import Message
 from .config import LLMConfig
-from .messages import Message
 
 
 class LLMClient(ABC):

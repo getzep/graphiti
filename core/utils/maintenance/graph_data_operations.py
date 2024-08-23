@@ -70,7 +70,6 @@ async def retrieve_episodes(
 	driver: AsyncDriver,
 	reference_time: datetime,
 	last_n: int = EPISODE_WINDOW_LEN,
-	sources: list[str] | None = 'messages',
 ) -> list[EpisodicNode]:
 	"""Retrieve the last n episodic nodes from the graph"""
 	result = await driver.execute_query(

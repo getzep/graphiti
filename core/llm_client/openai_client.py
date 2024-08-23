@@ -4,6 +4,7 @@ import typing
 
 from openai import AsyncOpenAI
 
+from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig
 
@@ -15,7 +16,7 @@ class OpenAIClient(LLMClient):
 		self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 		self.model = config.model
 
-	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, typing.Any]:
+	async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
 		try:
 			response = await self.client.chat.completions.create(
 				model=self.model,
