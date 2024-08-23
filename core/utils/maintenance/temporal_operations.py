@@ -23,6 +23,8 @@ def extract_node_edge_node_triplet(
 ) -> NodeEdgeNodeTriplet:
 	source_node = next((node for node in nodes if node.uuid == edge.source_node_uuid), None)
 	target_node = next((node for node in nodes if node.uuid == edge.target_node_uuid), None)
+	if not source_node or not target_node:
+		raise ValueError(f'Source or target node not found for edge {edge.uuid}')
 	return (source_node, edge, target_node)
 
 
@@ -31,11 +33,8 @@ def prepare_edges_for_invalidation(
 	new_edges: list[EntityEdge],
 	nodes: list[EntityNode],
 ) -> tuple[list[NodeEdgeNodeTriplet], list[NodeEdgeNodeTriplet]]:
-	existing_edges_pending_invalidation = []  # TODO: this is not yet used?
-	new_edges_with_nodes = []  # TODO: this is not yet used?
-
-	existing_edges_pending_invalidation = []
-	new_edges_with_nodes = []
+	existing_edges_pending_invalidation: list[NodeEdgeNodeTriplet] = []
+	new_edges_with_nodes: list[NodeEdgeNodeTriplet] = []
 
 	for edge_list, result_list in [
 		(existing_edges, existing_edges_pending_invalidation),

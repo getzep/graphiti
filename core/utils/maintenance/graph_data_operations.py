@@ -70,7 +70,6 @@ async def retrieve_episodes(
 	driver: AsyncDriver,
 	reference_time: datetime,
 	last_n: int = EPISODE_WINDOW_LEN,
-	sources: list[str] | None = 'messages',
 ) -> list[EpisodicNode]:
 	"""Retrieve the last n episodic nodes from the graph"""
 	result = await driver.execute_query(
@@ -95,14 +94,7 @@ async def retrieve_episodes(
 			created_at=datetime.fromtimestamp(
 				record['created_at'].to_native().timestamp(), timezone.utc
 			),
-			valid_at=(
-				datetime.fromtimestamp(
-					record['valid_at'].to_native().timestamp(),
-					timezone.utc,
-				)
-				if record['valid_at'] is not None
-				else None
-			),
+			valid_at=(record['valid_at'].to_native()),
 			uuid=record['uuid'],
 			source=record['source'],
 			name=record['name'],

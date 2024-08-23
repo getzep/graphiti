@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .models import Message, PromptFunction, PromptVersion
 
@@ -16,7 +16,7 @@ class Versions(TypedDict):
 	v3: PromptFunction
 
 
-def v1(context: dict[str, any]) -> list[Message]:
+def v1(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -64,7 +64,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v2(context: dict[str, any]) -> list[Message]:
+def v2(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -105,7 +105,7 @@ def v2(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v3(context: dict[str, any]) -> list[Message]:
+def v3(context: dict[str, Any]) -> list[Message]:
 	sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
 
 	user_prompt = f"""

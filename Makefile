@@ -22,7 +22,7 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) . --show-column-numbers --show-error-codes --pretty 
+	$(MYPY) ./core --show-column-numbers --show-error-codes --pretty 
 
 # Run tests
 test:

@@ -103,11 +103,11 @@ async def test_graph_integration():
 	bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary')
 
 	episodic_edge_1 = EpisodicEdge(
-		source_node_uuid=episode, target_node_uuid=alice_node, created_at=now
+		source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now
 	)
 
 	episodic_edge_2 = EpisodicEdge(
-		source_node_uuid=episode, target_node_uuid=bob_node, created_at=now
+		source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now
 	)
 
 	entity_edge = EntityEdge(
