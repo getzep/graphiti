@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from core.edges import EntityEdge
 from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import EpisodicNode, EntityNode
+from core.nodes import EntityNode, EpisodicNode
 from core.search.search_utils import (
 	edge_fulltext_search,
 	edge_similarity_search,
@@ -92,10 +92,7 @@ async def hybrid_search(
 		reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 		edges.extend(reranked_edges)
 
-	context = SearchResults(
-		episodes=episodes,
-		nodes=nodes,
-		edges=edges)
+	context = SearchResults(episodes=episodes, nodes=nodes, edges=edges)
 
 	end = time()
 
