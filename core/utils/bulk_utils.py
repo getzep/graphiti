@@ -1,6 +1,7 @@
 import asyncio
 import typing
 from datetime import datetime
+from numpy import dot
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel
@@ -23,7 +24,7 @@ from core.utils.maintenance.node_operations import (
 	extract_nodes,
 )
 
-CHUNK_SIZE = 10
+CHUNK_SIZE = 15
 
 
 class BulkEpisode(BaseModel):
@@ -137,6 +138,9 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 async def compress_nodes(
 	llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
+	anchor = nodes[0] if len(nodes) > 0 else None
+	nodes.sort(key=lambda node: dot(anchor.name_embedding, node.name_embedding))
+
 	node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
 	results = await asyncio.gather(*[dedupe_node_list(llm_client, chunk) for chunk in node_chunks])
@@ -156,6 +160,9 @@ async def compress_nodes(
 
 
 async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
+	anchor = edges[0] if len(edges) > 0 else None
+	edges.sort(key=lambda embedding: dot(anchor.fact_embedding, embedding.fact_embedding))
+
 	edge_chunks = [edges[i : i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
 
 	results = await asyncio.gather(*[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks])
