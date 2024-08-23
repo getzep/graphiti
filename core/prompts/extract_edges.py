@@ -122,7 +122,7 @@ def v2(context: dict[str, Any]) -> list[Message]:
                     "relation_type": "RELATION_TYPE_IN_CAPS",
                     "source_node_uuid": "uuid of the source entity node",
                     "target_node_uuid": "uuid of the target entity node",
-                    "fact": "Detailed description of the relationship",
+                    "fact": "brief description of the relationship",
                     "valid_at": "YYYY-MM-DDTHH:MM:SSZ or null if not explicitly mentioned",
                     "invalid_at": "YYYY-MM-DDTHH:MM:SSZ or null if ongoing or not explicitly mentioned"
                 }}

@@ -11,7 +11,7 @@ We're excited you're interested in contributing to Graphiti! This document outli
    cd graphiti
    ```
 3. Set up your development environment:
-   - Ensure you have Python 3.8+ installed.
+   - Ensure you have Python 3.10+ installed.
    - Install Poetry: https://python-poetry.org/docs/#installation
    - Install project dependencies:
      ```

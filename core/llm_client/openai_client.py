@@ -47,7 +47,7 @@ class OpenAIClient(LLMClient):
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=openai_messages,
-                temperature=0.1,
+                temperature=0,
                 max_tokens=3000,
                 response_format={'type': 'json_object'},
             )

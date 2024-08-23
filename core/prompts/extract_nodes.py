@@ -125,10 +125,11 @@ def v3(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
-Given the following conversation, extract entity nodes that are explicitly or implicitly mentioned:
+Given the following conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
 
 Conversation:
 {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+<CURRENT MESSAGE>
 {context["episode_content"]}
 
 Guidelines:
