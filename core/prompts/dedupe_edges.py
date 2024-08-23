@@ -54,8 +54,9 @@ def v1(context: dict[str, Any]) -> list[Message]:
         do not return it in the list of unique facts.
 
         Guidelines:
-        1. The facts do not have to be completely identical to be duplicates, 
-        they just need to have similar factual content
+        1. identical or near identical facts are duplicates
+        2. Facts are also duplicates if they are represented by similar sentences
+        3. Facts will often discuss the same or similar relation between identical entities
 
         Respond with a JSON object in the following format:
         {{
@@ -130,8 +131,10 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
         If any facts in Facts is a duplicate of another fact, return a new fact with one of their uuid's.
 
         Guidelines:
-        1. The facts do not have to be completely identical to be duplicates, they just need to have similar content
-        2. The final list should have only unique facts. If 3 facts are all duplicates of each other, only one of their
+        1. identical or near identical facts are duplicates
+        2. Facts are also duplicates if they are represented by similar sentences
+        3. Facts will often discuss the same or similar relation between identical entities
+        4. The final list should have only unique facts. If 3 facts are all duplicates of each other, only one of their
             facts should be in the response
 
         Respond with a JSON object in the following format:
