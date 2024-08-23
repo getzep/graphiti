@@ -1,13 +1,32 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
 from core import Graphiti
 from core.utils.maintenance.graph_data_operations import clear_data
+from core.utils.bulk_utils import BulkEpisode
+
+from examples.romeo.parse import get_romeo_messages
 
 load_dotenv()
 
@@ -37,71 +56,33 @@ def setup_logging():
     return logger
 
 
-bmw_sales = [
-    {
-        'episode_body': 'Paul (buyer): Hi, I would like to buy a new car',
-    },
-    {
-        'episode_body': 'Dan The Salesman (salesman): Sure, I can help you with that. What kind of car are you looking for?',
-    },
-    {
-        'episode_body': 'Paul (buyer): I am looking for a new BMW',
-    },
-    {
-        'episode_body': 'Dan The Salesman (salesman): Great choice! What kind of BMW are you looking for?',
-    },
-    {
-        'episode_body': 'Paul (buyer): I am considering a BMW 3 series',
-    },
-    {
-        'episode_body': 'Dan The Salesman (salesman): Great choice, we currently have a 2024 BMW 3 series in stock, it is a great car and costs $50,000',
-    },
-    {
-        'episode_body': "Paul (buyer): Actually I am interested in something cheaper, I won't consider anything over $30,000",
-    },
-]
-dates_mentioned = [
-    {
-        'episode_body': 'Paul (user): I have graduated from Univerity of Toronto in 2022',
-    },
-    {
-        'episode_body': 'Jane (user): How cool, I graduated from the same school in 1999',
-    },
-]
-
-times_mentioned = [
-    {
-        'episode_body': 'Paul (user): 15 minutes ago we put a deposit on our new house',
-    },
-]
-
-time_range_mentioned = [
-    {
-        'episode_body': 'Paul (user): I served as a US Marine in 2015-2019',
-    },
-]
-
-relative_time_range_mentioned = [
-    {
-        'episode_body': 'Paul (user): I lived in Toronto for 10 years, until moving to Vancouver yesterday',
-    },
-]
-
-
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    messages = get_romeo_messages()
+    now = datetime.now()
+    episodes: list[BulkEpisode] = [
+        BulkEpisode(
+            name=f'Message {i}',
+            content=f'{speaker}: {speech}',
+            source_description='Podcast Transcript',
+            episode_type='string',
+            reference_time=now + timedelta(seconds=i * 10),
+        )
+        for i, (speaker, speech) in enumerate(messages)
+    ]
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
+    await client.add_episode_bulk(episodes)
 
-    for i, message in enumerate(bmw_sales):
-        await client.add_episode(
-            name=f'Message {i}',
-            episode_body=message['episode_body'],
-            source_description='',
-            # reference_time=datetime.now() - timedelta(days=365 * 3),
-            reference_time=datetime.now(),
-        )
+    # for i, (speaker, speech) in enumerate(get_romeo_messages()):
+    #     await client.add_episode(
+    #         name=f'Message {i}',
+    #         episode_body=f'{speaker}: {speech}',
+    #         source_description='',
+    #         # reference_time=datetime.now() - timedelta(days=365 * 3),
+    #         reference_time=datetime.now(),
+    #     )
     # await client.add_episode(
     # 	name='Message 5',
     # 	episode_body='Jane: I  miss Paul',
