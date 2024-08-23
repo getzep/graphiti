@@ -56,7 +56,7 @@ class Graphiti:
 		else:
 			self.llm_client = OpenAIClient(
 				LLMConfig(
-					api_key=os.getenv('OPENAI_API_KEY') or '',
+					api_key=os.getenv('OPENAI_API_KEY', default=''),
 					model='gpt-4o-mini',
 					base_url='https://api.openai.com/v1',
 				)
@@ -303,9 +303,9 @@ class Graphiti:
 				datetime.now(),
 				search_config,
 			)
-		)['edges']
+		).edges
 
-		facts = [edge.fact for edge in edges if isinstance(edge, EntityEdge)]
+		facts = [edge.fact for edge in edges]
 
 		return facts
 

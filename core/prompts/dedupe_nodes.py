@@ -35,7 +35,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
         
         Task:
         1. start with the list of nodes from New Nodes
-        2. If Any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
+        2. If any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
             node in the list
         3. Respond with the resulting list of nodes
 
@@ -74,7 +74,7 @@ def v2(context: dict[str, Any]) -> list[Message]:
         {json.dumps(context['extracted_nodes'], indent=2)}
 
         Task:
-        If Any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
+        If any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if they are duplicates, 

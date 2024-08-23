@@ -28,9 +28,15 @@ class SearchConfig(BaseModel):
 	reranker: str = 'rrf'
 
 
+class SearchResults(BaseModel):
+	episodes: list[str]
+	nodes: list[str]
+	edges: list[str]
+
+
 async def hybrid_search(
 	driver: AsyncDriver, embedder, query: str, timestamp: datetime, config: SearchConfig
-) -> dict[str, list[Node | Edge]]:
+) -> SearchResults:
 	start = time()
 
 	episodes = []
@@ -86,11 +92,10 @@ async def hybrid_search(
 		reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 		edges.extend(reranked_edges)
 
-	context = {
-		'episodes': episodes,
-		'nodes': nodes,
-		'edges': edges,
-	}
+	context = SearchResults(
+		episodes=episodes,
+		nodes=nodes,
+		edges=edges)
 
 	end = time()
 

@@ -20,7 +20,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
 		Message(
 			role='user',
 			content=f"""
-               Based on the provided existing edges and new edges with their timestamps, determine which existing relationships, if Any, should be invalidated due to contradictions or updates in the new edges.
+               Based on the provided existing edges and new edges with their timestamps, determine which existing relationships, if any, should be invalidated due to contradictions or updates in the new edges.
                 Only mark a relationship as invalid if there is clear evidence from new edges that the relationship is no longer true.
                 Do not invalidate relationships merely because they weren't mentioned in new edges. You may use the current episode and previous episodes as well as the facts of each edge to understand the context of the relationships.
 
