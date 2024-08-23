@@ -60,6 +60,8 @@ async def main():
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     messages = get_romeo_messages()
     now = datetime.now()
+    current_index = 0
+    # make it upload in chunks of 50
     episodes: list[BulkEpisode] = [
         BulkEpisode(
             name=f'Message {i}',
@@ -68,11 +70,25 @@ async def main():
             episode_type='string',
             reference_time=now + timedelta(seconds=i * 10),
         )
-        for i, (speaker, speech) in enumerate(messages)
+        for i, (speaker, speech) in enumerate(messages[current_index : current_index + 50])
     ]
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     await client.add_episode_bulk(episodes)
+    current_index += 50
+    while current_index < len(messages):
+        episodes: list[BulkEpisode] = [
+            BulkEpisode(
+                name=f'Message {i}',
+                content=f'{speaker}: {speech}',
+                source_description='Podcast Transcript',
+                episode_type='string',
+                reference_time=now + timedelta(seconds=i * 10),
+            )
+            for i, (speaker, speech) in enumerate(messages[current_index : current_index + 50])
+        ]
+        await client.add_episode_bulk(episodes)
+        current_index += 50
 
     # for i, (speaker, speech) in enumerate(get_romeo_messages()):
     #     await client.add_episode(

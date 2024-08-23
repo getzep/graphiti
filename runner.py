@@ -45,19 +45,22 @@ bmw_sales = [
         'episode_body': 'Dan The Salesman (salesman): Sure, I can help you with that. What kind of car are you looking for?',
     },
     {
-        'episode_body': 'Paul (buyer): I am looking for a new BMW',
-    },
-    {
-        'episode_body': 'Dan The Salesman (salesman): Great choice! What kind of BMW are you looking for?',
-    },
-    {
         'episode_body': 'Paul (buyer): I am considering a BMW 3 series',
     },
     {
         'episode_body': 'Dan The Salesman (salesman): Great choice, we currently have a 2024 BMW 3 series in stock, it is a great car and costs $50,000',
     },
     {
-        'episode_body': "Paul (buyer): Actually I am interested in something cheaper, I won't consider anything over $30,000",
+        'episode_body': "Paul (buyer): Ah, I see, I can't afford that, I am interested in something cheaper, and won't consider anything over $30,000",
+    },
+    {
+        'episode_body': 'Dan The Salesman (salesman): Are you open to considering a BMW 2 series? It is a great car and costs $30,000',
+    },
+    {
+        'episode_body': "Paul (buyer): Just looking it up, it looks solid. Can I book a test drive tomorrow? Let's say 10am?",
+    },
+    {
+        'episode_body': 'Dan The Salesman (salesman): Absolutely, I will book a test drive for you tomorrow at 10am',
     },
 ]
 dates_mentioned = [
