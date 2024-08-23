@@ -40,7 +40,7 @@ async def retrieve_previous_episodes_bulk(
 	previous_episodes_list = await asyncio.gather(
 		*[
 			retrieve_episodes(
-				driver, episode.valid_at or episode.created_at, last_n=EPISODE_WINDOW_LEN
+				driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN
 			)
 			for episode in episodes
 		]

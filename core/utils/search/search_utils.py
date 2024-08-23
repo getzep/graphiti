@@ -139,7 +139,7 @@ async def entity_similarity_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=[],
-				created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -174,7 +174,7 @@ async def entity_fulltext_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=[],
-				created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -222,7 +222,7 @@ async def edge_fulltext_search(
 			name=record['name'],
 			episodes=record['episodes'],
 			fact_embedding=record['fact_embedding'],
-			created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
+			created_at=record['created_at'].to_native(),
 			expired_at=safely_parse_db_date(record['expired_at']),
 			valid_at=safely_parse_db_date(record['valid_at']),
 			invalid_at=safely_parse_db_date(record['invalid_at']),

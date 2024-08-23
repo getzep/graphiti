@@ -42,7 +42,7 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -174,7 +174,7 @@ async def entity_similarity_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
@@ -209,7 +209,7 @@ async def entity_fulltext_search(
 				uuid=record['uuid'],
 				name=record['name'],
 				labels=['Entity'],
-				created_at=datetime.now(),
+				created_at=record['created_at'].to_native(),
 				summary=record['summary'],
 			)
 		)
