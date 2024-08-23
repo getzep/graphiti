@@ -99,8 +99,12 @@ async def dedupe_extracted_edges(
 
 	# Prepare context for LLM
 	context = {
-		'extracted_edges': [{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in extracted_edges],
-		'existing_edges': [{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges],
+		'extracted_edges': [
+			{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in extracted_edges
+		],
+		'existing_edges': [
+			{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
+		],
 	}
 
 	llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))

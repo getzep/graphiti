@@ -1,9 +1,9 @@
 import asyncio
 import typing
 from datetime import datetime
-from numpy import dot
 
 from neo4j import AsyncDriver
+from numpy import dot
 from pydantic import BaseModel
 
 from core.edges import Edge, EntityEdge, EpisodicEdge
