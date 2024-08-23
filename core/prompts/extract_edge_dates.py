@@ -4,22 +4,22 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-	v1: PromptVersion
+    v1: PromptVersion
 
 
 class Versions(TypedDict):
-	v1: PromptFunction
+    v1: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
-	return [
-		Message(
-			role='system',
-			content='You are an AI assistant that extracts datetime information for graph edges, focusing only on dates directly related to the establishment or change of the relationship described in the edge fact.',
-		),
-		Message(
-			role='user',
-			content=f"""
+    return [
+        Message(
+            role='system',
+            content='You are an AI assistant that extracts datetime information for graph edges, focusing only on dates directly related to the establishment or change of the relationship described in the edge fact.',
+        ),
+        Message(
+            role='user',
+            content=f"""
             Edge:
             Source Node: {context['source_node']}
             Edge Name: {context['edge_name']}
@@ -55,8 +55,8 @@ def v1(context: dict[str, Any]) -> list[Message]:
                 "explanation": "Brief explanation of why these dates were chosen or why they were set to null"
             }}
             """,
-		),
-	]
+        ),
+    ]
 
 
 versions: Versions = {'v1': v1}
