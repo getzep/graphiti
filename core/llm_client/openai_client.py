@@ -1,5 +1,6 @@
 import json
 import logging
+import typing
 
 from openai import AsyncOpenAI
 
@@ -14,7 +15,7 @@ class OpenAIClient(LLMClient):
 		self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 		self.model = config.model
 
-	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, any]:
+	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, typing.Any]:
 		try:
 			response = await self.client.chat.completions.create(
 				model=self.model,

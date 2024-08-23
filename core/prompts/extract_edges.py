@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .models import Message, PromptFunction, PromptVersion
 
@@ -14,7 +14,7 @@ class Versions(TypedDict):
 	v2: PromptFunction
 
 
-def v1(context: dict[str, any]) -> list[Message]:
+def v1(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -70,7 +70,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v2(context: dict[str, any]) -> list[Message]:
+def v2(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',

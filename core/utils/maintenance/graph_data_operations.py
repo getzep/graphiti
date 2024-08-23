@@ -52,9 +52,7 @@ async def build_indices_and_constraints(driver: AsyncDriver):
         }}
         """,
 	]
-	index_queries: list[LiteralString] = (
-		range_indices + fulltext_indices + vector_indices
-	)
+	index_queries: list[LiteralString] = range_indices + fulltext_indices + vector_indices
 
 	await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
 

@@ -1,3 +1,4 @@
+import typing
 from abc import ABC, abstractmethod
 
 from .config import LLMConfig
@@ -9,5 +10,5 @@ class LLMClient(ABC):
 		pass
 
 	@abstractmethod
-	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, any]:
+	async def generate_response(self, messages: list[dict[str, str]]) -> dict[str, typing.Any]:
 		pass

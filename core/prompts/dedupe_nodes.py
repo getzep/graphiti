@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .models import Message, PromptFunction, PromptVersion
 
@@ -16,7 +16,7 @@ class Versions(TypedDict):
 	node_list: PromptVersion
 
 
-def v1(context: dict[str, any]) -> list[Message]:
+def v1(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -35,7 +35,7 @@ def v1(context: dict[str, any]) -> list[Message]:
         
         Task:
         1. start with the list of nodes from New Nodes
-        2. If any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
+        2. If Any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
             node in the list
         3. Respond with the resulting list of nodes
 
@@ -56,7 +56,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v2(context: dict[str, any]) -> list[Message]:
+def v2(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -74,7 +74,7 @@ def v2(context: dict[str, any]) -> list[Message]:
         {json.dumps(context['extracted_nodes'], indent=2)}
 
         Task:
-        If any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
+        If Any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if they are duplicates, 
@@ -96,7 +96,7 @@ def v2(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def node_list(context: dict[str, any]) -> list[Message]:
+def node_list(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',

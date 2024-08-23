@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .models import Message, PromptFunction, PromptVersion
 
@@ -15,7 +15,7 @@ class Versions(TypedDict):
 	edge_list: PromptFunction
 
 
-def v1(context: dict[str, any]) -> list[Message]:
+def v1(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -34,7 +34,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 
         Task:
         1. start with the list of edges from New Edges
-        2. If any edge in New Edges is a duplicate of an edge in Existing Edges, replace the new edge with the existing
+        2. If Any edge in New Edges is a duplicate of an edge in Existing Edges, replace the new edge with the existing
             edge in the list
         3. Respond with the resulting list of edges
 
@@ -55,7 +55,7 @@ def v1(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def v2(context: dict[str, any]) -> list[Message]:
+def v2(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -74,7 +74,7 @@ def v2(context: dict[str, any]) -> list[Message]:
 
         Task:
         1. start with the list of edges from New Edges
-        2. If any edge in New Edges is a duplicate of an edge in Existing Edges, replace the new edge with the existing
+        2. If Any edge in New Edges is a duplicate of an edge in Existing Edges, replace the new edge with the existing
             edge in the list
         3. Respond with the resulting list of edges
 
@@ -97,7 +97,7 @@ def v2(context: dict[str, any]) -> list[Message]:
 	]
 
 
-def edge_list(context: dict[str, any]) -> list[Message]:
+def edge_list(context: dict[str, Any]) -> list[Message]:
 	return [
 		Message(
 			role='system',
@@ -112,7 +112,7 @@ def edge_list(context: dict[str, any]) -> list[Message]:
         {json.dumps(context['edges'], indent=2)}
 
         Task:
-        If any edge in Edges is a duplicate of another edge, return the fact of only one of the duplicate edges
+        If Any edge in Edges is a duplicate of another edge, return the fact of only one of the duplicate edges
 
         Guidelines:
         1. Use both the name and fact of edges to determine if they are duplicates, 

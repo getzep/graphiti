@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import typing
 from datetime import datetime
 from time import time
 from typing import Callable
@@ -83,7 +84,7 @@ class Graphiti:
 		episode: EpisodicNode,
 		new_nodes: list[EntityNode],
 		new_edges: list[EntityEdge],
-		relevant_schema: dict[str, any],
+		relevant_schema: dict[str, typing.Any],
 		previous_episodes: list[EpisodicNode],
 	): ...
 

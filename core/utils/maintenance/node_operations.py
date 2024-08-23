@@ -1,4 +1,5 @@
 import logging
+import typing
 from datetime import datetime
 from time import time
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def extract_new_nodes(
 	llm_client: LLMClient,
 	episode: EpisodicNode,
-	relevant_schema: dict[str, any],
+	relevant_schema: dict[str, typing.Any],
 	previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
 	# Prepare context for LLM

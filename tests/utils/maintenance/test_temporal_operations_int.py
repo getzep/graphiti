@@ -267,7 +267,7 @@ async def test_invalidate_edges_multiple_invalidations():
 async def test_invalidate_edges_no_effect():
 	existing_edges, nodes = create_complex_test_data()
 
-	# Create a new edge that doesn't invalidate any existing edges
+	# Create a new edge that doesn't invalidate Any existing edges
 	new_edge = (
 		nodes[2],
 		EntityEdge(

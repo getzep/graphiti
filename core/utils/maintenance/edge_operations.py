@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 from time import time
-from typing import List
+from typing import Any, List
 
 from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
@@ -35,7 +35,7 @@ async def extract_new_edges(
 	llm_client: LLMClient,
 	episode: EpisodicNode,
 	new_nodes: list[EntityNode],
-	relevant_schema: dict[str, any],
+	relevant_schema: dict[str, Any],
 	previous_episodes: list[EpisodicNode],
 ) -> tuple[list[EntityEdge], list[EntityNode]]:
 	# Prepare context for LLM

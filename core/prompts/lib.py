@@ -1,4 +1,4 @@
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from .dedupe_edges import (
 	Prompt as DedupeEdgesPrompt,
@@ -68,7 +68,7 @@ class VersionWrapper:
 	def __init__(self, func: PromptFunction):
 		self.func = func
 
-	def __call__(self, context: dict[str, any]) -> list[Message]:
+	def __call__(self, context: dict[str, Any]) -> list[Message]:
 		return self.func(context)
 
 
