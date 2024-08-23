@@ -145,16 +145,20 @@ async def extract_edge_dates(
 	invalid_at = llm_response.get('invalid_at')
 	explanation = llm_response.get('explanation', '')
 
-	valid_at_datetime = (
-		datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
-		if valid_at and valid_at != ''
-		else None
-	)
-	invalid_at_datetime = (
-		datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
-		if invalid_at and invalid_at != ''
-		else None
-	)
+	valid_at_datetime = None
+	invalid_at_datetime = None
+
+	if valid_at and valid_at != '':
+		try:
+			valid_at_datetime = datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
+		except ValueError as e:
+			logger.error(f'Error parsing valid_at date: {e}. Input: {valid_at}')
+
+	if invalid_at and invalid_at != '':
+		try:
+			invalid_at_datetime = datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
+		except ValueError as e:
+			logger.error(f'Error parsing invalid_at date: {e}. Input: {invalid_at}')
 
 	logger.info(f'Edge date extraction explanation: {explanation}')
 
