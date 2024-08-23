@@ -5,26 +5,26 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-	v1: PromptVersion
-	v2: PromptVersion
-	v3: PromptVersion
+    v1: PromptVersion
+    v2: PromptVersion
+    v3: PromptVersion
 
 
 class Versions(TypedDict):
-	v1: PromptFunction
-	v2: PromptFunction
-	v3: PromptFunction
+    v1: PromptFunction
+    v2: PromptFunction
+    v3: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
-	return [
-		Message(
-			role='system',
-			content='You are a helpful assistant that extracts graph nodes from provided context.',
-		),
-		Message(
-			role='user',
-			content=f"""
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts graph nodes from provided context.',
+        ),
+        Message(
+            role='user',
+            content=f"""
         Given the following context, extract new semantic nodes that need to be added to the knowledge graph:
     
         Existing Nodes:
@@ -60,19 +60,19 @@ def v1(context: dict[str, Any]) -> list[Message]:
     
         If no new nodes need to be added, return an empty list for "new_nodes".
         """,
-		),
-	]
+        ),
+    ]
 
 
 def v2(context: dict[str, Any]) -> list[Message]:
-	return [
-		Message(
-			role='system',
-			content='You are a helpful assistant that extracts graph nodes from provided context.',
-		),
-		Message(
-			role='user',
-			content=f"""
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts graph nodes from provided context.',
+        ),
+        Message(
+            role='user',
+            content=f"""
         Given the following context, extract new entity nodes that need to be added to the knowledge graph:
 
         Previous Episodes:
@@ -101,14 +101,14 @@ def v2(context: dict[str, Any]) -> list[Message]:
 
         If no new nodes need to be added, return an empty list for "new_nodes".
         """,
-		),
-	]
+        ),
+    ]
 
 
 def v3(context: dict[str, Any]) -> list[Message]:
-	sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
+    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
 
-	user_prompt = f"""
+    user_prompt = f"""
 Given the following conversation, extract entity nodes that are explicitly or implicitly mentioned:
 
 Conversation:
@@ -120,6 +120,7 @@ Guidelines:
 2. Extract other significant entities, concepts, or actors mentioned in the conversation.
 3. Provide concise but informative summaries for each extracted node.
 4. Avoid creating nodes for relationships or actions.
+5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
 
 Respond with a JSON object in the following format:
 {{
@@ -132,10 +133,10 @@ Respond with a JSON object in the following format:
     ]
 }}
 """
-	return [
-		Message(role='system', content=sys_prompt),
-		Message(role='user', content=user_prompt),
-	]
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
 
 
 versions: Versions = {'v1': v1, 'v2': v2, 'v3': v3}
