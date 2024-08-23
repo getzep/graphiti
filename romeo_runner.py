@@ -23,9 +23,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from core import Graphiti
-from core.utils.maintenance.graph_data_operations import clear_data
 from core.utils.bulk_utils import BulkEpisode
-
+from core.utils.maintenance.graph_data_operations import clear_data
 from examples.romeo.parse import get_romeo_messages
 
 load_dotenv()
