@@ -94,14 +94,7 @@ async def retrieve_episodes(
 			created_at=datetime.fromtimestamp(
 				record['created_at'].to_native().timestamp(), timezone.utc
 			),
-			valid_at=(
-				datetime.fromtimestamp(
-					record['valid_at'].to_native().timestamp(),
-					timezone.utc,
-				)
-				if record['valid_at'] is not None
-				else None
-			),
+			valid_at=(record['valid_at'].to_native()),
 			uuid=record['uuid'],
 			source=record['source'],
 			name=record['name'],
