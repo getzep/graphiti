@@ -60,7 +60,6 @@ bmw_sales = [
         'episode_body': "Paul (buyer): Actually I am interested in something cheaper, I won't consider anything over $30,000",
     },
 ]
-
 dates_mentioned = [
     {
         'episode_body': 'Paul (user): I have graduated from Univerity of Toronto in 2022',
