@@ -120,3 +120,44 @@ def process_edge_invalidation_llm_response(
 				f"Invalidated edge: {edge_to_update.name} (UUID: {edge_to_update.uuid}). Updated Fact: {edge_to_invalidate['fact']}"
 			)
 	return invalidated_edges
+
+
+async def extract_edge_dates(
+	llm_client: LLMClient,
+	edge_triplet: NodeEdgeNodeTriplet,
+	reference_time: datetime,
+	current_episode: EpisodicNode,
+	previous_episodes: List[EpisodicNode],
+) -> tuple[datetime | None, datetime | None, str]:
+	source_node, edge, target_node = edge_triplet
+
+	context = {
+		'source_node': source_node.name,
+		'edge_name': edge.name,
+		'target_node': target_node.name,
+		'edge_fact': edge.fact,
+		'current_episode': current_episode.content,
+		'previous_episodes': [ep.content for ep in previous_episodes],
+		'reference_timestamp': reference_time.isoformat(),
+	}
+	test = prompt_library.extract_edge_dates.v1(context)
+	llm_response = await llm_client.generate_response(prompt_library.extract_edge_dates.v1(context))
+
+	valid_at = llm_response.get('valid_at')
+	invalid_at = llm_response.get('invalid_at')
+	explanation = llm_response.get('explanation', '')
+
+	valid_at_datetime = (
+		datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
+		if valid_at and valid_at != ''
+		else None
+	)
+	invalid_at_datetime = (
+		datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
+		if invalid_at and invalid_at != ''
+		else None
+	)
+
+	logger.info(f'Edge date extraction explanation: {explanation}')
+
+	return valid_at_datetime, invalid_at_datetime, explanation

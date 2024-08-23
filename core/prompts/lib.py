@@ -18,6 +18,15 @@ from .dedupe_nodes import (
 from .dedupe_nodes import (
 	versions as dedupe_nodes_versions,
 )
+from .extract_edge_dates import (
+	Prompt as ExtractEdgeDatesPrompt,
+)
+from .extract_edge_dates import (
+	Versions as ExtractEdgeDatesVersions,
+)
+from .extract_edge_dates import (
+	versions as extract_edge_dates_versions,
+)
 from .extract_edges import (
 	Prompt as ExtractEdgesPrompt,
 )
@@ -54,6 +63,7 @@ class PromptLibrary(Protocol):
 	extract_edges: ExtractEdgesPrompt
 	dedupe_edges: DedupeEdgesPrompt
 	invalidate_edges: InvalidateEdgesPrompt
+	extract_edge_dates: ExtractEdgeDatesPrompt
 
 
 class PromptLibraryImpl(TypedDict):
@@ -62,6 +72,7 @@ class PromptLibraryImpl(TypedDict):
 	extract_edges: ExtractEdgesVersions
 	dedupe_edges: DedupeEdgesVersions
 	invalidate_edges: InvalidateEdgesVersions
+	extract_edge_dates: ExtractEdgeDatesVersions
 
 
 class VersionWrapper:
@@ -90,6 +101,7 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
 	'extract_edges': extract_edges_versions,
 	'dedupe_edges': dedupe_edges_versions,
 	'invalidate_edges': invalidate_edges_versions,
+	'extract_edge_dates': extract_edge_dates_versions,
 }
 
 prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)

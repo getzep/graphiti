@@ -120,6 +120,7 @@ Guidelines:
 2. Extract other significant entities, concepts, or actors mentioned in the conversation.
 3. Provide concise but informative summaries for each extracted node.
 4. Avoid creating nodes for relationships or actions.
+5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
 
 Respond with a JSON object in the following format:
 {{

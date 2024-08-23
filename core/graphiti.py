@@ -38,6 +38,8 @@ from core.utils.maintenance.graph_data_operations import (
 )
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
 from core.utils.maintenance.temporal_operations import (
+	extract_edge_dates,
+	extract_node_edge_node_triplet,
 	invalidate_edges,
 	prepare_edges_for_invalidation,
 )
@@ -186,7 +188,13 @@ class Graphiti:
 			for deduped_edge in deduped_edges:
 				if deduped_edge.uuid not in [edge.uuid for edge in invalidated_edges]:
 					edges_to_save.append(deduped_edge)
-
+			for deduped_edge in deduped_edges:
+				triplet = extract_node_edge_node_triplet(deduped_edge, nodes)
+				valid_at, invalid_at, _ = await extract_edge_dates(
+					self.llm_client, triplet, episode.valid_at, episode, previous_episodes
+				)
+				deduped_edge.valid_at = valid_at
+				deduped_edge.invalid_at = invalid_at
 			entity_edges.extend(edges_to_save)
 
 			edge_touched_node_uuids = list(set(edge_touched_node_uuids))
