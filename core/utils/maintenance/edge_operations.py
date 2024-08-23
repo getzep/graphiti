@@ -94,27 +94,27 @@ async def dedupe_extracted_edges(
 ) -> list[EntityEdge]:
 	# Create edge map
 	edge_map = {}
-	for edge in existing_edges:
-		edge_map[edge.fact] = edge
 	for edge in extracted_edges:
-		if edge.fact in edge_map:
-			continue
-		edge_map[edge.fact] = edge
+		edge_map[edge.uuid] = edge
 
 	# Prepare context for LLM
 	context = {
-		'extracted_edges': [{'name': edge.name, 'fact': edge.fact} for edge in extracted_edges],
-		'existing_edges': [{'name': edge.name, 'fact': edge.fact} for edge in extracted_edges],
+		'extracted_edges': [
+			{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in extracted_edges
+		],
+		'existing_edges': [
+			{'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
+		],
 	}
 
 	llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))
-	new_edges_data = llm_response.get('new_edges', [])
-	logger.info(f'Extracted new edges: {new_edges_data}')
+	unique_edge_data = llm_response.get('unique_facts', [])
+	logger.info(f'Extracted unique edges: {unique_edge_data}')
 
 	# Get full edge data
 	edges = []
-	for edge_data in new_edges_data:
-		edge = edge_map[edge_data['fact']]
+	for unique_edge in unique_edge_data:
+		edge = edge_map[unique_edge['uuid']]
 		edges.append(edge)
 
 	return edges
@@ -129,15 +129,15 @@ async def dedupe_edge_list(
 	# Create edge map
 	edge_map = {}
 	for edge in edges:
-		edge_map[edge.fact] = edge
+		edge_map[edge.uuid] = edge
 
 	# Prepare context for LLM
-	context = {'edges': [{'name': edge.name, 'fact': edge.fact} for edge in edges]}
+	context = {'edges': [{'uuid': edge.uuid, 'fact': edge.fact} for edge in edges]}
 
 	llm_response = await llm_client.generate_response(
 		prompt_library.dedupe_edges.edge_list(context)
 	)
-	unique_edges_data = llm_response.get('unique_edges', [])
+	unique_edges_data = llm_response.get('unique_facts', [])
 
 	end = time()
 	logger.info(f'Extracted edge duplicates: {unique_edges_data} in {(end - start) * 1000} ms ')
@@ -145,7 +145,9 @@ async def dedupe_edge_list(
 	# Get full edge data
 	unique_edges = []
 	for edge_data in unique_edges_data:
-		fact = edge_data['fact']
-		unique_edges.append(edge_map[fact])
+		uuid = edge_data['uuid']
+		edge = edge_map[uuid]
+		edge.fact = edge_data['fact']
+		unique_edges.append(edge)
 
 	return unique_edges
