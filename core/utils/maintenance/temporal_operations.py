@@ -81,9 +81,7 @@ async def invalidate_edges(
         current_episode,
         previous_episodes,
     )
-    logger.info(prompt_library.invalidate_edges.v1(context))
     llm_response = await llm_client.generate_response(prompt_library.invalidate_edges.v1(context))
-    logger.info(f'invalidate_edges LLM response: {llm_response}')
 
     edges_to_invalidate = llm_response.get('invalidated_edges', [])
     invalidated_edges = process_edge_invalidation_llm_response(
@@ -139,17 +137,13 @@ def process_edge_invalidation_llm_response(
 
 async def extract_edge_dates(
     llm_client: LLMClient,
-    edge_triplet: NodeEdgeNodeTriplet,
+    edge: EntityEdge,
     reference_time: datetime,
     current_episode: EpisodicNode,
     previous_episodes: List[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None, str]:
-    source_node, edge, target_node = edge_triplet
-
     context = {
-        'source_node': source_node.name,
         'edge_name': edge.name,
-        'target_node': target_node.name,
         'edge_fact': edge.fact,
         'current_episode': current_episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
