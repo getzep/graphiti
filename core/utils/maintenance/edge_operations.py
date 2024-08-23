@@ -105,7 +105,7 @@ async def dedupe_extracted_edges(
 
 	llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))
 	unique_edge_data = llm_response.get('unique_facts', [])
-	logger.info(f'Extracted new edges: {unique_edge_data}')
+	logger.info(f'Extracted unique edges: {unique_edge_data}')
 
 	# Get full edge data
 	edges = []
