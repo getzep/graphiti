@@ -138,7 +138,10 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 async def compress_nodes(
         llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
-    anchor = nodes[0] if len(nodes) > 0 else None
+    if len(nodes) == 0:
+        return nodes, uuid_map
+
+    anchor = nodes[0]
     nodes.sort(key=lambda node: dot(anchor.name_embedding or [], node.name_embedding or []))
 
     node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
@@ -160,7 +163,10 @@ async def compress_nodes(
 
 
 async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
-    anchor = edges[0] if len(edges) > 0 else None
+    if len(edges) == 0:
+        return edges
+
+    anchor = edges[0]
     edges.sort(key=lambda embedding: dot(anchor.fact_embedding or [], embedding.fact_embedding or []))
 
     edge_chunks = [edges[i: i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]

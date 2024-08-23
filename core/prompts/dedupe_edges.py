@@ -121,10 +121,10 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
         Respond with a JSON object in the following format:
         {{
             "unique_facts": [
-				{{
-					"uuid": "unique identifier of the fact",
-					"fact": "fact of a unique edge"
-				}}
+                {{
+                    "uuid": "unique identifier of the fact",
+                    "fact": "fact of a unique edge"
+                }}
             ]
         }}
         """,
