@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import os
-import re
 
 
 def parse_script(filename):
@@ -23,7 +22,7 @@ def parse_script(filename):
     current_speech = []
     messages = []
 
-    with open(filename, 'r') as file:
+    with open(filename) as file:
         for line in file:
             line = line.strip()
 
