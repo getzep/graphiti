@@ -84,7 +84,7 @@ time_range_mentioned = [
 
 relative_time_range_mentioned = [
 	{
-		'episode_body': 'Paul (user): I served as a US Marine in for 20 years, until retiring last month',
+		'episode_body': 'Paul (user): I lived in Toronto for 10 years, until moving to Vancouver yesterday',
 	},
 ]
 
@@ -96,7 +96,7 @@ async def main():
 	await client.build_indices_and_constraints()
 
 	# await client.build_indices()
-	for i, message in enumerate(relative_time_range_mentioned):
+	for i, message in enumerate(bmw_sales):
 		await client.add_episode(
 			name=f'Message {i}',
 			episode_body=message['episode_body'],

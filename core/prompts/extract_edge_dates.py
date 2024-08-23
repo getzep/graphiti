@@ -30,7 +30,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             Previous Episodes: {context['previous_episodes']}
             Reference Timestamp: {context['reference_timestamp']}
 
-            IMPORTANT: Only extract dates that are part of the provided fact. Otherwise ignore the date.
+            IMPORTANT: Only extract time information if it is part of the provided fact. Otherwise ignore the time mentioned. Make sure to do your best to determine the dates if only the relative time is mentioned. (eg 10 years ago, 2 mins ago) based on the provided reference timestamp
 
             Definitions:
             - valid_at: The date and time when the relationship described by the edge fact became true or was established.
@@ -42,7 +42,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             Guidelines:
             1. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) for datetimes.
             2. Use the reference timestamp as the current time when determining the valid_at and invalid_at dates.
-            3. If no relevant dates are found that explicitly establish or change the relationship, leave the fields as null.
+            3. If no temporal information is found that establishes or changes the relationship, leave the fields as null.
             4. Do not infer dates from related events. Only use dates that are directly stated to establish or change the relationship.
 			5. For relative time mentions directly related to the relationship, calculate the actual datetime based on the reference timestamp.
             6. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
