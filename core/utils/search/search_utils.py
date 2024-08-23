@@ -102,7 +102,7 @@ async def edge_similarity_search(
 			name=record['name'],
 			episodes=record['episodes'],
 			fact_embedding=record['fact_embedding'],
-			created_at=safely_parse_db_date(record['created_at']) or datetime.now(),
+			created_at=record['created_at'],
 			expired_at=safely_parse_db_date(record['expired_at']),
 			valid_at=safely_parse_db_date(record['valid_at']),
 			invalid_at=safely_parse_db_date(record['invalid_at']),
