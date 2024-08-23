@@ -95,7 +95,6 @@ async def main():
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
 
-    # await client.build_indices()
     for i, message in enumerate(bmw_sales):
         await client.add_episode(
             name=f'Message {i}',

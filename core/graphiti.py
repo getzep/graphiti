@@ -55,7 +55,6 @@ from core.utils.maintenance.graph_data_operations import (
 from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
 from core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
-    extract_node_edge_node_triplet,
     invalidate_edges,
     prepare_edges_for_invalidation,
 )
@@ -183,22 +182,27 @@ class Graphiti:
             )
 
             for edge in invalidated_edges:
+                for existing_edge in existing_edges:
+                    if existing_edge.uuid == edge.uuid:
+                        existing_edge.expired_at = edge.expired_at
+                for deduped_edge in deduped_edges:
+                    if deduped_edge.uuid == edge.uuid:
+                        deduped_edge.expired_at = edge.expired_at
                 edge_touched_node_uuids.append(edge.source_node_uuid)
                 edge_touched_node_uuids.append(edge.target_node_uuid)
 
-            edges_to_save = invalidated_edges
+            edges_to_save = existing_edges + deduped_edges
 
-            # There may be an overlap between deduped and invalidated edges, so we want to make sure to save the invalidated one
-            for deduped_edge in deduped_edges:
-                if deduped_edge.uuid not in [edge.uuid for edge in invalidated_edges]:
-                    edges_to_save.append(deduped_edge)
-            for deduped_edge in deduped_edges:
-                triplet = extract_node_edge_node_triplet(deduped_edge, nodes)
+            for edge_to_extract_dates_from in edges_to_save:
                 valid_at, invalid_at, _ = await extract_edge_dates(
-                    self.llm_client, triplet, episode.valid_at, episode, previous_episodes
+                    self.llm_client,
+                    edge_to_extract_dates_from,
+                    episode.valid_at,
+                    episode,
+                    previous_episodes,
                 )
-                deduped_edge.valid_at = valid_at
-                deduped_edge.invalid_at = invalid_at
+                edge_to_extract_dates_from.valid_at = valid_at
+                edge_to_extract_dates_from.invalid_at = invalid_at
             entity_edges.extend(edges_to_save)
 
             edge_touched_node_uuids = list(set(edge_touched_node_uuids))
