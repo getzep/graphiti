@@ -36,7 +36,7 @@ class BulkEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-        driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await asyncio.gather(
         *[
@@ -52,7 +52,7 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def extract_nodes_and_edges_bulk(
-        llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
+    llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await asyncio.gather(
         *[
@@ -89,9 +89,9 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-        driver: AsyncDriver,
-        llm_client: LLMClient,
-        extracted_nodes: list[EntityNode],
+    driver: AsyncDriver,
+    llm_client: LLMClient,
+    extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
     nodes, uuid_map = node_name_match(extracted_nodes)
@@ -110,7 +110,7 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-        driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # Compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)
@@ -136,7 +136,7 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 
 
 async def compress_nodes(
-        llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
+    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
     if len(nodes) == 0:
         return nodes, uuid_map
@@ -144,7 +144,7 @@ async def compress_nodes(
     anchor = nodes[0]
     nodes.sort(key=lambda node: dot(anchor.name_embedding or [], node.name_embedding or []))
 
-    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
     results = await asyncio.gather(*[dedupe_node_list(llm_client, chunk) for chunk in node_chunks])
 
@@ -167,9 +167,11 @@ async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list
         return edges
 
     anchor = edges[0]
-    edges.sort(key=lambda embedding: dot(anchor.fact_embedding or [], embedding.fact_embedding or []))
+    edges.sort(
+        key=lambda embedding: dot(anchor.fact_embedding or [], embedding.fact_embedding or [])
+    )
 
-    edge_chunks = [edges[i: i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
+    edge_chunks = [edges[i : i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
 
     results = await asyncio.gather(*[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks])
 
