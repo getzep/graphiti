@@ -105,9 +105,10 @@ async def dedupe_extracted_nodes(
 
     uuid_map: dict[str, str] = {}
     for duplicate in duplicate_data:
-        uuid = new_nodes_map[duplicate['name']].uuid
-        uuid_value = node_map[duplicate['duplicate_of']].uuid
-        uuid_map[uuid] = uuid_value
+        if duplicate['name'] in new_nodes_map and duplicate['duplicate_of'] in node_map:
+            uuid = new_nodes_map[duplicate['name']].uuid
+            uuid_value = node_map[duplicate['duplicate_of']].uuid
+            uuid_map[uuid] = uuid_value
 
     nodes: list[EntityNode] = []
     brand_new_nodes: list[EntityNode] = []

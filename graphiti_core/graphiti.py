@@ -74,7 +74,7 @@ class Graphiti:
             self.llm_client = OpenAIClient(
                 LLMConfig(
                     api_key=os.getenv('OPENAI_API_KEY', default=''),
-                    model='gpt-4o-mini',
+                    model='gpt-4o',
                     base_url='https://api.openai.com/v1',
                 )
             )
@@ -148,12 +148,6 @@ class Graphiti:
             existing_edges = await get_relevant_edges(extracted_edges, self.driver)
             logger.info(f'Existing edges: {[(e.name, e.uuid) for e in existing_edges]}')
             logger.info(f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}')
-
-            # deduped_edges = await dedupe_extracted_edges_v2(
-            #     self.llm_client,
-            #     extract_node_and_edge_triplets(extracted_edges, nodes),
-            #     extract_node_and_edge_triplets(existing_edges, nodes),
-            # )
 
             deduped_edges = await dedupe_extracted_edges(
                 self.llm_client,

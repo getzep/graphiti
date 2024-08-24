@@ -42,27 +42,29 @@ bmw_sales = [
         'episode_body': 'Paul (buyer): Hi, I would like to buy a new car',
     },
     {
-        'episode_body': 'Dan The Salesman (salesman): Sure, I can help you with that. What kind of car are you looking for?',
+        'episode_body': 'Dan (salesperson): Sure, I can help you with that. What kind of car are you looking for?',
     },
     {
         'episode_body': 'Paul (buyer): I am considering a BMW 3 series',
     },
     {
-        'episode_body': 'Dan The Salesman (salesman): Great choice, we currently have a 2024 BMW 3 series in stock, it is a great car and costs $50,000',
+        'episode_body': 'Dan (salesperson): Great choice, we currently have a 2024 BMW 3 series in stock, it is a great car and costs $50,000',
     },
     {
         'episode_body': "Paul (buyer): Ah, I see, I can't afford that, I am interested in something cheaper, and won't consider anything over $30,000",
     },
     {
-        'episode_body': 'Dan The Salesman (salesman): Are you open to considering a BMW 2 series? It is a great car and costs $30,000',
+        'episode_body': 'Dan (salesperson): Are you open to considering a BMW 2 series? It is a great car and costs $30,000',
     },
     {
         'episode_body': "Paul (buyer): Just looking it up, it looks solid. Can I book a test drive tomorrow? Let's say 10am?",
     },
     {
-        'episode_body': 'Dan The Salesman (salesman): Absolutely, I will book a test drive for you tomorrow at 10am',
+        'episode_body': 'Dan (salesperson): Absolutely, I will book a test drive for you tomorrow at 10am',
     },
 ]
+
+
 dates_mentioned = [
     {
         'episode_body': 'Paul (user): I have graduated from Univerity of Toronto in 2022',
@@ -93,7 +95,8 @@ relative_time_range_mentioned = [
 
 async def main():
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
 
@@ -102,32 +105,8 @@ async def main():
             name=f'Message {i}',
             episode_body=message['episode_body'],
             source_description='',
-            # reference_time=datetime.now() - timedelta(days=365 * 3),
             reference_time=datetime.now(),
         )
-    # await client.add_episode(
-    # 	name='Message 5',
-    # 	episode_body='Jane: I  miss Paul',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-    # await client.add_episode(
-    # 	name='Message 6',
-    # 	episode_body='Jane: I dont miss Paul anymore, I hate him',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-
-    # await client.add_episode(
-    #     name="Message 3",
-    #     episode_body="Assistant: The best type of apples available are Fuji apples",
-    #     source_description="WhatsApp Message",
-    # )
-    # await client.add_episode(
-    #     name="Message 4",
-    #     episode_body="Paul: Oh, I actually hate those",
-    #     source_description="WhatsApp Message",
-    # )
 
 
 asyncio.run(main())

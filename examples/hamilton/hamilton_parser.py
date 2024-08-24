@@ -1,20 +1,12 @@
-"""
-Copyright 2024, Zep Software, Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
 import os
+import re
+
+
+def sanitize_text(text):
+    # Remove special characters and extra whitespace
+    sanitized = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    sanitized = ' '.join(sanitized.split())
+    return sanitized
 
 
 def parse_script(filename):
@@ -22,7 +14,7 @@ def parse_script(filename):
     current_speech = []
     messages = []
 
-    with open(filename) as file:
+    with open(filename, encoding='utf-8') as file:
         for line in file:
             line = line.strip()
 
@@ -35,7 +27,8 @@ def parse_script(filename):
             ):
                 # If we have a current speaker, save their message
                 if current_speaker:
-                    messages.append((current_speaker, ' '.join(current_speech)))
+                    sanitized_speech = sanitize_text(' '.join(current_speech))
+                    messages.append((sanitize_text(current_speaker), sanitized_speech))
 
                 # Start a new speech
                 current_speaker = line
@@ -46,13 +39,14 @@ def parse_script(filename):
 
     # Add the last speech
     if current_speaker:
-        messages.append((current_speaker, ' '.join(current_speech)))
+        sanitized_speech = sanitize_text(' '.join(current_speech))
+        messages.append((sanitize_text(current_speaker), sanitized_speech))
 
     return messages
 
 
-def get_romeo_messages():
-    file_path = 'romeo_act1.txt'
+def get_hamilton_messages():
+    file_path = 'hamilton.txt'
     script_dir = os.path.dirname(__file__)
     relative_path = os.path.join(script_dir, file_path)
     # Use the function

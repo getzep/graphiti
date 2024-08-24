@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 from core import Graphiti
 from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
-from examples.romeo.parse import get_romeo_messages
+from examples.hamilton.hamilton_parser import get_hamilton_messages
 
 load_dotenv()
 
@@ -58,54 +58,23 @@ def setup_logging():
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    messages = get_romeo_messages()
+    messages = get_hamilton_messages()
+    print(messages)
+    print(len(messages))
     now = datetime.now()
-    # make it upload in chunks of 50
     episodes: list[BulkEpisode] = [
         BulkEpisode(
             name=f'Message {i}',
             content=f'{speaker}: {speech}',
-            source_description='Podcast Transcript',
+            source_description='Hamilton Transcript',
             episode_type='string',
             reference_time=now + timedelta(seconds=i * 10),
         )
-        for i, (speaker, speech) in enumerate(messages)
+        for i, (speaker, speech) in enumerate(messages[:50])
     ]
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     await client.add_episode_bulk(episodes)
-
-    # for i, (speaker, speech) in enumerate(get_romeo_messages()):
-    #     await client.add_episode(
-    #         name=f'Message {i}',
-    #         episode_body=f'{speaker}: {speech}',
-    #         source_description='',
-    #         # reference_time=datetime.now() - timedelta(days=365 * 3),
-    #         reference_time=datetime.now(),
-    #     )
-    # await client.add_episode(
-    # 	name='Message 5',
-    # 	episode_body='Jane: I  miss Paul',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-    # await client.add_episode(
-    # 	name='Message 6',
-    # 	episode_body='Jane: I dont miss Paul anymore, I hate him',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-
-    # await client.add_episode(
-    #     name="Message 3",
-    #     episode_body="Assistant: The best type of apples available are Fuji apples",
-    #     source_description="WhatsApp Message",
-    # )
-    # await client.add_episode(
-    #     name="Message 4",
-    #     episode_body="Paul: Oh, I actually hate those",
-    #     source_description="WhatsApp Message",
-    # )
 
 
 asyncio.run(main())
