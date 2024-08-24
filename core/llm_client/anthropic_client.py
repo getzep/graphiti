@@ -18,8 +18,8 @@ import json
 import logging
 import typing
 
+from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionMessageParam
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -28,31 +28,29 @@ from .config import LLMConfig
 logger = logging.getLogger(__name__)
 
 
-class OpenAIClient(LLMClient):
+class AnthropicClient(LLMClient):
     def __init__(self, config: LLMConfig):
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        self.client = AsyncAnthropic(api_key=config.api_key)
         self.model = config.model
 
     def get_embedder(self) -> typing.Any:
-        return self.client.embeddings
+        openai_client = AsyncOpenAI()
+        return openai_client.embeddings
 
     async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
-        openai_messages: list[ChatCompletionMessageParam] = []
-        for m in messages:
-            if m.role == 'user':
-                openai_messages.append({'role': 'user', 'content': m.content})
-            elif m.role == 'system':
-                openai_messages.append({'role': 'system', 'content': m.content})
+        system_message = messages[0]
+        user_messages = messages[1:]
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=openai_messages,
-                temperature=0.1,
-                max_tokens=3000,
-                response_format={'type': 'json_object'},
+            message = await self.client.messages.create(
+                system=system_message.content + '\n Only include JSON in the response',
+                max_tokens=4000,
+                messages=[{'role': m.role, 'content': m.content} for m in user_messages],
+                model='claude-3-5-sonnet-20240620',
             )
-            result = response.choices[0].message.content or ''
-            return json.loads(result)
+
+            print(message.content[0].text)
+
+            return json.loads(message.content[0].text)
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise

@@ -23,9 +23,11 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from core import Graphiti
+from core.llm_client.anthropic_client import AnthropicClient
+from core.llm_client.config import LLMConfig
 from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
-from examples.romeo.parse import get_romeo_messages
+from examples.debate.parser import get_debate_messages
 
 load_dotenv()
 
@@ -57,55 +59,42 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    messages = get_romeo_messages()
-    now = datetime.now()
-    # make it upload in chunks of 50
-    episodes: list[BulkEpisode] = [
-        BulkEpisode(
-            name=f'Message {i}',
-            content=f'{speaker}: {speech}',
-            source_description='Podcast Transcript',
-            episode_type='string',
-            reference_time=now + timedelta(seconds=i * 10),
-        )
-        for i, (speaker, speech) in enumerate(messages)
-    ]
+    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
+    messages = get_debate_messages()
+    print(messages[:3])
+    print(len(messages))
+    # i need to create tuples from each 3 messages in the messages
+    message_tuples = [messages[i : i + 5] for i in range(0, len(messages), 5)]
+    # # neets to be october 3 2000
+    now = datetime(2000, 10, 3)
+    # episodes: list[BulkEpisode] = [
+    #     BulkEpisode(
+    #         name=f'Statement {i + 1}',
+    #         content=f"{episode['role']}: {episode['statement']}",
+    #         source_description='Bush Gore debate 2001',
+    #         episode_type='string',
+    #         reference_time=now + timedelta(seconds=i * 10),
+    #     )
+    #     for i, episode in enumerate(messages)
+    # ]
+
+    # await clear_data(client.driver)
+    # await client.build_indices_and_constraints()
+    # await client.add_episode_bulk(episodes)
+
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    await client.add_episode_bulk(episodes)
-
-    # for i, (speaker, speech) in enumerate(get_romeo_messages()):
-    #     await client.add_episode(
-    #         name=f'Message {i}',
-    #         episode_body=f'{speaker}: {speech}',
-    #         source_description='',
-    #         # reference_time=datetime.now() - timedelta(days=365 * 3),
-    #         reference_time=datetime.now(),
-    #     )
-    # await client.add_episode(
-    # 	name='Message 5',
-    # 	episode_body='Jane: I  miss Paul',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-    # await client.add_episode(
-    # 	name='Message 6',
-    # 	episode_body='Jane: I dont miss Paul anymore, I hate him',
-    # 	source_description='WhatsApp Message',
-    # 	reference_time=datetime.now(),
-    # )
-
-    # await client.add_episode(
-    #     name="Message 3",
-    #     episode_body="Assistant: The best type of apples available are Fuji apples",
-    #     source_description="WhatsApp Message",
-    # )
-    # await client.add_episode(
-    #     name="Message 4",
-    #     episode_body="Paul: Oh, I actually hate those",
-    #     source_description="WhatsApp Message",
-    # )
+    for i, episode_list in enumerate(message_tuples[:4]):
+        combined_roles_and_statements_str = ''.join(
+            f"{episode['role']}: {episode['statement']}\n" for episode in episode_list
+        )
+        await client.add_episode(
+            name=f'Statement {i + 1}',
+            episode_body=combined_roles_and_statements_str,
+            source_description='Bush Gore depate 2001',
+            reference_time=now + timedelta(seconds=i * 10),
+        )
 
 
 asyncio.run(main())
