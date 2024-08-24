@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import os
+import re
 
 
 def parse_script(filename):
@@ -51,9 +52,26 @@ def parse_script(filename):
     return messages
 
 
+def escape_special_characters(text):
+    # Define the special characters to remove
+    special_chars = r'+-&|!(){}[]^"~*?:\/'
+
+    # Use regex to replace all special characters with an empty string
+    return re.sub(f'[{re.escape(special_chars)}]', '', text)
+
+
+# Test the function with a sample line from your text
+sample_text = "GREGORY: To move is to stir; and to be valiant is to stand\\: therefore, if thou art moved, thou runn'st away."
+escaped_text = escape_special_characters(sample_text)
+print(escaped_text)
+
+
 def get_romeo_messages():
-    file_path = 'romeo_act1.txt'
+    file_path = 'romeo_act2.txt'
     script_dir = os.path.dirname(__file__)
     relative_path = os.path.join(script_dir, file_path)
-    # Use the function
-    return parse_script(relative_path)
+    # Use the function with escaping
+    return [
+        (speaker, escape_special_characters(speech))
+        for speaker, speech in parse_script(relative_path)
+    ]
