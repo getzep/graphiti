@@ -26,6 +26,8 @@ from core import Graphiti
 from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
 from examples.romeo.parse import get_romeo_messages
+from core.llm_client.anthropic_client import AnthropicClient
+from core.llm_client.config import LLMConfig
 
 load_dotenv()
 
@@ -57,32 +59,38 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     messages = get_romeo_messages()
     now = datetime.now()
-    # make it upload in chunks of 50
-    episodes: list[BulkEpisode] = [
-        BulkEpisode(
-            name=f'Message {i}',
-            content=f'{speaker}: {speech}',
-            source_description='Podcast Transcript',
-            episode_type='string',
-            reference_time=now + timedelta(seconds=i * 10),
-        )
-        for i, (speaker, speech) in enumerate(messages)
-    ]
-    await clear_data(client.driver)
-    await client.build_indices_and_constraints()
-    await client.add_episode_bulk(episodes)
+    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
 
-    # for i, (speaker, speech) in enumerate(get_romeo_messages()):
-    #     await client.add_episode(
+    # make it upload in chunks of 50
+    # episodes: list[BulkEpisode] = [
+    #     BulkEpisode(
     #         name=f'Message {i}',
-    #         episode_body=f'{speaker}: {speech}',
-    #         source_description='',
-    #         # reference_time=datetime.now() - timedelta(days=365 * 3),
-    #         reference_time=datetime.now(),
+    #         content=f'{speaker}: {speech}',
+    #         source_description='Podcast Transcript',
+    #         episode_type='string',
+    #         reference_time=now + timedelta(seconds=i * 10),
     #     )
+    #     for i, (speaker, speech) in enumerate(messages)
+    # ]
+    # await clear_data(client.driver)
+    # await client.build_indices_and_constraints()
+    # await client.add_episode_bulk(episodes)
+    romeo_messages = get_romeo_messages()
+    print(len(romeo_messages))
+    messages_tuples = [romeo_messages[i : i + 15] for i in range(0, len(romeo_messages), 15)]
+    for i, tuple_list in enumerate(messages_tuples):
+        combined_string = ' '.join([f'{speaker}: {speech}\n' for speaker, speech in tuple_list])
+        print(combined_string)
+        await client.add_episode(
+            name=f'Message {i}',
+            episode_body=combined_string,
+            source_description='',
+            # reference_time=datetime.now() - timedelta(days=365 * 3),
+            reference_time=datetime.now(),
+        )
     # await client.add_episode(
     # 	name='Message 5',
     # 	episode_body='Jane: I  miss Paul',

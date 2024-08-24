@@ -112,7 +112,7 @@ class Graphiti:
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(reference_time)
+            previous_episodes = await self.retrieve_episodes(reference_time, last_n=1)
             episode = EpisodicNode(
                 name=name,
                 labels=[],
