@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
-from core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
 

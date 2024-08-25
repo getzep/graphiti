@@ -5,12 +5,11 @@ import os
 import sys
 from datetime import datetime
 
-from dotenv import load_dotenv
-
 from core import Graphiti
 from core.nodes import EpisodeType
 from core.utils.bulk_utils import RawEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -47,10 +46,8 @@ async def main(use_bulk: bool = True):
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    json_file_path = os.path.join(script_dir, 'allbirds_products.json')
-    products = json.load(open(json_file_path))['products']
-    logger.info(products)
+    with open('allbirds_products.json') as products_file:
+        products = json.load(products_file)['products']
 
     if not use_bulk:
         for i, product in enumerate(products):

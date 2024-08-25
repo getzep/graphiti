@@ -23,8 +23,8 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
-from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import Node
+from graphiti_core.llm_client.config import EMBEDDING_DIM
+from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
 

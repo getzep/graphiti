@@ -19,9 +19,9 @@ from datetime import datetime
 from time import time
 from typing import Any
 
-from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodeType, EpisodicNode
-from core.prompts import prompt_library
+from graphiti_core.llm_client import LLMClient
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +134,9 @@ async def dedupe_extracted_nodes(
 
     uuid_map: dict[str, str] = {}
     for duplicate in duplicate_data:
-        if duplicate['name'] in new_nodes_map and duplicate['duplicate_of'] in node_map:
-            uuid = new_nodes_map[duplicate['name']].uuid
-            uuid_value = node_map[duplicate['duplicate_of']].uuid
-            uuid_map[uuid] = uuid_value
+        uuid = new_nodes_map[duplicate['name']].uuid
+        uuid_value = node_map[duplicate['duplicate_of']].uuid
+        uuid_map[uuid] = uuid_value
 
     nodes: list[EntityNode] = []
     brand_new_nodes: list[EntityNode] = []
