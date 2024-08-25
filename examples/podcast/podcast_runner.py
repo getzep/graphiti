@@ -20,10 +20,12 @@ import os
 import sys
 
 from dotenv import load_dotenv
+
+from core.nodes import EpisodeType
 from transcript_parser import parse_podcast_messages
 
 from core import Graphiti
-from core.utils.bulk_utils import BulkEpisode
+from core.utils.bulk_utils import RawEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -70,10 +72,11 @@ async def main(use_bulk: bool = True):
                 source_description='Podcast Transcript',
             )
 
-    episodes: list[BulkEpisode] = [
-        BulkEpisode(
+    episodes: list[RawEpisode] = [
+        RawEpisode(
             name=f'Message {i}',
             content=f'{message.speaker_name} ({message.role}): {message.content}',
+            source=EpisodeType.message,
             source_description='Podcast Transcript',
             episode_type='string',
             reference_time=message.actual_timestamp,

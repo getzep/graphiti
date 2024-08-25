@@ -19,40 +19,65 @@ from datetime import datetime
 from time import time
 
 from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodicNode
+from core.nodes import EntityNode, EpisodicNode, EpisodeType
 from core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
 
 
-async def extract_nodes(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-) -> list[EntityNode]:
-    start = time()
-
+async def extract_message_nodes(llm_client: LLMClient,
+                                episode: EpisodicNode,
+                                previous_episodes: list[EpisodicNode]) -> list[dict[str, str]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
-        'episode_timestamp': (episode.valid_at.isoformat() if episode.valid_at else None),
+        'episode_timestamp': episode.valid_at.isoformat(),
         'previous_episodes': [
             {
                 'content': ep.content,
-                'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                'timestamp': ep.valid_at.isoformat(),
             }
             for ep in previous_episodes
         ],
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.extract_nodes.v3(context))
-    new_nodes_data = llm_response.get('new_nodes', [])
+    llm_response = await llm_client.generate_response(prompt_library.extract_nodes.v2(context))
+    extracted_node_data = llm_response.get('extracted_nodes', [])
+    return extracted_node_data
+
+
+async def extract_json_nodes(llm_client: LLMClient,
+                             episode: EpisodicNode,
+                             ) -> list[dict[str, str]]:
+    # Prepare context for LLM
+    context = {
+        'episode_content': episode.content,
+        'episode_timestamp': episode.valid_at.isoformat(),
+        'source_description': episode.source_description
+    }
+
+    llm_response = await llm_client.generate_response(prompt_library.extract_nodes.extract_json(context))
+    extracted_node_data = llm_response.get('extracted_nodes', [])
+    return extracted_node_data
+
+
+async def extract_nodes(
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+) -> list[EntityNode]:
+    start = time()
+    extracted_node_data: list[dict[str, str]] = []
+    if episode.source == EpisodeType.message:
+        extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
+    elif episode.source == EpisodeType.json:
+        extracted_node_data = await extract_json_nodes(llm_client, episode)
 
     end = time()
-    logger.info(f'Extracted new nodes: {new_nodes_data} in {(end - start) * 1000} ms')
+    logger.info(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
     new_nodes = []
-    for node_data in new_nodes_data:
+    for node_data in extracted_node_data:
         new_node = EntityNode(
             name=node_data['name'],
             labels=node_data['labels'],
@@ -66,9 +91,9 @@ async def extract_nodes(
 
 
 async def dedupe_extracted_nodes(
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
-    existing_nodes: list[EntityNode],
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
+        existing_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str], list[EntityNode]]:
     start = time()
 
@@ -129,8 +154,8 @@ async def dedupe_extracted_nodes(
 
 
 async def dedupe_node_list(
-    llm_client: LLMClient,
-    nodes: list[EntityNode],
+        llm_client: LLMClient,
+        nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import typing
 from collections import defaultdict
 from datetime import datetime
@@ -100,7 +101,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
@@ -149,7 +150,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -183,10 +184,10 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    fuzzy_query = query + '~'
+    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
@@ -218,10 +219,10 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    fuzzy_query = query + '~'
+    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
 
     records, _, _ = await driver.execute_query(
         """
@@ -269,8 +270,8 @@ async def edge_fulltext_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     start = time()
     relevant_nodes: list[EntityNode] = []
@@ -300,8 +301,8 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
+        edges: list[EntityEdge],
+        driver: AsyncDriver,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
