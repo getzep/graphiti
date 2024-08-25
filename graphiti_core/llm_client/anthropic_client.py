@@ -42,7 +42,8 @@ class AnthropicClient(LLMClient):
         user_messages = messages[1:]
         try:
             message = await self.client.messages.create(
-                system=system_message.content + '\n Only include JSON in the response',
+                system='Only include JSON in the response Do not include any additional text or explanation of the content. Just JSON.\n'
+                + system_message.content,
                 max_tokens=4000,
                 messages=[{'role': m.role, 'content': m.content} for m in user_messages],
                 model='claude-3-5-sonnet-20240620',
