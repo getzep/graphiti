@@ -20,13 +20,13 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from core import Graphiti
-from core.llm_client.anthropic_client import AnthropicClient
-from core.llm_client.config import LLMConfig
-from core.utils.maintenance.graph_data_operations import clear_data
 from dotenv import load_dotenv
 
 from examples.presidential_debates.parser import get_debate_messages
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
