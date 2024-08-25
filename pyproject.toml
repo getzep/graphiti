@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "graphiti"
+name = "graphiti-core"
 version = "0.0.1"
-description = "Graph building library"
+description = "A temporal graph building library"
 authors = [
     "Paul Paliychuk <paul@getzep.com>",
     "Preston Rasmussen <preston@getzep.com>",
