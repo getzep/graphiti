@@ -19,15 +19,15 @@ from datetime import datetime
 from time import time
 
 from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodicNode, EpisodeType
+from core.nodes import EntityNode, EpisodeType, EpisodicNode
 from core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
 
 
-async def extract_message_nodes(llm_client: LLMClient,
-                                episode: EpisodicNode,
-                                previous_episodes: list[EpisodicNode]) -> list[dict[str, str]]:
+async def extract_message_nodes(
+    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+) -> list[dict[str, str]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
@@ -46,25 +46,28 @@ async def extract_message_nodes(llm_client: LLMClient,
     return extracted_node_data
 
 
-async def extract_json_nodes(llm_client: LLMClient,
-                             episode: EpisodicNode,
-                             ) -> list[dict[str, str]]:
+async def extract_json_nodes(
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+) -> list[dict[str, str]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'episode_timestamp': episode.valid_at.isoformat(),
-        'source_description': episode.source_description
+        'source_description': episode.source_description,
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.extract_nodes.extract_json(context))
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.extract_json(context)
+    )
     extracted_node_data = llm_response.get('extracted_nodes', [])
     return extracted_node_data
 
 
 async def extract_nodes(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
-        previous_episodes: list[EpisodicNode],
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, str]] = []
@@ -91,9 +94,9 @@ async def extract_nodes(
 
 
 async def dedupe_extracted_nodes(
-        llm_client: LLMClient,
-        extracted_nodes: list[EntityNode],
-        existing_nodes: list[EntityNode],
+    llm_client: LLMClient,
+    extracted_nodes: list[EntityNode],
+    existing_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str], list[EntityNode]]:
     start = time()
 
@@ -154,8 +157,8 @@ async def dedupe_extracted_nodes(
 
 
 async def dedupe_node_list(
-        llm_client: LLMClient,
-        nodes: list[EntityNode],
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 

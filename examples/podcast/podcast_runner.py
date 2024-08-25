@@ -20,11 +20,10 @@ import os
 import sys
 
 from dotenv import load_dotenv
-
-from core.nodes import EpisodeType
 from transcript_parser import parse_podcast_messages
 
 from core import Graphiti
+from core.nodes import EpisodeType
 from core.utils.bulk_utils import RawEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
 

@@ -26,7 +26,7 @@ from neo4j import AsyncGraphDatabase
 
 from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient, LLMConfig, OpenAIClient
-from core.nodes import EntityNode, EpisodicNode, EpisodeType
+from core.nodes import EntityNode, EpisodeType, EpisodicNode
 from core.search.search import SearchConfig, hybrid_search
 from core.search.search_utils import (
     get_relevant_edges,
@@ -86,22 +86,22 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-            self,
-            reference_time: datetime,
-            last_n: int = EPISODE_WINDOW_LEN,
+        self,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """Retrieve the last n episodic nodes from the graph"""
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-            self,
-            name: str,
-            episode_body: str,
-            source_description: str,
-            reference_time: datetime,
-            source: EpisodeType = EpisodeType.message,
-            success_callback: Callable | None = None,
-            error_callback: Callable | None = None,
+        self,
+        name: str,
+        episode_body: str,
+        source_description: str,
+        reference_time: datetime,
+        source: EpisodeType = EpisodeType.message,
+        success_callback: Callable | None = None,
+        error_callback: Callable | None = None,
     ):
         """Process an episode and update the graph"""
         try:
@@ -124,9 +124,7 @@ class Graphiti:
                 valid_at=reference_time,
             )
 
-            extracted_nodes = await extract_nodes(
-                self.llm_client, episode, previous_episodes
-            )
+            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
@@ -248,8 +246,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-            self,
-            bulk_episodes: list[RawEpisode],
+        self,
+        bulk_episodes: list[RawEpisode],
     ):
         try:
             start = time()
