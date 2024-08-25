@@ -29,7 +29,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             Reference Timestamp: {context['reference_timestamp']}
 
             IMPORTANT: Only extract time information if it is part of the provided fact. Otherwise ignore the time mentioned. Make sure to do your best to determine the dates if only the relative time is mentioned. (eg 10 years ago, 2 mins ago) based on the provided reference timestamp
-
+            If the relationship is not of spanning nature, but you are still able to determine the dates, set the valid_at only.
             Definitions:
             - valid_at: The date and time when the relationship described by the edge fact became true or was established.
             - invalid_at: The date and time when the relationship described by the edge fact stopped being true or ended.
