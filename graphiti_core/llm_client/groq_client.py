@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 class GroqClient(LLMClient):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig | None = None):
+        if config is None:
+            config = LLMConfig()
         self.client = AsyncGroq(api_key=config.api_key)
         self.model = config.model
 

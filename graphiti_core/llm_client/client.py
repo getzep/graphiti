@@ -23,7 +23,7 @@ from .config import LLMConfig
 
 class LLMClient(ABC):
     @abstractmethod
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig | None):
         pass
 
     @abstractmethod

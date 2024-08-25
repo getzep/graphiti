@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(LLMClient):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig | None = None):
+        if config is None:
+            config = LLMConfig()
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
         self.model = config.model
 
