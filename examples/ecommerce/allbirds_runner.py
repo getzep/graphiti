@@ -14,9 +14,9 @@ from core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-neo4j_uri = os.environ.get('NEO4J_URI', default='bolt://localhost:7687')
-neo4j_user = os.environ.get('NEO4J_USER', default='neo4j')
-neo4j_password = os.environ.get('NEO4J_PASSWORD', default='password')
+neo4j_uri = os.getenv('NEO4J_URI', default='bolt://localhost:7687')
+neo4j_user = os.getenv('NEO4J_USER', default='neo4j')
+neo4j_password = os.getenv('NEO4J_PASSWORD', default='password')
 
 logger = logging.getLogger(__name__)
 
