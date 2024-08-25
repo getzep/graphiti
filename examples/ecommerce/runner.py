@@ -21,12 +21,12 @@ import os
 import sys
 from datetime import datetime
 
-from core import Graphiti
-from core.llm_client.anthropic_client import AnthropicClient
-from core.llm_client.config import LLMConfig
-from core.nodes import EpisodeType
-from core.utils.bulk_utils import RawEpisode
-from core.utils.maintenance.graph_data_operations import clear_data
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import AnthropicClient
+from graphiti_core.llm_client import LLMConfig
+from graphiti_core.nodes import EpisodeType
+from graphiti_core.utils.bulk_utils import RawEpisode
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from dotenv import load_dotenv
 
 load_dotenv()

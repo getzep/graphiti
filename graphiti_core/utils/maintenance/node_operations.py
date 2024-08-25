@@ -20,7 +20,7 @@ from time import time
 from typing import Any
 
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
