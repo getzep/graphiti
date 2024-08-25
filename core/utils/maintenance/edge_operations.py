@@ -70,6 +70,7 @@ async def extract_edges(
     }
 
     llm_response = await llm_client.generate_response(prompt_library.extract_edges.v2(context))
+    print(llm_response)
     edges_data = llm_response.get('edges', [])
 
     end = time()

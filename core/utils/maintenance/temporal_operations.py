@@ -110,13 +110,13 @@ def prepare_invalidation_context(
         'existing_edges': [
             f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) {extract_date_strings_from_edge(edge)}'
             for source_node, edge, target_node in sorted(
-                existing_edges, key=lambda x: (x[1].valid_at or x[1].created_at), reverse=True
+                existing_edges, key=lambda x: (x[1].created_at), reverse=True
             )
         ],
         'new_edges': [
             f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) {extract_date_strings_from_edge(edge)}'
             for source_node, edge, target_node in sorted(
-                new_edges, key=lambda x: (x[1].valid_at or x[1].created_at), reverse=True
+                new_edges, key=lambda x: (x[1].created_at), reverse=True
             )
         ],
         'current_episode': current_episode.content,

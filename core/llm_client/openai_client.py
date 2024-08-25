@@ -48,11 +48,12 @@ class OpenAIClient(LLMClient):
                 model=self.model,
                 messages=openai_messages,
                 temperature=0.1,
-                max_tokens=3000,
+                max_tokens=4096,
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
         except Exception as e:
+            print(openai_messages)
             logger.error(f'Error in generating LLM response: {e}')
             raise
