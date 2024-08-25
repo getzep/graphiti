@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from core.edges import EntityEdge
 from core.llm_client import LLMConfig, OpenAIClient
-from core.nodes import EntityNode, EpisodicNode
+from core.nodes import EntityNode, EpisodicNode, EpisodeType
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
 )
@@ -58,7 +58,7 @@ def create_test_data():
         content='Alice now dislikes Bob',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test episode for unit testing',
     )
 
@@ -69,7 +69,7 @@ def create_test_data():
             content='Alice liked Bob',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode for unit testing',
         )
     ]
