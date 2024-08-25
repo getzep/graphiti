@@ -21,13 +21,13 @@ import os
 import sys
 from datetime import datetime
 
+from dotenv import load_dotenv
+
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import AnthropicClient
-from graphiti_core.llm_client import LLMConfig
+from graphiti_core.llm_client import AnthropicClient, LLMConfig
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -95,7 +95,10 @@ async def ingest_products_data():
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     json_file_path = os.path.join(script_dir, 'allbirds_products.json')
-    products = json.load(open(json_file_path))['products']
+
+    with open(json_file_path) as file:
+        products = json.load(file)['products']
+
     episodes: list[RawEpisode] = [
         RawEpisode(
             name=f'Product {i}',
