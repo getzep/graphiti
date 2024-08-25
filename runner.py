@@ -94,6 +94,15 @@ relative_time_range_mentioned = [
     },
 ]
 
+divorce = [
+    {
+        'episode_body': 'Paul (user): I divorced Jane in 2020',
+    },
+    {
+        'episode_body': 'Jane (user): I married Paul in 1983 in july in Malibu',
+    },
+]
+
 
 async def main():
     setup_logging()
@@ -102,7 +111,7 @@ async def main():
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
 
-    for i, message in enumerate(bmw_sales):
+    for i, message in enumerate(divorce):
         await client.add_episode(
             name=f'Message {i}',
             episode_body=message['episode_body'],

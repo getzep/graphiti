@@ -112,7 +112,7 @@ class Graphiti:
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(reference_time, last_n=1)
+            previous_episodes = await self.retrieve_episodes(reference_time, last_n=3)
             episode = EpisodicNode(
                 name=name,
                 labels=[],
@@ -160,6 +160,30 @@ class Graphiti:
                 edge_touched_node_uuids.append(edge.source_node_uuid)
                 edge_touched_node_uuids.append(edge.target_node_uuid)
 
+            for edge in deduped_edges:
+                valid_at, invalid_at, _ = await extract_edge_dates(
+                    self.llm_client,
+                    edge,
+                    episode.valid_at,
+                    episode,
+                    previous_episodes,
+                )
+                edge.valid_at = valid_at
+                edge.invalid_at = invalid_at
+                if edge.invalid_at:
+                    edge.expired_at = datetime.now()
+            for edge in existing_edges:
+                valid_at, invalid_at, _ = await extract_edge_dates(
+                    self.llm_client,
+                    edge,
+                    episode.valid_at,
+                    episode,
+                    previous_episodes,
+                )
+                edge.valid_at = valid_at
+                edge.invalid_at = invalid_at
+                if edge.invalid_at:
+                    edge.expired_at = datetime.now()
             (
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
@@ -187,16 +211,16 @@ class Graphiti:
 
             edges_to_save = existing_edges + deduped_edges
 
-            for edge_to_extract_dates_from in edges_to_save:
-                valid_at, invalid_at, _ = await extract_edge_dates(
-                    self.llm_client,
-                    edge_to_extract_dates_from,
-                    episode.valid_at,
-                    episode,
-                    previous_episodes,
-                )
-                edge_to_extract_dates_from.valid_at = valid_at
-                edge_to_extract_dates_from.invalid_at = invalid_at
+            # for edge_to_extract_dates_from in edges_to_save:
+            #     valid_at, invalid_at, _ = await extract_edge_dates(
+            #         self.llm_client,
+            #         edge_to_extract_dates_from,
+            #         episode.valid_at,
+            #         episode,
+            #         previous_episodes,
+            #     )
+            #     edge_to_extract_dates_from.valid_at = valid_at
+            #     edge_to_extract_dates_from.invalid_at = invalid_at
             entity_edges.extend(edges_to_save)
 
             edge_touched_node_uuids = list(set(edge_touched_node_uuids))
