@@ -65,7 +65,7 @@ shoe_conversation = [
     "John: I'm looking for shoes made out of wool",
     "SalesShoeBot: We have just what you are looking for, how do you like our Men's SuperLight Wool Runners - Dark Grey (Medium Grey Sole)? They use the SuperLight Foam technology.",
     'John: Oh, actually I bought those 2 months ago, but unfortunately found out that I was allergic to wool. I think I will pass on those, maybe there is something with a retro look that you could suggest?',
-    'SalesShoeBot: Im sorry to hear that! Would you be interested in Couriers model? We have them in Natural Black and Basin Blue colors',
+    "SalesShoeBot: Im sorry to hear that! Would you be interested in Men's Couriers - (Blizzard Sole) model? We have them in Natural Black and Basin Blue colors",
     'John: Oh that is perfect, I LOVE the Natural Black color!. I will take those.',
 ]
 
