@@ -14,9 +14,9 @@ from core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
-neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
-neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+neo4j_uri = os.environ.get('NEO4J_URI', default='bolt://localhost:7687')
+neo4j_user = os.environ.get('NEO4J_USER', default='neo4j')
+neo4j_password = os.environ.get('NEO4J_PASSWORD', default='password')
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,7 @@ async def main(use_bulk: bool = True):
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    json_file_path = os.path.join(script_dir, 'allbirds_products.json')
-    products = json.load(open(json_file_path))['products']
+    products = json.load(open('allbirds_products.json'))['products']
     logger.info(products)
 
     if not use_bulk:

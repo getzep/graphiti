@@ -78,7 +78,6 @@ async def main(use_bulk: bool = True):
             content=f'{message.speaker_name} ({message.role}): {message.content}',
             source=EpisodeType.message,
             source_description='Podcast Transcript',
-            episode_type='string',
             reference_time=message.actual_timestamp,
         )
         for i, message in enumerate(messages[3:14])
