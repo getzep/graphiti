@@ -75,6 +75,7 @@ async def build_indices_and_constraints(driver: AsyncDriver):
 
 async def clear_data(driver: AsyncDriver):
     async with driver.session() as session:
+
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
@@ -82,9 +83,9 @@ async def clear_data(driver: AsyncDriver):
 
 
 async def retrieve_episodes(
-        driver: AsyncDriver,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
+    driver: AsyncDriver,
+    reference_time: datetime,
+    last_n: int = EPISODE_WINDOW_LEN,
 ) -> list[EpisodicNode]:
     """Retrieve the last n episodic nodes from the graph"""
     result = await driver.execute_query(
