@@ -39,7 +39,8 @@ class AnthropicClient(LLMClient):
 
     async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         system_message = messages[0]
-        user_messages = messages[1:]
+        user_messages = messages[1:] + [Message(role='assistant', content='{')]
+
         try:
             message = await self.client.messages.create(
                 system='Only include JSON in the response Do not include any additional text or explanation of the content. Just JSON.\n'
@@ -49,9 +50,7 @@ class AnthropicClient(LLMClient):
                 model='claude-3-5-sonnet-20240620',
             )
 
-            print(message.content[0].text)
-
-            return json.loads(message.content[0].text)
+            return json.loads('{' + message.content[0].text)
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise
