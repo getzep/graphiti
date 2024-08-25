@@ -16,7 +16,7 @@ def sanitize_string(text):
 
 
 def parse_debate(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, encoding='utf-8') as file:
         content = file.read()
 
     # Split the content into episodes

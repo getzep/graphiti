@@ -26,7 +26,7 @@ from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, LLMConfig, OpenAIClient
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, hybrid_search
 from graphiti_core.search.search_utils import (
     get_relevant_edges,
@@ -37,7 +37,7 @@ from graphiti_core.utils import (
     retrieve_episodes,
 )
 from graphiti_core.utils.bulk_utils import (
-    BulkEpisode,
+    RawEpisode,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_nodes_and_edges_bulk,
@@ -192,24 +192,24 @@ class Graphiti:
                 existing_edges=existing_edges, new_edges=deduped_edges, nodes=nodes
             )
 
-                invalidated_edges = await invalidate_edges(
-                    self.llm_client,
-                    old_edges_with_nodes_pending_invalidation,
-                    new_edges_with_nodes,
-                    episode,
-                    previous_episodes,
-                )
+            invalidated_edges = await invalidate_edges(
+                self.llm_client,
+                old_edges_with_nodes_pending_invalidation,
+                new_edges_with_nodes,
+                episode,
+                previous_episodes,
+            )
 
-                for edge in invalidated_edges:
-                    for existing_edge in existing_edges:
-                        if existing_edge.uuid == edge.uuid:
-                            existing_edge.expired_at = edge.expired_at
-                    for deduped_edge in deduped_edges:
-                        if deduped_edge.uuid == edge.uuid:
-                            deduped_edge.expired_at = edge.expired_at
-                    edge_touched_node_uuids.append(edge.source_node_uuid)
-                    edge_touched_node_uuids.append(edge.target_node_uuid)
-                logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
+            for edge in invalidated_edges:
+                for existing_edge in existing_edges:
+                    if existing_edge.uuid == edge.uuid:
+                        existing_edge.expired_at = edge.expired_at
+                for deduped_edge in deduped_edges:
+                    if deduped_edge.uuid == edge.uuid:
+                        deduped_edge.expired_at = edge.expired_at
+                edge_touched_node_uuids.append(edge.source_node_uuid)
+                edge_touched_node_uuids.append(edge.target_node_uuid)
+            logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
 
             edges_to_save = existing_edges + deduped_edges
 

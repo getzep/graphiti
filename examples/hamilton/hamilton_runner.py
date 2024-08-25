@@ -20,11 +20,11 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
-
 from core import Graphiti
 from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
+from dotenv import load_dotenv
+
 from examples.hamilton.hamilton_parser import get_hamilton_messages
 
 load_dotenv()

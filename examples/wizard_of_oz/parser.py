@@ -1,9 +1,9 @@
-import re
 import os
+import re
 
 
 def parse_wizard_of_oz(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, encoding='utf-8') as file:
         content = file.read()
 
     # Split the content into chapters

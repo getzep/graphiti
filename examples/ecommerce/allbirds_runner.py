@@ -5,12 +5,11 @@ import os
 import sys
 from datetime import datetime
 
-from dotenv import load_dotenv
-
 from core import Graphiti
 from core.nodes import EpisodeType
 from core.utils.bulk_utils import RawEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
+from dotenv import load_dotenv
 
 load_dotenv()
 

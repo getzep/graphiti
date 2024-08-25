@@ -20,14 +20,13 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
-
+from core import Graphiti
 from core.llm_client.anthropic_client import AnthropicClient
 from core.llm_client.config import LLMConfig
-from core import Graphiti
-from core.utils.bulk_utils import BulkEpisode
 from core.utils.maintenance.graph_data_operations import clear_data
-from examples.woo.parser import get_wizard_of_oz_messages
+from dotenv import load_dotenv
+
+from examples.wizard_of_oz.parser import get_wizard_of_oz_messages
 
 load_dotenv()
 
