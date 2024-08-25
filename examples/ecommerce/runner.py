@@ -23,6 +23,7 @@ import json
 from dotenv import load_dotenv
 
 from core.llm_client.anthropic_client import AnthropicClient
+from core.llm_client.openai_client import OpenAIClient
 from core.llm_client.config import LLMConfig
 from core import Graphiti
 from core.utils.maintenance.graph_data_operations import clear_data
@@ -46,7 +47,7 @@ def setup_logging():
     console_handler.setLevel(logging.INFO)
 
     # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
 
     # Add formatter to console handler
     console_handler.setFormatter(formatter)
@@ -57,15 +58,19 @@ def setup_logging():
     return logger
 
 
-async def main():
-    setup_logging()
-    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
+shoe_conversation = [
+    "SalesShoeBot: Hi, I'm the Sales Shoe Bot focused on selling Allbirds shoes. How can I help you today?",
+    "John: Hi, I'm looking for a new pair of shoes.",
+    'SalesShoeBot: Of course! What kinde of material are you looking for?',
+    "John: I'm looking for shoes made out of wool",
+    "SalesShoeBot: We have just what you are looking for, how do you like our Men's SuperLight Wool Runners - Dark Grey (Medium Grey Sole)? They use the SuperLight Foam technology.",
+    'John: Oh, actually I bought those 2 months ago, but unfortunately found out that I was allergic to wool. I think I will pass on those, maybe there is something with a retro look that you could suggest?',
+    'SalesShoeBot: Im sorry to hear that! Would you be interested in Couriers model? We have them in Natural Black and Basin Blue colors',
+    'John: Oh that is perfect, I LOVE the Natural Black color!. I will take those.',
+]
 
-    await clear_data(client.driver)
-    await client.build_indices_and_constraints()
-    await ingest_products_data()
 
+async def add_messages(client: Graphiti):
     for i, message in enumerate(shoe_conversation):
         await client.add_episode(
             name=f'Message {i}',
@@ -76,17 +81,15 @@ async def main():
         )
 
 
-shoe_conversation = [
-    "SalesShoeBot: Hi, I'm the Sales Shoe Bot. How can I help you today?",
-    "Jane: I'm looking for a new pair of shoes.",
-    'SalesShoeBot: Of course! We are selling Allbird shoes. What kinde of material are you looking for??',
-    "Jane: I'm looking for shoes made out of Eucalyptus Tree Fiber",
-    'SalesShoeBot: We have just what you are looking for, are you willing to consider the Tree Breezer?',
-    "Jane: Sure, I'll take a look.",
-    'Jane: Actually, a friend of mine bought these last year and they hated it, do you have something else? Maybe something made out of cotton?',
-    'SalesShoeBot: Im sorry to hear that! We have Anytime no show soc in rugged beige?',
-    'Jane: Oh that is perfect, I LOVE that color!.',
-]
+async def main():
+    setup_logging()
+    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
+
+    await clear_data(client.driver)
+    await client.build_indices_and_constraints()
+    await ingest_products_data()
+    await add_messages(client)
 
 
 async def ingest_products_data():
