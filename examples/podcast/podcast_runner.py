@@ -22,9 +22,9 @@ import sys
 from dotenv import load_dotenv
 from transcript_parser import parse_podcast_messages
 
-from core import Graphiti
-from core.utils.bulk_utils import BulkEpisode
-from core.utils.maintenance.graph_data_operations import clear_data
+from graphiti_core import Graphiti
+from graphiti_core.utils.bulk_utils import BulkEpisode
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 

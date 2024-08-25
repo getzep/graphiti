@@ -22,19 +22,19 @@ from neo4j import AsyncDriver
 from numpy import dot
 from pydantic import BaseModel
 
-from core.edges import Edge, EntityEdge, EpisodicEdge
-from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodicNode
-from core.search.search_utils import get_relevant_edges, get_relevant_nodes
-from core.utils import retrieve_episodes
-from core.utils.maintenance.edge_operations import (
+from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
+from graphiti_core.llm_client import LLMClient
+from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
+from graphiti_core.utils import retrieve_episodes
+from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
     dedupe_edge_list,
     dedupe_extracted_edges,
     extract_edges,
 )
-from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
-from core.utils.maintenance.node_operations import (
+from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
+from graphiti_core.utils.maintenance.node_operations import (
     dedupe_extracted_nodes,
     dedupe_node_list,
     extract_nodes,

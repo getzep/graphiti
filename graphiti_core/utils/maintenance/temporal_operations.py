@@ -18,10 +18,10 @@ import logging
 from datetime import datetime
 from typing import List
 
-from core.edges import EntityEdge
-from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodicNode
-from core.prompts import prompt_library
+from graphiti_core.edges import EntityEdge
+from graphiti_core.llm_client import LLMClient
+from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.prompts import prompt_library
 
 logger = logging.getLogger(__name__)
 
