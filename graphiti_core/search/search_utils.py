@@ -8,8 +8,8 @@ from time import time
 from neo4j import AsyncDriver
 from neo4j import time as neo4j_time
 
-from core.edges import EntityEdge
-from core.nodes import EntityNode, EpisodicNode
+from graphiti_core.edges import EntityEdge
+from graphiti_core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 

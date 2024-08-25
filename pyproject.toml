@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 
 packages = [
-    { include = "core", from = "." }
+    { include = "graphiti_core", from = "." }
 ]
 
 [tool.poetry.dependencies]

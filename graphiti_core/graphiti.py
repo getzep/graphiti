@@ -24,19 +24,19 @@ from typing import Callable
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 
-from core.edges import EntityEdge, EpisodicEdge
-from core.llm_client import LLMClient, LLMConfig, OpenAIClient
-from core.nodes import EntityNode, EpisodicNode
-from core.search.search import SearchConfig, hybrid_search
-from core.search.search_utils import (
+from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.llm_client import LLMClient, LLMConfig, OpenAIClient
+from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.search.search import SearchConfig, hybrid_search
+from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
 )
-from core.utils import (
+from graphiti_core.utils import (
     build_episodic_edges,
     retrieve_episodes,
 )
-from core.utils.bulk_utils import (
+from graphiti_core.utils.bulk_utils import (
     BulkEpisode,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
@@ -44,16 +44,16 @@ from core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
-from core.utils.maintenance.edge_operations import (
+from graphiti_core.utils.maintenance.edge_operations import (
     dedupe_extracted_edges,
     extract_edges,
 )
-from core.utils.maintenance.graph_data_operations import (
+from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     build_indices_and_constraints,
 )
-from core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
-from core.utils.maintenance.temporal_operations import (
+from graphiti_core.utils.maintenance.node_operations import dedupe_extracted_nodes, extract_nodes
+from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
     invalidate_edges,
     prepare_edges_for_invalidation,

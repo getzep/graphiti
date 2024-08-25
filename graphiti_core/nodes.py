@@ -24,7 +24,7 @@ from neo4j import AsyncDriver
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from core.llm_client.config import EMBEDDING_DIM
+from graphiti_core.llm_client.config import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
 
