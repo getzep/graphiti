@@ -20,18 +20,20 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from core import Graphiti
-from core.utils.bulk_utils import BulkEpisode
-from core.utils.maintenance.graph_data_operations import clear_data
 from dotenv import load_dotenv
 
 from examples.hamilton.hamilton_parser import get_hamilton_messages
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import AnthropicClient
+from graphiti_core.nodes import EpisodeType
+from graphiti_core.utils.bulk_utils import RawEpisode
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
-neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
-neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
+neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
+neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
 
 
 def setup_logging():
@@ -44,7 +46,7 @@ def setup_logging():
     console_handler.setLevel(logging.INFO)
 
     # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
 
     # Add formatter to console handler
     console_handler.setFormatter(formatter)
@@ -57,23 +59,24 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    llm_client = AnthropicClient()
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
     messages = get_hamilton_messages()
-    print(messages)
-    print(len(messages))
-    now = datetime.now()
-    episodes: list[BulkEpisode] = [
-        BulkEpisode(
+
+    await clear_data(client.driver)
+    await client.build_indices_and_constraints()
+
+    episodes: list[RawEpisode] = [
+        RawEpisode(
             name=f'Message {i}',
             content=f'{speaker}: {speech}',
             source_description='Hamilton Transcript',
-            episode_type='string',
-            reference_time=now + timedelta(seconds=i * 10),
+            source=EpisodeType.message,
+            reference_time=datetime.now() + timedelta(seconds=i * 10),
         )
         for i, (speaker, speech) in enumerate(messages[:50])
     ]
-    await clear_data(client.driver)
-    await client.build_indices_and_constraints()
+
     await client.add_episode_bulk(episodes)
 
 

@@ -57,8 +57,8 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    messages = get_romeo_messages()
-    now = datetime.now()
+    get_romeo_messages()
+    datetime.now()
     llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
 
