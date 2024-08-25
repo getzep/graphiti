@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_message_nodes(
-        llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -48,8 +48,8 @@ async def extract_message_nodes(
 
 
 async def extract_json_nodes(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
+    llm_client: LLMClient,
+    episode: EpisodicNode,
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -66,9 +66,9 @@ async def extract_json_nodes(
 
 
 async def extract_nodes(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
-        previous_episodes: list[EpisodicNode],
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
@@ -95,9 +95,9 @@ async def extract_nodes(
 
 
 async def dedupe_extracted_nodes(
-        llm_client: LLMClient,
-        extracted_nodes: list[EntityNode],
-        existing_nodes: list[EntityNode],
+    llm_client: LLMClient,
+    extracted_nodes: list[EntityNode],
+    existing_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str], list[EntityNode]]:
     start = time()
 
@@ -158,8 +158,8 @@ async def dedupe_extracted_nodes(
 
 
 async def dedupe_node_list(
-        llm_client: LLMClient,
-        nodes: list[EntityNode],
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 

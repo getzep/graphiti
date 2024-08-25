@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from core.edges import EntityEdge
 from core.llm_client import LLMConfig, OpenAIClient
-from core.nodes import EntityNode, EpisodicNode, EpisodeType
+from core.nodes import EntityNode, EpisodeType, EpisodicNode
 from core.utils.maintenance.temporal_operations import (
     invalidate_edges,
 )
