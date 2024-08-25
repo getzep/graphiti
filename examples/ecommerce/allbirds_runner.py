@@ -59,6 +59,7 @@ async def main(use_bulk: bool = True):
                 reference_time=datetime.now(),
                 source_description='Allbirds products',
             )
+        return
 
     episodes: list[RawEpisode] = [
         RawEpisode(
