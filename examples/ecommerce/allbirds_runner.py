@@ -47,8 +47,8 @@ async def main(use_bulk: bool = True):
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    products = json.load(open('allbirds_products.json'))['products']
-    logger.info(products)
+    with open('allbirds_products.json') as products_file:
+        products = json.load(products_file)['products']
 
     if not use_bulk:
         for i, product in enumerate(products):
