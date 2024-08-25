@@ -9,6 +9,10 @@ authors = [
 readme = "README.md"
 license = "Apache-2.0"
 
+packages = [
+    { include = "core", from = "." }
+]
+
 [tool.poetry.dependencies]
 python = "^3.10"
 pydantic = "^2.8.2"
