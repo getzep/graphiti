@@ -21,17 +21,17 @@ from time import time
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
-from core.edges import EntityEdge
-from core.llm_client.config import EMBEDDING_DIM
-from core.nodes import EntityNode, EpisodicNode
-from core.search.search_utils import (
+from graphiti_core.edges import EntityEdge
+from graphiti_core.llm_client.config import EMBEDDING_DIM
+from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
     get_mentioned_nodes,
     rrf,
 )
-from core.utils import retrieve_episodes
-from core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
+from graphiti_core.utils import retrieve_episodes
+from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 
 logger = logging.getLogger(__name__)
 

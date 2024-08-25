@@ -22,7 +22,7 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) ./core --show-column-numbers --show-error-codes --pretty 
+	$(MYPY) ./graphiti_core --show-column-numbers --show-error-codes --pretty 
 
 # Run tests
 test:

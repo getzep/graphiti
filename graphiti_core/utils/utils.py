@@ -16,8 +16,8 @@ limitations under the License.
 
 import logging
 
-from core.edges import EpisodicEdge
-from core.nodes import EntityNode, EpisodicNode
+from graphiti_core.edges import EpisodicEdge
+from graphiti_core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 

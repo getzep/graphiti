@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from openai import OpenAI
 
-from core.edges import EntityEdge, EpisodicEdge
-from core.graphiti import Graphiti
-from core.nodes import EntityNode, EpisodicNode
+from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.graphiti import Graphiti
+from graphiti_core.nodes import EntityNode, EpisodicNode
 
 pytestmark = pytest.mark.integration
 

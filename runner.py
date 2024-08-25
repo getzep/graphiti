@@ -6,8 +6,8 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from core import Graphiti
-from core.utils.maintenance.graph_data_operations import clear_data
+from graphiti_core import Graphiti
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
