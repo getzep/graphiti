@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import Any
 
 from core.llm_client import LLMClient
 from core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 async def extract_message_nodes(
     llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
@@ -49,7 +50,7 @@ async def extract_message_nodes(
 async def extract_json_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
@@ -70,7 +71,7 @@ async def extract_nodes(
     previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
     start = time()
-    extracted_node_data: list[dict[str, str]] = []
+    extracted_node_data: list[dict[str, Any]] = []
     if episode.source == EpisodeType.message:
         extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
     elif episode.source == EpisodeType.json:
