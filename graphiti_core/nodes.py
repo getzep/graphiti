@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from enum import Enum
 from time import time
 from uuid import uuid4
 
@@ -27,6 +28,20 @@ from pydantic import BaseModel, Field
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
+
+
+class EpisodeType(Enum):
+    message = 'message'
+    json = 'json'
+
+    @staticmethod
+    def from_str(episode_type: str):
+        if episode_type == 'message':
+            return EpisodeType.message
+        if episode_type == 'json':
+            return EpisodeType.json
+        logger.error(f'Episode type: {episode_type} not implemented')
+        raise NotImplementedError
 
 
 class Node(BaseModel, ABC):
@@ -48,7 +63,7 @@ class Node(BaseModel, ABC):
 
 
 class EpisodicNode(Node):
-    source: str = Field(description='source type')
+    source: EpisodeType = Field(description='source type')
     source_description: str = Field(description='description of the data source')
     content: str = Field(description='raw episode data')
     valid_at: datetime = Field(
@@ -73,7 +88,7 @@ class EpisodicNode(Node):
             entity_edges=self.entity_edges,
             created_at=self.created_at,
             valid_at=self.valid_at,
-            source=self.source,
+            source=self.source.value,
             _database='neo4j',
         )
 
@@ -96,7 +111,7 @@ class EntityNode(Node):
         embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
         self.name_embedding = embedding[:EMBEDDING_DIM]
         end = time()
-        logger.info(f'embedded {text} in {end-start} ms')
+        logger.info(f'embedded {text} in {end - start} ms')
 
         return embedding
 
