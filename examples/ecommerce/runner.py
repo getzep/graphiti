@@ -24,7 +24,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import AnthropicClient, LLMConfig
+from graphiti_core.llm_client import AnthropicClient, LLMConfig, GroqClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -82,17 +82,18 @@ async def add_messages(client: Graphiti):
 
 async def main():
     setup_logging()
-    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    # llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
+    llm_client = GroqClient(LLMConfig(api_key=os.environ.get('GROQ_API_KEY')))
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
 
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    await ingest_products_data()
+    await ingest_products_data(client)
     await add_messages(client)
 
 
-async def ingest_products_data():
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+async def ingest_products_data(client: Graphiti):
+    # client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     json_file_path = os.path.join(script_dir, 'allbirds_products.json')
 
