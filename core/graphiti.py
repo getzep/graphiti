@@ -26,7 +26,7 @@ from neo4j import AsyncGraphDatabase
 
 from core.edges import EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient, LLMConfig, OpenAIClient
-from core.nodes import EntityNode, EpisodicNode
+from core.nodes import EntityNode, EpisodeType, EpisodicNode
 from core.search.search import SearchConfig, hybrid_search
 from core.search.search_utils import (
     get_relevant_edges,
@@ -37,7 +37,7 @@ from core.utils import (
     retrieve_episodes,
 )
 from core.utils.bulk_utils import (
-    BulkEpisode,
+    RawEpisode,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_nodes_and_edges_bulk,
@@ -99,6 +99,7 @@ class Graphiti:
         episode_body: str,
         source_description: str,
         reference_time: datetime,
+        source: EpisodeType = EpisodeType.message,
         success_callback: Callable | None = None,
         error_callback: Callable | None = None,
     ):
@@ -116,7 +117,7 @@ class Graphiti:
             episode = EpisodicNode(
                 name=name,
                 labels=[],
-                source='messages',
+                source=source,
                 content=episode_body,
                 source_description=source_description,
                 created_at=now,
@@ -250,7 +251,7 @@ class Graphiti:
             await asyncio.gather(*[edge.save(self.driver) for edge in entity_edges])
 
             end = time()
-            logger.info(f'Completed add_episode in {(end-start) * 1000} ms')
+            logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
             # for node in nodes:
             #     if isinstance(node, EntityNode):
             #         await node.update_summary(self.driver)
@@ -264,7 +265,7 @@ class Graphiti:
 
     async def add_episode_bulk(
         self,
-        bulk_episodes: list[BulkEpisode],
+        bulk_episodes: list[RawEpisode],
     ):
         try:
             start = time()
@@ -275,7 +276,7 @@ class Graphiti:
                 EpisodicNode(
                     name=episode.name,
                     labels=[],
-                    source='messages',
+                    source=episode.source,
                     content=episode.content,
                     source_description=episode.source_description,
                     created_at=now,
@@ -334,7 +335,7 @@ class Graphiti:
             await asyncio.gather(*[edge.save(self.driver) for edge in edges])
 
             end = time()
-            logger.info(f'Completed add_episode_bulk in {(end-start) * 1000} ms')
+            logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
 
         except Exception as e:
             raise e

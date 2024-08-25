@@ -1,26 +1,11 @@
-"""
-Copyright 2024, Zep Software, Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
 import asyncio
+import json
 import logging
 import os
 import sys
+from datetime import datetime
 
 from dotenv import load_dotenv
-from transcript_parser import parse_podcast_messages
 
 from core import Graphiti
 from core.nodes import EpisodeType
@@ -32,6 +17,8 @@ load_dotenv()
 neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
 neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
 neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging():
@@ -60,30 +47,31 @@ async def main(use_bulk: bool = True):
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
-    messages = parse_podcast_messages()
+    products = json.load(open('allbirds_products.json'))['products']
+    logger.info(products)
 
     if not use_bulk:
-        for i, message in enumerate(messages[3:14]):
+        for i, product in enumerate(products):
             await client.add_episode(
-                name=f'Message {i}',
-                episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
-                reference_time=message.actual_timestamp,
-                source_description='Podcast Transcript',
+                name=f'Product {i}',
+                episode_body=json.dumps(product),
+                source=EpisodeType.json,
+                reference_time=datetime.now(),
+                source_description='Allbirds products',
             )
 
     episodes: list[RawEpisode] = [
         RawEpisode(
-            name=f'Message {i}',
-            content=f'{message.speaker_name} ({message.role}): {message.content}',
-            source=EpisodeType.message,
-            source_description='Podcast Transcript',
-            episode_type='string',
-            reference_time=message.actual_timestamp,
+            name=f'Product {i}',
+            content=str(product),
+            source_description='Allbirds products',
+            source=EpisodeType.json,
+            reference_time=datetime.now(),
         )
-        for i, message in enumerate(messages[3:14])
+        for i, product in enumerate(products)
     ]
 
     await client.add_episode_bulk(episodes)
 
 
-asyncio.run(main(True))
+asyncio.run(main())

@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from core.edges import Edge, EntityEdge, EpisodicEdge
 from core.llm_client import LLMClient
-from core.nodes import EntityNode, EpisodicNode
+from core.nodes import EntityNode, EpisodeType, EpisodicNode
 from core.search.search_utils import get_relevant_edges, get_relevant_nodes
 from core.utils import retrieve_episodes
 from core.utils.maintenance.edge_operations import (
@@ -43,11 +43,11 @@ from core.utils.maintenance.node_operations import (
 CHUNK_SIZE = 15
 
 
-class BulkEpisode(BaseModel):
+class RawEpisode(BaseModel):
     name: str
     content: str
     source_description: str
-    episode_type: str
+    source: EpisodeType
     reference_time: datetime
 
 
