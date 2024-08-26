@@ -92,7 +92,7 @@ results = await graphiti.search('Who was the California Attorney General?')
 # Rerank search results based on graph distance
 # Provide a node UUID to prioritize results closer to that node in the graph.
 # Results are weighted by their proximity, with distant edges receiving lower scores.
-await client.search('Who was the California Attorney General?', node_uuid)
+await client.search('Who was the California Attorney General?', center_node_uuid)
 
 # Close the connection
 graphiti.close()
