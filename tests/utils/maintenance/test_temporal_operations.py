@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodicNode, EpisodeType
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
