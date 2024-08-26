@@ -58,9 +58,6 @@ class LLMClient(ABC):
         return hashlib.md5(key_str.encode()).hexdigest()
 
     async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
-        if not self.cache_enabled:
-            raise NotImplementedError('Cache is disabled')
-
         if self.cache_enabled:
             cache_key = self._get_cache_key(messages)
 
