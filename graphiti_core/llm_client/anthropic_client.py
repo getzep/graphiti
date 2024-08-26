@@ -36,7 +36,6 @@ class AnthropicClient(LLMClient):
             config = LLMConfig()
         super().__init__(config, cache)
         self.client = AsyncAnthropic(api_key=config.api_key)
-        self.model = config.model
 
     def get_embedder(self) -> typing.Any:
         openai_client = AsyncOpenAI()
