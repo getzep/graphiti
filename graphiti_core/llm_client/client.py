@@ -63,7 +63,7 @@ class LLMClient(ABC):
 
             cached_response = self.cache_dir.get(cache_key)
             if cached_response is not None:
-                logger.info(f'Cache hit for {cache_key}')
+                logger.debug(f'Cache hit for {cache_key}')
                 return cached_response
 
         response = await self._generate_response(messages)
