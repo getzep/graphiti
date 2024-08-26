@@ -1,38 +1,31 @@
-# graphiti: dynamic, temporally-aware knowledge graphs for LLM-powered agents
+# graphiti: Temporal Knowledge Graphs for LLM-powered Agents
 
 [![Lint](https://github.com/getzep/graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/lint.yml)
 [![Unit Tests](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml)
 [![MyPy Check](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/graphiti)
 
-graphiti builds dynamic, temporally-aware knowledge graphs that can represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
+graphiti builds dynamic, temporally-aware knowledge graphs that represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
 
 TODO: Add video here.
 
-With graphiti, you can build agentic applications that:
+With graphiti, you can build LLM applications such as:
 
-TODO
+- assistants that learn from user interactions, using the graph to fuse knowledge about the user with dynamic, structured data from business applications such as CRMs, billing systems, and more.
+- agents that autonomously carry out complex tasks with data sourced from multiple dynamic sources, utilizing the graph to reason with changes to environment state.
 
-- memory (which is what Zep, the creators of graphiti, use it for)
-- market / competitive research - reviews, product catalogs, and pricing data
-- recommendations - user preferences and product changes
-- hr - employee reviews, changes in org structure, and org planning
-- Healthcare Predictive Analytics:
-  An AI health assistant that combines electronic health records, wearable data, and lifestyle information to predict health risks and suggest personalized interventions, leveraging Graphiti's temporal analysis to track health trends over a patient's lifetime.
-- Adaptive Learning Systems:
-  An intelligent tutoring agent that integrates course materials, student performance data, and learning style assessments to create personalized learning paths, using Graphiti to model the evolution of a student's knowledge and skills over time.
-- Dynamic Supply Chain Management:
-  A supply chain optimization agent that fuses real-time inventory levels, shipping data, weather reports, and geopolitical news to anticipate disruptions and automatically adjust logistics strategies, utilizing Graphiti's temporal knowledge graph to model complex, evolving supply networks.
-- Intelligent Market Analysis Agent:
-  A financial strategy assistant that synthesizes company financial reports, economic indicators, news articles, and social media sentiment to provide real-time market insights and investment recommendations, employing Graphiti to track and correlate market trends across various time scales.
-- Evolving Regulatory Compliance Assistants:
-  A proactive compliance agent that integrates legislative updates, court rulings, internal policy documents, and industry best practices to ensure ongoing regulatory adherence, using Graphiti to maintain an up-to-date model of the regulatory landscape and its impact on business operations.
+There are a broad set of Assistant and Agent applications across sales, customer service, health, finance, and more. graphiti is designed to support their long-term recall of state and their reasoning with state changes.
 
-Unlike many other knowledge graph libraries, graphiti is:
+## Why build yet another graph library?
 
-- purpose built for data that changes over time. It intelligently maintains the graph, adding additional edges between nodes as "facts", represented by edges, are falsified. Episodes represent a single ingestion event, with nodes for each episode related to each other.
-- designed for agentic applications. Searching a graph with graphiti returns natural language “facts”, not just triples. More below. Summaries are also generated …
-- fast, with search results in <100ms (bounded by embedding model latency) and building a X node graph in less than Y (again, bounded by LLM inference speed).
+Unlike many other knowledge graph libraries, graphiti is purpose built for dynamic data and agentic use:
+
+- New nodes and edges are evaluated against the current graph, with the new entities and current graph revised to reflect the new context.
+- Facts, a natural language representation of the relationship between a source and destination node, are generated when graph-building and associated with edges.
+- Dates or partial date information is extracted from input datas and edge `valid_at` / `invalid_at` fields updated to reflect this state.
+- Graphiti offers semantic, BM25, and graph search, and various approaches to fuse results from multiple search modes.
+- Search is designed to be fast < 100ms, and bounded by the latency of your embedding service's API.
+- graphiti is careful to reuse an existing schema, avoiding an explosion in node and edge types.
 
 ## graphiti and Zep's Memory Layer for LLM Apps
 
