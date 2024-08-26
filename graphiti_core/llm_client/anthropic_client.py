@@ -27,19 +27,21 @@ from .config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODEL = 'claude-3-5-sonnet-20240620'
+
 
 class AnthropicClient(LLMClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(self, config: LLMConfig | None = None, cache: bool = False):
         if config is None:
             config = LLMConfig()
+        super().__init__(config, cache)
         self.client = AsyncAnthropic(api_key=config.api_key)
-        self.model = config.model
 
     def get_embedder(self) -> typing.Any:
         openai_client = AsyncOpenAI()
         return openai_client.embeddings
 
-    async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         system_message = messages[0]
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]] + [
             {'role': 'assistant', 'content': '{'}
@@ -49,9 +51,10 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system='Only include JSON in the response. Do not include any additional text or explanation of the content.\n'
                 + system_message.content,
-                max_tokens=4096,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
                 messages=user_messages,  # type: ignore
-                model='claude-3-5-sonnet-20240620',
+                model=self.model or DEFAULT_MODEL,
             )
 
             return json.loads('{' + result.content[0].text)  # type: ignore

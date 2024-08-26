@@ -87,7 +87,19 @@ async def retrieve_episodes(
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
 ) -> list[EpisodicNode]:
-    """Retrieve the last n episodic nodes from the graph"""
+    """
+    Retrieve the last n episodic nodes from the graph.
+
+    Args:
+        driver (AsyncDriver): The Neo4j driver instance.
+        reference_time (datetime): The reference time to filter episodes. Only episodes with a valid_at timestamp
+                                   less than or equal to this reference_time will be retrieved. This allows for
+                                   querying the graph's state at a specific point in time.
+        last_n (int, optional): The number of most recent episodes to retrieve, relative to the reference_time.
+
+    Returns:
+        list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
+    """
     result = await driver.execute_query(
         """
         MATCH (e:Episodic) WHERE e.valid_at <= $reference_time

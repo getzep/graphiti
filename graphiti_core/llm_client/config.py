@@ -15,6 +15,8 @@ limitations under the License.
 """
 
 EMBEDDING_DIM = 1024
+DEFAULT_MAX_TOKENS = 4096
+DEFAULT_TEMPERATURE = 0
 
 
 class LLMConfig:
@@ -29,8 +31,10 @@ class LLMConfig:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = 'gpt-4o-mini',
-        base_url: str = 'https://api.openai.com/v1',
+        model: str | None = None,
+        base_url: str | None = None,
+        temperature: float = DEFAULT_TEMPERATURE,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
         """
         Initialize the LLMConfig with the provided parameters.
@@ -50,3 +54,5 @@ class LLMConfig:
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens

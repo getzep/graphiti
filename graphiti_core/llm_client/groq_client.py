@@ -28,36 +28,37 @@ from .config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODEL = 'llama-3.1-70b-versatile'
+
 
 class GroqClient(LLMClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(self, config: LLMConfig | None = None, cache: bool = False):
         if config is None:
             config = LLMConfig()
+        super().__init__(config, cache)
         self.client = AsyncGroq(api_key=config.api_key)
-        self.model = config.model
 
     def get_embedder(self) -> typing.Any:
         openai_client = AsyncOpenAI()
         return openai_client.embeddings
 
-    async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
-        openai_messages: list[ChatCompletionMessageParam] = []
+    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+        msgs: list[ChatCompletionMessageParam] = []
         for m in messages:
             if m.role == 'user':
-                openai_messages.append({'role': 'user', 'content': m.content})
+                msgs.append({'role': 'user', 'content': m.content})
             elif m.role == 'system':
-                openai_messages.append({'role': 'system', 'content': m.content})
+                msgs.append({'role': 'system', 'content': m.content})
         try:
             response = await self.client.chat.completions.create(
-                model='llama-3.1-70b-versatile',
-                messages=openai_messages,
-                temperature=0.0,
-                max_tokens=4096,
+                model=self.model or DEFAULT_MODEL,
+                messages=msgs,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
         except Exception as e:
-            print(openai_messages)
             logger.error(f'Error in generating LLM response: {e}')
             raise

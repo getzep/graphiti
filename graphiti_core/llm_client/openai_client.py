@@ -27,18 +27,22 @@ from .config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODEL = 'gpt-4o-2024-08-06'
+
 
 class OpenAIClient(LLMClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(self, config: LLMConfig | None = None, cache: bool = False):
         if config is None:
             config = LLMConfig()
+
+        super().__init__(config, cache)
+
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
-        self.model = config.model
 
     def get_embedder(self) -> typing.Any:
         return self.client.embeddings
 
-    async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
             if m.role == 'user':
@@ -47,10 +51,10 @@ class OpenAIClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
             response = await self.client.chat.completions.create(
-                model=self.model,
+                model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
-                temperature=0,
-                max_tokens=4096,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
