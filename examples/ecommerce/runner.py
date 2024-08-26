@@ -20,20 +20,20 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import AnthropicClient, LLMConfig, GroqClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
-neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
-neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
+neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
+neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
 
 
 def setup_logging():
@@ -58,13 +58,16 @@ def setup_logging():
 
 
 shoe_conversation = [
-    "SalesShoeBot: Hi, I'm the Sales Shoe Bot focused on selling Allbirds shoes. How can I help you today?",
+    "SalesBot: Hi, I'm Allbirds Assistant! How can I help you today?",
     "John: Hi, I'm looking for a new pair of shoes.",
-    'SalesShoeBot: Of course! What kinde of material are you looking for?',
+    'SalesBot: Of course! What kinde of material are you looking for?',
     "John: I'm looking for shoes made out of wool",
-    "SalesShoeBot: We have just what you are looking for, how do you like our Men's SuperLight Wool Runners - Dark Grey (Medium Grey Sole)? They use the SuperLight Foam technology.",
-    'John: Oh, actually I bought those 2 months ago, but unfortunately found out that I was allergic to wool. I think I will pass on those, maybe there is something with a retro look that you could suggest?',
-    "SalesShoeBot: Im sorry to hear that! Would you be interested in Men's Couriers - (Blizzard Sole) model? We have them in Natural Black and Basin Blue colors",
+    """SalesBot: We have just what you are looking for, how do you like our Men's SuperLight Wool Runners 
+    - Dark Grey (Medium Grey Sole)? They use the SuperLight Foam technology.""",
+    """John: Oh, actually I bought those 2 months ago, but unfortunately found out that I was allergic to wool. 
+    I think I will pass on those, maybe there is something with a retro look that you could suggest?""",
+    """SalesBot: Im sorry to hear that! Would you be interested in Men's Couriers - 
+    (Blizzard Sole) model? We have them in Natural Black and Basin Blue colors""",
     'John: Oh that is perfect, I LOVE the Natural Black color!. I will take those.',
 ]
 
@@ -82,9 +85,7 @@ async def add_messages(client: Graphiti):
 
 async def main():
     setup_logging()
-    # llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
-    llm_client = GroqClient(LLMConfig(api_key=os.environ.get('GROQ_API_KEY')))
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
@@ -93,9 +94,8 @@ async def main():
 
 
 async def ingest_products_data(client: Graphiti):
-    # client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    json_file_path = os.path.join(script_dir, 'allbirds_products.json')
+    script_dir = Path(__file__).parent
+    json_file_path = script_dir / 'allbirds_products.json'
 
     with open(json_file_path) as file:
         products = json.load(file)['products']

@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 class AnthropicClient(LLMClient):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig | None = None):
+        if config is None:
+            config = LLMConfig()
         self.client = AsyncAnthropic(api_key=config.api_key)
         self.model = config.model
 
@@ -39,18 +41,20 @@ class AnthropicClient(LLMClient):
 
     async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         system_message = messages[0]
-        user_messages = messages[1:] + [Message(role='assistant', content='{')]
+        user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]] + [
+            {'role': 'assistant', 'content': '{'}
+        ]
 
         try:
-            message = await self.client.messages.create(
-                system='Only include JSON in the response Do not include any additional text or explanation of the content. Just JSON.\n'
+            result = await self.client.messages.create(
+                system='Only include JSON in the response. Do not include any additional text or explanation of the content.\n'
                 + system_message.content,
-                max_tokens=4000,
-                messages=[{'role': m.role, 'content': m.content} for m in user_messages],
+                max_tokens=4096,
+                messages=user_messages,  # type: ignore
                 model='claude-3-5-sonnet-20240620',
             )
 
-            return json.loads('{' + message.content[0].text)
+            return json.loads('{' + result.content[0].text)  # type: ignore
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise

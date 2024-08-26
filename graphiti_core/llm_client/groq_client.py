@@ -19,9 +19,8 @@ import logging
 import typing
 
 from groq import AsyncGroq
+from groq.types.chat import ChatCompletionMessageParam
 from openai import AsyncOpenAI
-
-from openai.types.chat import ChatCompletionMessageParam
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -31,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 class GroqClient(LLMClient):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig | None = None):
+        if config is None:
+            config = LLMConfig()
         self.client = AsyncGroq(api_key=config.api_key)
         self.model = config.model
 
@@ -48,11 +49,11 @@ class GroqClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
             response = await self.client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model='llama-3.1-70b-versatile',
                 messages=openai_messages,
-                temperature=0,
+                temperature=0.0,
                 max_tokens=4096,
-                response_format={"type": "json_object"},
+                response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)

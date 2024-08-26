@@ -20,12 +20,12 @@ import os
 import sys
 from datetime import datetime
 
-from core import Graphiti
-from core.llm_client.anthropic_client import AnthropicClient
-from core.llm_client.config import LLMConfig
 from dotenv import load_dotenv
 
-from examples.romeo.parse import get_romeo_messages
+from examples.romeo_juliet.parse import get_romeo_messages
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
+from graphiti_core.llm_client.config import LLMConfig
 
 load_dotenv()
 
@@ -57,8 +57,8 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    messages = get_romeo_messages()
-    now = datetime.now()
+    get_romeo_messages()
+    datetime.now()
     llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
 

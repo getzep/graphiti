@@ -35,6 +35,8 @@ ruff = "^0.6.2"
 pydantic = "^2.8.2"
 mypy = "^1.11.1"
 groq = "^0.9.0"
+ipykernel = "^6.29.5"
+jupyterlab = "^4.2.4"
 
 [build-system]
 requires = ["poetry-core"]
