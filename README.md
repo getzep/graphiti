@@ -125,10 +125,13 @@ And the key there vs fact triplets is that it accomplishes 1 almost as well as a
 
 ## Status and Roadmap
 
+wip, but endavour to not break API.
+
 graphiti is under active development. Areas we're actively working on:
 
 - performance and scalability
 - search improvements
+- node CRUD
 
 TODO: expand on the above. Include ROADMAP
 
