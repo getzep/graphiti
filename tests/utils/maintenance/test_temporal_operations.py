@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodicNode, EpisodeType
 from graphiti_core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
@@ -153,7 +153,7 @@ def test_prepare_invalidation_context():
         content='This is the current episode content.',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test episode for unit testing',
     )
     previous_episodes = [
@@ -170,7 +170,7 @@ def test_prepare_invalidation_context():
             content='This is the content of previous episode 2.',
             created_at=now - timedelta(days=2),
             valid_at=now - timedelta(days=2),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode 2 for unit testing',
         ),
     ]
@@ -215,7 +215,7 @@ def test_prepare_invalidation_context_empty_input():
         content='Empty episode',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test empty episode for unit testing',
     )
     result = prepare_invalidation_context([], [], current_episode, [])
@@ -267,7 +267,7 @@ def test_prepare_invalidation_context_sorting():
         content='This is the current episode content.',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test episode for unit testing',
     )
     previous_episodes = [
@@ -276,7 +276,7 @@ def test_prepare_invalidation_context_sorting():
             content='This is the content of a previous episode.',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode for unit testing',
         ),
     ]
