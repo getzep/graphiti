@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta
 
 import pytest
+import unittest
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.maintenance.temporal_operations import (
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
+    extract_date_strings_from_edge,
 )
 
 
@@ -291,6 +293,43 @@ def test_prepare_invalidation_context_sorting():
     assert result['current_episode'] == current_episode.content
     assert len(result['previous_episodes']) == 1
     assert result['previous_episodes'][0] == previous_episodes[0].content
+
+
+class TestExtractDateStringsFromEdge(unittest.TestCase):
+    def generate_entity_edge(self, valid_at, invalid_at):
+        return EntityEdge(
+            source_node_uuid='1',
+            target_node_uuid='2',
+            name='KNOWS',
+            fact='Node1 knows Node2',
+            created_at=datetime.now(),
+            valid_at=valid_at,
+            invalid_at=invalid_at,
+        )
+
+    def test_both_dates_present(self):
+        edge = self.generate_entity_edge(datetime(2024, 1, 1, 12, 0), datetime(2024, 1, 2, 12, 0))
+        result = extract_date_strings_from_edge(edge)
+        expected = 'Start Date: 2024-01-01T12:00:00 (End Date: 2024-01-02T12:00:00)'
+        self.assertEqual(result, expected)
+
+    def test_only_valid_at_present(self):
+        edge = self.generate_entity_edge(datetime(2024, 1, 1, 12, 0), None)
+        result = extract_date_strings_from_edge(edge)
+        expected = 'Start Date: 2024-01-01T12:00:00'
+        self.assertEqual(result, expected)
+
+    def test_only_invalid_at_present(self):
+        edge = self.generate_entity_edge(None, datetime(2024, 1, 2, 12, 0))
+        result = extract_date_strings_from_edge(edge)
+        expected = ' (End Date: 2024-01-02T12:00:00)'
+        self.assertEqual(result, expected)
+
+    def test_no_dates_present(self):
+        edge = self.generate_entity_edge(None, None)
+        result = extract_date_strings_from_edge(edge)
+        expected = ''
+        self.assertEqual(result, expected)
 
 
 # Run the tests
