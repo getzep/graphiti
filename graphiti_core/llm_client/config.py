@@ -31,8 +31,8 @@ class LLMConfig:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = 'gpt-4o-mini',
-        base_url: str = 'https://api.openai.com/v1',
+        model: str | None = None,
+        base_url: str | None = None,
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
