@@ -344,3 +344,46 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
     sorted_uuids = [term[0] for term in scored_uuids]
 
     return sorted_uuids
+
+
+def node_distance_reranker(
+    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+) -> list[str]:
+    scores: dict[str, int] = defaultdict(int)
+    for result in results:
+        for i, uuid in enumerate(result):
+            # Find shortest paths
+            records, _, _ = driver.execute_query(
+                """
+            MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity) YIELD source, target
+            MATCH (center:Entity {uuid: $center_uuid} YIELD center
+            CALL gds.graph.project(
+              'shortest_path_source',
+              source,
+              center
+            ) YIELD source_total_cost
+            CALL gds.graph.project(
+              'shortest_path_target',
+              target,
+              center
+            ) YIELD target_total_cost
+            RETURN min(source_total_cost, target_total_cost) AS score
+            """,
+                edge_uuid=uuid,
+                center_uuid=center_node_uuid,
+            )
+
+            distance = 0.01
+
+            for record in records:
+                if record['score'] > distance:
+                    distance = record['score']
+
+            scores[uuid] += 1 / distance
+
+    scored_uuids = [term for term in scores.items()]
+    scored_uuids.sort(reverse=True, key=lambda term: term[1])
+
+    sorted_uuids = [term[0] for term in scored_uuids]
+
+    return sorted_uuids
