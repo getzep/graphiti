@@ -26,7 +26,7 @@ from neo4j import AsyncGraphDatabase
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.search.search import SearchConfig, hybrid_search
+from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
 from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
@@ -515,7 +515,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def search(self, query: str, num_results=10):
+    async def search(self, query: str, center_node_uuid: str | None = None, num_results=10):
         """
         Perform a hybrid search on the knowledge graph.
 
@@ -526,6 +526,8 @@ class Graphiti:
         ----------
         query : str
             The search query string.
+        center_node_uuid: str, optional
+            Facts will be reranked based on proximity to this node
         num_results : int, optional
             The maximum number of results to return. Defaults to 10.
 
@@ -543,7 +545,14 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
-        search_config = SearchConfig(num_episodes=0, num_results=num_results)
+        reranker = Reranker.rrf if center_node_uuid is None else Reranker.node_distance
+        search_config = SearchConfig(
+            num_episodes=0,
+            num_edges=num_results,
+            num_nodes=0,
+            search_methods=[SearchMethod.bm25, SearchMethod.cosine_similarity],
+            reranker=reranker,
+        )
         edges = (
             await hybrid_search(
                 self.driver,
@@ -551,6 +560,7 @@ class Graphiti:
                 query,
                 datetime.now(),
                 search_config,
+                center_node_uuid,
             )
         ).edges
 
@@ -558,7 +568,13 @@ class Graphiti:
 
         return facts
 
-    async def _search(self, query: str, timestamp: datetime, config: SearchConfig):
+    async def _search(
+        self,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
+    ):
         return await hybrid_search(
-            self.driver, self.llm_client.get_embedder(), query, timestamp, config
+            self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )

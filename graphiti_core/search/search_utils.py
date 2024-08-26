@@ -333,7 +333,7 @@ async def get_relevant_edges(
 
 # takes in a list of rankings of uuids
 def rrf(results: list[list[str]], rank_const=1) -> list[str]:
-    scores: dict[str, int] = defaultdict(int)
+    scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
             scores[uuid] += 1 / (i + rank_const)
@@ -342,5 +342,45 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
     scored_uuids.sort(reverse=True, key=lambda term: term[1])
 
     sorted_uuids = [term[0] for term in scored_uuids]
+
+    return sorted_uuids
+
+
+async def node_distance_reranker(
+    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+) -> list[str]:
+    # use rrf as a preliminary ranker
+    sorted_uuids = rrf(results)
+    scores: dict[str, float] = {}
+
+    for uuid in sorted_uuids:
+        # Find shortest path to center node
+        records, _, _ = await driver.execute_query(
+            """  
+        MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity)
+        MATCH p = SHORTEST 1 (center:Entity)-[:RELATES_TO]-+(n:Entity)
+        WHERE center.uuid = $center_uuid AND n.uuid IN [source.uuid, target.uuid]
+        RETURN min(length(p)) AS score, source.uuid AS source_uuid, target.uuid AS target_uuid
+        """,
+            edge_uuid=uuid,
+            center_uuid=center_node_uuid,
+        )
+        distance = 0.01
+
+        for record in records:
+            if (
+                record['source_uuid'] == center_node_uuid
+                or record['target_uuid'] == center_node_uuid
+            ):
+                continue
+            distance = record['score']
+
+        if uuid in scores:
+            scores[uuid] = min(1 / distance, scores[uuid])
+        else:
+            scores[uuid] = 1 / distance
+
+    # rerank on shortest distance
+    sorted_uuids.sort(reverse=True, key=lambda cur_uuid: scores[cur_uuid])
 
     return sorted_uuids
