@@ -534,7 +534,7 @@ class Graphiti:
         Returns
         -------
         list
-            A list of facts (strings) that are relevant to the search query.
+            A list of EntityEdge objects that are relevant to the search query.
 
         Notes
         -----
@@ -564,9 +564,7 @@ class Graphiti:
             )
         ).edges
 
-        facts = [edge.fact for edge in edges]
-
-        return facts
+        return edges
 
     async def _search(
         self,
