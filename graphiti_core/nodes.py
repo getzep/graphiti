@@ -31,6 +31,23 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodeType(Enum):
+    """
+    Enumeration of different types of episodes that can be processed.
+
+    This enum defines the various sources or formats of episodes that the system
+    can handle. It's used to categorize and potentially handle different types
+    of input data differently.
+
+    Attributes:
+    -----------
+    message : str
+        Represents a standard message-type episode. The content for this type
+        should be formatted as "actor: content". For example, "user: Hello, how are you?"
+        or "assistant: I'm doing well, thank you for asking."
+    json : str
+        Represents an episode containing a JSON string object with structured data.
+    """
+
     message = 'message'
     json = 'json'
 
