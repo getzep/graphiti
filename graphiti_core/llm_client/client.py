@@ -88,15 +88,7 @@ class LLMClient(ABC):
                 logger.debug(f'Cache hit for {cache_key}')
                 return cached_response
 
-        try:
-            response = await self._generate_response_with_retry(messages)
-        except httpx.HTTPStatusError as e:
-            error_type = 'server' if 500 <= e.response.status_code < 600 else 'client'
-            logger.error(f'Failed to generate response due to {error_type} error: {str(e)}')
-            raise
-        except Exception as e:
-            logger.error(f'Failed to generate response due to unexpected error: {str(e)}')
-            raise
+        response = await self._generate_response_with_retry(messages)
 
         if self.cache_enabled:
             self.cache_dir.set(cache_key, response)
