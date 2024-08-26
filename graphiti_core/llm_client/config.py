@@ -28,9 +28,9 @@ class LLMConfig:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         model: str = 'gpt-4o-mini',
-        base_url: str = 'https://api.openai.com',
+        base_url: str = 'https://api.openai.com/v1',
     ):
         """
         Initialize the LLMConfig with the provided parameters.

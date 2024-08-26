@@ -91,6 +91,15 @@ async def invalidate_edges(
     return invalidated_edges
 
 
+def extract_date_strings_from_edge(edge: EntityEdge) -> str:
+    start = edge.valid_at
+    end = edge.invalid_at
+    date_string = f'Start Date: {start.isoformat()}' if start else ''
+    if end:
+        date_string += f' (End Date: {end.isoformat()})'
+    return date_string
+
+
 def prepare_invalidation_context(
     existing_edges: list[NodeEdgeNodeTriplet],
     new_edges: list[NodeEdgeNodeTriplet],
@@ -99,15 +108,15 @@ def prepare_invalidation_context(
 ) -> dict:
     return {
         'existing_edges': [
-            f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) ({edge.created_at.isoformat()})'
+            f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) {extract_date_strings_from_edge(edge)}'
             for source_node, edge, target_node in sorted(
-                existing_edges, key=lambda x: x[1].created_at, reverse=True
+                existing_edges, key=lambda x: (x[1].created_at), reverse=True
             )
         ],
         'new_edges': [
-            f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) ({edge.created_at.isoformat()})'
+            f'{edge.uuid} | {source_node.name} - {edge.name} - {target_node.name} (Fact: {edge.fact}) {extract_date_strings_from_edge(edge)}'
             for source_node, edge, target_node in sorted(
-                new_edges, key=lambda x: x[1].created_at, reverse=True
+                new_edges, key=lambda x: (x[1].created_at), reverse=True
             )
         ],
         'current_episode': current_episode.content,

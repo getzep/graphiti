@@ -36,9 +36,10 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-               Based on the provided existing edges and new edges with their timestamps, determine which existing relationships, if any, should be invalidated due to contradictions or updates in the new edges.
-                Only mark a relationship as invalid if there is clear evidence from new edges that the relationship is no longer true.
-                Do not invalidate relationships merely because they weren't mentioned in new edges. You may use the current episode and previous episodes as well as the facts of each edge to understand the context of the relationships.
+               Based on the provided existing edges and new edges with their timestamps, determine which relationships, if any, should be marked as expired due to contradictions or updates in the newer edges.
+               Use the start and end dates of the edges to determine which edges are to be marked expired.
+                Only mark a relationship as invalid if there is clear evidence from other edges that the relationship is no longer true.
+                Do not invalidate relationships merely because they weren't mentioned in the episodes. You may use the current episode and previous episodes as well as the facts of each edge to understand the context of the relationships.
 
                 Previous Episodes:
                 {context['previous_episodes']}
@@ -52,7 +53,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
                 New Edges:
                 {context['new_edges']}
 
-                Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (fact: EDGE_FACT), TIMESTAMP)"
+                Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (fact: EDGE_FACT), START_DATE (END_DATE, optional))"
 
                 For each existing edge that should be invalidated, respond with a JSON object in the following format:
                 {{

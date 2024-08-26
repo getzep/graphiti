@@ -1,10 +1,12 @@
+import unittest
 from datetime import datetime, timedelta
 
 import pytest
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.maintenance.temporal_operations import (
+    extract_date_strings_from_edge,
     prepare_edges_for_invalidation,
     prepare_invalidation_context,
 )
@@ -153,7 +155,7 @@ def test_prepare_invalidation_context():
         content='This is the current episode content.',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test episode for unit testing',
     )
     previous_episodes = [
@@ -162,7 +164,7 @@ def test_prepare_invalidation_context():
             content='This is the content of previous episode 1.',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode 1 for unit testing',
         ),
         EpisodicNode(
@@ -170,7 +172,7 @@ def test_prepare_invalidation_context():
             content='This is the content of previous episode 2.',
             created_at=now - timedelta(days=2),
             valid_at=now - timedelta(days=2),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode 2 for unit testing',
         ),
     ]
@@ -197,7 +199,7 @@ def test_prepare_invalidation_context():
     assert node1.name in existing_edge_str
     assert edge1.name in existing_edge_str
     assert node2.name in existing_edge_str
-    assert edge1.created_at.isoformat() in existing_edge_str
+    assert edge1.fact in existing_edge_str
 
     # Check the format of the new edge
     new_edge_str = result['new_edges'][0]
@@ -205,7 +207,7 @@ def test_prepare_invalidation_context():
     assert node2.name in new_edge_str
     assert edge2.name in new_edge_str
     assert node3.name in new_edge_str
-    assert edge2.created_at.isoformat() in new_edge_str
+    assert edge2.fact in new_edge_str
 
 
 def test_prepare_invalidation_context_empty_input():
@@ -215,7 +217,7 @@ def test_prepare_invalidation_context_empty_input():
         content='Empty episode',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test empty episode for unit testing',
     )
     result = prepare_invalidation_context([], [], current_episode, [])
@@ -267,7 +269,7 @@ def test_prepare_invalidation_context_sorting():
         content='This is the current episode content.',
         created_at=now,
         valid_at=now,
-        source='test',
+        source=EpisodeType.message,
         source_description='Test episode for unit testing',
     )
     previous_episodes = [
@@ -276,7 +278,7 @@ def test_prepare_invalidation_context_sorting():
             content='This is the content of a previous episode.',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode for unit testing',
         ),
     ]
@@ -291,6 +293,43 @@ def test_prepare_invalidation_context_sorting():
     assert result['current_episode'] == current_episode.content
     assert len(result['previous_episodes']) == 1
     assert result['previous_episodes'][0] == previous_episodes[0].content
+
+
+class TestExtractDateStringsFromEdge(unittest.TestCase):
+    def generate_entity_edge(self, valid_at, invalid_at):
+        return EntityEdge(
+            source_node_uuid='1',
+            target_node_uuid='2',
+            name='KNOWS',
+            fact='Node1 knows Node2',
+            created_at=datetime.now(),
+            valid_at=valid_at,
+            invalid_at=invalid_at,
+        )
+
+    def test_both_dates_present(self):
+        edge = self.generate_entity_edge(datetime(2024, 1, 1, 12, 0), datetime(2024, 1, 2, 12, 0))
+        result = extract_date_strings_from_edge(edge)
+        expected = 'Start Date: 2024-01-01T12:00:00 (End Date: 2024-01-02T12:00:00)'
+        self.assertEqual(result, expected)
+
+    def test_only_valid_at_present(self):
+        edge = self.generate_entity_edge(datetime(2024, 1, 1, 12, 0), None)
+        result = extract_date_strings_from_edge(edge)
+        expected = 'Start Date: 2024-01-01T12:00:00'
+        self.assertEqual(result, expected)
+
+    def test_only_invalid_at_present(self):
+        edge = self.generate_entity_edge(None, datetime(2024, 1, 2, 12, 0))
+        result = extract_date_strings_from_edge(edge)
+        expected = ' (End Date: 2024-01-02T12:00:00)'
+        self.assertEqual(result, expected)
+
+    def test_no_dates_present(self):
+        edge = self.generate_entity_edge(None, None)
+        result = extract_date_strings_from_edge(edge)
+        expected = ''
+        self.assertEqual(result, expected)
 
 
 # Run the tests
