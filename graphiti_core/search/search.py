@@ -63,12 +63,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    timestamp: datetime,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
@@ -122,7 +122,7 @@ async def hybrid_search(
             if center_node_uuid is None:
                 logger.exception('No center node provided for Node Distance reranker')
                 raise Exception('No center node provided for Node Distance reranker')
-            reranked_uuids = node_distance_reranker(driver, search_result_uuids, center_node_uuid)
+            reranked_uuids = await node_distance_reranker(driver, search_result_uuids, center_node_uuid)
 
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
         edges.extend(reranked_edges)

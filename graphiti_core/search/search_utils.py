@@ -101,7 +101,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
@@ -150,7 +150,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -184,7 +184,7 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -219,7 +219,7 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -270,8 +270,8 @@ async def edge_fulltext_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     start = time()
     relevant_nodes: list[EntityNode] = []
@@ -301,8 +301,8 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
+        edges: list[EntityEdge],
+        driver: AsyncDriver,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -346,40 +346,35 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
     return sorted_uuids
 
 
-def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+async def node_distance_reranker(
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
-    scores: dict[str, int] = defaultdict(int)
+    scores: dict[str, int] = {}
+
     for result in results:
         for i, uuid in enumerate(result):
             # Find shortest paths
-            records, _, _ = driver.execute_query(
-                """
-            MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity) YIELD source, target
-            MATCH (center:Entity {uuid: $center_uuid} YIELD center
-            CALL gds.graph.project(
-              'shortest_path_source',
-              source,
-              center
-            ) YIELD source_total_cost
-            CALL gds.graph.project(
-              'shortest_path_target',
-              target,
-              center
-            ) YIELD target_total_cost
-            RETURN min(source_total_cost, target_total_cost) AS score
+            records, _, _ = await driver.execute_query(
+                """  
+            MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity)
+            MATCH p = SHORTEST 1 (center:Entity)-[:RELATES_TO]-+(n:Entity)
+            WHERE center.uuid = $center_uuid AND n.uuid IN [source.uuid, target.uuid]
+            RETURN min(length(p)) AS score, source.uuid AS source_uuid, target.uuid AS target_uuid
             """,
                 edge_uuid=uuid,
                 center_uuid=center_node_uuid,
             )
-
             distance = 0.01
 
             for record in records:
-                if record['score'] > distance:
-                    distance = record['score']
+                if record["source_uuid"] == center_node_uuid or record["target_uuid"] == center_node_uuid:
+                    continue
+                distance = record["score"]
 
-            scores[uuid] += 1 / distance
+            if uuid in scores:
+                scores[uuid] = min(1 / distance, scores[uuid])
+            else:
+                scores[uuid] = 1 / distance
 
     scored_uuids = [term for term in scores.items()]
     scored_uuids.sort(reverse=True, key=lambda term: term[1])
