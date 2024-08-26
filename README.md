@@ -35,7 +35,15 @@ We're excited to open-source graphiti, believing its potential reaches far beyon
 
 ## Installation
 
-Requirements: Python 3.10+ annd neo4j >=5.21
+Requirements:
+
+- Python 3.10 or higher
+- Neo4j 5.21 or higher
+- OpenAI API key (for LLM inference and embedding)
+
+Optional:
+
+- Anthropic or Groq API key (for alternative LLM providers)
 
 > [!NOTE]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly interface to manage Neo4j instances and databases.
@@ -48,22 +56,43 @@ or
 
 ## Quick Start
 
+> [!NOTE]
+> Zep uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
+
+Support for Anthropic and Groq LLM inferences is available, too.
+
 ```python
-from graphiti import Graphiti
+from graphiti_core import Graphiti
+from graphiti_core.nodes import EpisodeType
+from datetime import datetime
 
 # Initialize Graphiti
 graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
 # Process an episode
-await graphiti.process_episode(
-    name="Example Episode",
-    episode_body="Alice met Bob at the coffee shop.",
-    source_description="User input",
+await graphiti.add_episode(
+    name="Freakonomics Radio 10",
+    episode_body="""Kamala Harris, before serving as Vice president and US Senator was a prosecutor,
+    the district attorney for San Francisco and the California Attorney General.""",
+    source=EpisodeType.text,
+    source_description="podcast",
     reference_time=datetime.now()
 )
 
-# Retrieve recent episodes
-recent_episodes = await graphiti.retrieve_episodes(last_n=5)
+# Retrieve the last 5 episodes created prior to now
+await graphiti.retrieve_episodes(datetime.now(), last_n=5)
+
+# Search the graph
+# Execute a hybrid search combining semantic similarity and BM25 retrieval
+# Results are combined and reranked using Reciprocal Rank Fusion
+results = await graphiti.search('Who was the California Attorney General?')
+
+> ["Kamala Harris was Attorney General of California"]
+
+# Rerank search results based on graph distance
+# Provide a node UUID to prioritize results closer to that node in the graph.
+# Results are weighted by their proximity, with distant edges receiving lower scores.
+await client.search('Who was the California Attorney General?', node_uuid)
 
 # Close the connection
 graphiti.close()
