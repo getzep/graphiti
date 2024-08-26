@@ -162,7 +162,7 @@ def test_prepare_invalidation_context():
             content='This is the content of previous episode 1.',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode 1 for unit testing',
         ),
         EpisodicNode(
