@@ -333,7 +333,7 @@ async def get_relevant_edges(
 
 # takes in a list of rankings of uuids
 def rrf(results: list[list[str]], rank_const=1) -> list[str]:
-    scores: dict[str, int] = defaultdict(int)
+    scores: dict[str, float] = defaultdict(int)
     for result in results:
         for i, uuid in enumerate(result):
             scores[uuid] += 1 / (i + rank_const)
@@ -349,7 +349,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 async def node_distance_reranker(
         driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
-    scores: dict[str, int] = {}
+    scores: dict[str, float] = {}
 
     for result in results:
         for uuid in result:
