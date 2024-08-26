@@ -212,16 +212,6 @@ class Graphiti:
 
             edges_to_save = existing_edges + deduped_edges
 
-            # for edge_to_extract_dates_from in edges_to_save:
-            #     valid_at, invalid_at, _ = await extract_edge_dates(
-            #         self.llm_client,
-            #         edge_to_extract_dates_from,
-            #         episode.valid_at,
-            #         episode,
-            #         previous_episodes,
-            #     )
-            #     edge_to_extract_dates_from.valid_at = valid_at
-            #     edge_to_extract_dates_from.invalid_at = invalid_at
             entity_edges.extend(edges_to_save)
 
             edge_touched_node_uuids = list(set(edge_touched_node_uuids))
