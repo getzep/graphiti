@@ -37,6 +37,7 @@ mypy = "^1.11.1"
 groq = "^0.9.0"
 ipykernel = "^6.29.5"
 jupyterlab = "^4.2.4"
+diskcache-stubs = "^5.6.3.6.20240818"
 
 [build-system]
 requires = ["poetry-core"]
