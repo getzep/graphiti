@@ -333,7 +333,7 @@ async def get_relevant_edges(
 
 # takes in a list of rankings of uuids
 def rrf(results: list[list[str]], rank_const=1) -> list[str]:
-    scores: dict[str, float] = defaultdict(int)
+    scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
             scores[uuid] += 1 / (i + rank_const)
