@@ -18,8 +18,8 @@ import json
 import logging
 import typing
 
+from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionMessageParam
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -28,34 +28,33 @@ from .config import LLMConfig
 logger = logging.getLogger(__name__)
 
 
-class OpenAIClient(LLMClient):
+class AnthropicClient(LLMClient):
     def __init__(self, config: LLMConfig | None = None):
         if config is None:
             config = LLMConfig()
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        self.client = AsyncAnthropic(api_key=config.api_key)
         self.model = config.model
 
     def get_embedder(self) -> typing.Any:
-        return self.client.embeddings
+        openai_client = AsyncOpenAI()
+        return openai_client.embeddings
 
     async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
-        openai_messages: list[ChatCompletionMessageParam] = []
-        for m in messages:
-            if m.role == 'user':
-                openai_messages.append({'role': 'user', 'content': m.content})
-            elif m.role == 'system':
-                openai_messages.append({'role': 'system', 'content': m.content})
+        system_message = messages[0]
+        user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]] + [
+            {'role': 'assistant', 'content': '{'}
+        ]
+
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=openai_messages,
-                temperature=0,
+            result = await self.client.messages.create(
+                system='Only include JSON in the response. Do not include any additional text or explanation of the content.\n'
+                + system_message.content,
                 max_tokens=4096,
-                response_format={'type': 'json_object'},
+                messages=user_messages,  # type: ignore
+                model='claude-3-5-sonnet-20240620',
             )
-            result = response.choices[0].message.content or ''
-            return json.loads(result)
+
+            return json.loads('{' + result.content[0].text)  # type: ignore
         except Exception as e:
-            print(openai_messages)
             logger.error(f'Error in generating LLM response: {e}')
             raise

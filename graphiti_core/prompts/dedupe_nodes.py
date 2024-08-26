@@ -88,7 +88,8 @@ def v2(context: dict[str, Any]) -> list[Message]:
 
         New Nodes:
         {json.dumps(context['extracted_nodes'], indent=2)}
-
+        Important:
+        If a node in the new nodes is describing the same entity as a node in the existing nodes, mark it as a duplicate!!!
         Task:
         If any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
 

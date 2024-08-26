@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
-from graphiti_core.nodes import EpisodicNode
+from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
 
@@ -112,7 +112,7 @@ async def retrieve_episodes(
             ),
             valid_at=(record['valid_at'].to_native()),
             uuid=record['uuid'],
-            source=record['source'],
+            source=EpisodeType.from_str(record['source']),
             name=record['name'],
             source_description=record['source_description'],
         )

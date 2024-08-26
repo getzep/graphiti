@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import typing
 from collections import defaultdict
 from datetime import datetime
@@ -186,7 +187,7 @@ async def entity_fulltext_search(
     query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    fuzzy_query = query + '~'
+    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
@@ -221,7 +222,7 @@ async def edge_fulltext_search(
     query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    fuzzy_query = query + '~'
+    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
 
     records, _, _ = await driver.execute_query(
         """
