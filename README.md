@@ -11,31 +11,34 @@ TODO: Add video here.
 
 With graphiti, you can build LLM applications such as:
 
-- assistants that learn from user interactions, using the graph to fuse knowledge about the user with dynamic, structured data from business applications such as CRMs, billing systems, and more.
-- agents that autonomously carry out complex tasks with data sourced from multiple dynamic sources, utilizing the graph to reason with changes to environment state.
+- Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
+- Agents that autonomously execute complex tasks, reasoning with state changes from multiple dynamic sources.
 
-There are a broad set of Assistant and Agent applications across sales, customer service, health, finance, and more. graphiti is designed to support their long-term recall of state and their reasoning with state changes.
+graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term recall and state-based reasoning for both assistants and agents.
 
-## Why build yet another graph library?
+## Why graphiti?
 
-Unlike many other knowledge graph libraries, graphiti is purpose built for dynamic data and agentic use:
+graphiti is designed for dynamic data and agentic use:
 
-- New nodes and edges are evaluated against the current graph, with the new entities and current graph revised to reflect the new context.
-- Facts, a natural language representation of the relationship between a source and destination node, are generated when graph-building and associated with edges.
-- Dates or partial date information is extracted from input datas and edge `valid_at` / `invalid_at` fields updated to reflect this state.
-- Graphiti offers semantic, BM25, and graph search, and various approaches to fuse results from multiple search modes.
-- Search is designed to be fast < 100ms, and bounded by the latency of your embedding service's API.
-- graphiti is careful to reuse an existing schema, avoiding an explosion in node and edge types.
+- **Smart Graph Updates**: Automatically evaluates new entities against the current graph, revising both to reflect the latest context.
+- **Rich Edge Semantics**: Generates human-readable, semantic, and full-text searchable representations for edges during graph construction, enabling search and enhancing interpretability.
+- **Temporal Awareness**: Extracts and updates time-based edge metadata from input data, enabling reasoning over changing relationships.
+- **Hybrid Search**: Offers semantic, BM25, and graph-based search with the ability to fuse results.
+- **Fast**: Search results in < 100ms, with latency primarily determined by the 3rd-party embedding API call.
+- **Schema Consistency**: Maintains a coherent graph structure by reusing existing schema, preventing unnecessary proliferation of node and edge types.
 
-## graphiti and Zep's Memory Layer for LLM Apps
+## graphiti and Zep Memory
 
-TODO
+graphiti powers the core of Zep's next-generation memory layer for LLM-powered Assistants and Agents.
+
+We're excited to open-source graphiti, believing its potential reaches far beyond memory applications.
 
 ## Installation
 
-neo4j quick install: Desktop
+Requirements: Python 3.10+ annd neo4j >=5.21
 
-Requirements: neo4j vector plugin apoc
+> [!NOTE]
+> The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly interface to manage Neo4j instances and databases.
 
 `pip install graphiti-core`
 
