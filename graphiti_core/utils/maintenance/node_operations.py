@@ -72,7 +72,7 @@ async def extract_nodes(
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
-    if episode.source == EpisodeType.message:
+    if episode.source in [EpisodeType.message, EpisodeType.text]:
         extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
     elif episode.source == EpisodeType.json:
         extracted_node_data = await extract_json_nodes(llm_client, episode)
