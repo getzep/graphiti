@@ -16,7 +16,6 @@ limitations under the License.
 
 import asyncio
 import logging
-import os
 from datetime import datetime
 from time import time
 from typing import Callable
@@ -25,7 +24,7 @@ from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
-from graphiti_core.llm_client import LLMClient, LLMConfig, OpenAIClient
+from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, hybrid_search
 from graphiti_core.search.search_utils import (
@@ -107,12 +106,7 @@ class Graphiti:
         if llm_client:
             self.llm_client = llm_client
         else:
-            self.llm_client = OpenAIClient(
-                LLMConfig(
-                    api_key=os.getenv('OPENAI_API_KEY', default=''),
-                    model='gpt-4o-2024-08-06',
-                )
-            )
+            self.llm_client = OpenAIClient()
 
     def close(self):
         """

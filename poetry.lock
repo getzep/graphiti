@@ -531,6 +531,20 @@ files = [
 ]
 
 [[package]]
+name = "diskcache-stubs"
+version = "5.6.3.6.20240818"
+description = "diskcache stubs"
+optional = false
+python-versions = ">=3"
+files = [
+    {file = "diskcache_stubs-5.6.3.6.20240818-py3-none-any.whl", hash = "sha256:e1db90940b344140730976abe79f57f5b43ca296cbb43fa95da0c69b12d5de4f"},
+    {file = "diskcache_stubs-5.6.3.6.20240818.tar.gz", hash = "sha256:b6eb43899e906b3167a20ac09a9a226f30267a306a96542ea720ebbfc3282796"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.4.0"
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 description = "Distro - an OS platform information API"
@@ -3729,4 +3743,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "7a39a71738b144a77525b8d449a6d624856b1f20a4b6e3d0694d41e68bafe610"
+content-hash = "5b90bb6d58d36a2553f5410c418b179aa1c86b55078567c33aaa6fddf6a8c6c6"
