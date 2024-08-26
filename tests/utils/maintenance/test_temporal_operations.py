@@ -162,7 +162,7 @@ def test_prepare_invalidation_context():
             content='This is the content of previous episode 1.',
             created_at=now - timedelta(days=1),
             valid_at=now - timedelta(days=1),
-            source='test',
+            source=EpisodeType.message,
             source_description='Test previous episode 1 for unit testing',
         ),
         EpisodicNode(
@@ -197,7 +197,7 @@ def test_prepare_invalidation_context():
     assert node1.name in existing_edge_str
     assert edge1.name in existing_edge_str
     assert node2.name in existing_edge_str
-    assert edge1.created_at.isoformat() in existing_edge_str
+    assert edge1.fact in existing_edge_str
 
     # Check the format of the new edge
     new_edge_str = result['new_edges'][0]
@@ -205,7 +205,7 @@ def test_prepare_invalidation_context():
     assert node2.name in new_edge_str
     assert edge2.name in new_edge_str
     assert node3.name in new_edge_str
-    assert edge2.created_at.isoformat() in new_edge_str
+    assert edge2.fact in new_edge_str
 
 
 def test_prepare_invalidation_context_empty_input():
