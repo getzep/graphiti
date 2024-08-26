@@ -46,10 +46,13 @@ class EpisodeType(Enum):
         or "assistant: I'm doing well, thank you for asking."
     json : str
         Represents an episode containing a JSON string object with structured data.
+    text : str
+        Represents a plain text episode.
     """
 
     message = 'message'
     json = 'json'
+    text = 'text'
 
     @staticmethod
     def from_str(episode_type: str):
@@ -57,6 +60,8 @@ class EpisodeType(Enum):
             return EpisodeType.message
         if episode_type == 'json':
             return EpisodeType.json
+        if episode_type == 'text':
+            return EpisodeType.text
         logger.error(f'Episode type: {episode_type} not implemented')
         raise NotImplementedError
 
