@@ -36,9 +36,7 @@ async def invoke_tool(tool_name: str, **kwargs):
 @tool
 async def get_team_roster(team_name: str):
     """Get the current roster for a specific team."""
-    search_result = await graphiti_client.search(f'{team_name.lower()}', num_results=1)
-    print(search_result)
-    print(team_name.lower())
+    search_result = await graphiti_client.search(f'{team_name.lower()}', num_results=10)
     roster = []
     for fact in search_result:
         roster.append(fact)
