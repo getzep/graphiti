@@ -4,22 +4,29 @@
 
 ## Temporal Knowledge Graphs for Agentic Applications
 
+<br />
+
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
 [![Lint](https://github.com/getzep/graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/lint.yml)
 [![Unit Tests](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml)
 [![MyPy Check](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/graphiti)
 
+<br />
+
 </div>
 
-graphiti builds dynamic, temporally-aware knowledge graphs that represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
+graphiti builds dynamic, temporally aware knowledge graphs that represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
 
+<br />
+
+ 
 <p align="center">
-    <br />
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="graphiti demo slides" width="750px">
-    </br />
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="graphiti demo slides" width="700px">   
 </p>
 
+<br />
+ 
 With graphiti, you can build LLM applications such as:
 
 - Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
