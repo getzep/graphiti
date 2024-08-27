@@ -25,11 +25,13 @@ from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
 from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
+    hybrid_node_search,
 )
 from graphiti_core.utils import (
     build_episodic_edges,
@@ -534,7 +536,7 @@ class Graphiti:
         Returns
         -------
         list
-            A list of facts (strings) that are relevant to the search query.
+            A list of EntityEdge objects that are relevant to the search query.
 
         Notes
         -----
@@ -564,9 +566,7 @@ class Graphiti:
             )
         ).edges
 
-        facts = [edge.fact for edge in edges]
-
-        return facts
+        return edges
 
     async def _search(
         self,
@@ -578,3 +578,41 @@ class Graphiti:
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
+
+    async def get_nodes_by_query(self, query: str, limit: int | None = None) -> list[EntityNode]:
+        """
+        Retrieve nodes from the graph database based on a text query.
+
+        This method performs a hybrid search using both text-based and
+        embedding-based approaches to find relevant nodes.
+
+        Parameters
+        ----------
+        query : str
+            The text query to search for in the graph.
+        limit : int | None, optional
+            The maximum number of results to return per search method.
+            If None, a default limit will be applied.
+
+        Returns
+        -------
+        list[EntityNode]
+            A list of EntityNode objects that match the search criteria.
+
+        Notes
+        -----
+        This method uses the following steps:
+        1. Generates an embedding for the input query using the LLM client's embedder.
+        2. Calls the hybrid_node_search function with both the text query and its embedding.
+        3. The hybrid search combines fulltext search and vector similarity search
+           to find the most relevant nodes.
+
+        The method leverages the LLM client's embedding capabilities to enhance
+        the search with semantic similarity matching. The 'limit' parameter is applied
+        to each individual search method before results are combined and deduplicated.
+        If not specified, a default limit (defined in the search functions) will be used.
+        """
+        embedder = self.llm_client.get_embedder()
+        query_embedding = await generate_embedding(embedder, query)
+        relevant_nodes = await hybrid_node_search([query], [query_embedding], self.driver, limit)
+        return relevant_nodes

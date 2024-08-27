@@ -76,17 +76,17 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
 
-    facts = await graphiti.search('Freakenomics guest')
+    edges = await graphiti.search('Freakenomics guest')
 
-    logger.info('\nQUERY: Freakenomics guest\n' + format_context(facts))
+    logger.info('\nQUERY: Freakenomics guest\n' + format_context([edge.fact for edge in edges]))
 
-    facts = await graphiti.search('tania tetlow\n')
+    edges = await graphiti.search('tania tetlow\n')
 
-    logger.info('\nQUERY: Tania Tetlow\n' + format_context(facts))
+    logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
 
-    facts = await graphiti.search('issues with higher ed')
+    edges = await graphiti.search('issues with higher ed')
 
-    logger.info('\nQUERY: issues with higher ed\n' + format_context(facts))
+    logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
     graphiti.close()
 
 
@@ -103,6 +103,7 @@ async def test_graph_integration():
         name='test_episode',
         labels=[],
         created_at=now,
+        valid_at=now,
         source='message',
         source_description='conversation message',
         content='Alice likes Bob',

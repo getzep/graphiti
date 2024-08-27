@@ -26,7 +26,7 @@ jobs:
           path-to-document: "https://github.com/getzep/graphiti/blob/main/Zep-CLA.md" # e.g. a CLA or a DCO document
           # branch should not be protected
           branch: "main"
-          allowlist: paul-paliychuk,prasmussen15,danielchalef,dependabot[bot],ellipsisdev
+          allowlist: paul-paliychuk,prasmussen15,danielchalef,dependabot[bot],ellipsis-dev[bot]
 
           # the followings are the optional inputs - If the optional inputs are not given, then default values will be taken
           #remote-organization-name: enter the remote organization name where the signatures should be stored (Default is storing the signatures in the same repository)
