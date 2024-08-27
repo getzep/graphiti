@@ -86,28 +86,28 @@ for i, episode in enumerate(episodes):
 # Execute a hybrid search combining semantic similarity and BM25 retrieval
 # Results are combined and reranked using Reciprocal Rank Fusion
 results = await graphiti.search('Who was the California Attorney General?')
-
-EntityEdge(
-│   uuid='3133258f738e487383f07b04e15d4ac0',
-│   source_node_uuid='2a85789b318d4e418050506879906e62',
-│   target_node_uuid='baf7781f445945989d6e4f927f881556',
-│   created_at=datetime.datetime(2024, 8, 26, 13, 13, 24, 861097),
-│   name='HELD_POSITION',
-    # the fact reflects the updated state that Harris is
-    # no longer the AG of California
-│   fact='Kamala Harris was the Attorney General of California',
-│   fact_embedding=[
-│   │   -0.009955154731869698,
-│       ...
-│   │   0.00784289836883545
-│   ],
-│   episodes=['b43e98ad0a904088a76c67985caecc22'],
-│   expired_at=datetime.datetime(2024, 8, 26, 20, 18, 1, 53812),
-    # These dates represent the date this edge was true.
-│   valid_at=datetime.datetime(2011, 1, 3, 0, 0, tzinfo=<UTC>),
-│   invalid_at=datetime.datetime(2017, 1, 3, 0, 0, tzinfo=<UTC>)
-)
-
+[
+    EntityEdge(
+    │   uuid='3133258f738e487383f07b04e15d4ac0',
+    │   source_node_uuid='2a85789b318d4e418050506879906e62',
+    │   target_node_uuid='baf7781f445945989d6e4f927f881556',
+    │   created_at=datetime.datetime(2024, 8, 26, 13, 13, 24, 861097),
+    │   name='HELD_POSITION',
+        # the fact reflects the updated state that Harris is
+        # no longer the AG of California
+    │   fact='Kamala Harris was the Attorney General of California',
+    │   fact_embedding=[
+    │   │   -0.009955154731869698,
+    │       ...
+    │   │   0.00784289836883545
+    │   ],
+    │   episodes=['b43e98ad0a904088a76c67985caecc22'],
+    │   expired_at=datetime.datetime(2024, 8, 26, 20, 18, 1, 53812),
+        # These dates represent the date this edge was true.
+    │   valid_at=datetime.datetime(2011, 1, 3, 0, 0, tzinfo=<UTC>),
+    │   invalid_at=datetime.datetime(2017, 1, 3, 0, 0, tzinfo=<UTC>)
+    )
+]
 
 # Rerank search results based on graph distance
 # Provide a node UUID to prioritize results closer to that node in the graph.
@@ -268,6 +268,58 @@ bulk_episodes = [
 ]
 
 await graphiti.add_episode_bulk(bulk_episodes)
+```
+
+### Searching graphiti's graph
+
+The examples demonstrates two search approaches in the graphiti library:
+
+1. **Hybrid Search:**
+
+   ```python
+   graphiti.search(query)
+   ```
+
+   Combines semantic similarity and BM25 retrieval, reranked using Reciprocal Rank Fusion.
+
+   Example: Does a broad retrieval of facts related to Allbirds Wool Runners and Jane's purchase.
+
+2. **Node Distance Reranking:**
+
+   ```python
+   client.search(query, focal_node_uuid)
+   ```
+
+   Extends Hybrid Search above by prioritizing results based on proximity to a specified node in the graph.
+
+   Example: Focuses on Jane-specific information, highlighting her wool allergy.
+
+Node Distance Reranking is particularly useful for entity-specific queries, providing more contextually relevant results. It weights facts by their closeness to the focal node, emphasizing information directly related to the entity of interest.
+
+This dual approach allows for both broad exploration and targeted, entity-specific information retrieval from the knowledge graph.
+
+```python
+query = "Can Jane wear Allbirds Wool Runners?"
+jane_node_uuid = "123e4567-e89b-12d3-a456-426614174000"
+
+def print_facts(edges):
+    print("\n".join([edge.fact for edge in edges]))
+
+# Hybrid Search
+results = await graphiti.search(query)
+print_facts(results)
+
+> The Allbirds Wool Runners are sold by Allbirds.
+> Men's SuperLight Wool Runners - Dark Grey (Medium Grey Sole) has a runner silhouette.
+> Jane purchased SuperLight Wool Runners.
+
+# Hybrid Search with Node Distance Reranking
+await client.search(query, jane_node_uuid)
+print_facts(results)
+
+> Jane purchased SuperLight Wool Runners.
+> Jane is allergic to wool.
+> The Allbirds Wool Runners are sold by Allbirds.
 ```
 
 ## How graphiti works
