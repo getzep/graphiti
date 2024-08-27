@@ -25,6 +25,7 @@ from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
 from graphiti_core.search.search_utils import (
@@ -576,3 +577,9 @@ class Graphiti:
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
+
+    async def get_nodes_by_query(self, query: str) -> list[EntityNode]:
+        embedder = self.llm_client.get_embedder()
+        query_embedding = await generate_embedding(embedder, query)
+        relevant_nodes = await get_relevant_nodes([EntityNode(name=query, name_embedding=query_embedding)], self.driver)
+        return relevant_nodes
