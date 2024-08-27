@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from dataclasses import Field
 from datetime import datetime
 from enum import Enum
 from time import time
@@ -50,8 +51,8 @@ class Reranker(Enum):
 
 
 class SearchConfig(BaseModel):
-    num_edges: Optional[int] = 10
-    num_nodes: Optional[int] = 10
+    num_edges: int = Field(default=10)
+    num_nodes: int = Field(default=10)
     num_episodes: int = EPISODE_WINDOW_LEN
     search_methods: list[SearchMethod]
     reranker: Reranker | None
@@ -64,12 +65,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    timestamp: datetime,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
