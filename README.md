@@ -159,7 +159,7 @@ Visit the Zep knowledge base for graphiti [Guides and API documentation](https:/
 
 graphiti is under active development. We aim to maintain API stability while working on:
 
-- [ ] Implementing node and edge CRUD operations
+- [X] Implementing node and edge CRUD operations
 - [ ] Improving performance and scalability
 - [ ] Achieving good performance with different LLM and embedding models
 - [ ] Creating a dedicated embedder interface
