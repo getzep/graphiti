@@ -269,21 +269,55 @@ async def edge_fulltext_search(
     return edges
 
 
-async def get_relevant_nodes(
-    nodes: list[EntityNode],
+async def hybrid_node_search(
+    queries: list[str],
+    embeddings: list[list[float]],
     driver: AsyncDriver,
+    limit: int | None = None,
 ) -> list[EntityNode]:
+    """
+    Perform a hybrid search for nodes using both text queries and embeddings.
+
+    This method combines fulltext search and vector similarity search to find
+    relevant nodes in the graph database.
+
+    Parameters
+    ----------
+    queries : list[str]
+        A list of text queries to search for.
+    embeddings : list[list[float]]
+        A list of embedding vectors corresponding to the queries. If empty only fulltext search is performed.
+    driver : AsyncDriver
+        The Neo4j driver instance for database operations.
+    limit : int | None, optional
+        The maximum number of results to return per search method. If None, a default limit will be applied.
+
+    Returns
+    -------
+    list[EntityNode]
+        A list of unique EntityNode objects that match the search criteria.
+
+    Notes
+    -----
+    This method performs the following steps:
+    1. Executes fulltext searches for each query.
+    2. Executes vector similarity searches for each embedding.
+    3. Combines and deduplicates the results from both search types.
+    4. Logs the performance metrics of the search operation.
+
+    The search results are deduplicated based on the node UUIDs to ensure
+    uniqueness in the returned list. The 'limit' parameter is applied to each
+    individual search method before deduplication. If not specified, a default
+    limit (defined in the individual search functions) will be used.
+    """
+
     start = time()
     relevant_nodes: list[EntityNode] = []
     relevant_node_uuids = set()
 
     results = await asyncio.gather(
-        *[entity_fulltext_search(node.name, driver) for node in nodes],
-        *[
-            entity_similarity_search(node.name_embedding, driver)
-            for node in nodes
-            if node.name_embedding is not None
-        ],
+        *[entity_fulltext_search(q, driver, limit or RELEVANT_SCHEMA_LIMIT) for q in queries],
+        *[entity_similarity_search(e, driver, limit or RELEVANT_SCHEMA_LIMIT) for e in embeddings],
     )
 
     for result in results:
@@ -296,7 +330,43 @@ async def get_relevant_nodes(
 
     end = time()
     logger.info(f'Found relevant nodes: {relevant_node_uuids} in {(end - start) * 1000} ms')
+    return relevant_nodes
 
+
+async def get_relevant_nodes(
+    nodes: list[EntityNode],
+    driver: AsyncDriver,
+) -> list[EntityNode]:
+    """
+    Retrieve relevant nodes based on the provided list of EntityNodes.
+
+    This method performs a hybrid search using both the names and embeddings
+    of the input nodes to find relevant nodes in the graph database.
+
+    Parameters
+    ----------
+    nodes : list[EntityNode]
+        A list of EntityNode objects to use as the basis for the search.
+    driver : AsyncDriver
+        The Neo4j driver instance for database operations.
+
+    Returns
+    -------
+    list[EntityNode]
+        A list of EntityNode objects that are deemed relevant based on the input nodes.
+
+    Notes
+    -----
+    This method uses the hybrid_node_search function to perform the search,
+    which combines fulltext search and vector similarity search.
+    It extracts the names and name embeddings (if available) from the input nodes
+    to use as search criteria.
+    """
+    relevant_nodes = await hybrid_node_search(
+        [node.name for node in nodes],
+        [node.name_embedding for node in nodes if node.name_embedding is not None],
+        driver,
+    )
     return relevant_nodes
 
 

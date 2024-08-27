@@ -103,6 +103,7 @@ async def test_graph_integration():
         name='test_episode',
         labels=[],
         created_at=now,
+        valid_at=now,
         source='message',
         source_description='conversation message',
         content='Alice likes Bob',
