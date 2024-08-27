@@ -64,12 +64,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    timestamp: datetime,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
@@ -95,7 +95,9 @@ async def hybrid_search(
             .embedding[:EMBEDDING_DIM]
         )
 
-        similarity_search = await edge_similarity_search(search_vector, driver, 2 * config.num_edges)
+        similarity_search = await edge_similarity_search(
+            search_vector, driver, 2 * config.num_edges
+        )
         search_results.append(similarity_search)
 
     if len(search_results) > 1 and config.reranker is None:
