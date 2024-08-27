@@ -22,8 +22,6 @@ from datetime import datetime
 
 import pytest
 from dotenv import load_dotenv
-from neo4j import AsyncGraphDatabase
-from openai import OpenAI
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti

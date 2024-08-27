@@ -179,7 +179,6 @@ class EntityEdge(Edge):
             """
         MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
         DELETE e
-        
         """,
             uuid=self.uuid,
         )
