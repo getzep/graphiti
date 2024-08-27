@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "graphiti-core"
-version = "0.0.1"
+version = "0.1.0"
 description = "A temporal graph building library"
 authors = [
     "Paul Paliychuk <paul@getzep.com>",
     "Preston Rasmussen <preston@getzep.com>",
+    "Daniel Chalef <daniel@getzep.com>",
 ]
 readme = "README.md"
 license = "Apache-2.0"
