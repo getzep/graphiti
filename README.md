@@ -83,7 +83,7 @@ or
 ## Quick Start
 
 > [!IMPORTANT]
-> Zep uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
+> graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
 
 ```python
 from graphiti_core import Graphiti
