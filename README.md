@@ -151,9 +151,12 @@ await graphiti.add_episode(
         "disaster preparedness and agricultural planning."
     ),
     source=EpisodeType.text,
-    source_description="Technology magazine article",     # A description of the source (e.g., "podcast", "news article")
-    reference_time=datetime(2023, 11, 15, 9, 30),    # The timestamp for when this episode occurred or was created
-    metadata={                       # Additional metadata about the episode (optional)
+    # A description of the source (e.g., "podcast", "news article")
+    source_description="Technology magazine article",
+    # The timestamp for when this episode occurred or was created
+    reference_time=datetime(2023, 11, 15, 9, 30),
+    # Additional metadata about the episode (optional)
+    metadata={
         "author": "Zara Patel",
         "publication": "Tech Horizons Monthly",
         "word_count": 39
