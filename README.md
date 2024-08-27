@@ -57,9 +57,7 @@ or
 ## Quick Start
 
 > [!IMPORTANT]
-> Zep uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
-
-Support for Anthropic and Groq LLM inferences is available, too.
+> Zep uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
 
 ```python
 from graphiti_core import Graphiti
@@ -146,7 +144,12 @@ Using the `EpisodeType.text` type:
 ```python
 await graphiti.add_episode(
     name="tech_innovation_article",
-    episode_body="MIT researchers have unveiled 'ClimateNet', an AI system capable of predicting climate patterns with unprecedented accuracy. Early tests show it can forecast major weather events up to three weeks in advance, potentially revolutionizing disaster preparedness and agricultural planning.",
+    episode_body=(
+        "MIT researchers have unveiled 'ClimateNet', an AI system capable of predicting "
+        "climate patterns with unprecedented accuracy. Early tests show it can forecast "
+        "major weather events up to three weeks in advance, potentially revolutionizing "
+        "disaster preparedness and agricultural planning."
+    ),
     source=EpisodeType.text,
     source_description="Technology magazine article",     # A description of the source (e.g., "podcast", "news article")
     reference_time=datetime(2023, 11, 15, 9, 30),    # The timestamp for when this episode occurred or was created
@@ -163,7 +166,11 @@ Using the `EpisodeType.message` type supports passing in multi-turn conversation
 ```python
 await graphiti.add_episode(
     name="Customer_Support_Interaction_1",
-    episode_body="Customer: Hi, I'm having trouble with my Allbirds shoes. The sole is coming off after only 2 months of use.\nSupport: I'm sorry to hear that. Can you please provide your order number?",
+    episode_body=(
+        "Customer: Hi, I'm having trouble with my Allbirds shoes. "
+        "The sole is coming off after only 2 months of use.\n"
+        "Support: I'm sorry to hear that. Can you please provide your order number?"
+    ),
     source=EpisodeType.message,
     source_description="Customer support chat",
     reference_time=datetime(2024, 3, 15, 14, 45),
