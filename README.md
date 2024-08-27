@@ -272,7 +272,7 @@ await graphiti.add_episode_bulk(bulk_episodes)
 
 ### Searching graphiti's graph
 
-The examples demonstrates two search approaches in the graphiti library:
+The examples below demonstrate two search approaches in the graphiti library:
 
 1. **Hybrid Search:**
 
