@@ -342,17 +342,18 @@ print_facts(results)
 
 ## Status and Roadmap
 
-wip, but endavour to not break API.
+graphiti is under active development. We aim to maintain API stability while working on:
 
-graphiti is under active development. Areas we're actively working on:
+- [ ] Implementing node and edge CRUD operations
+- [ ] Improving performance and scalability
+- [ ] Achieving good performance with different LLM and embedding models
+- [ ] Creating a dedicated embedder interface
+- [ ] Supporting custom graph schemas:
+  - Allow developers to provide their own defined node and edge classes when ingesting episodes
+  - Enable more flexible knowledge representation tailored to specific use cases
+- [ ] Enhancing retrieval capabilities with more robust and configurable options
+- [ ] Expanding test coverage to ensure reliability and catch edge cases
 
-- performance and scalability
-- search improvements
-- node CRUD
-
-TODO: expand on the above. Include ROADMAP
-
-Latency scales sublinearly with graph size, with a cap
 
 ## Contributing
 
