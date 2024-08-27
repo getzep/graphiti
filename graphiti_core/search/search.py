@@ -15,13 +15,12 @@ limitations under the License.
 """
 
 import logging
-from dataclasses import Field
 from datetime import datetime
 from enum import Enum
 from time import time
 
 from neo4j import AsyncDriver
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client.config import EMBEDDING_DIM
@@ -64,12 +63,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    timestamp: datetime,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
