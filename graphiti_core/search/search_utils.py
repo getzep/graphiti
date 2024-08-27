@@ -3,22 +3,17 @@ import logging
 import re
 import typing
 from collections import defaultdict
-from datetime import datetime
 from time import time
 
 from neo4j import AsyncDriver
-from neo4j import time as neo4j_time
 
 from graphiti_core.edges import EntityEdge
+from graphiti_core.helpers import parse_db_date
 from graphiti_core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 
 RELEVANT_SCHEMA_LIMIT = 3
-
-
-def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
-    return neo_date.to_native() if neo_date else None
 
 
 async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode]):
@@ -106,7 +101,7 @@ async def edge_similarity_search(
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
         """
-                CALL db.index.vector.queryRelationships("fact_embedding", 5, $search_vector)
+                CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS r, score
                 MATCH (n)-[r:RELATES_TO]->(m)
                 RETURN
@@ -121,7 +116,7 @@ async def edge_similarity_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
-                ORDER BY score DESC LIMIT $limit
+                ORDER BY score DESC
                 """,
         search_vector=search_vector,
         limit=limit,
@@ -316,8 +311,11 @@ async def hybrid_node_search(
     relevant_node_uuids = set()
 
     results = await asyncio.gather(
-        *[entity_fulltext_search(q, driver, limit or RELEVANT_SCHEMA_LIMIT) for q in queries],
-        *[entity_similarity_search(e, driver, limit or RELEVANT_SCHEMA_LIMIT) for e in embeddings],
+        *[entity_fulltext_search(q, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT)) for q in queries],
+        *[
+            entity_similarity_search(e, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT))
+            for e in embeddings
+        ],
     )
 
     for result in results:

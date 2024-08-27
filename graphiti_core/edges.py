@@ -23,6 +23,7 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
+from graphiti_core.helpers import parse_db_date
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 from graphiti_core.nodes import Node
 
@@ -38,6 +39,9 @@ class Edge(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
+    @abstractmethod
+    async def delete(self, driver: AsyncDriver): ...
+
     def __hash__(self):
         return hash(self.uuid)
 
@@ -45,6 +49,9 @@ class Edge(BaseModel, ABC):
         if isinstance(other, Node):
             return self.uuid == other.uuid
         return False
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
 
 
 class EpisodicEdge(Edge):
@@ -66,9 +73,48 @@ class EpisodicEdge(Edge):
 
         return result
 
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
+        DELETE e
+        """,
+            uuid=self.uuid,
+        )
 
-# TODO: Neo4j doesn't support variables for edge types and labels.
-#  Right now we have all edge nodes as type RELATES_TO
+        logger.info(f'Deleted Edge: {self.uuid}')
+
+        return result
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
+        RETURN
+            e.uuid As uuid, 
+            n.uuid AS source_node_uuid, 
+            m.uuid AS target_node_uuid, 
+            e.created_at AS created_at
+        """,
+            uuid=uuid,
+        )
+
+        edges: list[EpisodicEdge] = []
+
+        for record in records:
+            edges.append(
+                EpisodicEdge(
+                    uuid=record['uuid'],
+                    source_node_uuid=record['source_node_uuid'],
+                    target_node_uuid=record['target_node_uuid'],
+                    created_at=record['created_at'].to_native(),
+                )
+            )
+
+        logger.info(f'Found Edge: {uuid}')
+
+        return edges[0]
 
 
 class EntityEdge(Edge):
@@ -97,7 +143,7 @@ class EntityEdge(Edge):
         self.fact_embedding = embedding[:EMBEDDING_DIM]
 
         end = time()
-        logger.info(f'embedded {text} in {end-start} ms')
+        logger.info(f'embedded {text} in {end - start} ms')
 
         return embedding
 
@@ -127,3 +173,60 @@ class EntityEdge(Edge):
         logger.info(f'Saved edge to neo4j: {self.uuid}')
 
         return result
+
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+        DELETE e
+        """,
+            uuid=self.uuid,
+        )
+
+        logger.info(f'Deleted Edge: {self.uuid}')
+
+        return result
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+        RETURN
+            e.uuid AS uuid,
+            n.uuid AS source_node_uuid,
+            m.uuid AS target_node_uuid,
+            e.created_at AS created_at,
+            e.name AS name,
+            e.fact AS fact,
+            e.fact_embedding AS fact_embedding,
+            e.episodes AS episodes,
+            e.expired_at AS expired_at,
+            e.valid_at AS valid_at,
+            e.invalid_at AS invalid_at
+        """,
+            uuid=uuid,
+        )
+
+        edges: list[EntityEdge] = []
+
+        for record in records:
+            edges.append(
+                EntityEdge(
+                    uuid=record['uuid'],
+                    source_node_uuid=record['source_node_uuid'],
+                    target_node_uuid=record['target_node_uuid'],
+                    fact=record['fact'],
+                    name=record['name'],
+                    episodes=record['episodes'],
+                    fact_embedding=record['fact_embedding'],
+                    created_at=record['created_at'].to_native(),
+                    expired_at=parse_db_date(record['expired_at']),
+                    valid_at=parse_db_date(record['valid_at']),
+                    invalid_at=parse_db_date(record['invalid_at']),
+                )
+            )
+
+        logger.info(f'Found Edge: {uuid}')
+
+        return edges[0]
