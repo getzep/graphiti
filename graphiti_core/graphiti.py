@@ -581,5 +581,7 @@ class Graphiti:
     async def get_nodes_by_query(self, query: str) -> list[EntityNode]:
         embedder = self.llm_client.get_embedder()
         query_embedding = await generate_embedding(embedder, query)
-        relevant_nodes = await get_relevant_nodes([EntityNode(name=query, name_embedding=query_embedding)], self.driver)
+        relevant_nodes = await get_relevant_nodes(
+            [EntityNode(name=query, name_embedding=query_embedding)], self.driver
+        )
         return relevant_nodes
