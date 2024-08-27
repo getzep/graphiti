@@ -13,6 +13,6 @@ async def generate_embedding(embedder, text, model='text-embedding-3-small'):
     embedding = embedding[:EMBEDDING_DIM]
 
     end = time()
-    logger.info(f'embedded {text} in {end-start} ms')
+    logger.debug(f'embedded text of length {len(text)} in {end-start} ms')
 
     return embedding
