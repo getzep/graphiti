@@ -228,7 +228,7 @@ Graphiti offers `add_episode_bulk` for efficient batch ingestion of episodes, si
 > [!WARNING]
 > Use `add_episode_bulk` only for populating empty graphs or when edge invalidation is not required. The bulk ingestion pipeline does not perform edge invalidation operations.
 
-```json
+```python
 product_data = [
     {
         "id": "PROD001",
@@ -241,6 +241,7 @@ product_data = [
         "in_stock": true,
         "last_updated": "2024-03-15T10:30:00Z"
     },
+    ...
     {
         "id": "PROD0100",
         "name": "Kids Wool Runner-up Mizzles",
