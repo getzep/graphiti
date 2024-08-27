@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 from datetime import datetime
+from enum import Enum
 from time import time
 
 from neo4j import AsyncDriver
@@ -28,6 +29,7 @@ from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
     get_mentioned_nodes,
+    node_distance_reranker,
     rrf,
 )
 from graphiti_core.utils import retrieve_episodes
@@ -36,12 +38,22 @@ from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW
 logger = logging.getLogger(__name__)
 
 
+class SearchMethod(Enum):
+    cosine_similarity = 'cosine_similarity'
+    bm25 = 'bm25'
+
+
+class Reranker(Enum):
+    rrf = 'reciprocal_rank_fusion'
+    node_distance = 'node_distance'
+
+
 class SearchConfig(BaseModel):
-    num_results: int = 10
+    num_edges: int = 10
+    num_nodes: int = 10
     num_episodes: int = EPISODE_WINDOW_LEN
-    similarity_search: str = 'cosine'
-    text_search: str = 'BM25'
-    reranker: str = 'rrf'
+    search_methods: list[SearchMethod]
+    reranker: Reranker | None
 
 
 class SearchResults(BaseModel):
@@ -51,7 +63,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-    driver: AsyncDriver, embedder, query: str, timestamp: datetime, config: SearchConfig
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    timestamp: datetime,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
@@ -65,11 +82,11 @@ async def hybrid_search(
         episodes.extend(await retrieve_episodes(driver, timestamp))
         nodes.extend(await get_mentioned_nodes(driver, episodes))
 
-    if config.text_search == 'BM25':
+    if SearchMethod.bm25 in config.search_methods:
         text_search = await edge_fulltext_search(query, driver)
         search_results.append(text_search)
 
-    if config.similarity_search == 'cosine':
+    if SearchMethod.cosine_similarity in config.search_methods:
         query_text = query.replace('\n', ' ')
         search_vector = (
             (await embedder.create(input=[query_text], model='text-embedding-3-small'))
@@ -80,18 +97,13 @@ async def hybrid_search(
         similarity_search = await edge_similarity_search(search_vector, driver)
         search_results.append(similarity_search)
 
-    if len(search_results) == 1:
-        edges = search_results[0]
-
-    elif len(search_results) > 1 and config.reranker != 'rrf':
+    if len(search_results) > 1 and config.reranker is None:
         logger.exception('Multiple searches enabled without a reranker')
         raise Exception('Multiple searches enabled without a reranker')
 
-    elif config.reranker == 'rrf':
+    else:
         edge_uuid_map = {}
         search_result_uuids = []
-
-        logger.info([[edge.fact for edge in result] for result in search_results])
 
         for result in search_results:
             result_uuids = []
@@ -103,12 +115,23 @@ async def hybrid_search(
 
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
-        reranked_uuids = rrf(search_result_uuids)
+        reranked_uuids: list[str] = []
+        if config.reranker == Reranker.rrf:
+            reranked_uuids = rrf(search_result_uuids)
+        elif config.reranker == Reranker.node_distance:
+            if center_node_uuid is None:
+                logger.exception('No center node provided for Node Distance reranker')
+                raise Exception('No center node provided for Node Distance reranker')
+            reranked_uuids = await node_distance_reranker(
+                driver, search_result_uuids, center_node_uuid
+            )
 
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
         edges.extend(reranked_edges)
 
-    context = SearchResults(episodes=episodes, nodes=nodes, edges=edges)
+    context = SearchResults(
+        episodes=episodes, nodes=nodes[: config.num_nodes], edges=edges[: config.num_edges]
+    )
 
     end = time()
 
