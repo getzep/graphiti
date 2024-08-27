@@ -22,8 +22,6 @@ from datetime import datetime
 
 import pytest
 from dotenv import load_dotenv
-from neo4j import AsyncGraphDatabase
-from openai import OpenAI
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
@@ -74,7 +72,7 @@ def format_context(facts):
 @pytest.mark.asyncio
 async def test_graphiti_init():
     logger = setup_logging()
-    graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, None)
+    graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
     edges = await graphiti.search('Freakenomics guest')
 
@@ -92,11 +90,9 @@ async def test_graphiti_init():
 
 @pytest.mark.asyncio
 async def test_graph_integration():
-    driver = AsyncGraphDatabase.driver(
-        NEO4J_URI,
-        auth=(NEO4j_USER, NEO4j_PASSWORD),
-    )
-    embedder = OpenAI().embeddings
+    client = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
+    embedder = client.llm_client.get_embedder()
+    driver = client.driver
 
     now = datetime.now()
     episode = EpisodicNode(
@@ -139,10 +135,21 @@ async def test_graph_integration():
         invalid_at=now,
     )
 
-    entity_edge.generate_embedding(embedder)
+    await entity_edge.generate_embedding(embedder)
 
     nodes = [episode, alice_node, bob_node]
     edges = [episodic_edge_1, episodic_edge_2, entity_edge]
 
+    # test save
     await asyncio.gather(*[node.save(driver) for node in nodes])
     await asyncio.gather(*[edge.save(driver) for edge in edges])
+
+    # test get
+    assert await EpisodicNode.get_by_uuid(driver, episode.uuid) is not None
+    assert await EntityNode.get_by_uuid(driver, alice_node.uuid) is not None
+    assert await EpisodicEdge.get_by_uuid(driver, episodic_edge_1.uuid) is not None
+    assert await EntityEdge.get_by_uuid(driver, entity_edge.uuid) is not None
+
+    # test delete
+    await asyncio.gather(*[node.delete(driver) for node in nodes])
+    await asyncio.gather(*[edge.delete(driver) for edge in edges])
