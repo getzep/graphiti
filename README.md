@@ -34,8 +34,6 @@ With graphiti, you can build LLM applications such as:
 
 graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term recall and state-based reasoning for both assistants and agents.
 
-<br />
-
 ## Why graphiti?
 
 graphiti is designed for dynamic data and agentic use:
@@ -47,7 +45,6 @@ graphiti is designed for dynamic data and agentic use:
 - **Fast**: Search results in < 100ms, with latency primarily determined by the 3rd-party embedding API call.
 - **Schema Consistency**: Maintains a coherent graph structure by reusing existing schema, preventing unnecessary proliferation of node and edge types.
 
-<br />
 
 ## graphiti and Zep Memory
 
@@ -55,7 +52,7 @@ graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM
 
 We're excited to open-source graphiti, believing its potential reaches far beyond memory applications.
 
-<br />
+
 
 ## Installation
 
@@ -78,7 +75,7 @@ or
 
 `poetry add graphiti-core`
 
-<br />
+
 
 ## Quick Start
 
@@ -144,7 +141,7 @@ await client.search('Who was the California Attorney General?', center_node_uuid
 graphiti.close()
 ```
 
-<br />
+
 
 ## Documentation
 
@@ -350,7 +347,6 @@ print_facts(results)
 > The Allbirds Wool Runners are sold by Allbirds.
 ```
 
-<br />
 
 ## Status and Roadmap
 
@@ -366,7 +362,6 @@ graphiti is under active development. We aim to maintain API stability while wor
 - [ ] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
-<br />
 
 ## Contributing
 
