@@ -149,7 +149,7 @@ graphiti.close()
 
 ## Documentation
 
-Visit the Zep knowledge base for graphite [Guides and API documentation](https://help.getzep.com/graphiti/graphiti).
+Visit the Zep knowledge base for graphiti [Guides and API documentation](https://help.getzep.com/graphiti/graphiti).
 
 
 ## Status and Roadmap
