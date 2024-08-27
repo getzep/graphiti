@@ -7,7 +7,9 @@
 
 graphiti builds dynamic, temporally-aware knowledge graphs that represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
 
-![graphiti demo slides](https://github.com/getzep/graphiti/blob/main/images/graphiti-intro-slides-stock-2.gif?raw=true)
+<div style="text-align: center;">
+  <img src="/images/graphiti-intro-slides-stock-2.gif" alt="graphiti demo slides" style="width: 80%;">
+</div>
 
 With graphiti, you can build LLM applications such as:
 
