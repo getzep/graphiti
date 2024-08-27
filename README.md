@@ -1,4 +1,7 @@
-# graphiti: Temporal Knowledge Graphs for Agentic Applications
+<div align="center">
+# graphiti
+## Temporal Knowledge Graphs for Agentic Applications
+</div>
 
 [![Lint](https://github.com/getzep/graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/lint.yml)
 [![Unit Tests](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml)
