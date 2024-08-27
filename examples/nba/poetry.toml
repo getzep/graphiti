@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "graphiti-nba-example"
+version = "0.1.0"
+description = "NBA roster management example using Graphiti and LangGraph"
+authors = ["Your Name <your.email@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+graphiti-core = { path = "../..", develop = true }
+python-dotenv = "^1.0.0"
+nba-api = "^1.5.0"
+langgraph = "^0.2.14"
+langchain = "^0.2.14"
+langchain-openai = "^0.1.22"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.3.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,257 @@
+[
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1628369,
+    "player_name": "Jayson Tatum"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 201950,
+    "player_name": "Jrue Holiday"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1627759,
+    "player_name": "Jaylen Brown"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 204001,
+    "player_name": "Kristaps Porzingis"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1628401,
+    "player_name": "Derrick White"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1630202,
+    "player_name": "Payton Pritchard"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1629052,
+    "player_name": "Oshae Brissett"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1641809,
+    "player_name": "Drew Peterson"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1631120,
+    "player_name": "JD Davison"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1630214,
+    "player_name": "Xavier Tillman"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1641775,
+    "player_name": "Jordan Walsh"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1630573,
+    "player_name": "Sam Hauser"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1628436,
+    "player_name": "Luke Kornet"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 201143,
+    "player_name": "Al Horford"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1630531,
+    "player_name": "Jaden Springer"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1629004,
+    "player_name": "Svi Mykhailiuk"
+  },
+  {
+    "team_name": "Boston Celtics",
+    "player_id": 1629674,
+    "player_name": "Neemias Queta"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1627780,
+    "player_name": "Gary Payton II"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1630228,
+    "player_name": "Jonathan Kuminga"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1641764,
+    "player_name": "Brandin Podziemski"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 101108,
+    "player_name": "Chris Paul"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1630541,
+    "player_name": "Moses Moody"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1626172,
+    "player_name": "Kevon Looney"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 202691,
+    "player_name": "Klay Thompson"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1630586,
+    "player_name": "Usman Garuba"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1630611,
+    "player_name": "Gui Santos"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1629010,
+    "player_name": "Jerome Robinson"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 203967,
+    "player_name": "Dario Saric"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 203952,
+    "player_name": "Andrew Wiggins"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 203110,
+    "player_name": "Draymond Green"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1631311,
+    "player_name": "Lester Quinones"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 201939,
+    "player_name": "Stephen Curry"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1631218,
+    "player_name": "Trayce Jackson-Davis"
+  },
+  {
+    "team_name": "Golden State Warriors",
+    "player_id": 1630311,
+    "player_name": "Pat Spencer"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1642013,
+    "player_name": "Malik Williams"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1631241,
+    "player_name": "Javon Freeman-Liberty"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1641711,
+    "player_name": "Gradey Dick"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1629667,
+    "player_name": "Jalen McDaniels"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1630618,
+    "player_name": "DJ Carton"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1630567,
+    "player_name": "Scottie Barnes"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1630193,
+    "player_name": "Immanuel Quickley"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1629628,
+    "player_name": "RJ Barrett"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1628971,
+    "player_name": "Bruce Brown"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1629670,
+    "player_name": "Jordan Nwora"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1631338,
+    "player_name": "Mouhamadou Gueye"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 202066,
+    "player_name": "Garrett Temple"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1627751,
+    "player_name": "Jakob Poeltl"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1628449,
+    "player_name": "Chris Boucher"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1630534,
+    "player_name": "Ochai Agbaji"
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 1629018,
+    "player_name": "Gary Trent Jr."
+  },
+  {
+    "team_name": "Toronto Raptors",
+    "player_id": 203482,
+    "player_name": "Kelly Olynyk"
+  }
+]
