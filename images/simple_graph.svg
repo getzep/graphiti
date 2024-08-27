@@ -1,0 +1,130 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="320.0599060058594" height="339.72857666015625"
+    viewBox="-105.8088607788086 -149.75405883789062 320.0599060058594 339.72857666015625">
+    <title>Neo4j Graph Visualization</title>
+    <desc>Created using Neo4j (http://www.neo4j.com/)</desc>
+    <g class="layer relationships">
+        <g class="relationship"
+            transform="translate(64.37326808037952 160.9745045766605) rotate(325.342180479503)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 45.86500098580619 0.5 L 45.86500098580619 -0.5 L 25 -0.5 Z M 94.08765723580619 0.5 L 114.95265822161238 0.5 L 114.95265822161238 3.5 L 121.95265822161238 0 L 114.95265822161238 -3.5 L 114.95265822161238 -0.5 L 94.08765723580619 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="69.97632911080619" y="3"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">MENTIONS</text>
+        </g>
+        <g class="relationship"
+            transform="translate(64.37326808037952 160.9745045766605) rotate(268.0194761774372)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 48.45342195548257 0.5 L 48.45342195548257 -0.5 L 25 -0.5 Z M 96.67607820548257 0.5 L 120.12950016096514 0.5 L 120.12950016096514 3.5 L 127.12950016096514 0 L 120.12950016096514 -3.5 L 120.12950016096514 -0.5 L 96.67607820548257 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="72.56475008048257" y="3" transform="rotate(180 72.56475008048257 0)"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">MENTIONS</text>
+        </g>
+        <g class="relationship"
+            transform="translate(64.37326808037952 160.9745045766605) rotate(214.36893208966427)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 43.0453604327618 0.5 L 43.0453604327618 -0.5 L 25 -0.5 Z M 91.2680166827618 0.5 L 109.3133771155236 0.5 L 109.3133771155236 3.5 L 116.3133771155236 0 L 109.3133771155236 -3.5 L 109.3133771155236 -0.5 L 91.2680166827618 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="67.1566885577618" y="3" transform="rotate(180 67.1566885577618 0)"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">MENTIONS</text>
+        </g>
+        <g class="relationship"
+            transform="translate(59.11570627539377 8.935881644552067) rotate(388.4945734254285)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 39.4813012088875 0.5 L 39.4813012088875 -0.5 L 25 -0.5 Z M 97.0398949588875 0.5 L 111.521196167775 0.5 L 111.521196167775 3.5 L 118.521196167775 0 L 111.521196167775 -3.5 L 111.521196167775 -0.5 L 97.0398949588875 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="68.2605980838875" y="3"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">WORKS_FOR</text>
+        </g>
+        <g class="relationship"
+            transform="translate(59.11570627539377 8.935881644552067) rotate(507.02532906724895)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 31.21884260824949 0.5 L 31.21884260824949 -0.5 L 25 -0.5 Z M 94.55478010824949 0.5 L 100.77362271649898 0.5 L 100.77362271649898 3.5 L 107.77362271649898 0 L 100.77362271649898 -3.5 L 100.77362271649898 -0.5 L 94.55478010824949 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="62.88681135824949" y="3" transform="rotate(180 62.88681135824949 0)"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">WORKED_FOR</text>
+        </g>
+        <g class="relationship"
+            transform="translate(59.11570627539377 8.935881644552067) rotate(266.9235303682344)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 26.434656330468542 0.5 L 26.434656330468542 -0.5 L 25 -0.5 Z M 96.44246883046854 0.5 L 97.87712516093708 0.5 L 97.87712516093708 3.5 L 104.87712516093708 0 L 97.87712516093708 -3.5 L 97.87712516093708 -0.5 L 96.44246883046854 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="61.43856258046854" y="3" transform="rotate(180 61.43856258046854 0)"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">HOLDS_OFFIC…</text>
+        </g>
+        <g class="relationship"
+            transform="translate(-76.8088607917906 -66.37642130383644) rotate(388.9897079993928)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 50.08589014533345 0.5 L 50.08589014533345 -0.5 L 25 -0.5 Z M 98.30854639533345 0.5 L 123.3944365406669 0.5 L 123.3944365406669 3.5 L 130.3944365406669 0 L 123.3944365406669 -3.5 L 123.3944365406669 -0.5 L 98.30854639533345 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="74.19721827033345" y="3"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">MENTIONS</text>
+        </g>
+        <g class="relationship"
+            transform="translate(-76.8088607917906 -66.37642130383644) rotate(337.13573550965714)">
+            <path class="b-outline" fill="#A5ABB6" stroke="none"
+                d="M 25 0.5 L 42.363883039766904 0.5 L 42.363883039766904 -0.5 L 25 -0.5 Z M 90.5865392897669 0.5 L 107.95042232953381 0.5 L 107.95042232953381 3.5 L 114.95042232953381 0 L 107.95042232953381 -3.5 L 107.95042232953381 -0.5 L 90.5865392897669 -0.5 Z" />
+            <text text-anchor="middle" pointer-events="none" font-size="8px" fill="#fff"
+                x="66.4752111647669" y="3"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">MENTIONS</text>
+        </g>
+    </g>
+    <g class="layer nodes">
+        <g class="node" aria-label="graph-node18"
+            transform="translate(64.37326808037952,160.9745045766605)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#F79767" stroke="#f36924"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="5"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> podcast</text>
+        </g>
+        <g class="node" aria-label="graph-node19"
+            transform="translate(185.25107500848034,77.40633150430716)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#C990C0" stroke="#b261a5"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="5"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> California</text>
+        </g>
+        <g class="node" aria-label="graph-node20"
+            transform="translate(59.11570627539377,8.935881644552067)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#C990C0" stroke="#b261a5"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="0"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> Kamala</text>
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="10"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> Harris</text>
+        </g>
+        <g class="node" aria-label="graph-node21"
+            transform="translate(-52.26958053720941,81.20034573955071)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#C990C0" stroke="#b261a5"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="0"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> San</text>
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="10"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> Franci…</text>
+        </g>
+        <g class="node" aria-label="graph-node23"
+            transform="translate(52.14536630162807,-120.75406399781392)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#C990C0" stroke="#b261a5"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="0"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> Attorney</text>
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="10"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif">of…</text>
+        </g>
+        <g class="node" aria-label="graph-node22"
+            transform="translate(-76.8088607917906,-66.37642130383644)">
+            <circle class="b-outline" cx="0" cy="0" r="25" fill="#F79767" stroke="#f36924"
+                stroke-width="2px" />
+            <text class="caption" text-anchor="middle" pointer-events="none" x="0" y="5"
+                font-size="10px" fill="#FFFFFF"
+                font-family="Helvetica Neue, Helvetica, Arial, sans-serif"> podcast</text>
+        </g>
+    </g>
+</svg>
