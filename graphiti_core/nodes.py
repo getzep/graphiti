@@ -68,7 +68,7 @@ class EpisodeType(Enum):
 
 class Node(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: uuid4().hex)
-    name: str = Field(default='')
+    name: str = Field(description='name of the node')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now())
 

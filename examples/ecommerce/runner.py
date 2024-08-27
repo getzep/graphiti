@@ -86,7 +86,6 @@ async def add_messages(client: Graphiti):
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     await ingest_products_data(client)
