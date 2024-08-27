@@ -93,8 +93,8 @@ class EpisodicEdge(Edge):
         MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
         RETURN
             e.uuid As uuid, 
-            e.source_node_uuid AS source_node_uuid, 
-            e.target_node_uuid AS target_node_uuid, 
+            n.uuid AS source_node_uuid, 
+            m.uuid AS target_node_uuid, 
             e.created_at AS created_at
         """,
             uuid=uuid,
@@ -107,7 +107,7 @@ class EpisodicEdge(Edge):
                 EpisodicEdge(
                     uuid=record['uuid'],
                     source_node_uuid=record['source_node_uuid'],
-                    target_node_uuid=['target_node_uuid'],
+                    target_node_uuid=record['target_node_uuid'],
                     created_at=record['created_at'].to_native(),
                 )
             )
@@ -177,7 +177,7 @@ class EntityEdge(Edge):
     async def delete(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
-        MATCH [e:RELATES_TO {uuid: $uuid}]
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
         DELETE e
         """,
             uuid=self.uuid,
@@ -194,8 +194,8 @@ class EntityEdge(Edge):
         MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
         RETURN
             e.uuid AS uuid,
-            e.source_node_uuid AS source_node_uuid,
-            e.target_node_uuid AS target_node_uuid,
+            n.uuid AS source_node_uuid,
+            m.uuid AS target_node_uuid,
             e.created_at AS created_at,
             e.name AS name,
             e.fact AS fact,
