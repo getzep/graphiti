@@ -33,23 +33,27 @@ async def invoke_tool(tool_name: str, **kwargs):
     return await tool.ainvoke(input=kwargs)
 
 
+def get_fact_string(edge):
+    return f'{edge.fact} {edge.valid_at or edge.created_at}'
+
+
 @tool
 async def get_team_roster(team_name: str):
     """Get the current roster for a specific team."""
-    search_result = await graphiti_client.search(f'{team_name.lower()}', num_results=10)
+    search_result = await graphiti_client.search(f'{team_name.lower()}', num_results=30)
     roster = []
-    for fact in search_result:
-        roster.append(fact)
+    for edge in search_result:
+        roster.append(get_fact_string(edge))
     return roster
 
 
 @tool
 async def search_player_info(player_name: str):
     """Search for information about a specific player."""
-    search_result = await graphiti_client.search(f'{player_name}')
+    search_result = await graphiti_client.search(f'{player_name}', num_results=30)
     player_info = {
         'name': player_name,
-        'facts': search_result,
+        'facts': [get_fact_string(edge) for edge in search_result],
     }
     return player_info
 

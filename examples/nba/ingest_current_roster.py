@@ -117,26 +117,26 @@ async def main():
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
 
-    episodes: list[RawEpisode] = [
-        RawEpisode(
-            name=f'Player {player["player_id"]}',
-            content=str(player),
-            source_description='NBA current roster',
-            source=EpisodeType.json,
-            reference_time=datetime.now(),
-        )
-        for i, player in enumerate(current_roster_from_file)
-    ]
+    players_grouped_by_team = {}
+    for player in current_roster_from_file:
+        team_name = player['team_name']
+        if team_name not in players_grouped_by_team:
+            players_grouped_by_team[team_name] = []
+        players_grouped_by_team[team_name].append(player)
 
-    await client.add_episode_bulk(episodes)
-    # client.llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
-    # await client.add_episode(
-    #     name='Player Transfer',
-    #     episode_body='DJ Carton got transeffered to Boston Celtics August 2nd',
-    #     source_description='NBA transfer',
-    #     reference_time=datetime.now(),
-    #     source=EpisodeType.message,
-    # )
+    for _, _ in players_grouped_by_team.items():
+        episodes: list[RawEpisode] = [
+            RawEpisode(
+                name=f'Player {player["player_id"]}',
+                content=str(player),
+                source_description='NBA current roster',
+                source=EpisodeType.json,
+                reference_time=datetime.now(),
+            )
+            for player in players
+        ]
+
+        await client.add_episode_bulk(episodes)
 
 
 if __name__ == '__main__':
