@@ -336,7 +336,6 @@ graphiti is under active development. We aim to maintain API stability while wor
 - [ ] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
-For the latest updates, check the GitHub repository and release notes.
 
 ## Contributing
 
