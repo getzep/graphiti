@@ -51,7 +51,7 @@ graphiti is designed for dynamic data and agentic use:
 
 ## graphiti and Zep Memory
 
-graphiti powers the core of Zep's next-generation memory layer for LLM-powered Assistants and Agents.
+graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
 
 We're excited to open-source graphiti, believing its potential reaches far beyond memory applications.
 
