@@ -277,7 +277,7 @@ The examples below demonstrate two search approaches in the graphiti library:
 1. **Hybrid Search:**
 
    ```python
-   graphiti.search(query)
+   await graphiti.search(query)
    ```
 
    Combines semantic similarity and BM25 retrieval, reranked using Reciprocal Rank Fusion.
@@ -287,7 +287,7 @@ The examples below demonstrate two search approaches in the graphiti library:
 2. **Node Distance Reranking:**
 
    ```python
-   client.search(query, focal_node_uuid)
+   await client.search(query, focal_node_uuid)
    ```
 
    Extends Hybrid Search above by prioritizing results based on proximity to a specified node in the graph.
@@ -322,56 +322,6 @@ print_facts(results)
 > The Allbirds Wool Runners are sold by Allbirds.
 ```
 
-## How graphiti works
-
-### Adding Data as Episodes
-
-```mermaid
-graph LR
-    A[Episode Ingestion] --> B
-
-    subgraph "Node Processing"
-        B[Node Extraction] --> B1[Search for Similar Nodes]
-        B1 --> B2[Node Deduplication]
-    end
-
-    B2 --> C
-
-    subgraph "Edge Processing"
-        C[Edge Extraction] --> C1[Search for Similar Edges]
-        C1 --> C2[Edge Deduplication]
-    end
-
-    C2 --> D[Temporal Analysis]
-    D --> E[Edge Invalidation]
-    E --> F[Graph Update]
-
-    A -->|Retrieve| G[Previous Episodes]
-    G -->|Provide Context| B
-    G -->|Provide Context| C
-```
-
-### Graph Search
-
-```mermaid
-graph LR
-    A[Search Query] --> B[Hybrid Search]
-    B --> C[BM25 on Facts]
-    B --> D[Cosine Similarity on Facts]
-    C --> E[Reciprocal Rank Fusion Reranking]
-    D --> E
-    E --> F[Most Relevant Facts]
-```
-
-two quickest wins for search using the graph database is:
-
-1. chunking. The graph structure means we have preformed chunks and the existing structure allows us to better chunk new episodes. (good chunking is pretty underrated in RAG imo)
-2. Traditional RAG search, for things like facts, is good at finding the small chunked snippets of information, but its bad for providing summarized or more general context. The graph structure allows us to provide this context.
-
-That is why in the complex search we are returning facts which are more specific to the wuery, and nodes which provide summaries about the entities involved. And in the future we can provide community summaries or context based on other forms of graph traversal
-
-And the key there vs fact triplets is that it accomplishes 1 almost as well as a graph, but getting 2 out is not possible without basically creating a pseudo-graph
-
 ## Status and Roadmap
 
 wip, but endavour to not break API.
@@ -388,4 +338,8 @@ Latency scales sublinearly with graph size, with a cap
 
 ## Contributing
 
+We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the graphiti Discord channel. For detailed guidelines on code contributions, please refer to [CONTRIBUTING](CONTRIBUTING.md).
+
 ## Support
+
+Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#graphiti** channel!
