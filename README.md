@@ -164,7 +164,9 @@ await graphiti.add_episode(
 )
 ```
 
-Using the `EpisodeType.message` type supports passing in multi-turn conversations in the `episode_body`. The text should be structured in `{role/name}: {message}` pairs.
+Using the `EpisodeType.message` type supports passing in multi-turn conversations in the `episode_body`.
+
+The text should be structured in `{role/name}: {message}` pairs.
 
 ```python
 await graphiti.add_episode(
@@ -236,10 +238,9 @@ product_data = [
         "material": "Wool",
         "technology": "SuperLight Foam",
         "price": 125.00,
-        "in_stock": True,
+        "in_stock": true,
         "last_updated": "2024-03-15T10:30:00Z"
     },
-    ...
     {
         "id": "PROD0100",
         "name": "Kids Wool Runner-up Mizzles",
@@ -248,7 +249,7 @@ product_data = [
         "material": "Wool",
         "technology": "Water-repellent",
         "price": 80.00,
-        "in_stock": False,
+        "in_stock": true,
         "last_updated": "2024-03-17T14:45:00Z"
     }
 ]
