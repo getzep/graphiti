@@ -75,6 +75,9 @@ class Node(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
+    @abstractmethod
+    async def delete(self, driver: AsyncDriver): ...
+
     def __hash__(self):
         return hash(self.uuid)
 
@@ -82,6 +85,9 @@ class Node(BaseModel, ABC):
         if isinstance(other, Node):
             return self.uuid == other.uuid
         return False
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
 
 
 class EpisodicNode(Node):
@@ -111,12 +117,57 @@ class EpisodicNode(Node):
             created_at=self.created_at,
             valid_at=self.valid_at,
             source=self.source.value,
-            _database='neo4j',
         )
 
         logger.info(f'Saved Node to neo4j: {self.uuid}')
 
         return result
+
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n:Episodic {uuid: $uuid})
+        DETACH DELETE n
+        """,
+            uuid=self.uuid,
+        )
+
+        logger.info(f'Deleted Node: {self.uuid}')
+
+        return result
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic {uuid: $uuid})
+            RETURN e.content as content,
+            e.created_at as created_at,
+            e.valid_at as valid_at,
+            e.uuid as uuid,
+            e.name as name,
+            e.source_description as source_description,
+            e.source as source
+        """,
+            uuid=uuid,
+        )
+
+        episodes = [
+            EpisodicNode(
+                content=record['content'],
+                created_at=record['created_at'].to_native().timestamp(),
+                valid_at=(record['valid_at'].to_native()),
+                uuid=record['uuid'],
+                source=EpisodeType.from_str(record['source']),
+                name=record['name'],
+                source_description=record['source_description'],
+            )
+            for record in records
+        ]
+
+        logger.info(f'Found Node: {uuid}')
+
+        return episodes[0]
 
 
 class EntityNode(Node):
@@ -153,3 +204,47 @@ class EntityNode(Node):
         logger.info(f'Saved Node to neo4j: {self.uuid}')
 
         return result
+
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n:Entity {uuid: $uuid})
+        DETACH DELETE n
+        """,
+            uuid=self.uuid,
+        )
+
+        logger.info(f'Deleted Node: {self.uuid}')
+
+        return result
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity {uuid: $uuid})
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name, 
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuid=uuid,
+        )
+
+        nodes: list[EntityNode] = []
+
+        for record in records:
+            nodes.append(
+                EntityNode(
+                    uuid=record['uuid'],
+                    name=record['name'],
+                    labels=['Entity'],
+                    created_at=record['created_at'].to_native(),
+                    summary=record['summary'],
+                )
+            )
+
+        logger.info(f'Found Node: {uuid}')
+
+        return nodes[0]

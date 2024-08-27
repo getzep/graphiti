@@ -3,22 +3,17 @@ import logging
 import re
 import typing
 from collections import defaultdict
-from datetime import datetime
 from time import time
 
 from neo4j import AsyncDriver
-from neo4j import time as neo4j_time
 
 from graphiti_core.edges import EntityEdge
+from graphiti_core.helpers import parse_db_date
 from graphiti_core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 
 RELEVANT_SCHEMA_LIMIT = 3
-
-
-def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
-    return neo_date.to_native() if neo_date else None
 
 
 async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode]):
@@ -101,12 +96,12 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
         """
-                CALL db.index.vector.queryRelationships("fact_embedding", 5, $search_vector)
+                CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS r, score
                 MATCH (n)-[r:RELATES_TO]->(m)
                 RETURN
@@ -121,7 +116,7 @@ async def edge_similarity_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
-                ORDER BY score DESC LIMIT $limit
+                ORDER BY score DESC
                 """,
         search_vector=search_vector,
         limit=limit,
@@ -150,7 +145,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -184,7 +179,7 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -219,7 +214,7 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -270,10 +265,10 @@ async def edge_fulltext_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    limit: int | None = None,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        limit: int | None = None,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
@@ -316,8 +311,8 @@ async def hybrid_node_search(
     relevant_node_uuids = set()
 
     results = await asyncio.gather(
-        *[entity_fulltext_search(q, driver, limit or RELEVANT_SCHEMA_LIMIT) for q in queries],
-        *[entity_similarity_search(e, driver, limit or RELEVANT_SCHEMA_LIMIT) for e in embeddings],
+        *[entity_fulltext_search(q, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT)) for q in queries],
+        *[entity_similarity_search(e, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT)) for e in embeddings],
     )
 
     for result in results:
@@ -334,8 +329,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -371,8 +366,8 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
+        edges: list[EntityEdge],
+        driver: AsyncDriver,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -417,7 +412,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(results)
@@ -439,8 +434,8 @@ async def node_distance_reranker(
 
         for record in records:
             if (
-                record['source_uuid'] == center_node_uuid
-                or record['target_uuid'] == center_node_uuid
+                    record['source_uuid'] == center_node_uuid
+                    or record['target_uuid'] == center_node_uuid
             ):
                 continue
             distance = record['score']
