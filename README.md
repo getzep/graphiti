@@ -326,17 +326,15 @@ print_facts(results)
 
 graphiti is under active development. We aim to maintain API stability while working on:
 
-- Improving performance and scalability
-- Achieving good performance with different LLM and embedding models
-- Creating a dedicated embedder interface
-- Supporting custom graph schemas:
+- [ ] Implementing node and edge CRUD operations
+- [ ] Improving performance and scalability
+- [ ] Achieving good performance with different LLM and embedding models
+- [ ] Creating a dedicated embedder interface
+- [ ] Supporting custom graph schemas:
   - Allow developers to provide their own defined node and edge classes when ingesting episodes
   - Enable more flexible knowledge representation tailored to specific use cases
-- Implementing node and edge CRUD operations
-- Enhancing retrieval capabilities with more robust and configurable options
-- Expanding test coverage to ensure reliability and catch edge cases
-
-Latency currently scales sublinearly with graph size, with an upper limit.
+- [ ] Enhancing retrieval capabilities with more robust and configurable options
+- [ ] Expanding test coverage to ensure reliability and catch edge cases
 
 For the latest updates, check the GitHub repository and release notes.
 
