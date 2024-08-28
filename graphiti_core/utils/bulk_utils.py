@@ -15,11 +15,13 @@ limitations under the License.
 """
 
 import asyncio
+import logging
 import typing
 from datetime import datetime
+from math import ceil
 
 from neo4j import AsyncDriver
-from numpy import dot
+from numpy import dot, sqrt
 from pydantic import BaseModel
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
@@ -40,7 +42,9 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
 )
 
-CHUNK_SIZE = 15
+logger = logging.getLogger(__name__)
+
+CHUNK_SIZE = 10
 
 
 class RawEpisode(BaseModel):
@@ -165,13 +169,56 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 async def compress_nodes(
         llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
+    # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
     if len(nodes) == 0:
         return nodes, uuid_map
 
-    anchor = nodes[0]
-    nodes.sort(key=lambda node: dot(anchor.name_embedding or [], node.name_embedding or []))
+    # Our approach involves us deduplicating chunks of nodes in parallel.
+    # We want n chunks of size n so that n ** 2 == len(nodes).
+    # We want chunk sizes to be at least 10 for optimizing LLM processing time
+    chunk_size = max(int(sqrt(len(nodes))), CHUNK_SIZE)
 
-    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+    # First calculate similarity scores between nodes
+    similarity_scores: list[tuple[int, int, float]] = [(i, j, dot(n.name_embedding or [], m.name_embedding or [])) for
+                                                       i, n in enumerate(nodes) for j, m in
+                                                       enumerate(nodes[:i])]
+
+    # We now sort by semantic similarity
+    similarity_scores.sort(key=lambda score_tuple: score_tuple[2])
+
+    # initialize our chunks based on chunk size
+    node_chunks: list[list[EntityNode]] = [[] for _ in range(ceil(len(nodes) / chunk_size))]
+
+    # Draft the most similar nodes into the same chunk
+    while len(similarity_scores) > 0:
+        i, j, _ = similarity_scores.pop()
+        # determine if any of the nodes have already been drafted into a chunk
+        n = nodes[i]
+        m = nodes[j]
+        # make sure the shortest chunks get preference
+        node_chunks.sort(reverse=True, key=lambda chunk: len(chunk))
+
+        n_chunk = max([chunk.index(n) if n in chunk else -1 for chunk in node_chunks])
+        m_chunk = max([chunk.index(m) if m in chunk else -1 for chunk in node_chunks])
+
+        # both nodes already in a chunk
+        if n_chunk > -1 and m_chunk > -1:
+            continue
+
+        # n has a chunk and that chunk is not full
+        elif n_chunk > -1 and len(node_chunks[n_chunk]) < chunk_size:
+            # put m in the same chunk as n
+            node_chunks[n_chunk].append(m)
+
+        # m has a chunk and that chunk is not full
+        elif m_chunk > -1 and len(node_chunks[m_chunk]) < chunk_size:
+            # put n in the same chunk as m
+            node_chunks[m_chunk].append(n)
+
+        # neither node has a chunk or the chunk is full
+        else:
+            # add both nodes to the shortest chunk
+            node_chunks[-1].extend([n, m])
 
     results = await asyncio.gather(*[dedupe_node_list(llm_client, chunk) for chunk in node_chunks])
 
@@ -182,6 +229,8 @@ async def compress_nodes(
         extended_map.update(uuid_map_chunk)
 
     # Check if we have removed all duplicates
+    logger.info(f"NODES LENGTH: {len(nodes)}")
+    logger.info(f"COMPRESSED NODES LENGTH: {len(compressed_nodes)}")
     if len(compressed_nodes) == len(nodes):
         compressed_uuid_map = compress_uuid_map(extended_map)
         return compressed_nodes, compressed_uuid_map
@@ -193,9 +242,9 @@ async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list
     if len(edges) == 0:
         return edges
 
-    anchor = edges[0]
+    anchor_edge = edges[0]
     edges.sort(
-        key=lambda embedding: dot(anchor.fact_embedding or [], embedding.fact_embedding or [])
+        key=lambda embedding, anchor=anchor_edge: dot(anchor.fact_embedding or [], embedding.fact_embedding or [])
     )
 
     edge_chunks = [edges[i: i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
