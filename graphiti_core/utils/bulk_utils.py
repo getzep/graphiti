@@ -114,13 +114,21 @@ async def dedupe_nodes_bulk(
 
     compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
 
-    existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
+    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
-    nodes, partial_uuid_map, _ = await dedupe_extracted_nodes(
-        llm_client, compressed_nodes, existing_nodes
-    )
+    existing_nodes_chunks: tuple[list[EntityNode]] = await asyncio.gather(
+        *[get_relevant_nodes(node_chunk, driver) for node_chunk in node_chunks])
 
-    compressed_map.update(partial_uuid_map)
+    results: tuple[tuple[list[EntityNode], dict[str, str], list[EntityNode]]] = await asyncio.gather(
+        *[dedupe_extracted_nodes(
+            llm_client, compressed_nodes, existing_nodes_chunks[i]
+        ) for i, node_chunk in enumerate(node_chunks)])
+
+    nodes: list[EntityNode] = []
+    for result in results:
+        nodes.extend(result[0])
+        partial_uuid_map = result[1]
+        compressed_map.update(partial_uuid_map)
 
     return nodes, compressed_map
 
