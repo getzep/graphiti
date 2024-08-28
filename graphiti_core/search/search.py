@@ -20,7 +20,7 @@ from enum import Enum
 from time import time
 
 from neo4j import AsyncDriver
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client.config import EMBEDDING_DIM
@@ -49,8 +49,8 @@ class Reranker(Enum):
 
 
 class SearchConfig(BaseModel):
-    num_edges: int = 10
-    num_nodes: int = 10
+    num_edges: int = Field(default=10)
+    num_nodes: int = Field(default=10)
     num_episodes: int = EPISODE_WINDOW_LEN
     search_methods: list[SearchMethod]
     reranker: Reranker | None
@@ -63,12 +63,12 @@ class SearchResults(BaseModel):
 
 
 async def hybrid_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    timestamp: datetime,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
@@ -79,11 +79,11 @@ async def hybrid_search(
     search_results = []
 
     if config.num_episodes > 0:
-        episodes.extend(await retrieve_episodes(driver, timestamp))
+        episodes.extend(await retrieve_episodes(driver, timestamp, config.num_episodes))
         nodes.extend(await get_mentioned_nodes(driver, episodes))
 
     if SearchMethod.bm25 in config.search_methods:
-        text_search = await edge_fulltext_search(query, driver)
+        text_search = await edge_fulltext_search(query, driver, 2 * config.num_edges)
         search_results.append(text_search)
 
     if SearchMethod.cosine_similarity in config.search_methods:
@@ -94,7 +94,9 @@ async def hybrid_search(
             .embedding[:EMBEDDING_DIM]
         )
 
-        similarity_search = await edge_similarity_search(search_vector, driver)
+        similarity_search = await edge_similarity_search(
+            search_vector, driver, 2 * config.num_edges
+        )
         search_results.append(similarity_search)
 
     if len(search_results) > 1 and config.reranker is None:

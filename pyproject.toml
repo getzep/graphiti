@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "graphiti-core"
-version = "0.0.1"
+version = "0.1.0"
 description = "A temporal graph building library"
 authors = [
     "Paul Paliychuk <paul@getzep.com>",
     "Preston Rasmussen <preston@getzep.com>",
+    "Daniel Chalef <daniel@getzep.com>",
 ]
 readme = "README.md"
 license = "Apache-2.0"
@@ -20,9 +21,7 @@ fastapi = "^0.112.0"
 neo4j = "^5.23.0"
 sentence-transformers = "^3.0.1"
 diskcache = "^5.6.3"
-arrow = "^1.3.0"
 openai = "^1.38.0"
-anthropic = "^0.34.1"
 tenacity = "^9.0.0"
 
 [tool.poetry.dev-dependencies]
@@ -36,6 +35,7 @@ ruff = "^0.6.2"
 pydantic = "^2.8.2"
 mypy = "^1.11.1"
 groq = "^0.9.0"
+anthropic = "^0.34.1"
 ipykernel = "^6.29.5"
 jupyterlab = "^4.2.4"
 diskcache-stubs = "^5.6.3.6.20240818"
