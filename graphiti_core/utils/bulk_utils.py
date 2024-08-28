@@ -125,7 +125,7 @@ async def dedupe_nodes_bulk(
 
     results: tuple[tuple[list[EntityNode], dict[str, str], list[EntityNode]]] = await asyncio.gather(
         *[dedupe_extracted_nodes(
-            llm_client, compressed_nodes, existing_nodes_chunks[i]
+            llm_client, node_chunk, existing_nodes_chunks[i]
         ) for i, node_chunk in enumerate(node_chunks)])
 
     nodes: list[EntityNode] = []
@@ -198,8 +198,8 @@ async def compress_nodes(
         # make sure the shortest chunks get preference
         node_chunks.sort(reverse=True, key=lambda chunk: len(chunk))
 
-        n_chunk = max([chunk.index(n) if n in chunk else -1 for chunk in node_chunks])
-        m_chunk = max([chunk.index(m) if m in chunk else -1 for chunk in node_chunks])
+        n_chunk = max([i if n in chunk else -1 for i, chunk in enumerate(node_chunks)])
+        m_chunk = max([i if m in chunk else -1 for i, chunk in enumerate(node_chunks)])
 
         # both nodes already in a chunk
         if n_chunk > -1 and m_chunk > -1:
@@ -229,8 +229,6 @@ async def compress_nodes(
         extended_map.update(uuid_map_chunk)
 
     # Check if we have removed all duplicates
-    logger.info(f"NODES LENGTH: {len(nodes)}")
-    logger.info(f"COMPRESSED NODES LENGTH: {len(compressed_nodes)}")
     if len(compressed_nodes) == len(nodes):
         compressed_uuid_map = compress_uuid_map(extended_map)
         return compressed_nodes, compressed_uuid_map
