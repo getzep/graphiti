@@ -124,7 +124,7 @@ async def main():
             players_grouped_by_team[team_name] = []
         players_grouped_by_team[team_name].append(player)
 
-    for _, _ in players_grouped_by_team.items():
+    for _, players in players_grouped_by_team.items():
         episodes: list[RawEpisode] = [
             RawEpisode(
                 name=f'Player {player["player_id"]}',
