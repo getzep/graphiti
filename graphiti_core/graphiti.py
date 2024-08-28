@@ -43,7 +43,7 @@ from graphiti_core.utils.bulk_utils import (
     dedupe_nodes_bulk,
     extract_nodes_and_edges_bulk,
     resolve_edge_pointers,
-    retrieve_previous_episodes_bulk,
+    retrieve_previous_episodes_bulk, compress_edges,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     dedupe_extracted_edges,
@@ -175,9 +175,9 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -205,14 +205,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            success_callback: Callable | None = None,
+            error_callback: Callable | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -407,8 +407,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
+            self,
+            bulk_episodes: list[RawEpisode],
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -481,15 +481,18 @@ class Graphiti:
                 *[edge.generate_embedding(embedder) for edge in extracted_edges],
             )
 
-            # Dedupe extracted nodes
-            nodes, uuid_map = await dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes)
+            # Dedupe extracted nodes, compress extracted edges
+            (nodes, uuid_map), compressed_edges = await asyncio.gather(
+                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
+                compress_edges(self.llm_client, extracted_edges)
+            )
 
             # save nodes to KG
             await asyncio.gather(*[node.save(self.driver) for node in nodes])
 
             # re-map edge pointers so that they don't point to discard dupe nodes
             extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
-                extracted_edges, uuid_map
+                compressed_edges, uuid_map
             )
             episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
                 episodic_edges, uuid_map
@@ -569,11 +572,11 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            timestamp: datetime,
+            config: SearchConfig,
+            center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
