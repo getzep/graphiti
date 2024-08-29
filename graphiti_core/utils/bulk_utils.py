@@ -299,7 +299,7 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
 
 
 async def extract_edge_dates_bulk(llm_client: LLMClient, extracted_edges: list[EntityEdge],
-                                  episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]]):
+                                  episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]]) -> list[EntityEdge]:
     edges = list(extracted_edges)
     episode_uuid_map: dict[str, tuple[EpisodicNode, list[EpisodicNode]]] = {episode.uuid: (episode, previous_episodes)
                                                                             for episode, previous_episodes in
