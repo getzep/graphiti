@@ -482,9 +482,8 @@ class Graphiti:
             )
 
             # Dedupe extracted nodes, compress extracted edges
-            (nodes, uuid_map), compressed_edges = await asyncio.gather(
-                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
-                compress_edges(self.llm_client, extracted_edges)
+            (nodes, uuid_map) = await asyncio.gather(
+                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes)
             )
 
             # save nodes to KG
@@ -492,7 +491,7 @@ class Graphiti:
 
             # re-map edge pointers so that they don't point to discard dupe nodes
             extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
-                compressed_edges, uuid_map
+                extracted_edges, uuid_map
             )
             episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
                 episodic_edges, uuid_map

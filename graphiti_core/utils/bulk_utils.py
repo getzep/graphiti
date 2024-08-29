@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import logging
 import typing
+from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
@@ -140,7 +141,10 @@ async def dedupe_nodes_bulk(
 async def dedupe_edges_bulk(
         driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
-    edge_chunks = [extracted_edges[i: i + CHUNK_SIZE] for i in range(0, len(extracted_edges), CHUNK_SIZE)]
+    # First compress edges
+    compressed_edges = await compress_edges(llm_client, extracted_edges)
+
+    edge_chunks = [compressed_edges[i: i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)]
 
     relevant_edges_chunks: tuple[list[EntityEdge]] = await asyncio.gather(
         *[get_relevant_edges(edge_chunk, driver) for edge_chunk in edge_chunks])
@@ -239,13 +243,21 @@ async def compress_nodes(
 async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
     if len(edges) == 0:
         return edges
+    # We only want to dedupe edges that are between the same pair of nodes
+    # We build a map of the edges based on their source and target nodes.
+    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
+    for edge in edges:
+        # We drop loop edges
+        if edge.source_node_uuid == edge.target_node_uuid:
+            continue
 
-    anchor_edge = edges[0]
-    edges.sort(
-        key=lambda embedding, anchor=anchor_edge: dot(anchor.fact_embedding or [], embedding.fact_embedding or [])
-    )
+        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
+        pointers = [edge.source_node_uuid, edge.target_node_uuid]
+        pointers.sort()
 
-    edge_chunks = [edges[i: i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
+        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
+
+    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
 
     results = await asyncio.gather(*[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks])
 
@@ -283,3 +295,17 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
 
     return edges
+
+
+async def extract_edge_dates_bulk(llm_client: LLMClient, extracted_edges: list[EntityEdge]):
+    valid_at, invalid_at, _ = await extract_edge_dates(
+        llm_client,
+        edge,
+        episode.valid_at,
+        episode,
+        previous_episodes,
+    )
+    edge.valid_at = valid_at
+    edge.invalid_at = invalid_at
+    if edge.invalid_at:
+        edge.expired_at = datetime.now()

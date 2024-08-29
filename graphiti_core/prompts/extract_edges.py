@@ -110,10 +110,11 @@ def v2(context: dict[str, Any]) -> list[Message]:
 
         Guidelines:
         1. Create edges only between the provided nodes.
-        2. Each edge should represent a clear relationship between two nodes.
+        2. Each edge should represent a clear relationship between two DISTINCT nodes.
         3. The relation_type should be a concise, all-caps description of the relationship (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
         4. Provide a more detailed fact describing the relationship.
         5. Consider temporal aspects of relationships when relevant.
+        6. Avoid using the same node as the source and target of a relationship
 
         Respond with a JSON object in the following format:
         {{
