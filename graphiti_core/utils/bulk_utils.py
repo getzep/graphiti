@@ -42,6 +42,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     dedupe_node_list,
     extract_nodes,
 )
+from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
 
 logger = logging.getLogger(__name__)
 
@@ -297,15 +298,28 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
     return edges
 
 
-async def extract_edge_dates_bulk(llm_client: LLMClient, extracted_edges: list[EntityEdge]):
-    valid_at, invalid_at, _ = await extract_edge_dates(
+async def extract_edge_dates_bulk(llm_client: LLMClient, extracted_edges: list[EntityEdge],
+                                  episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]]):
+    edges = list(extracted_edges)
+    episode_uuid_map: dict[str, tuple[EpisodicNode, list[EpisodicNode]]] = {episode.uuid: (episode, previous_episodes)
+                                                                            for episode, previous_episodes in
+                                                                            episode_pairs}
+
+    results = await asyncio.gather(*[extract_edge_dates(
         llm_client,
         edge,
-        episode.valid_at,
-        episode,
-        previous_episodes,
-    )
-    edge.valid_at = valid_at
-    edge.invalid_at = invalid_at
-    if edge.invalid_at:
-        edge.expired_at = datetime.now()
+        episode_uuid_map[edge.episodes[0]][0],
+        episode_uuid_map[edge.episodes[0]][1],
+    ) for edge in edges])
+
+    for i, result in enumerate(results):
+        valid_at = result[0]
+        invalid_at = result[1]
+        edge = edges[i]
+
+        edge.valid_at = valid_at
+        edge.invalid_at = invalid_at
+        if edge.invalid_at:
+            edge.expired_at = datetime.now()
+
+    return edges

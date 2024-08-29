@@ -319,26 +319,24 @@ class Graphiti:
                 valid_at, invalid_at, _ = await extract_edge_dates(
                     self.llm_client,
                     edge,
-                    episode.valid_at,
                     episode,
                     previous_episodes,
                 )
                 edge.valid_at = valid_at
                 edge.invalid_at = invalid_at
                 if edge.invalid_at:
-                    edge.expired_at = datetime.now()
+                    edge.expired_at = now
             for edge in existing_edges:
                 valid_at, invalid_at, _ = await extract_edge_dates(
                     self.llm_client,
                     edge,
-                    episode.valid_at,
                     episode,
                     previous_episodes,
                 )
                 edge.valid_at = valid_at
                 edge.invalid_at = invalid_at
                 if edge.invalid_at:
-                    edge.expired_at = datetime.now()
+                    edge.expired_at = now
             (
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
