@@ -27,7 +27,7 @@ from .config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4o-mini'
+DEFAULT_MODEL = 'gpt-4o-2024-08-06'
 
 
 class OpenAIClient(LLMClient):
