@@ -248,12 +248,14 @@ Current event: {event}
 
 Your task is to decide on an action based on the event. 
 Use the available tools to gather information, but focus on making a decision quickly. 
-If you think a player transfer would benefit your team, propose one following the guidelines below. Make sure to get familiar with the entire transfer history of a given player
+If you think a player transfer would benefit your team, propose one following the guidelines below. 
+Make sure to get familiar with the entire transfer history of a given player. 
+If the player has a transfer history, make sure to use the existing pricing history to make a perfect offer. Make sure that the offer is fair, not too expensive, but still compelling enough to make the transfer happen.
 Ensure that you use the current budget info and the current state of your team (use an appropriate tool to get the current state of your team) to make the best decision.
 Current budget: ${budget}
 
 Valid teams for transfers: {valid_teams}
-Do not propose transfers you cannot afford.
+Do not propose transfers you cannot afford. (you cant go into debt!)
 IMPORTANT: After gathering information, you MUST make a decision. Your options are:
 1. Propose a transfer
     Note: if you are proposing a transfer make sure to output JSON in the following format:
@@ -263,7 +265,7 @@ IMPORTANT: After gathering information, you MUST make a decision. Your options a
             "from_team": "team_name",
             "player_name": "player_name",
             "proposed_price": price,
-            "reason": "reason for the proposed transfer"
+            "reason": "reason for the proposed transfer. Make sure to include pricing considerations in the reason"
         }}
     }}
     IMPORTANT: Only propose transfers to teams in the valid teams list. Make sure that the player_name is a valid player on the from_team. Ensure that the the from_team name is a valid team name.
@@ -386,7 +388,7 @@ def create_simulator_agent():
     Your role is to generate realistic events based on the current state of NBA teams and players. 
     Use the provided team and player information to create engaging and plausible scenarios.
     Ensure that you use as much as possible from the teams_context to create the event. 
-    Use the existing events to get a sense of the narrative unfolding.
+    Use the existing events to get a sense of the narrative unfolding. Additionally, if you see the players that dont have a lot of context, make sure to include them in the event to make for a more compelling story.
     Current NBA landscape:
     {teams_context}
 

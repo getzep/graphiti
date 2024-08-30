@@ -94,7 +94,7 @@ def fetch_current_roster():
                     'team_name': name,
                     'player_id': player_dict['PLAYER_ID'],
                     'player_name': player_dict['PLAYER'],
-                    'last_transfer_price': random_number_from_list,
+                    'last_transfer_price': f'${random_number_from_list:,}',
                     # 'player_number': player_dict['NUM'],
                     # 'player_position': player_dict['POSITION'],
                     # 'player_school': player_dict['SCHOOL'],
@@ -128,19 +128,25 @@ async def main():
             players_grouped_by_team[team_name] = []
         players_grouped_by_team[team_name].append(player)
 
-    for _, players in players_grouped_by_team.items():
-        episodes: list[RawEpisode] = [
-            RawEpisode(
-                name=f'Player {player["player_id"]}',
-                content=str(player),
-                source_description='NBA current roster',
-                source=EpisodeType.json,
-                reference_time=datetime.now(),
-            )
-            for player in players
-        ]
+    episodes: list[RawEpisode] = [
+        RawEpisode(
+            name=f'Player {player["player_id"]}',
+            content=str(
+                {
+                    'team_name': player['team_name'],
+                    'player_name': player['player_name'],
+                    'last_transfer_price': player['last_transfer_price']
+                    + '<instruction>Make sure to extract the this as a node with the name of the price. Make sure to extract the edge with the name of TRANSFER_PRICE</instruction>',
+                }
+            ),
+            source_description='NBA current roster',
+            source=EpisodeType.json,
+            reference_time=datetime.now(),
+        )
+        for player in current_roster_from_file
+    ]
 
-        await client.add_episode_bulk(episodes)
+    await client.add_episode_bulk(episodes)
 
 
 if __name__ == '__main__':
