@@ -29,9 +29,10 @@ from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
 from graphiti_core.search.search_utils import (
+    RELEVANT_SCHEMA_LIMIT,
     get_relevant_edges,
     get_relevant_nodes,
-    hybrid_node_search, RELEVANT_SCHEMA_LIMIT,
+    hybrid_node_search,
 )
 from graphiti_core.utils import (
     build_episodic_edges,
@@ -176,9 +177,9 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-            self,
-            reference_time: datetime,
-            last_n: int = EPISODE_WINDOW_LEN,
+        self,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -206,14 +207,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-            self,
-            name: str,
-            episode_body: str,
-            source_description: str,
-            reference_time: datetime,
-            source: EpisodeType = EpisodeType.message,
-            success_callback: Callable | None = None,
-            error_callback: Callable | None = None,
+        self,
+        name: str,
+        episode_body: str,
+        source_description: str,
+        reference_time: datetime,
+        source: EpisodeType = EpisodeType.message,
+        success_callback: Callable | None = None,
+        error_callback: Callable | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -406,8 +407,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-            self,
-            bulk_episodes: list[RawEpisode],
+        self,
+        bulk_episodes: list[RawEpisode],
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -571,17 +572,19 @@ class Graphiti:
         return edges
 
     async def _search(
-            self,
-            query: str,
-            timestamp: datetime,
-            config: SearchConfig,
-            center_node_uuid: str | None = None,
+        self,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
-    async def get_nodes_by_query(self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT) -> list[EntityNode]:
+    async def get_nodes_by_query(
+        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+    ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
 
