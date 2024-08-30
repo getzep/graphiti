@@ -170,6 +170,186 @@
     "player_name": "Pat Spencer"
   },
   {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1641720,
+    "player_name": "Jalen Hood-Schifino"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1626156,
+    "player_name": "D'Angelo Russell"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1629020,
+    "player_name": "Jarred Vanderbilt"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 203076,
+    "player_name": "Anthony Davis"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1630219,
+    "player_name": "Skylar Mays"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1629629,
+    "player_name": "Cam Reddish"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1629216,
+    "player_name": "Gabe Vincent"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1631108,
+    "player_name": "Max Christie"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1629637,
+    "player_name": "Jaxson Hayes"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1627752,
+    "player_name": "Taurean Prince"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1630658,
+    "player_name": "Colin Castleton"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1630559,
+    "player_name": "Austin Reaves"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1628385,
+    "player_name": "Harry Giles III"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1641721,
+    "player_name": "Maxwell Lewis"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 2544,
+    "player_name": "LeBron James"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 203915,
+    "player_name": "Spencer Dinwiddie"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1629060,
+    "player_name": "Rui Hachimura"
+  },
+  {
+    "team_name": "Los Angeles Lakers",
+    "player_id": 1626174,
+    "player_name": "Christian Wood"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1626196,
+    "player_name": "Josh Richardson"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1626179,
+    "player_name": "Terry Rozier"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1626153,
+    "player_name": "Delon Wright"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631107,
+    "player_name": "Nikola Jovic"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631288,
+    "player_name": "Jamal Cain"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 201988,
+    "player_name": "Patty Mills"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631170,
+    "player_name": "Jaime Jaquez Jr."
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1628389,
+    "player_name": "Bam Adebayo"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1629639,
+    "player_name": "Tyler Herro"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631214,
+    "player_name": "Alondes Williams"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1628997,
+    "player_name": "Caleb Martin"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631306,
+    "player_name": "Cole Swider"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 202710,
+    "player_name": "Jimmy Butler"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1629312,
+    "player_name": "Haywood Highsmith"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1631115,
+    "player_name": "Orlando Robinson"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1628418,
+    "player_name": "Thomas Bryant"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 201567,
+    "player_name": "Kevin Love"
+  },
+  {
+    "team_name": "Miami Heat",
+    "player_id": 1629130,
+    "player_name": "Duncan Robinson"
+  },
+  {
     "team_name": "Toronto Raptors",
     "player_id": 1642013,
     "player_name": "Malik Williams"

@@ -21,7 +21,13 @@ from graphiti_core.nodes import EpisodeType
 logging.getLogger('langchain.callbacks.tracers.langchain').setLevel(logging.WARNING)
 logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
 DEFAULT_MODEL = 'gpt-4o-mini'
-
+VALID_TEAMS = [
+    'Toronto Raptors',
+    'Boston Celtics',
+    'Golden State Warriors',
+    'Miami Heat',
+    'Los Angeles Lakers',
+]
 load_dotenv()
 logging.basicConfig(
     level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -183,12 +189,6 @@ async def search_player_info(player_name: str):
 
 
 @tool
-async def propose_transfer(player_name: str, from_team: str, to_team: str, proposed_price: int):
-    """Propose a player transfer from one team to another with a proposed price."""
-    return f'TRANSFER PROPOSAL: {to_team} wants to buy {player_name} from {from_team} for ${proposed_price:,}.'
-
-
-@tool
 async def execute_transfer(
     player_name: str, from_team: str, to_team: str, price: int
 ) -> Dict[str, Any]:
@@ -236,7 +236,7 @@ tools = [
 
 
 # Define the team agent function
-def create_team_agent(team_name: str, valid_teams: List[str]):
+def create_team_agent(team_name: str):
     llm = ChatOpenAI(temperature=0.3, model=DEFAULT_MODEL).bind(
         response_format={'type': 'json_object'}
     )
@@ -245,7 +245,7 @@ def create_team_agent(team_name: str, valid_teams: List[str]):
 Current event: {event}
 
 Your task is to decide on an action based on the event. Use the available tools to gather information, but focus on making a decision quickly. If you think a player transfer would benefit your team, propose one following the guidelines below.
-Ensure that you use the current budget info and the current state of your team to make the best decision.
+Ensure that you use the current budget info and the current state of your team (use an appropriate tool to get the current state of your team) to make the best decision.
 Current budget: ${budget}
 
 Valid teams for transfers: {valid_teams}
@@ -280,7 +280,7 @@ Do not ask for more information or clarification. Make a decision based on what 
                 'team_name': team_name,
                 'event': state['event'],
                 'budget': team_data['budget'],
-                'valid_teams': ', '.join(valid_teams),
+                'valid_teams': ', '.join(VALID_TEAMS),
             }
         )
 
@@ -289,8 +289,8 @@ Do not ask for more information or clarification. Make a decision based on what 
         if 'transfer_proposal' in json_result:
             transfer_offer = json_result['transfer_proposal']
             if (
-                transfer_offer['to_team'] not in valid_teams
-                or transfer_offer['from_team'] not in valid_teams
+                transfer_offer['to_team'] not in VALID_TEAMS
+                or transfer_offer['from_team'] not in VALID_TEAMS
             ):
                 logger.warning(f'Invalid transfer proposal: {transfer_offer}. Ignoring.')
                 transfer_offer = None
@@ -300,29 +300,6 @@ Do not ask for more information or clarification. Make a decision based on what 
         }
 
     return team_agent_function
-
-
-def parse_transfer_proposal(proposal: str) -> Dict[str, Any]:
-    # Use regex to extract information
-    to_team_match = re.search(r'(.*?) wants to buy', proposal)
-    player_match = re.search(r'buy (.*?) from', proposal)
-    from_team_match = re.search(r'from (.*?) for', proposal)
-    price_match = re.search(r'\$([0-9,]+)', proposal)
-
-    if not all([to_team_match, player_match, from_team_match, price_match]):
-        raise ValueError(f'Unable to parse transfer proposal: {proposal}')
-
-    to_team = to_team_match.group(1)
-    player_name = player_match.group(1)
-    from_team = from_team_match.group(1)
-    proposed_price = int(price_match.group(1).replace(',', ''))
-
-    return {
-        'to_team': to_team,
-        'from_team': from_team,
-        'player_name': player_name,
-        'proposed_price': proposed_price,
-    }
 
 
 async def process_event(state: SimulationState) -> SimulationState:
@@ -407,8 +384,7 @@ simulator_prompt, simulator_llm = create_simulator_agent()
 
 
 async def simulate_event(state: SimulationState) -> SimulationState:
-    teams = ['Toronto Raptors', 'Boston Celtics', 'Golden State Warriors']
-    teams_context = await fetch_all_teams_context.ainvoke({'teams': teams})
+    teams_context = await fetch_all_teams_context.ainvoke({'teams': VALID_TEAMS})
 
     result = await simulator_llm.ainvoke(
         simulator_prompt.format_prompt(teams_context=json.dumps(teams_context, indent=2))
@@ -432,9 +408,8 @@ workflow = StateGraph(SimulationState)
 # Add nodes
 workflow.add_node('simulate_event', simulate_event)
 workflow.add_node('process_event', process_event)
-valid_teams = ['Toronto Raptors', 'Boston Celtics', 'Golden State Warriors']
-for team in valid_teams:
-    workflow.add_node(f'agent_{team}', create_team_agent(team, valid_teams))
+for team in VALID_TEAMS:
+    workflow.add_node(f'agent_{team}', create_team_agent(team))
 workflow.add_node('process_transfers', process_transfers)
 
 # Add edges
@@ -442,10 +417,10 @@ workflow.add_edge(START, 'simulate_event')
 workflow.add_edge('simulate_event', 'process_event')
 
 # Add edges from process_event to all agent nodes
-for team in valid_teams:
+for team in VALID_TEAMS:
     workflow.add_edge('process_event', f'agent_{team}')
 
-for team in valid_teams:
+for team in VALID_TEAMS:
     workflow.add_edge(f'agent_{team}', 'process_transfers')
 
 
@@ -469,14 +444,12 @@ print(app.get_graph().draw_mermaid())
 
 async def run_simulation():
     num_iterations = int(input('Enter the number of simulation iterations: '))
-
+    teams = {}
+    for t in VALID_TEAMS:
+        teams[t] = {'budget': 100_000_000}
     initial_state = SimulationState(
         messages=[],
-        teams={
-            'Toronto Raptors': {'budget': 100000000},
-            'Boston Celtics': {'budget': 100000000},
-            'Golden State Warriors': {'budget': 100000000},
-        },
+        teams=teams,
         event='',
         transfer_offers=[],
         current_iteration=0,
@@ -490,7 +463,7 @@ async def run_simulation():
         print(f"{team_name} - Budget: ${team_data['budget']:,}")
     print(f'Steps taken: {final_state["current_iteration"]}')
     for event in final_state['all_events']:
-        print('/n')
+        print('\n')
         print(event)
         print('\n')
 

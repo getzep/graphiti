@@ -82,6 +82,7 @@ def fetch_current_roster():
             or name == 'Boston Celtics'
             or name == 'Toronto Raptors'
             or name == 'Los Angeles Lakers'
+            or name == 'Miami Heat'
         ):
             roster = commonteamroster.CommonTeamRoster(team_id=t['id']).get_dict()
             players_data = roster['resultSets'][0]
@@ -111,7 +112,7 @@ def fetch_current_roster():
 
 
 async def main():
-    # fetch_current_roster()
+    fetch_current_roster()
     current_roster_from_file: list[PlayerInfo] = []
     script_dir = Path(__file__).parent
     filename = script_dir / 'current_nba_roster.json'
