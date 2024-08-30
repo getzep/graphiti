@@ -22,7 +22,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
-
+import random
 from dotenv import load_dotenv
 from nba_api.stats.endpoints import commonteamroster, teamdetails
 from nba_api.stats.static import players, teams
@@ -77,13 +77,7 @@ def fetch_current_roster():
     for t in all_teams:
         name = t['full_name']
         print(name)
-        if (
-            name == 'Golden State Warriors'
-            or name == 'Boston Celtics'
-            or name == 'Toronto Raptors'
-            or name == 'Los Angeles Lakers'
-            or name == 'Miami Heat'
-        ):
+        if name == 'Boston Celtics' or name == 'Toronto Raptors':
             roster = commonteamroster.CommonTeamRoster(team_id=t['id']).get_dict()
             players_data = roster['resultSets'][0]
             headers = players_data['headers']
@@ -93,10 +87,14 @@ def fetch_current_roster():
                 player_dict = dict(zip(headers, row))
                 player_dict['team_name'] = name
                 print(player_dict)
+                random_number_from_list = random.choice(
+                    [2_000_000, 2_250_000, 2_500_000, 2_750_000, 3_000_000]
+                )
                 meaningful_data = {
                     'team_name': name,
                     'player_id': player_dict['PLAYER_ID'],
                     'player_name': player_dict['PLAYER'],
+                    'last_transfer_price': random_number_from_list,
                     # 'player_number': player_dict['NUM'],
                     # 'player_position': player_dict['POSITION'],
                     # 'player_school': player_dict['SCHOOL'],

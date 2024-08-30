@@ -2,436 +2,205 @@
   {
     "team_name": "Boston Celtics",
     "player_id": 1628369,
-    "player_name": "Jayson Tatum"
+    "player_name": "Jayson Tatum",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 201950,
-    "player_name": "Jrue Holiday"
+    "player_name": "Jrue Holiday",
+    "last_transfer_price": 3000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1627759,
-    "player_name": "Jaylen Brown"
+    "player_name": "Jaylen Brown",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 204001,
-    "player_name": "Kristaps Porzingis"
+    "player_name": "Kristaps Porzingis",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1628401,
-    "player_name": "Derrick White"
+    "player_name": "Derrick White",
+    "last_transfer_price": 2750000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1630202,
-    "player_name": "Payton Pritchard"
+    "player_name": "Payton Pritchard",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1629052,
-    "player_name": "Oshae Brissett"
+    "player_name": "Oshae Brissett",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1641809,
-    "player_name": "Drew Peterson"
+    "player_name": "Drew Peterson",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1631120,
-    "player_name": "JD Davison"
+    "player_name": "JD Davison",
+    "last_transfer_price": 3000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1630214,
-    "player_name": "Xavier Tillman"
+    "player_name": "Xavier Tillman",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1641775,
-    "player_name": "Jordan Walsh"
+    "player_name": "Jordan Walsh",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1630573,
-    "player_name": "Sam Hauser"
+    "player_name": "Sam Hauser",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1628436,
-    "player_name": "Luke Kornet"
+    "player_name": "Luke Kornet",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 201143,
-    "player_name": "Al Horford"
+    "player_name": "Al Horford",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1630531,
-    "player_name": "Jaden Springer"
+    "player_name": "Jaden Springer",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1629004,
-    "player_name": "Svi Mykhailiuk"
+    "player_name": "Svi Mykhailiuk",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Boston Celtics",
     "player_id": 1629674,
-    "player_name": "Neemias Queta"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1627780,
-    "player_name": "Gary Payton II"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1630228,
-    "player_name": "Jonathan Kuminga"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1641764,
-    "player_name": "Brandin Podziemski"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 101108,
-    "player_name": "Chris Paul"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1630541,
-    "player_name": "Moses Moody"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1626172,
-    "player_name": "Kevon Looney"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 202691,
-    "player_name": "Klay Thompson"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1630586,
-    "player_name": "Usman Garuba"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1630611,
-    "player_name": "Gui Santos"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1629010,
-    "player_name": "Jerome Robinson"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 203967,
-    "player_name": "Dario Saric"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 203952,
-    "player_name": "Andrew Wiggins"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 203110,
-    "player_name": "Draymond Green"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1631311,
-    "player_name": "Lester Quinones"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 201939,
-    "player_name": "Stephen Curry"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1631218,
-    "player_name": "Trayce Jackson-Davis"
-  },
-  {
-    "team_name": "Golden State Warriors",
-    "player_id": 1630311,
-    "player_name": "Pat Spencer"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1641720,
-    "player_name": "Jalen Hood-Schifino"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1626156,
-    "player_name": "D'Angelo Russell"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1629020,
-    "player_name": "Jarred Vanderbilt"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 203076,
-    "player_name": "Anthony Davis"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1630219,
-    "player_name": "Skylar Mays"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1629629,
-    "player_name": "Cam Reddish"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1629216,
-    "player_name": "Gabe Vincent"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1631108,
-    "player_name": "Max Christie"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1629637,
-    "player_name": "Jaxson Hayes"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1627752,
-    "player_name": "Taurean Prince"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1630658,
-    "player_name": "Colin Castleton"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1630559,
-    "player_name": "Austin Reaves"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1628385,
-    "player_name": "Harry Giles III"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1641721,
-    "player_name": "Maxwell Lewis"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 2544,
-    "player_name": "LeBron James"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 203915,
-    "player_name": "Spencer Dinwiddie"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1629060,
-    "player_name": "Rui Hachimura"
-  },
-  {
-    "team_name": "Los Angeles Lakers",
-    "player_id": 1626174,
-    "player_name": "Christian Wood"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1626196,
-    "player_name": "Josh Richardson"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1626179,
-    "player_name": "Terry Rozier"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1626153,
-    "player_name": "Delon Wright"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631107,
-    "player_name": "Nikola Jovic"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631288,
-    "player_name": "Jamal Cain"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 201988,
-    "player_name": "Patty Mills"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631170,
-    "player_name": "Jaime Jaquez Jr."
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1628389,
-    "player_name": "Bam Adebayo"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1629639,
-    "player_name": "Tyler Herro"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631214,
-    "player_name": "Alondes Williams"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1628997,
-    "player_name": "Caleb Martin"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631306,
-    "player_name": "Cole Swider"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 202710,
-    "player_name": "Jimmy Butler"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1629312,
-    "player_name": "Haywood Highsmith"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1631115,
-    "player_name": "Orlando Robinson"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1628418,
-    "player_name": "Thomas Bryant"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 201567,
-    "player_name": "Kevin Love"
-  },
-  {
-    "team_name": "Miami Heat",
-    "player_id": 1629130,
-    "player_name": "Duncan Robinson"
+    "player_name": "Neemias Queta",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1642013,
-    "player_name": "Malik Williams"
+    "player_name": "Malik Williams",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1631241,
-    "player_name": "Javon Freeman-Liberty"
+    "player_name": "Javon Freeman-Liberty",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1641711,
-    "player_name": "Gradey Dick"
+    "player_name": "Gradey Dick",
+    "last_transfer_price": 2750000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1629667,
-    "player_name": "Jalen McDaniels"
+    "player_name": "Jalen McDaniels",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1630618,
-    "player_name": "DJ Carton"
+    "player_name": "DJ Carton",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1630567,
-    "player_name": "Scottie Barnes"
+    "player_name": "Scottie Barnes",
+    "last_transfer_price": 3000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1630193,
-    "player_name": "Immanuel Quickley"
+    "player_name": "Immanuel Quickley",
+    "last_transfer_price": 2750000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1629628,
-    "player_name": "RJ Barrett"
+    "player_name": "RJ Barrett",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1628971,
-    "player_name": "Bruce Brown"
+    "player_name": "Bruce Brown",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1629670,
-    "player_name": "Jordan Nwora"
+    "player_name": "Jordan Nwora",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1631338,
-    "player_name": "Mouhamadou Gueye"
+    "player_name": "Mouhamadou Gueye",
+    "last_transfer_price": 2750000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 202066,
-    "player_name": "Garrett Temple"
+    "player_name": "Garrett Temple",
+    "last_transfer_price": 2250000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1627751,
-    "player_name": "Jakob Poeltl"
+    "player_name": "Jakob Poeltl",
+    "last_transfer_price": 2750000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1628449,
-    "player_name": "Chris Boucher"
+    "player_name": "Chris Boucher",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1630534,
-    "player_name": "Ochai Agbaji"
+    "player_name": "Ochai Agbaji",
+    "last_transfer_price": 2500000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 1629018,
-    "player_name": "Gary Trent Jr."
+    "player_name": "Gary Trent Jr.",
+    "last_transfer_price": 2000000
   },
   {
     "team_name": "Toronto Raptors",
     "player_id": 203482,
-    "player_name": "Kelly Olynyk"
+    "player_name": "Kelly Olynyk",
+    "last_transfer_price": 2000000
   }
 ]

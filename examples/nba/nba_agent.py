@@ -24,9 +24,9 @@ DEFAULT_MODEL = 'gpt-4o-mini'
 VALID_TEAMS = [
     'Toronto Raptors',
     'Boston Celtics',
-    'Golden State Warriors',
-    'Miami Heat',
-    'Los Angeles Lakers',
+    # 'Golden State Warriors',
+    # 'Miami Heat',
+    # 'Los Angeles Lakers',
 ]
 load_dotenv()
 logging.basicConfig(
@@ -59,6 +59,7 @@ class SimulationState(TypedDict):
     current_iteration: int
     all_events: List[str]
     max_iterations: int
+    teams_context: Dict[str, List[dict]]
 
 
 @tool
@@ -99,7 +100,7 @@ async def fetch_all_teams_context(teams: List[str]):
             "players": [
                 {{
                     "name": "Player Name",
-                    "summary": "Brief summary of the player"
+                    "summary": "Brief summary of the player. Make sure you include all the information you can get from the roster facts about the player. Do not include any information that is not in the roster facts. If dates are mentioned, make sure to integrate them well in the summary. If applicable it can tell the course of events"
                 }},
                 ...
             ]
@@ -190,7 +191,7 @@ async def search_player_info(player_name: str):
 
 @tool
 async def execute_transfer(
-    player_name: str, from_team: str, to_team: str, price: int
+    player_name: str, from_team: str, to_team: str, price: int, reason: str
 ) -> Dict[str, Any]:
     """Execute a transfer between two teams."""
     await graphiti_client.add_episode(
@@ -203,7 +204,7 @@ async def execute_transfer(
     return {
         'messages': [
             HumanMessage(
-                content=f'Transfer executed: {player_name} moved from {from_team} to {to_team} for ${price:,}'
+                content=f'Transfer executed: {player_name} moved from {from_team} to {to_team} for ${price:,} Reason: {reason}'
             )
         ],
     }
@@ -211,6 +212,7 @@ async def execute_transfer(
 
 async def add_episode(event_description: str):
     """Add a new episode to the Graphiti client."""
+    logger.info(f'Adding episode: {event_description}')
     await graphiti_client.add_episode(
         name='New Event',
         episode_body=event_description,
@@ -244,12 +246,14 @@ def create_team_agent(team_name: str):
 
 Current event: {event}
 
-Your task is to decide on an action based on the event. Use the available tools to gather information, but focus on making a decision quickly. If you think a player transfer would benefit your team, propose one following the guidelines below.
+Your task is to decide on an action based on the event. 
+Use the available tools to gather information, but focus on making a decision quickly. 
+If you think a player transfer would benefit your team, propose one following the guidelines below. Make sure to get familiar with the entire transfer history of a given player
 Ensure that you use the current budget info and the current state of your team (use an appropriate tool to get the current state of your team) to make the best decision.
 Current budget: ${budget}
 
 Valid teams for transfers: {valid_teams}
-
+Do not propose transfers you cannot afford.
 IMPORTANT: After gathering information, you MUST make a decision. Your options are:
 1. Propose a transfer
     Note: if you are proposing a transfer make sure to output JSON in the following format:
@@ -258,11 +262,15 @@ IMPORTANT: After gathering information, you MUST make a decision. Your options a
             "to_team": "team_name",
             "from_team": "team_name",
             "player_name": "player_name",
-            "proposed_price": price
+            "proposed_price": price,
+            "reason": "reason for the proposed transfer"
         }}
     }}
     IMPORTANT: Only propose transfers to teams in the valid teams list. Make sure that the player_name is a valid player on the from_team. Ensure that the the from_team name is a valid team name.
-2. Do nothing (output an empty JSON object)
+2. Do nothing (output the following JSON object)
+    {{
+        "no_transfer": "reason for not proposing a transfer"
+    }}
 
 Do not ask for more information or clarification. Make a decision based on what you know.
 
@@ -285,25 +293,33 @@ Do not ask for more information or clarification. Make a decision based on what 
         )
 
         json_result = json.loads(result['output'])
+        messages = []
         transfer_offer = None
         if 'transfer_proposal' in json_result:
             transfer_offer = json_result['transfer_proposal']
+            logger.info(f'Transfer proposal made by {team_name}: {transfer_offer["reason"]}')
+            messages.append(f'Transfer proposal made by {team_name}: {transfer_offer["reason"]}')
             if (
                 transfer_offer['to_team'] not in VALID_TEAMS
                 or transfer_offer['from_team'] not in VALID_TEAMS
             ):
                 logger.warning(f'Invalid transfer proposal: {transfer_offer}. Ignoring.')
                 transfer_offer = None
-
+        if 'no_transfer' in json_result:
+            logger.info(f'No transfer proposal made by {team_name}: {json_result["no_transfer"]}')
+            messages.append(
+                f'No transfer proposal made by {team_name}: {json_result["no_transfer"]}'
+            )
         return {
             'transfer_offers': [transfer_offer] if transfer_offer else [],
+            'messages': messages,
         }
 
     return team_agent_function
 
 
 async def process_event(state: SimulationState) -> SimulationState:
-    # await add_episode(state['event'])
+    await add_episode(state['event'])
     return {
         **state,
         'messages': [f"Event processed: {state['event']}"],
@@ -338,10 +354,11 @@ async def process_transfers(state: SimulationState) -> SimulationState:
                 'from_team': best_offer['from_team'],
                 'to_team': best_offer['to_team'],
                 'price': best_offer['proposed_price'],
+                'reason': best_offer['reason'],
             }
         )
         # Add the transfer result message to the state
-        state['messages'].extend(transfer_result['messages'])
+        state['messages'] = [transfer_result['messages']]
 
         # Update team rosters and budgets
         from_team = best_offer['from_team']
@@ -365,8 +382,11 @@ def create_simulator_agent():
         temperature=0.7, model=DEFAULT_MODEL
     )  # Higher temperature for more creative events
     prompt = ChatPromptTemplate.from_template("""
-    You are an NBA event simulator. Your role is to generate realistic events based on the current state of NBA teams and players. Use the provided team and player information to create engaging and plausible scenarios.
-
+    You are an NBA event simulator. 
+    Your role is to generate realistic events based on the current state of NBA teams and players. 
+    Use the provided team and player information to create engaging and plausible scenarios.
+    Ensure that you use as much as possible from the teams_context to create the event. 
+    Use the existing events to get a sense of the narrative unfolding.
     Current NBA landscape:
     {teams_context}
 
@@ -383,9 +403,35 @@ def create_simulator_agent():
 simulator_prompt, simulator_llm = create_simulator_agent()
 
 
+def create_analyzer_agent():
+    llm = ChatOpenAI(temperature=0.7, model='gpt-4o')  # Higher temperature for more creative events
+    prompt = ChatPromptTemplate.from_template("""
+    You are an NBA Simulation Turn analyzer. 
+    Your task is to compare the previous state of the graph (before the last turn) and the current state of the graph (after the last turn) and provide a brief analysis of the changes that occurred.
+    Make sure to put more emphasis on the transfers or reasons why transfers were not made.
+
+    Previous state of the graph:
+    {previous_state}
+
+    Current state of the graph:
+    {current_state}
+                                              
+    Changes that occurred during the last turn:
+    {changes}
+    
+    Output the analysis as a brief summary of the changes that occurred.
+
+    Analysis:
+    """)
+
+    return prompt, llm
+
+
+analyzer_prompt, analyzer_llm = create_analyzer_agent()
+
+
 async def simulate_event(state: SimulationState) -> SimulationState:
     teams_context = await fetch_all_teams_context.ainvoke({'teams': VALID_TEAMS})
-
     result = await simulator_llm.ainvoke(
         simulator_prompt.format_prompt(teams_context=json.dumps(teams_context, indent=2))
     )
@@ -396,10 +442,27 @@ async def simulate_event(state: SimulationState) -> SimulationState:
     return {
         **state,
         'event': new_event,
+        'teams_context': teams_context,
         'all_events': existing_events,
         'transfer_offers': [],
         'current_iteration': state['current_iteration'] + 1,
     }
+
+
+async def analyze_simulation_turn(state: SimulationState) -> SimulationState:
+    current_teams_context = state['teams_context']
+    updated_team_context = await fetch_all_teams_context.ainvoke({'teams': VALID_TEAMS})
+    result = await analyzer_llm.ainvoke(
+        analyzer_prompt.format_prompt(
+            previous_state=json.dumps(current_teams_context, indent=2),
+            current_state=json.dumps(updated_team_context, indent=2),
+            changes=state['messages'],
+        )
+    )
+
+    summary = result.content
+    logger.info(f'Analysis of the last turn: {summary}')
+    return state
 
 
 # Create the graph
@@ -411,7 +474,7 @@ workflow.add_node('process_event', process_event)
 for team in VALID_TEAMS:
     workflow.add_node(f'agent_{team}', create_team_agent(team))
 workflow.add_node('process_transfers', process_transfers)
-
+workflow.add_node('analyze_simulation_turn', analyze_simulation_turn)
 # Add edges
 workflow.add_edge(START, 'simulate_event')
 workflow.add_edge('simulate_event', 'process_event')
@@ -431,8 +494,10 @@ def routing_function(state: SimulationState) -> str:
         return 'simulate_event'
 
 
+workflow.add_edge('process_transfers', 'analyze_simulation_turn')
+
 workflow.add_conditional_edges(
-    'process_transfers',
+    'analyze_simulation_turn',
     routing_function,
 )
 
