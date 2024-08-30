@@ -29,6 +29,7 @@ from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
 from graphiti_core.search.search_utils import (
+    RELEVANT_SCHEMA_LIMIT,
     get_relevant_edges,
     get_relevant_nodes,
     hybrid_node_search,
@@ -41,6 +42,7 @@ from graphiti_core.utils.bulk_utils import (
     RawEpisode,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
+    extract_edge_dates_bulk,
     extract_nodes_and_edges_bulk,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
@@ -319,26 +321,24 @@ class Graphiti:
                 valid_at, invalid_at, _ = await extract_edge_dates(
                     self.llm_client,
                     edge,
-                    episode.valid_at,
                     episode,
                     previous_episodes,
                 )
                 edge.valid_at = valid_at
                 edge.invalid_at = invalid_at
                 if edge.invalid_at:
-                    edge.expired_at = datetime.now()
+                    edge.expired_at = now
             for edge in existing_edges:
                 valid_at, invalid_at, _ = await extract_edge_dates(
                     self.llm_client,
                     edge,
-                    episode.valid_at,
                     episode,
                     previous_episodes,
                 )
                 edge.valid_at = valid_at
                 edge.invalid_at = invalid_at
                 if edge.invalid_at:
-                    edge.expired_at = datetime.now()
+                    edge.expired_at = now
             (
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
@@ -481,15 +481,18 @@ class Graphiti:
                 *[edge.generate_embedding(embedder) for edge in extracted_edges],
             )
 
-            # Dedupe extracted nodes
-            nodes, uuid_map = await dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes)
+            # Dedupe extracted nodes, compress extracted edges
+            (nodes, uuid_map), extracted_edges_timestamped = await asyncio.gather(
+                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
+                extract_edge_dates_bulk(self.llm_client, extracted_edges, episode_pairs),
+            )
 
             # save nodes to KG
             await asyncio.gather(*[node.save(self.driver) for node in nodes])
 
             # re-map edge pointers so that they don't point to discard dupe nodes
             extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
-                extracted_edges, uuid_map
+                extracted_edges_timestamped, uuid_map
             )
             episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
                 episodic_edges, uuid_map
@@ -579,7 +582,9 @@ class Graphiti:
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
-    async def get_nodes_by_query(self, query: str, limit: int | None = None) -> list[EntityNode]:
+    async def get_nodes_by_query(
+        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+    ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
 

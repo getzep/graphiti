@@ -147,7 +147,6 @@ def process_edge_invalidation_llm_response(
 async def extract_edge_dates(
     llm_client: LLMClient,
     edge: EntityEdge,
-    reference_time: datetime,
     current_episode: EpisodicNode,
     previous_episodes: List[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None, str]:
@@ -156,7 +155,7 @@ async def extract_edge_dates(
         'edge_fact': edge.fact,
         'current_episode': current_episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
-        'reference_timestamp': reference_time.isoformat(),
+        'reference_timestamp': current_episode.valid_at.isoformat(),
     }
     llm_response = await llm_client.generate_response(prompt_library.extract_edge_dates.v1(context))
 

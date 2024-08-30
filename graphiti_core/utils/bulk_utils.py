@@ -15,11 +15,14 @@ limitations under the License.
 """
 
 import asyncio
+import logging
 import typing
+from collections import defaultdict
 from datetime import datetime
+from math import ceil
 
 from neo4j import AsyncDriver
-from numpy import dot
+from numpy import dot, sqrt
 from pydantic import BaseModel
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
@@ -39,8 +42,11 @@ from graphiti_core.utils.maintenance.node_operations import (
     dedupe_node_list,
     extract_nodes,
 )
+from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
 
-CHUNK_SIZE = 15
+logger = logging.getLogger(__name__)
+
+CHUNK_SIZE = 10
 
 
 class RawEpisode(BaseModel):
@@ -52,7 +58,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+        driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await asyncio.gather(
         *[
@@ -68,7 +74,7 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def extract_nodes_and_edges_bulk(
-    llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
+        llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await asyncio.gather(
         *[
@@ -105,36 +111,67 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: AsyncDriver,
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
+        driver: AsyncDriver,
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
     nodes, uuid_map = node_name_match(extracted_nodes)
 
     compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
 
-    existing_nodes = await get_relevant_nodes(compressed_nodes, driver)
+    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
-    nodes, partial_uuid_map, _ = await dedupe_extracted_nodes(
-        llm_client, compressed_nodes, existing_nodes
+    existing_nodes_chunks: list[list[EntityNode]] = list(
+        await asyncio.gather(
+            *[get_relevant_nodes(node_chunk, driver) for node_chunk in node_chunks]
+        )
     )
 
-    compressed_map.update(partial_uuid_map)
+    results: list[tuple[list[EntityNode], dict[str, str], list[EntityNode]]] = list(
+        await asyncio.gather(
+            *[
+                dedupe_extracted_nodes(llm_client, node_chunk, existing_nodes_chunks[i])
+                for i, node_chunk in enumerate(node_chunks)
+            ]
+        )
+    )
 
-    return nodes, compressed_map
+    final_nodes: list[EntityNode] = []
+    for result in results:
+        final_nodes.extend(result[0])
+        partial_uuid_map = result[1]
+        compressed_map.update(partial_uuid_map)
+
+    return final_nodes, compressed_map
 
 
 async def dedupe_edges_bulk(
-    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+        driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
-    # Compress edges
+    # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)
 
-    existing_edges = await get_relevant_edges(compressed_edges, driver)
+    edge_chunks = [
+        compressed_edges[i: i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
+    ]
 
-    edges = await dedupe_extracted_edges(llm_client, compressed_edges, existing_edges)
+    relevant_edges_chunks: list[list[EntityEdge]] = list(
+        await asyncio.gather(
+            *[get_relevant_edges(edge_chunk, driver) for edge_chunk in edge_chunks]
+        )
+    )
 
+    resolved_edge_chunks: list[list[EntityEdge]] = list(
+        await asyncio.gather(
+            *[
+                dedupe_extracted_edges(llm_client, edge_chunk, relevant_edges_chunks[i])
+                for i, edge_chunk in enumerate(edge_chunks)
+            ]
+        )
+    )
+
+    edges = [edge for edge_chunk in resolved_edge_chunks for edge in edge_chunk]
     return edges
 
 
@@ -152,15 +189,60 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 
 
 async def compress_nodes(
-    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
+        llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
+    # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
     if len(nodes) == 0:
         return nodes, uuid_map
 
-    anchor = nodes[0]
-    nodes.sort(key=lambda node: dot(anchor.name_embedding or [], node.name_embedding or []))
+    # Our approach involves us deduplicating chunks of nodes in parallel.
+    # We want n chunks of size n so that n ** 2 == len(nodes).
+    # We want chunk sizes to be at least 10 for optimizing LLM processing time
+    chunk_size = max(int(sqrt(len(nodes))), CHUNK_SIZE)
 
-    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+    # First calculate similarity scores between nodes
+    similarity_scores: list[tuple[int, int, float]] = [
+        (i, j, dot(n.name_embedding or [], m.name_embedding or []))
+        for i, n in enumerate(nodes)
+        for j, m in enumerate(nodes[:i])
+    ]
+
+    # We now sort by semantic similarity
+    similarity_scores.sort(key=lambda score_tuple: score_tuple[2])
+
+    # initialize our chunks based on chunk size
+    node_chunks: list[list[EntityNode]] = [[] for _ in range(ceil(len(nodes) / chunk_size))]
+
+    # Draft the most similar nodes into the same chunk
+    while len(similarity_scores) > 0:
+        i, j, _ = similarity_scores.pop()
+        # determine if any of the nodes have already been drafted into a chunk
+        n = nodes[i]
+        m = nodes[j]
+        # make sure the shortest chunks get preference
+        node_chunks.sort(reverse=True, key=lambda chunk: len(chunk))
+
+        n_chunk = max([i if n in chunk else -1 for i, chunk in enumerate(node_chunks)])
+        m_chunk = max([i if m in chunk else -1 for i, chunk in enumerate(node_chunks)])
+
+        # both nodes already in a chunk
+        if n_chunk > -1 and m_chunk > -1:
+            continue
+
+        # n has a chunk and that chunk is not full
+        elif n_chunk > -1 and len(node_chunks[n_chunk]) < chunk_size:
+            # put m in the same chunk as n
+            node_chunks[n_chunk].append(m)
+
+        # m has a chunk and that chunk is not full
+        elif m_chunk > -1 and len(node_chunks[m_chunk]) < chunk_size:
+            # put n in the same chunk as m
+            node_chunks[m_chunk].append(n)
+
+        # neither node has a chunk or the chunk is full
+        else:
+            # add both nodes to the shortest chunk
+            node_chunks[-1].extend([n, m])
 
     results = await asyncio.gather(*[dedupe_node_list(llm_client, chunk) for chunk in node_chunks])
 
@@ -181,13 +263,21 @@ async def compress_nodes(
 async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
     if len(edges) == 0:
         return edges
+    # We only want to dedupe edges that are between the same pair of nodes
+    # We build a map of the edges based on their source and target nodes.
+    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
+    for edge in edges:
+        # We drop loop edges
+        if edge.source_node_uuid == edge.target_node_uuid:
+            continue
 
-    anchor = edges[0]
-    edges.sort(
-        key=lambda embedding: dot(anchor.fact_embedding or [], embedding.fact_embedding or [])
-    )
+        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
+        pointers = [edge.source_node_uuid, edge.target_node_uuid]
+        pointers.sort()
 
-    edge_chunks = [edges[i : i + CHUNK_SIZE] for i in range(0, len(edges), CHUNK_SIZE)]
+        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
+
+    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
 
     results = await asyncio.gather(*[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks])
 
@@ -223,5 +313,45 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
         target_uuid = edge.target_node_uuid
         edge.source_node_uuid = uuid_map.get(source_uuid, source_uuid)
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
+
+    return edges
+
+
+async def extract_edge_dates_bulk(
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
+) -> list[EntityEdge]:
+    edges: list[EntityEdge] = []
+    # confirm that all of our edges have at least one episode
+    for edge in extracted_edges:
+        if edge.episodes is not None and len(edge.episodes) > 0:
+            edges.append(edge)
+
+    episode_uuid_map: dict[str, tuple[EpisodicNode, list[EpisodicNode]]] = {
+        episode.uuid: (episode, previous_episodes) for episode, previous_episodes in episode_pairs
+    }
+
+    results = await asyncio.gather(
+        *[
+            extract_edge_dates(
+                llm_client,
+                edge,
+                episode_uuid_map[edge.episodes[0]][0],  # type: ignore
+                episode_uuid_map[edge.episodes[0]][1],  # type: ignore
+            )
+            for edge in edges
+        ]
+    )
+
+    for i, result in enumerate(results):
+        valid_at = result[0]
+        invalid_at = result[1]
+        edge = edges[i]
+
+        edge.valid_at = valid_at
+        edge.invalid_at = invalid_at
+        if edge.invalid_at:
+            edge.expired_at = datetime.now()
 
     return edges
