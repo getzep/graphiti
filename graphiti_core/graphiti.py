@@ -31,7 +31,7 @@ from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hy
 from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
-    hybrid_node_search,
+    hybrid_node_search, RELEVANT_SCHEMA_LIMIT,
 )
 from graphiti_core.utils import (
     build_episodic_edges,
@@ -39,7 +39,6 @@ from graphiti_core.utils import (
 )
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
-    compress_edges,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_edge_dates_bulk,
@@ -177,9 +176,9 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -207,14 +206,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            success_callback: Callable | None = None,
+            error_callback: Callable | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -407,8 +406,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
+            self,
+            bulk_episodes: list[RawEpisode],
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -572,17 +571,17 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            timestamp: datetime,
+            config: SearchConfig,
+            center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
-    async def get_nodes_by_query(self, query: str, limit: int | None = None) -> list[EntityNode]:
+    async def get_nodes_by_query(self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
 

@@ -96,7 +96,7 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
@@ -145,7 +145,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -179,7 +179,7 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -214,7 +214,7 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -265,16 +265,16 @@ async def edge_fulltext_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
 
     This method combines fulltext search and vector similarity search to find
-    relevant nodes in the graph database. It uses an rrf reranker
+    relevant nodes in the graph database. It uses an rrf reranker.
 
     Parameters
     ----------
@@ -318,7 +318,7 @@ async def hybrid_node_search(
     node_uuid_map: dict[str, EntityNode] = {
         node.uuid: node for result in results for node in result
     }
-    result_uuids = [[node.uuid or node_uuid_map for node in result] for result in results]
+    result_uuids = [[node.uuid for node in result] for result in results]
 
     ranked_uuids = rrf(result_uuids)
 
@@ -330,8 +330,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -367,8 +367,8 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
+        edges: list[EntityEdge],
+        driver: AsyncDriver,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -413,7 +413,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(results)
@@ -435,8 +435,8 @@ async def node_distance_reranker(
 
         for record in records:
             if (
-                record['source_uuid'] == center_node_uuid
-                or record['target_uuid'] == center_node_uuid
+                    record['source_uuid'] == center_node_uuid
+                    or record['target_uuid'] == center_node_uuid
             ):
                 continue
             distance = record['score']
