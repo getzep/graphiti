@@ -268,13 +268,13 @@ async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
     driver: AsyncDriver,
-    limit: int | None = None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
 
     This method combines fulltext search and vector similarity search to find
-    relevant nodes in the graph database.
+    relevant nodes in the graph database. It uses an rrf reranker.
 
     Parameters
     ----------
@@ -307,27 +307,25 @@ async def hybrid_node_search(
     """
 
     start = time()
-    relevant_nodes: list[EntityNode] = []
-    relevant_node_uuids = set()
 
-    results = await asyncio.gather(
-        *[entity_fulltext_search(q, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT)) for q in queries],
-        *[
-            entity_similarity_search(e, driver, 2 * (limit or RELEVANT_SCHEMA_LIMIT))
-            for e in embeddings
-        ],
+    results: list[list[EntityNode]] = list(
+        await asyncio.gather(
+            *[entity_fulltext_search(q, driver, 2 * limit) for q in queries],
+            *[entity_similarity_search(e, driver, 2 * limit) for e in embeddings],
+        )
     )
 
-    for result in results:
-        for node in result:
-            if node.uuid in relevant_node_uuids:
-                continue
+    node_uuid_map: dict[str, EntityNode] = {
+        node.uuid: node for result in results for node in result
+    }
+    result_uuids = [[node.uuid for node in result] for result in results]
 
-            relevant_node_uuids.add(node.uuid)
-            relevant_nodes.append(node)
+    ranked_uuids = rrf(result_uuids)
+
+    relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
 
     end = time()
-    logger.info(f'Found relevant nodes: {relevant_node_uuids} in {(end - start) * 1000} ms')
+    logger.info(f'Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms')
     return relevant_nodes
 
 

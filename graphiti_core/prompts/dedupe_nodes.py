@@ -53,7 +53,9 @@ def v1(context: dict[str, Any]) -> list[Message]:
         1. start with the list of nodes from New Nodes
         2. If any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
             node in the list
-        3. Respond with the resulting list of nodes
+        3. when deduplicating nodes, synthesize their summaries into a short new summary that contains the relevant information
+            of the summaries of the new and existing nodes
+        4. Respond with the resulting list of nodes
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if they are duplicates, 
@@ -64,6 +66,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             "new_nodes": [
                 {{
                     "name": "Unique identifier for the node",
+                    "summary": "Brief summary of the node's role or significance"
                 }}
             ]
         }}
@@ -92,6 +95,8 @@ def v2(context: dict[str, Any]) -> list[Message]:
         If a node in the new nodes is describing the same entity as a node in the existing nodes, mark it as a duplicate!!!
         Task:
         If any node in New Nodes is a duplicate of a node in Existing Nodes, add their names to the output list
+        When finding duplicates nodes, synthesize their summaries into a short new summary that contains the 
+        relevant information of the summaries of the new and existing nodes.
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if they are duplicates, 
@@ -104,7 +109,8 @@ def v2(context: dict[str, Any]) -> list[Message]:
             "duplicates": [
                 {{
                     "name": "name of the new node",
-                    "duplicate_of": "name of the existing node"
+                    "duplicate_of": "name of the existing node",
+                    "summary": "Brief summary of the node's role or significance. Takes information from the new and existing nodes"
                 }}
             ]
         }}
@@ -130,6 +136,7 @@ def node_list(context: dict[str, Any]) -> list[Message]:
         Task:
         1. Group nodes together such that all duplicate nodes are in the same list of names
         2. All duplicate names should be grouped together in the same list
+        3. Also return a new summary that synthesizes the summary into a new short summary
 
         Guidelines:
         1. Each name from the list of nodes should appear EXACTLY once in your response
@@ -140,6 +147,7 @@ def node_list(context: dict[str, Any]) -> list[Message]:
             "nodes": [
                 {{
                     "names": ["myNode", "node that is a duplicate of myNode"],
+                    "summary": "Brief summary of the node summaries that appear in the list of names."
                 }}
             ]
         }}

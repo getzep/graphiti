@@ -189,6 +189,7 @@ async def dedupe_node_list(
     uuid_map: dict[str, str] = {}
     for node_data in nodes_data:
         node = node_map[node_data['names'][0]]
+        node.summary = node_data['summary']
         unique_nodes.append(node)
 
         for name in node_data['names'][1:]:
