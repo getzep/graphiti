@@ -77,7 +77,12 @@ def fetch_current_roster():
     for t in all_teams:
         name = t['full_name']
         print(name)
-        if name == 'Golden State Warriors' or name == 'Boston Celtics' or name == 'Toronto Raptors':
+        if (
+            name == 'Golden State Warriors'
+            or name == 'Boston Celtics'
+            or name == 'Toronto Raptors'
+            or name == 'Los Angeles Lakers'
+        ):
             roster = commonteamroster.CommonTeamRoster(team_id=t['id']).get_dict()
             players_data = roster['resultSets'][0]
             headers = players_data['headers']
