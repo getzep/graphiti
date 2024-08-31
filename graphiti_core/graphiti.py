@@ -290,7 +290,7 @@ class Graphiti:
             )
             existing_nodes = await get_relevant_nodes(extracted_nodes, self.driver)
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-            touched_nodes, _, brand_new_nodes = await dedupe_extracted_nodes(
+            touched_nodes, _ = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
             )
             logger.info(f'Adjusted touched nodes: {[(n.name, n.uuid) for n in touched_nodes]}')
@@ -312,7 +312,7 @@ class Graphiti:
                 existing_edges,
             )
 
-            edge_touched_node_uuids = [n.uuid for n in brand_new_nodes]
+            edge_touched_node_uuids = [n.uuid for n in touched_nodes]
             for edge in deduped_edges:
                 edge_touched_node_uuids.append(edge.source_node_uuid)
                 edge_touched_node_uuids.append(edge.target_node_uuid)
@@ -399,9 +399,7 @@ class Graphiti:
 
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
-            # for node in nodes:
-            #     if isinstance(node, EntityNode):
-            #         await node.update_summary(self.driver)
+
             if success_callback:
                 await success_callback(episode)
         except Exception as e:
