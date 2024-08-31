@@ -22,7 +22,7 @@ Graphiti builds dynamic, temporally aware Knowledge Graphs that represent comple
 
  
 <p align="center">
-    <img src="/images/Graphiti-intro-slides-stock-2.gif" alt="Graphiti demo slides" width="700px">   
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti demo slides" width="700px">   
 </p>
 
 <br />
