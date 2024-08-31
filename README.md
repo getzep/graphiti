@@ -27,7 +27,7 @@ Graphiti builds dynamic, temporally aware Knowledge Graphs that represent comple
 
 <br />
 
-Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as “Kendra loves Adidas shoes.” Each fact is a “triplet”, represented by two entities, or nodes (”Kendra”, “Adidas shoes”), and their relationship, or edge (”loves”). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
+Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
  
 With Graphiti, you can build LLM applications such as:
 
@@ -41,11 +41,11 @@ Graphiti supports a wide range of applications in sales, customer service, healt
 We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal aspects of data.
 
 Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and scale:
-- Temporal Awareness: Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph edges include temporal metadata to record relationship lifecycles.
-- Episodic Processing: Ingests data as discrete episodes, maintaining data provenance and allowing incremental entity and relationship extraction.
-- Hybrid Search: Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a central node e.g. “Kendra”.
-- Scalable: Designed for processing large datasets, with parallelization of LLM calls for bulk processing while preserving the chronology of events.
-- Supports Varied Sources: Can ingest both unstructured text and structured JSON data.
+- **Temporal Awareness:** Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph edges include temporal metadata to record relationship lifecycles.
+- **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental entity and relationship extraction.
+- **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a central node e.g. “Kendra”.
+- **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while preserving the chronology of events.
+- **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data.
 
 
 ## Graphiti and Zep Memory
