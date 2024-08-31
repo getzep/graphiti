@@ -1,56 +1,58 @@
 <div align="center">
 
-# graphiti
+# Graphiti
 
 ## Temporal Knowledge Graphs for Agentic Applications
 
 <br />
 
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
-[![Lint](https://github.com/getzep/graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/lint.yml)
-[![Unit Tests](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/unit_tests.yml)
-[![MyPy Check](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/graphiti/actions/workflows/typecheck.yml)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/graphiti)
+[![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
+[![Unit Tests](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml)
+[![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/Graphiti)
 
 <br />
 
 </div>
 
-graphiti builds dynamic, temporally aware knowledge graphs that represent complex, evolving relationships between entities over time. graphiti ingests both unstructured and structured data and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
+Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
 
 <br />
 
  
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="graphiti demo slides" width="700px">   
+    <img src="/images/Graphiti-intro-slides-stock-2.gif" alt="Graphiti demo slides" width="700px">   
 </p>
 
 <br />
+
+Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as “Kendra loves Adidas shoes.” Each fact is a “triplet”, represented by two entities, or nodes (”Kendra”, “Adidas shoes”), and their relationship, or edge (”loves”). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
  
-With graphiti, you can build LLM applications such as:
+With Graphiti, you can build LLM applications such as:
 
 - Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
 - Agents that autonomously execute complex tasks, reasoning with state changes from multiple dynamic sources.
 
-graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term recall and state-based reasoning for both assistants and agents.
+Graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term recall and state-based reasoning for both assistants and agents.
 
-## Why graphiti?
+## Why Graphiti?
 
-graphiti is designed for dynamic data and agentic use:
+We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal aspects of data.
 
-- **Smart Graph Updates**: Automatically evaluates new entities against the current graph, revising both to reflect the latest context.
-- **Rich Edge Semantics**: Generates human-readable, semantic, and full-text searchable representations for edges during graph construction, enabling search and enhancing interpretability.
-- **Temporal Awareness**: Extracts and updates time-based edge metadata from input data, enabling reasoning over changing relationships.
-- **Hybrid Search**: Offers semantic, BM25, and graph-based search with the ability to fuse results.
-- **Fast**: Search results in < 100ms, with latency primarily determined by the 3rd-party embedding API call.
-- **Schema Consistency**: Maintains a coherent graph structure by reusing existing schema, preventing unnecessary proliferation of node and edge types.
+Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and scale:
+- Temporal Awareness: Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph edges include temporal metadata to record relationship lifecycles.
+- Episodic Processing: Ingests data as discrete episodes, maintaining data provenance and allowing incremental entity and relationship extraction.
+- Hybrid Search: Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a central node e.g. “Kendra”.
+- Scalable: Designed for processing large datasets, with parallelization of LLM calls for bulk processing while preserving the chronology of events.
+- Supports Varied Sources: Can ingest both unstructured text and structured JSON data.
 
 
-## graphiti and Zep Memory
+## Graphiti and Zep Memory
 
-graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
+Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
 
-We're excited to open-source graphiti, believing its potential reaches far beyond memory applications.
+We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
 
 
 
@@ -70,13 +72,13 @@ Optional:
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly interface to manage Neo4j instances and databases.
 
 ```bash
-pip install graphiti-core
+pip install Graphiti-core
 ```
 
 or
 
 ```bash
-poetry add graphiti-core
+poetry add Graphiti-core
 ```
 
 
@@ -84,18 +86,18 @@ poetry add graphiti-core
 ## Quick Start
 
 > [!IMPORTANT]
-> graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
+> Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
 
 ```python
-from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
+from Graphiti_core import Graphiti
+from Graphiti_core.nodes import EpisodeType
 from datetime import datetime
 
 # Initialize Graphiti
-graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
+Graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
-# Initialize the graph database with graphiti's indices. This only needs to be done once.
-graphiti.build_indices_and_constraints() 
+# Initialize the graph database with Graphiti's indices. This only needs to be done once.
+Graphiti.build_indices_and_constraints() 
 
 # Add episodes
 episodes = [
@@ -104,7 +106,7 @@ episodes = [
     "As AG, Harris was in office from January 3, 2011 – January 3, 2017",
 ]
 for i, episode in enumerate(episodes):
-    await graphiti.add_episode(
+    await Graphiti.add_episode(
         name=f"Freakonomics Radio {i}",
         episode_body=episode,
         source=EpisodeType.text,
@@ -115,7 +117,7 @@ for i, episode in enumerate(episodes):
 # Search the graph
 # Execute a hybrid search combining semantic similarity and BM25 retrieval
 # Results are combined and reranked using Reciprocal Rank Fusion
-results = await graphiti.search('Who was the California Attorney General?')
+results = await Graphiti.search('Who was the California Attorney General?')
 [
     EntityEdge(
     │   uuid='3133258f738e487383f07b04e15d4ac0',
@@ -145,19 +147,19 @@ results = await graphiti.search('Who was the California Attorney General?')
 await client.search('Who was the California Attorney General?', center_node_uuid)
 
 # Close the connection
-graphiti.close()
+Graphiti.close()
 ```
 
 
 
 ## Documentation
 
-Visit the Zep knowledge base for graphiti [Guides and API documentation](https://help.getzep.com/graphiti/graphiti).
+Visit the Zep knowledge base for Graphiti [Guides and API documentation](https://help.getzep.com/Graphiti/Graphiti).
 
 
 ## Status and Roadmap
 
-graphiti is under active development. We aim to maintain API stability while working on:
+Graphiti is under active development. We aim to maintain API stability while working on:
 
 - [X] Implementing node and edge CRUD operations
 - [ ] Improving performance and scalability
@@ -172,8 +174,8 @@ graphiti is under active development. We aim to maintain API stability while wor
 
 ## Contributing
 
-We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the graphiti Discord channel. For detailed guidelines on code contributions, please refer to [CONTRIBUTING](CONTRIBUTING.md).
+We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#graphiti** channel!
+Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
