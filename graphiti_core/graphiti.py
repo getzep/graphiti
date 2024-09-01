@@ -61,6 +61,7 @@ from graphiti_core.utils.maintenance.temporal_operations import (
     invalidate_edges,
     prepare_edges_for_invalidation,
 )
+from graphiti_core.utils.utils import chunk_edges_by_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,8 @@ class Graphiti:
                 valid_at=reference_time,
             )
 
+            # Extract entities as nodes
+
             extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
@@ -288,61 +291,67 @@ class Graphiti:
             await asyncio.gather(
                 *[node.generate_name_embedding(embedder) for node in extracted_nodes]
             )
+
+            # Resolve extracted nodes with nodes already in the graph
             existing_nodes = await get_relevant_nodes(extracted_nodes, self.driver)
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-            touched_nodes, _ = await dedupe_extracted_nodes(
+            mentioned_nodes, _ = await dedupe_extracted_nodes(
                 self.llm_client, extracted_nodes, existing_nodes
             )
-            logger.info(f'Adjusted touched nodes: {[(n.name, n.uuid) for n in touched_nodes]}')
-            nodes.extend(touched_nodes)
+            logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
+            nodes.extend(mentioned_nodes)
 
+            # Extract facts as edges given entity nodes
             extracted_edges = await extract_edges(
-                self.llm_client, episode, touched_nodes, previous_episodes
+                self.llm_client, episode, mentioned_nodes, previous_episodes
             )
 
+            # calculate embeddings
             await asyncio.gather(*[edge.generate_embedding(embedder) for edge in extracted_edges])
 
-            existing_edges = await get_relevant_edges(extracted_edges, self.driver)
-            logger.info(f'Existing edges: {[(e.name, e.uuid) for e in existing_edges]}')
-            logger.info(f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}')
+            # Group edges by their source and target nodes
+            edge_chunks = chunk_edges_by_nodes(extracted_edges)
 
-            deduped_edges = await dedupe_extracted_edges(
+            # Find relevant schema by edge chunk and then reconcile them
+            existing_edge_chunks: list[list[EntityEdge]] = list(await asyncio.gather(
+                *[get_relevant_edges(chunk, self.driver, chunk[0].target_node_uuid, chunk[0].source_node_uuid) for chunk
+                  in edge_chunks]))
+            existing_edges: list[EntityEdge] = [edge for chunk in existing_edge_chunks for edge in chunk]
+            logger.info(f'Existing edge chunks: {[(e.name, e.uuid) for e in existing_edges]}')
+            logger.info(f'Extracted edge chunks: {[(e.name, e.uuid) for chunk in existing_edge_chunks for e in chunk]}')
+
+            deduped_edge_chunks: list[list[EntityEdge]] = list(await asyncio.gather(*[dedupe_extracted_edges(
                 self.llm_client,
-                extracted_edges,
-                existing_edges,
-            )
+                extracted_chunk,
+                existing_chunk,
+            ) for extracted_chunk, existing_chunk in zip(edge_chunks, existing_edge_chunks)]))
 
-            edge_touched_node_uuids = [n.uuid for n in touched_nodes]
+            deduped_edges: list[EntityEdge] = [edge for chunk in deduped_edge_chunks for edge in chunk]
+
+            edge_mentioned_node_uuids = [n.uuid for n in mentioned_nodes]
             for edge in deduped_edges:
-                edge_touched_node_uuids.append(edge.source_node_uuid)
-                edge_touched_node_uuids.append(edge.target_node_uuid)
+                edge_mentioned_node_uuids.append(edge.source_node_uuid)
+                edge_mentioned_node_uuids.append(edge.target_node_uuid)
+
+            # Extract dates for the newly extracted edges as well as related existing edges
+            edges_to_save = existing_edges + deduped_edges
 
             edge_dates = await asyncio.gather(*[extract_edge_dates(
                 self.llm_client,
                 edge,
                 episode,
                 previous_episodes,
-            ) for edge in deduped_edges])
+            ) for edge in edges_to_save])
 
-            for i, edge in enumerate(deduped_edges):
+            for i, edge in enumerate(edges_to_save):
                 valid_at = edge_dates[i][0]
                 invalid_at = edge_dates[i][1]
 
                 edge.valid_at = valid_at
                 edge.invalid_at = invalid_at
-                if edge.invalid_at:
+                if edge.invalid_at is not None:
                     edge.expired_at = now
-            for edge in existing_edges:
-                valid_at, invalid_at = await extract_edge_dates(
-                    self.llm_client,
-                    edge,
-                    episode,
-                    previous_episodes,
-                )
-                edge.valid_at = valid_at
-                edge.invalid_at = invalid_at
-                if edge.invalid_at:
-                    edge.expired_at = now
+
             (
                 old_edges_with_nodes_pending_invalidation,
                 new_edges_with_nodes,
@@ -365,16 +374,14 @@ class Graphiti:
                 for deduped_edge in deduped_edges:
                     if deduped_edge.uuid == edge.uuid:
                         deduped_edge.expired_at = edge.expired_at
-                edge_touched_node_uuids.append(edge.source_node_uuid)
-                edge_touched_node_uuids.append(edge.target_node_uuid)
+                edge_mentioned_node_uuids.append(edge.source_node_uuid)
+                edge_mentioned_node_uuids.append(edge.target_node_uuid)
             logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
-
-            edges_to_save = existing_edges + deduped_edges
 
             entity_edges.extend(edges_to_save)
 
-            edge_touched_node_uuids = list(set(edge_touched_node_uuids))
-            involved_nodes = [node for node in nodes if node.uuid in edge_touched_node_uuids]
+            edge_mentioned_node_uuids = list(set(edge_mentioned_node_uuids))
+            involved_nodes = [node for node in nodes if node.uuid in edge_mentioned_node_uuids]
 
             logger.info(f'Edge touched nodes: {[(n.name, n.uuid) for n in involved_nodes]}')
 
@@ -388,7 +395,6 @@ class Graphiti:
                     now,
                 )
             )
-            # Important to append the episode to the nodes at the end so that self referencing episodic edges are not built
             logger.info(f'Built episodic edges: {episodic_edges}')
 
             # Future optimization would be using batch operations to save nodes and edges

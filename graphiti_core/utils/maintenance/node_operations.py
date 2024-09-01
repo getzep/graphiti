@@ -153,10 +153,10 @@ async def dedupe_node_list(
     # build node map
     node_map = {}
     for node in nodes:
-        node_map[node.name] = node
+        node_map[node.uuid] = node
 
     # Prepare context for LLM
-    nodes_context = [{'name': node.name, 'summary': node.summary} for node in nodes]
+    nodes_context = [{'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in nodes]
 
     context = {
         'nodes': nodes_context,
@@ -175,13 +175,12 @@ async def dedupe_node_list(
     unique_nodes = []
     uuid_map: dict[str, str] = {}
     for node_data in nodes_data:
-        node = node_map[node_data['names'][0]]
+        node = node_map[node_data['uuids'][0]]
         node.summary = node_data['summary']
         unique_nodes.append(node)
 
-        for name in node_data['names'][1:]:
-            uuid = node_map[name].uuid
-            uuid_value = node_map[node_data['names'][0]].uuid
+        for uuid in node_data['uuids'][1:]:
+            uuid_value = node_map[node_data['uuids'][0]].uuid
             uuid_map[uuid] = uuid_value
 
     return unique_nodes, uuid_map
