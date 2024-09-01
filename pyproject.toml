@@ -22,7 +22,7 @@ neo4j = "^5.23.0"
 sentence-transformers = "^3.0.1"
 diskcache = "^5.6.3"
 openai = "^1.38.0"
-tenacity = "^9.0.0"
+tenacity = "<9.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.2"
@@ -39,6 +39,10 @@ anthropic = "^0.34.1"
 ipykernel = "^6.29.5"
 jupyterlab = "^4.2.4"
 diskcache-stubs = "^5.6.3.6.20240818"
+langgraph = "^0.2.15"
+langchain-anthropic = "^0.1.23"
+langsmith = "^0.1.108"
+langchain-openai = "^0.1.23"
 
 [build-system]
 requires = ["poetry-core"]
