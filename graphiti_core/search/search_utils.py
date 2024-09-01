@@ -424,7 +424,7 @@ async def node_distance_reranker(
         records, _, _ = await driver.execute_query(
             """  
         MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity)
-        MATCH p = SHORTEST 1 (center:Entity)-[:RELATES_TO]-+(n:Entity)
+        MATCH p = SHORTEST 1 (center:Entity)-[:RELATES_TO*1..10]->(n:Entity)
         WHERE center.uuid = $center_uuid AND n.uuid IN [source.uuid, target.uuid]
         RETURN min(length(p)) AS score, source.uuid AS source_uuid, target.uuid AS target_uuid
         """,
