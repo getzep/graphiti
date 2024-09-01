@@ -317,7 +317,7 @@ class Graphiti:
                 edge_touched_node_uuids.append(edge.source_node_uuid)
                 edge_touched_node_uuids.append(edge.target_node_uuid)
 
-            edge_dates = await asyncio.gather(*[await extract_edge_dates(
+            edge_dates = await asyncio.gather(*[extract_edge_dates(
                 self.llm_client,
                 edge,
                 episode,

@@ -108,7 +108,7 @@ def v2(context: dict[str, Any]) -> list[Message]:
         {{
             "duplicates": [
                 {{
-                    "uuid": "uuid of the new node",
+                    "uuid": "uuid of the new node like 5d643020624c42fa9de13f97b1b3fa39",
                     "duplicate_of": "uuid of the existing node",
                     "summary": "Brief summary of the node's role or significance. Takes information from the new and existing nodes"
                 }}

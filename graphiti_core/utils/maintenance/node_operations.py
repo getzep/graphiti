@@ -138,6 +138,8 @@ async def dedupe_extracted_nodes(
             existing_uuid = uuid_map[node.uuid]
             existing_node = node_map[existing_uuid]
             nodes.append(existing_node)
+        else:
+            nodes.append(node)
 
     return nodes, uuid_map
 

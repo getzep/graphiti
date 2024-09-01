@@ -63,13 +63,14 @@ async def main(use_bulk: bool = True):
     messages = parse_podcast_messages()
 
     if not use_bulk:
-        for i, message in enumerate(messages[3:14]):
+        for i, message in enumerate(messages[3:7]):
             await client.add_episode(
                 name=f'Message {i}',
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
             )
+        return
 
     episodes: list[RawEpisode] = [
         RawEpisode(
@@ -79,10 +80,10 @@ async def main(use_bulk: bool = True):
             source_description='Podcast Transcript',
             reference_time=message.actual_timestamp,
         )
-        for i, message in enumerate(messages[3:20])
+        for i, message in enumerate(messages[3:14])
     ]
 
     await client.add_episode_bulk(episodes)
 
 
-asyncio.run(main(True))
+asyncio.run(main(False))
