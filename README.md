@@ -72,13 +72,13 @@ Optional:
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly interface to manage Neo4j instances and databases.
 
 ```bash
-pip install Graphiti-core
+pip install graphiti-core
 ```
 
 or
 
 ```bash
-poetry add Graphiti-core
+poetry add graphiti-core
 ```
 
 
@@ -89,15 +89,15 @@ poetry add Graphiti-core
 > Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
 
 ```python
-from Graphiti_core import Graphiti
-from Graphiti_core.nodes import EpisodeType
+from graphiti_core import Graphiti
+from graphiti_core.nodes import EpisodeType
 from datetime import datetime
 
 # Initialize Graphiti
-Graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
+graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
 # Initialize the graph database with Graphiti's indices. This only needs to be done once.
-Graphiti.build_indices_and_constraints() 
+graphiti.build_indices_and_constraints() 
 
 # Add episodes
 episodes = [
@@ -106,7 +106,7 @@ episodes = [
     "As AG, Harris was in office from January 3, 2011 – January 3, 2017",
 ]
 for i, episode in enumerate(episodes):
-    await Graphiti.add_episode(
+    await graphiti.add_episode(
         name=f"Freakonomics Radio {i}",
         episode_body=episode,
         source=EpisodeType.text,
@@ -117,7 +117,7 @@ for i, episode in enumerate(episodes):
 # Search the graph
 # Execute a hybrid search combining semantic similarity and BM25 retrieval
 # Results are combined and reranked using Reciprocal Rank Fusion
-results = await Graphiti.search('Who was the California Attorney General?')
+results = await graphiti.search('Who was the California Attorney General?')
 [
     EntityEdge(
     │   uuid='3133258f738e487383f07b04e15d4ac0',
@@ -144,10 +144,10 @@ results = await Graphiti.search('Who was the California Attorney General?')
 # Rerank search results based on graph distance
 # Provide a node UUID to prioritize results closer to that node in the graph.
 # Results are weighted by their proximity, with distant edges receiving lower scores.
-await client.search('Who was the California Attorney General?', center_node_uuid)
+await graphiti.search('Who was the California Attorney General?', center_node_uuid)
 
 # Close the connection
-Graphiti.close()
+graphiti.close()
 ```
 
 
