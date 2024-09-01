@@ -60,6 +60,5 @@ class OpenAIClient(LLMClient):
             result = response.choices[0].message.content or ''
             return json.loads(result)
         except Exception as e:
-            print(openai_messages)
             logger.error(f'Error in generating LLM response: {e}')
             raise
