@@ -20,15 +20,14 @@ Graphiti builds dynamic, temporally aware Knowledge Graphs that represent comple
 
 <br />
 
- 
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti demo slides" width="700px">   
+    <img src="/images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
 </p>
 
 <br />
 
 Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
- 
+
 With Graphiti, you can build LLM applications such as:
 
 - Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
@@ -41,20 +40,22 @@ Graphiti supports a wide range of applications in sales, customer service, healt
 We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal aspects of data.
 
 Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and scale:
+
 - **Temporal Awareness:** Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph edges include temporal metadata to record relationship lifecycles.
 - **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental entity and relationship extraction.
 - **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a central node e.g. “Kendra”.
 - **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while preserving the chronology of events.
 - **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data.
 
+<p align="center">
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
+</p>
 
 ## Graphiti and Zep Memory
 
 Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
 
 We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
-
-
 
 ## Installation
 
@@ -81,8 +82,6 @@ or
 poetry add graphiti-core
 ```
 
-
-
 ## Quick Start
 
 > [!IMPORTANT]
@@ -97,7 +96,7 @@ from datetime import datetime
 graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
 # Initialize the graph database with Graphiti's indices. This only needs to be done once.
-graphiti.build_indices_and_constraints() 
+graphiti.build_indices_and_constraints()
 
 # Add episodes
 episodes = [
@@ -150,18 +149,15 @@ await graphiti.search('Who was the California Attorney General?', center_node_uu
 graphiti.close()
 ```
 
-
-
 ## Documentation
 
 Visit the Zep knowledge base for Graphiti [Guides and API documentation](https://help.getzep.com/Graphiti/Graphiti).
-
 
 ## Status and Roadmap
 
 Graphiti is under active development. We aim to maintain API stability while working on:
 
-- [X] Implementing node and edge CRUD operations
+- [x] Implementing node and edge CRUD operations
 - [ ] Improving performance and scalability
 - [ ] Achieving good performance with different LLM and embedding models
 - [ ] Creating a dedicated embedder interface
@@ -170,7 +166,6 @@ Graphiti is under active development. We aim to maintain API stability while wor
   - Enable more flexible knowledge representation tailored to specific use cases
 - [ ] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
-
 
 ## Contributing
 
