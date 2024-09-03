@@ -149,7 +149,7 @@ async def extract_edge_dates(
     edge: EntityEdge,
     current_episode: EpisodicNode,
     previous_episodes: List[EpisodicNode],
-) -> tuple[datetime | None, datetime | None, str]:
+) -> tuple[datetime | None, datetime | None]:
     context = {
         'edge_name': edge.name,
         'edge_fact': edge.fact,
@@ -180,4 +180,4 @@ async def extract_edge_dates(
 
     logger.info(f'Edge date extraction explanation: {explanation}')
 
-    return valid_at_datetime, invalid_at_datetime, explanation
+    return valid_at_datetime, invalid_at_datetime
