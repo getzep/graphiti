@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from time import time
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_message_nodes(
-        llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -48,8 +49,8 @@ async def extract_message_nodes(
 
 
 async def extract_json_nodes(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
+    llm_client: LLMClient,
+    episode: EpisodicNode,
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -66,9 +67,9 @@ async def extract_json_nodes(
 
 
 async def extract_nodes(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
-        previous_episodes: list[EpisodicNode],
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
@@ -95,9 +96,9 @@ async def extract_nodes(
 
 
 async def dedupe_extracted_nodes(
-        llm_client: LLMClient,
-        extracted_nodes: list[EntityNode],
-        existing_nodes: list[EntityNode],
+    llm_client: LLMClient,
+    extracted_nodes: list[EntityNode],
+    existing_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 
@@ -144,9 +145,77 @@ async def dedupe_extracted_nodes(
     return nodes, uuid_map
 
 
+async def resolve_extracted_nodes(
+    llm_client: LLMClient,
+    extracted_nodes: list[EntityNode],
+    existing_nodes_lists: list[list[EntityNode]],
+) -> tuple[list[EntityNode], dict[str, str]]:
+    uuid_map: dict[str, str] = {}
+    resolved_nodes: list[EntityNode] = []
+    results: list[tuple[EntityNode, dict[str, str]]] = list(
+        await asyncio.gather(
+            *[
+                resolve_extracted_node(llm_client, extracted_node, existing_nodes)
+                for extracted_node, existing_nodes in zip(extracted_nodes, existing_nodes_lists)
+            ]
+        )
+    )
+
+    for result in results:
+        uuid_map.update(result[1])
+        resolved_nodes.append(result[0])
+
+    return resolved_nodes, uuid_map
+
+
+async def resolve_extracted_node(
+    llm_client: LLMClient, extracted_node: EntityNode, existing_nodes: list[EntityNode]
+) -> tuple[EntityNode, dict[str, str]]:
+    start = time()
+
+    # Prepare context for LLM
+    existing_nodes_context = [
+        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in existing_nodes
+    ]
+
+    extracted_node_context = {
+        'uuid': extracted_node.uuid,
+        'name': extracted_node.name,
+        'summary': extracted_node.summary,
+    }
+
+    context = {
+        'existing_nodes': existing_nodes_context,
+        'extracted_nodes': extracted_node_context,
+    }
+
+    llm_response = await llm_client.generate_response(prompt_library.dedupe_nodes.v3(context))
+
+    is_duplicate: bool = llm_response.get('is_duplicate', False)
+    uuid: str | None = llm_response.get('uuid', None)
+    summary: str | None = llm_response.get('summary', None)
+
+    node = extracted_node
+    uuid_map: dict[str, str] = {}
+    if is_duplicate:
+        for existing_node in existing_nodes:
+            if existing_node.uuid != uuid:
+                continue
+            node = existing_node
+            node.summary = summary
+            uuid_map[extracted_node.uuid] = existing_node.uuid
+
+    end = time()
+    logger.info(
+        f'Resolved node: {extracted_node.name} is {node.name}, in {(end - start) * 1000} ms'
+    )
+
+    return node, uuid_map
+
+
 async def dedupe_node_list(
-        llm_client: LLMClient,
-        nodes: list[EntityNode],
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 
@@ -156,7 +225,9 @@ async def dedupe_node_list(
         node_map[node.uuid] = node
 
     # Prepare context for LLM
-    nodes_context = [{'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in nodes]
+    nodes_context = [
+        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in nodes
+    ]
 
     context = {
         'nodes': nodes_context,

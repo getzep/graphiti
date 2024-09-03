@@ -23,12 +23,14 @@ from .models import Message, PromptFunction, PromptVersion
 class Prompt(Protocol):
     v1: PromptVersion
     v2: PromptVersion
+    v3: PromptVersion
     edge_list: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
     v2: PromptFunction
+    v3: PromptFunction
     edge_list: PromptFunction
 
 
@@ -41,17 +43,17 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-        Given the following context, deduplicate facts from a list of new facts given a list of existing facts:
+        Given the following context, deduplicate facts from a list of new facts given a list of existing edges:
 
-        Existing Facts:
+        Existing Edges:
         {json.dumps(context['existing_edges'], indent=2)}
 
-        New Facts:
+        New Edges:
         {json.dumps(context['extracted_edges'], indent=2)}
 
         Task:
-        If any facts in New Facts is a duplicate of a fact in Existing Facts, 
-        do not return it in the list of unique facts.
+        If any edge in New Edges is a duplicate of an edge in Existing Edges, add their uuids to the output list.
+        When finding duplicates edges, synthesize their facts into a short new fact.
 
         Guidelines:
         1. identical or near identical facts are duplicates
@@ -60,9 +62,11 @@ def v1(context: dict[str, Any]) -> list[Message]:
 
         Respond with a JSON object in the following format:
         {{
-            "unique_facts": [
+            "duplicates": [
                 {{
-                    "uuid": "unique identifier of the fact"
+                    "uuid": "uuid of the new node like 5d643020624c42fa9de13f97b1b3fa39",
+                    "duplicate_of": "uuid of the existing node",
+                    "fact": "one sentence description of the fact"
                 }}
             ]
         }}
@@ -113,6 +117,40 @@ def v2(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def v3(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that de-duplicates edges from edge lists.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+        Given the following context, determine whether the New Edge represents any of the edges in the list of Existing Edges.
+
+        Existing Edges:
+        {json.dumps(context['existing_edges'], indent=2)}
+
+        New Edge:
+        {json.dumps(context['extracted_edges'], indent=2)}
+        Task:
+        1. If the New Edges represents the same factual information as any edge in Existing Edges, return 'is_duplicate: true' in the 
+            response. Otherwise, return 'is_duplicate: false'
+        2. If is_duplicate is true, also return the uuid of the existing edge in the response
+
+        Guidelines:
+        1. The facts do not need to be completely identical to be duplicates, they just need to express the same information.
+
+        Respond with a JSON object in the following format:
+            {{
+                "is_duplicate": true or false,
+                "uuid": uuid of the existing edge like "5d643020624c42fa9de13f97b1b3fa39" or null,
+            }}
+        """,
+        ),
+    ]
+
+
 def edge_list(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
@@ -151,4 +189,4 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2, 'edge_list': edge_list}
+versions: Versions = {'v1': v1, 'v2': v2, 'v3': v3, 'edge_list': edge_list}

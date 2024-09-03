@@ -17,14 +17,14 @@ limitations under the License.
 import logging
 from collections import defaultdict
 
-from graphiti_core.edges import EpisodicEdge, EntityEdge
+from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-        entity_nodes: list[EntityNode], episode: EpisodicNode
+    entity_nodes: list[EntityNode], episode: EpisodicNode
 ) -> list[EpisodicEdge]:
     edges: list[EpisodicEdge] = []
 

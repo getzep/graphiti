@@ -110,8 +110,8 @@ async def dedupe_extracted_edges(
     existing_edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     # Create edge map
-    edge_map = {}
-    for edge in extracted_edges:
+    edge_map: dict[str, EntityEdge] = {}
+    for edge in existing_edges:
         edge_map[edge.uuid] = edge
 
     # Prepare context for LLM
@@ -125,14 +125,23 @@ async def dedupe_extracted_edges(
     }
 
     llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))
-    unique_edge_data = llm_response.get('unique_facts', [])
-    logger.info(f'Extracted unique edges: {unique_edge_data}')
+    duplicate_data = llm_response.get('duplicates', [])
+    logger.info(f'Extracted unique edges: {duplicate_data}')
+
+    duplicate_uuid_map: dict[str, str] = {}
+    for duplicate in duplicate_data:
+        uuid_value = duplicate['duplicate_of']
+        duplicate_uuid_map[duplicate['uuid']] = uuid_value
 
     # Get full edge data
-    edges = []
-    for unique_edge in unique_edge_data:
-        edge = edge_map[unique_edge['uuid']]
-        edges.append(edge)
+    edges: list[EntityEdge] = []
+    for edge in extracted_edges:
+        if edge.uuid in duplicate_uuid_map:
+            existing_uuid = duplicate_uuid_map[edge.uuid]
+            existing_edge = edge_map[existing_uuid]
+            edges.append(existing_edge)
+        else:
+            edges.append(edge)
 
     return edges
 
