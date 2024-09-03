@@ -34,7 +34,7 @@ ruff = "^0.6.2"
 [tool.poetry.group.dev.dependencies]
 pydantic = "^2.8.2"
 mypy = "^1.11.1"
-groq = "^0.9.0"
+groq = ">=0.9,<0.11"
 anthropic = "^0.34.1"
 ipykernel = "^6.29.5"
 jupyterlab = "^4.2.4"
