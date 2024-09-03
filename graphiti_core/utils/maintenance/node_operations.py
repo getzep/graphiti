@@ -193,7 +193,7 @@ async def resolve_extracted_node(
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
     uuid: str | None = llm_response.get('uuid', None)
-    summary: str | None = llm_response.get('summary', None)
+    summary: str | None = llm_response.get('summary', '')
 
     node = extracted_node
     uuid_map: dict[str, str] = {}

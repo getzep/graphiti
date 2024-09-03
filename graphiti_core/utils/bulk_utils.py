@@ -17,7 +17,6 @@ limitations under the License.
 import asyncio
 import logging
 import typing
-from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
@@ -129,7 +128,7 @@ async def dedupe_nodes_bulk(
         )
     )
 
-    results: list[tuple[list[EntityNode], dict[str, str], list[EntityNode]]] = list(
+    results: list[tuple[list[EntityNode], dict[str, str]]] = list(
         await asyncio.gather(
             *[
                 dedupe_extracted_nodes(llm_client, node_chunk, existing_nodes_chunks[i])

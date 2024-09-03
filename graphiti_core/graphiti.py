@@ -48,7 +48,6 @@ from graphiti_core.utils.bulk_utils import (
     retrieve_previous_episodes_bulk,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
-    dedupe_extracted_edges,
     extract_edges,
     resolve_extracted_edges,
 )
@@ -57,7 +56,6 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     build_indices_and_constraints,
 )
 from graphiti_core.utils.maintenance.node_operations import (
-    dedupe_extracted_nodes,
     extract_nodes,
     resolve_extracted_nodes,
 )
