@@ -64,7 +64,6 @@ from graphiti_core.utils.maintenance.temporal_operations import (
     invalidate_edges,
     prepare_edges_for_invalidation,
 )
-from graphiti_core.utils.utils import chunk_edges_by_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -181,9 +180,9 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -211,14 +210,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            success_callback: Callable | None = None,
+            error_callback: Callable | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -423,8 +422,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
+            self,
+            bulk_episodes: list[RawEpisode],
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -588,18 +587,18 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            timestamp: datetime,
+            config: SearchConfig,
+            center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
-        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+            self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
