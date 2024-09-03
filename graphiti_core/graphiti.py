@@ -49,7 +49,7 @@ from graphiti_core.utils.bulk_utils import (
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     dedupe_extracted_edges,
-    extract_edges,
+    extract_edges, resolve_extracted_edges,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
@@ -182,9 +182,9 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -212,14 +212,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            success_callback: Callable | None = None,
+            error_callback: Callable | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -318,50 +318,21 @@ class Graphiti:
             # calculate embeddings
             await asyncio.gather(*[edge.generate_embedding(embedder) for edge in extracted_edges])
 
-            # Group edges by their source and target nodes
-            edge_chunks = chunk_edges_by_nodes(extracted_edges)
-
-            # Find relevant schema by edge chunk and then reconcile them
-            existing_edge_chunks: list[list[EntityEdge]] = list(
-                await asyncio.gather(
-                    *[
-                        get_relevant_edges(
-                            chunk, self.driver, chunk[0].target_node_uuid, chunk[0].source_node_uuid
-                        )
-                        for chunk in edge_chunks
-                    ]
-                )
-            )
-            existing_edges: list[EntityEdge] = [
-                edge for chunk in existing_edge_chunks for edge in chunk
-            ]
-            logger.info(f'Existing edge chunks: {[(e.name, e.uuid) for e in existing_edges]}')
+            # Resolve extracted edges with edges already in the graph
+            existing_edges_list: list[list[EntityEdge]] = list(await asyncio.gather(
+                *[get_relevant_edges([edge], self.driver, RELEVANT_SCHEMA_LIMIT, edge.source_node_uuid,
+                                     edge.target_node_uuid) for edge in
+                  extracted_edges]))
             logger.info(
-                f'Extracted edge chunks: {[(e.name, e.uuid) for chunk in existing_edge_chunks for e in chunk]}'
+                f'Existing edges lists: {[(e.name, e.uuid) for edges_lst in existing_edges_list for e in edges_lst]}')
+            logger.info(
+                f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}'
             )
 
-            deduped_edge_chunks: list[list[EntityEdge]] = list(
-                await asyncio.gather(
-                    *[
-                        dedupe_extracted_edges(
-                            self.llm_client,
-                            extracted_chunk,
-                            existing_chunk,
-                        )
-                        for extracted_chunk, existing_chunk in zip(
-                            edge_chunks, existing_edge_chunks
-                        )
-                    ]
-                )
-            )
+            deduped_edges: list[EntityEdge] = await resolve_extracted_edges(self.llm_client, extracted_edges,
+                                                                            existing_edges_list)
 
-            deduped_edges: list[EntityEdge] = [
-                edge for chunk in deduped_edge_chunks for edge in chunk
-            ]
-
-            # Extract dates for the newly extracted edges as well as related existing edges
-            edges_to_save = existing_edges + deduped_edges
-
+            # Extract dates for the newly extracted edges
             edge_dates = await asyncio.gather(
                 *[
                     extract_edge_dates(
@@ -370,11 +341,11 @@ class Graphiti:
                         episode,
                         previous_episodes,
                     )
-                    for edge in edges_to_save
+                    for edge in deduped_edges
                 ]
             )
 
-            for i, edge in enumerate(edges_to_save):
+            for i, edge in enumerate(deduped_edges):
                 valid_at = edge_dates[i][0]
                 invalid_at = edge_dates[i][1]
 
@@ -382,6 +353,10 @@ class Graphiti:
                 edge.invalid_at = invalid_at
                 if edge.invalid_at is not None:
                     edge.expired_at = now
+
+            entity_edges.extend(deduped_edges)
+
+            existing_edges: list[EntityEdge] = [e for edge_lst in existing_edges_list for e in edge_lst]
 
             (
                 old_edges_with_nodes_pending_invalidation,
@@ -407,7 +382,7 @@ class Graphiti:
                         deduped_edge.expired_at = edge.expired_at
             logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
 
-            entity_edges.extend(edges_to_save)
+            entity_edges.extend(existing_edges)
 
             logger.info(f'Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}')
 
@@ -437,8 +412,8 @@ class Graphiti:
                 raise e
 
     async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
+            self,
+            bulk_episodes: list[RawEpisode],
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -602,18 +577,18 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            timestamp: datetime,
+            config: SearchConfig,
+            center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
-        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+            self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.

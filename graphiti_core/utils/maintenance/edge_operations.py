@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import asyncio
 import logging
 from datetime import datetime
 from time import time
@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    entity_nodes: List[EntityNode],
-    episode: EpisodicNode,
-    created_at: datetime,
+        entity_nodes: List[EntityNode],
+        episode: EpisodicNode,
+        created_at: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
@@ -46,10 +46,10 @@ def build_episodic_edges(
 
 
 async def extract_edges(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    nodes: list[EntityNode],
-    previous_episodes: list[EpisodicNode],
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        nodes: list[EntityNode],
+        previous_episodes: list[EpisodicNode],
 ) -> list[EntityEdge]:
     start = time()
 
@@ -99,15 +99,15 @@ async def extract_edges(
 
 
 def create_edge_identifier(
-    source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
+        source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
 ) -> str:
     return f'{source_node.name}-{edge.name}-{target_node.name}'
 
 
 async def dedupe_extracted_edges(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        existing_edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     # Create edge map
     edge_map: dict[str, EntityEdge] = {}
@@ -146,9 +146,67 @@ async def dedupe_extracted_edges(
     return edges
 
 
+async def resolve_extracted_edges(
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        existing_edges_lists: list[list[EntityEdge]],
+) -> list[EntityEdge]:
+    resolved_edges: list[EntityEdge] = list(
+        await asyncio.gather(
+            *[
+                resolve_extracted_edge(llm_client, extracted_edge, existing_edges)
+                for extracted_edge, existing_edges in zip(extracted_edges, existing_edges_lists)
+            ]
+        )
+    )
+
+    return resolved_edges
+
+
+async def resolve_extracted_edge(
+        llm_client: LLMClient, extracted_edge: EntityEdge, existing_edges: list[EntityEdge]
+) -> EntityEdge:
+    start = time()
+
+    # Prepare context for LLM
+    existing_edges_context = [
+        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
+    ]
+
+    extracted_edge_context = {
+        'uuid': extracted_edge.uuid,
+        'name': extracted_edge.name,
+        'fact': extracted_edge.fact,
+    }
+
+    context = {
+        'existing_edges': existing_edges_context,
+        'extracted_edges': extracted_edge_context,
+    }
+
+    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v3(context))
+
+    is_duplicate: bool = llm_response.get('is_duplicate', False)
+    uuid: str | None = llm_response.get('uuid', None)
+
+    edge = extracted_edge
+    if is_duplicate:
+        for existing_edge in existing_edges:
+            if existing_edge.uuid != uuid:
+                continue
+            edge = existing_edge
+
+    end = time()
+    logger.info(
+        f'Resolved node: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
+    )
+
+    return edge
+
+
 async def dedupe_edge_list(
-    llm_client: LLMClient,
-    edges: list[EntityEdge],
+        llm_client: LLMClient,
+        edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     start = time()
 

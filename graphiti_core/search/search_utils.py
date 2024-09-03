@@ -96,11 +96,11 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float],
-    driver: AsyncDriver,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        search_vector: list[float],
+        limit: int = RELEVANT_SCHEMA_LIMIT,
+        source_node_uuid: str = '*',
+        target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
@@ -151,7 +151,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -185,7 +185,7 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -220,11 +220,11 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str,
-    driver: AsyncDriver,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        limit=RELEVANT_SCHEMA_LIMIT,
+        source_node_uuid: str = '*',
+        target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -277,10 +277,10 @@ async def edge_fulltext_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
@@ -342,8 +342,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -379,10 +379,11 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
+        edges: list[EntityEdge],
+        driver: AsyncDriver,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
+        source_node_uuid: str = '*',
+        target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -390,11 +391,11 @@ async def get_relevant_edges(
 
     results = await asyncio.gather(
         *[
-            edge_similarity_search(edge.fact_embedding, driver)
+            edge_similarity_search(driver, edge.fact_embedding, limit, source_node_uuid, target_node_uuid)
             for edge in edges
             if edge.fact_embedding is not None
         ],
-        *[edge_fulltext_search(edge.fact, driver) for edge in edges],
+        *[edge_fulltext_search(driver, edge.fact, limit, source_node_uuid, target_node_uuid) for edge in edges],
     )
 
     for result in results:
@@ -427,7 +428,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(results)
@@ -449,8 +450,8 @@ async def node_distance_reranker(
 
         for record in records:
             if (
-                record['source_uuid'] == center_node_uuid
-                or record['target_uuid'] == center_node_uuid
+                    record['source_uuid'] == center_node_uuid
+                    or record['target_uuid'] == center_node_uuid
             ):
                 continue
             distance = record['score']
