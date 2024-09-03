@@ -55,6 +55,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
         1. Focus on entities, concepts, or actors that are central to the current episode.
         2. Avoid creating nodes for relationships or actions (these will be handled as edges later).
         3. Provide a brief but informative summary for each node.
+        4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
 
         Respond with a JSON object in the following format:
         {{
@@ -90,6 +91,7 @@ Guidelines:
 3. Provide concise but informative summaries for each extracted node.
 4. Avoid creating nodes for relationships or actions.
 5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
+6. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
 
 Respond with a JSON object in the following format:
 {{

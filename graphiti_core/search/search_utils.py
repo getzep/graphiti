@@ -96,14 +96,18 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+    driver: AsyncDriver,
+    search_vector: list[float],
+    limit: int = RELEVANT_SCHEMA_LIMIT,
+    source_node_uuid: str = '*',
+    target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
-                YIELD relationship AS r, score
-                MATCH (n)-[r:RELATES_TO]->(m)
+                YIELD relationship AS rel, score
+                MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
                 RETURN
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
@@ -119,6 +123,8 @@ async def edge_similarity_search(
                 ORDER BY score DESC
                 """,
         search_vector=search_vector,
+        source_uuid=source_node_uuid,
+        target_uuid=target_node_uuid,
         limit=limit,
     )
 
@@ -214,7 +220,11 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+    driver: AsyncDriver,
+    query: str,
+    limit=RELEVANT_SCHEMA_LIMIT,
+    source_node_uuid: str = '*',
+    target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -222,8 +232,8 @@ async def edge_fulltext_search(
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
-                YIELD relationship AS r, score
-                MATCH (n:Entity)-[r]->(m:Entity)
+                YIELD relationship AS rel, score
+                MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
                 RETURN 
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
@@ -239,6 +249,8 @@ async def edge_fulltext_search(
                 ORDER BY score DESC LIMIT $limit
                 """,
         query=fuzzy_query,
+        source_uuid=source_node_uuid,
+        target_uuid=target_node_uuid,
         limit=limit,
     )
 
@@ -369,6 +381,9 @@ async def get_relevant_nodes(
 async def get_relevant_edges(
     edges: list[EntityEdge],
     driver: AsyncDriver,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
+    source_node_uuid: str = '*',
+    target_node_uuid: str = '*',
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -376,11 +391,16 @@ async def get_relevant_edges(
 
     results = await asyncio.gather(
         *[
-            edge_similarity_search(edge.fact_embedding, driver)
+            edge_similarity_search(
+                driver, edge.fact_embedding, limit, source_node_uuid, target_node_uuid
+            )
             for edge in edges
             if edge.fact_embedding is not None
         ],
-        *[edge_fulltext_search(edge.fact, driver) for edge in edges],
+        *[
+            edge_fulltext_search(driver, edge.fact, limit, source_node_uuid, target_node_uuid)
+            for edge in edges
+        ],
     )
 
     for result in results:

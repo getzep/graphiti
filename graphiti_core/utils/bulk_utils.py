@@ -17,7 +17,6 @@ limitations under the License.
 import asyncio
 import logging
 import typing
-from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
@@ -43,6 +42,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
 )
 from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
+from graphiti_core.utils.utils import chunk_edges_by_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ async def dedupe_nodes_bulk(
         )
     )
 
-    results: list[tuple[list[EntityNode], dict[str, str], list[EntityNode]]] = list(
+    results: list[tuple[list[EntityNode], dict[str, str]]] = list(
         await asyncio.gather(
             *[
                 dedupe_extracted_nodes(llm_client, node_chunk, existing_nodes_chunks[i])
@@ -265,19 +265,7 @@ async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list
         return edges
     # We only want to dedupe edges that are between the same pair of nodes
     # We build a map of the edges based on their source and target nodes.
-    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
-    for edge in edges:
-        # We drop loop edges
-        if edge.source_node_uuid == edge.target_node_uuid:
-            continue
-
-        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
-        pointers = [edge.source_node_uuid, edge.target_node_uuid]
-        pointers.sort()
-
-        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
-
-    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
+    edge_chunks = chunk_edges_by_nodes(edges)
 
     results = await asyncio.gather(*[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks])
 
