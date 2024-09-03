@@ -24,14 +24,15 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
+from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
 
 logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    entity_nodes: List[EntityNode],
-    episode: EpisodicNode,
-    created_at: datetime,
+        entity_nodes: List[EntityNode],
+        episode: EpisodicNode,
+        created_at: datetime,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = []
 
@@ -47,10 +48,10 @@ def build_episodic_edges(
 
 
 async def extract_edges(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    nodes: list[EntityNode],
-    previous_episodes: list[EpisodicNode],
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        nodes: list[EntityNode],
+        previous_episodes: list[EpisodicNode],
 ) -> list[EntityEdge]:
     start = time()
 
@@ -99,15 +100,15 @@ async def extract_edges(
 
 
 def create_edge_identifier(
-    source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
+        source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
 ) -> str:
     return f'{source_node.name}-{edge.name}-{target_node.name}'
 
 
 async def dedupe_extracted_edges(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        existing_edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     # Create edge map
     edge_map: dict[str, EntityEdge] = {}
@@ -147,24 +148,25 @@ async def dedupe_extracted_edges(
 
 
 async def resolve_extracted_edges(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    existing_edges_lists: list[list[EntityEdge]],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        existing_edges_lists: list[list[EntityEdge]],
+        current_episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode]
 ) -> list[EntityEdge]:
-    resolved_edges: list[EntityEdge] = list(
-        await asyncio.gather(
-            *[
-                resolve_extracted_edge(llm_client, extracted_edge, existing_edges)
-                for extracted_edge, existing_edges in zip(extracted_edges, existing_edges_lists)
-            ]
-        )
-    )
+    results: list[tuple[EntityEdge, tuple[datetime | None, datetime | None]]] = list(await asyncio.gather(
+        *[
+            (resolve_extracted_edge(llm_client, extracted_edge, existing_edges),
+             extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes))
+            for extracted_edge, existing_edges in zip(extracted_edges, existing_edges_lists)
+        ]
+    ))
 
     return resolved_edges
 
 
 async def resolve_extracted_edge(
-    llm_client: LLMClient, extracted_edge: EntityEdge, existing_edges: list[EntityEdge]
+        llm_client: LLMClient, extracted_edge: EntityEdge, existing_edges: list[EntityEdge]
 ) -> EntityEdge:
     start = time()
 
@@ -205,8 +207,8 @@ async def resolve_extracted_edge(
 
 
 async def dedupe_edge_list(
-    llm_client: LLMClient,
-    edges: list[EntityEdge],
+        llm_client: LLMClient,
+        edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     start = time()
 
