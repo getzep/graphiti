@@ -150,15 +150,19 @@ async def dedupe_extracted_edges(
 async def resolve_extracted_edges(
         llm_client: LLMClient,
         extracted_edges: list[EntityEdge],
+        related_edges_lists: list[list[EntityEdge]],
         existing_edges_lists: list[list[EntityEdge]],
         current_episode: EpisodicNode,
         previous_episodes: list[EpisodicNode]
 ) -> list[EntityEdge]:
+    # resolve edges with related edges in the graph, extract temporal information, and find invalidation candidates
     results: list[tuple[EntityEdge, tuple[datetime | None, datetime | None]]] = list(await asyncio.gather(
         *[
-            (resolve_extracted_edge(llm_client, extracted_edge, existing_edges),
-             extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes))
-            for extracted_edge, existing_edges in zip(extracted_edges, existing_edges_lists)
+            (resolve_extracted_edge(llm_client, extracted_edge, related_edges),
+             extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
+             )
+            for extracted_edge, related_edges, existing_edges in
+            zip(extracted_edges, related_edges_lists, existing_edges_lists)
         ]
     ))
 
@@ -166,18 +170,22 @@ async def resolve_extracted_edges(
     for result in results:
         resolved_edge = result[0]
         valid_at, invalid_at = result[1]
+        resolved_edge.valid_at = valid_at if valid_at is not None else resolved_edge.valid_at
+        resolved_edge.invalid_at = invalid_at if invalid_at is not None else resolved_edge.invalid_at
+        if invalid_at is not None and resolved_edge.expired_at is None:
+            resolved_edge.expired_at = datetime.now()
 
     return resolved_edges
 
 
 async def resolve_extracted_edge(
-        llm_client: LLMClient, extracted_edge: EntityEdge, existing_edges: list[EntityEdge]
+        llm_client: LLMClient, extracted_edge: EntityEdge, related_edges: list[EntityEdge]
 ) -> EntityEdge:
     start = time()
 
     # Prepare context for LLM
     existing_edges_context = [
-        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
+        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in related_edges
     ]
 
     extracted_edge_context = {
@@ -198,7 +206,7 @@ async def resolve_extracted_edge(
 
     edge = extracted_edge
     if is_duplicate:
-        for existing_edge in existing_edges:
+        for existing_edge in related_edges:
             if existing_edge.uuid != uuid:
                 continue
             edge = existing_edge
