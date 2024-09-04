@@ -1,11 +1,11 @@
 import asyncio
 import logging
 import re
-import typing
 from collections import defaultdict
 from time import time
+from typing import Any
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, Query
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.helpers import parse_db_date
@@ -66,12 +66,12 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
             r.expired_at AS expired_at,
             r.valid_at AS valid_at,
             r.invalid_at AS invalid_at
-        
+
     """,
         node_ids=node_ids,
     )
 
-    context: dict[str, typing.Any] = {}
+    context: dict[str, Any] = {}
 
     for record in records:
         n_uuid = record['source_node_uuid']
@@ -96,15 +96,14 @@ async def bfs(node_ids: list[str], driver: AsyncDriver):
 
 
 async def edge_similarity_search(
-    driver: AsyncDriver,
-    search_vector: list[float],
-    limit: int = RELEVANT_SCHEMA_LIMIT,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
+        driver: AsyncDriver,
+        search_vector: list[float],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
-    records, _, _ = await driver.execute_query(
-        """
+    query = Query("""
                 CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS rel, score
                 MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
@@ -121,7 +120,68 @@ async def edge_similarity_search(
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
                 ORDER BY score DESC
-                """,
+        """)
+
+    if source_node_uuid is None and target_node_uuid is None:
+        query = Query("""
+                    CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
+                    YIELD relationship AS rel, score
+                    MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
+                    RETURN
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC
+            """)
+    elif source_node_uuid is None:
+        query = Query("""
+                    CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
+                    YIELD relationship AS rel, score
+                    MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
+                    RETURN
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC
+            """)
+    elif target_node_uuid is None:
+        query = Query("""
+                    CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
+                    YIELD relationship AS rel, score
+                    MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
+                    RETURN
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC
+            """)
+
+    records, _, _ = await driver.execute_query(
+        query,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -151,7 +211,7 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        search_vector: list[float], driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -161,6 +221,7 @@ async def entity_similarity_search(
                 RETURN
                     n.uuid As uuid, 
                     n.name AS name, 
+                    n.name_embeddings AS name_embedding,
                     n.created_at AS created_at, 
                     n.summary AS summary
                 ORDER BY score DESC
@@ -175,6 +236,7 @@ async def entity_similarity_search(
             EntityNode(
                 uuid=record['uuid'],
                 name=record['name'],
+                name_embedding=record['name_embedding'],
                 labels=['Entity'],
                 created_at=record['created_at'].to_native(),
                 summary=record['summary'],
@@ -185,7 +247,7 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
+        query: str, driver: AsyncDriver, limit=RELEVANT_SCHEMA_LIMIT
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
@@ -193,8 +255,9 @@ async def entity_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
     RETURN
-        node.uuid As uuid, 
+        node.uuid AS uuid, 
         node.name AS name, 
+        node.name_embeddings AS name_embedding,
         node.created_at AS created_at, 
         node.summary AS summary
     ORDER BY score DESC
@@ -210,6 +273,7 @@ async def entity_fulltext_search(
             EntityNode(
                 uuid=record['uuid'],
                 name=record['name'],
+                name_embedding=record['name_embedding'],
                 labels=['Entity'],
                 created_at=record['created_at'].to_native(),
                 summary=record['summary'],
@@ -220,21 +284,18 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    limit=RELEVANT_SCHEMA_LIMIT,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
+        driver: AsyncDriver,
+        query: str,
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
-
-    records, _, _ = await driver.execute_query(
-        """
-                CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
-                YIELD relationship AS rel, score
-                MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                RETURN 
+    cypher_query = Query("""
+              CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
+              YIELD relationship AS rel, score
+              MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
+              RETURN 
                     r.uuid AS uuid,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
@@ -247,7 +308,70 @@ async def edge_fulltext_search(
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
                 ORDER BY score DESC LIMIT $limit
-                """,
+                """)
+
+    if source_node_uuid is None and target_node_uuid is None:
+        cypher_query = Query("""
+                  CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
+                  YIELD relationship AS rel, score
+                  MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
+                  RETURN 
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC LIMIT $limit
+                    """)
+    elif source_node_uuid is None:
+        cypher_query = Query("""
+                  CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
+                  YIELD relationship AS rel, score
+                  MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
+                  RETURN 
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC LIMIT $limit
+                    """)
+    elif target_node_uuid is None:
+        cypher_query = Query("""
+                  CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
+                  YIELD relationship AS rel, score
+                  MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
+                  RETURN 
+                        r.uuid AS uuid,
+                        n.uuid AS source_node_uuid,
+                        m.uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.fact_embedding AS fact_embedding,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at
+                    ORDER BY score DESC LIMIT $limit
+                    """)
+
+    fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
+
+    records, _, _ = await driver.execute_query(
+        cypher_query,
         query=fuzzy_query,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -277,16 +401,16 @@ async def edge_fulltext_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
 
     This method combines fulltext search and vector similarity search to find
-    relevant nodes in the graph database. It uses an rrf reranker.
+    relevant nodes in the graph database. It uses a rrf reranker.
 
     Parameters
     ----------
@@ -342,8 +466,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -379,11 +503,11 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    edges: list[EntityEdge],
-    driver: AsyncDriver,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
-    source_node_uuid: str = '*',
-    target_node_uuid: str = '*',
+        driver: AsyncDriver,
+        edges: list[EntityEdge],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -392,13 +516,13 @@ async def get_relevant_edges(
     results = await asyncio.gather(
         *[
             edge_similarity_search(
-                driver, edge.fact_embedding, limit, source_node_uuid, target_node_uuid
+                driver, edge.fact_embedding, source_node_uuid, target_node_uuid, limit
             )
             for edge in edges
             if edge.fact_embedding is not None
         ],
         *[
-            edge_fulltext_search(driver, edge.fact, limit, source_node_uuid, target_node_uuid)
+            edge_fulltext_search(driver, edge.fact, source_node_uuid, target_node_uuid, limit)
             for edge in edges
         ],
     )
@@ -433,14 +557,14 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(results)
     scores: dict[str, float] = {}
 
     for uuid in sorted_uuids:
-        # Find shortest path to center node
+        # Find the shortest path to center node
         records, _, _ = await driver.execute_query(
             """  
         MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity)
@@ -455,8 +579,8 @@ async def node_distance_reranker(
 
         for record in records:
             if (
-                record['source_uuid'] == center_node_uuid
-                or record['target_uuid'] == center_node_uuid
+                    record['source_uuid'] == center_node_uuid
+                    or record['target_uuid'] == center_node_uuid
             ):
                 continue
             distance = record['score']
