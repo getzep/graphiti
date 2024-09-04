@@ -162,6 +162,11 @@ async def resolve_extracted_edges(
         ]
     ))
 
+    resolved_edges: list[EntityEdge] = []
+    for result in results:
+        resolved_edge = result[0]
+        valid_at, invalid_at = result[1]
+
     return resolved_edges
 
 
