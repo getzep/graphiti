@@ -38,40 +38,6 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to contradictions with the New Edge.
-
-                Existing Edges:
-                {context['existing_edges']}
-
-                New Edge:
-                {context['new_edge']}
-
-
-                For each existing edge that should be invalidated, respond with a JSON object in the following format:
-                {{
-                    "invalidated_edges": [
-                        {{
-                            "uuid": "The UUID of the edge to be invalidated (the part before the | character)",
-                            "fact": "Updated fact of the edge"
-                        }}
-                    ]
-                }}
-
-                If no relationships need to be invalidated based on these strict criteria, return an empty list for "invalidated_edges".
-            """,
-        ),
-    ]
-
-
-def v1(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
-        ),
-        Message(
-            role='user',
-            content=f"""
                Based on the provided existing edges and new edges with their timestamps, determine which relationships, if any, should be marked as expired due to contradictions or updates in the newer edges.
                Use the start and end dates of the edges to determine which edges are to be marked expired.
                 Only mark a relationship as invalid if there is clear evidence from other edges that the relationship is no longer true.
@@ -96,6 +62,40 @@ def v1(context: dict[str, Any]) -> list[Message]:
                     "invalidated_edges": [
                         {{
                             "edge_uuid": "The UUID of the edge to be invalidated (the part before the | character)",
+                            "fact": "Updated fact of the edge"
+                        }}
+                    ]
+                }}
+
+                If no relationships need to be invalidated based on these strict criteria, return an empty list for "invalidated_edges".
+            """,
+        ),
+    ]
+
+
+def v2(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to contradictions with the New Edge.
+
+                Existing Edges:
+                {context['existing_edges']}
+
+                New Edge:
+                {context['new_edge']}
+
+
+                For each existing edge that should be invalidated, respond with a JSON object in the following format:
+                {{
+                    "invalidated_edges": [
+                        {{
+                            "uuid": "The UUID of the edge to be invalidated (the part before the | character)",
                             "fact": "Updated fact of the edge"
                         }}
                     ]
