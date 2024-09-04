@@ -158,7 +158,7 @@ async def dedupe_edges_bulk(
 
     relevant_edges_chunks: list[list[EntityEdge]] = list(
         await asyncio.gather(
-            *[get_relevant_edges(edge_chunk, driver) for edge_chunk in edge_chunks]
+            *[get_relevant_edges(driver, edge_chunk, None, None) for edge_chunk in edge_chunks]
         )
     )
 
