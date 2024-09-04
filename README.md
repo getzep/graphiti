@@ -151,7 +151,9 @@ graphiti.close()
 
 ## Documentation
 
-Visit the Zep knowledge base for Graphiti [Guides and API documentation](https://help.getzep.com/Graphiti/Graphiti).
+- [Guides and API documentation](https://help.getzep.com/Graphiti/Graphiti).
+- [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
+- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
 
 ## Status and Roadmap
 
