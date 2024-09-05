@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from fastapi import APIRouter, FastAPI, status
+from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils import clear_data  # type: ignore
 
 from graph_service.dto import AddMessagesRequest, Episode, Message, Result
@@ -76,7 +77,7 @@ async def add_messages(
             name=m.name,
             episode_body=f"{m.role or ''}({m.role_type}): {m.content}",
             reference_time=m.timestamp,
-            source='message',
+            source=EpisodeType.message,
             source_description=m.source_description,
         )
 

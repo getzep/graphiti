@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+from graphiti_core.nodes import EpisodeType
 from pydantic import BaseModel, Field
 
 from graph_service.dto.common import Message
@@ -12,8 +13,8 @@ class Episode(BaseModel):
     timestamp: datetime = Field(
         default_factory=datetime.now, description='The timestamp of the episode'
     )
-    type: Literal['message', 'json'] = Field(
-        ..., description='The type of the episode (json or message)'
+    type: EpisodeType = Field(
+        default=EpisodeType.message, description='The type of the episode (json or message)'
     )
     source_description: str = Field(
         default='', description='The description of the source of the episode'
