@@ -225,7 +225,8 @@ class EntityNode(Node):
         MATCH (n:Entity {uuid: $uuid})
         RETURN
             n.uuid As uuid, 
-            n.name AS name, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
             n.created_at AS created_at, 
             n.summary AS summary
         """,
@@ -239,6 +240,7 @@ class EntityNode(Node):
                 EntityNode(
                     uuid=record['uuid'],
                     name=record['name'],
+                    name_embedding=record['name_embedding'],
                     labels=['Entity'],
                     created_at=record['created_at'].to_native(),
                     summary=record['summary'],
@@ -248,3 +250,6 @@ class EntityNode(Node):
         logger.info(f'Found Node: {uuid}')
 
         return nodes[0]
+
+
+# Node helpers

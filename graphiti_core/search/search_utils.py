@@ -23,7 +23,8 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
         MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
         RETURN DISTINCT
             n.uuid As uuid, 
-            n.name AS name, 
+            n.name AS name,
+            n.name_embedding AS name_embedding
             n.created_at AS created_at, 
             n.summary AS summary
         """,
@@ -37,6 +38,7 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
             EntityNode(
                 uuid=record['uuid'],
                 name=record['name'],
+                name_embedding=record['name_embedding'],
                 labels=['Entity'],
                 created_at=record['created_at'].to_native(),
                 summary=record['summary'],
@@ -221,7 +223,7 @@ async def entity_similarity_search(
                 RETURN
                     n.uuid As uuid, 
                     n.name AS name, 
-                    n.name_embeddings AS name_embedding,
+                    n.name_embedding AS name_embedding,
                     n.created_at AS created_at, 
                     n.summary AS summary
                 ORDER BY score DESC
@@ -257,7 +259,7 @@ async def entity_fulltext_search(
     RETURN
         node.uuid AS uuid, 
         node.name AS name, 
-        node.name_embeddings AS name_embedding,
+        node.name_embedding AS name_embedding,
         node.created_at AS created_at, 
         node.summary AS summary
     ORDER BY score DESC
