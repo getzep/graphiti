@@ -95,7 +95,7 @@ def v2(context: dict[str, Any]) -> list[Message]:
                 {{
                     "invalidated_edges": [
                         {{
-                            "uuid": "The UUID of the edge to be invalidated (the part before the | character)",
+                            "uuid": "The UUID of the edge to be invalidated",
                             "fact": "Updated fact of the edge"
                         }}
                     ]
