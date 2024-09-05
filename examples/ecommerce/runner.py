@@ -94,7 +94,7 @@ async def main():
 
 async def ingest_products_data(client: Graphiti):
     script_dir = Path(__file__).parent
-    json_file_path = script_dir / 'allbirds_products.json'
+    json_file_path = script_dir / '../data/manybirds_products.json'
 
     with open(json_file_path) as file:
         products = json.load(file)['products']
@@ -110,7 +110,14 @@ async def ingest_products_data(client: Graphiti):
         for i, product in enumerate(products)
     ]
 
-    await client.add_episode_bulk(episodes)
+    for episode in episodes:
+        await client.add_episode(
+            episode.name,
+            episode.content,
+            episode.source_description,
+            episode.reference_time,
+            episode.source,
+        )
 
 
 asyncio.run(main())

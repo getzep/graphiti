@@ -59,11 +59,6 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import (
-    extract_edge_dates,
-    invalidate_edges,
-    prepare_edges_for_invalidation,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +288,7 @@ class Graphiti:
                 *[node.generate_name_embedding(embedder) for node in extracted_nodes]
             )
 
-            # Resolve extracted nodes with nodes already in the graph
+            # Resolve extracted nodes with nodes already in the graph and extract facts
             existing_nodes_lists: list[list[EntityNode]] = list(
                 await asyncio.gather(
                     *[get_relevant_nodes([node], self.driver) for node in extracted_nodes]
@@ -302,22 +297,27 @@ class Graphiti:
 
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
-            mentioned_nodes, _ = await resolve_extracted_nodes(
-                self.llm_client, extracted_nodes, existing_nodes_lists
+            (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
+                resolve_extracted_nodes(self.llm_client, extracted_nodes, existing_nodes_lists),
+                extract_edges(self.llm_client, episode, extracted_nodes, previous_episodes),
             )
             logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
             nodes.extend(mentioned_nodes)
 
-            # Extract facts as edges given entity nodes
-            extracted_edges = await extract_edges(
-                self.llm_client, episode, mentioned_nodes, previous_episodes
+            extracted_edges_with_resolved_pointers = resolve_edge_pointers(
+                extracted_edges, uuid_map
             )
 
             # calculate embeddings
-            await asyncio.gather(*[edge.generate_embedding(embedder) for edge in extracted_edges])
+            await asyncio.gather(
+                *[
+                    edge.generate_embedding(embedder)
+                    for edge in extracted_edges_with_resolved_pointers
+                ]
+            )
 
-            # Resolve extracted edges with edges already in the graph
-            existing_edges_list: list[list[EntityEdge]] = list(
+            # Resolve extracted edges with related edges already in the graph
+            related_edges_list: list[list[EntityEdge]] = list(
                 await asyncio.gather(
                     *[
                         get_relevant_edges(
@@ -327,74 +327,66 @@ class Graphiti:
                             edge.target_node_uuid,
                             RELEVANT_SCHEMA_LIMIT,
                         )
-                        for edge in extracted_edges
+                        for edge in extracted_edges_with_resolved_pointers
                     ]
                 )
             )
             logger.info(
-                f'Existing edges lists: {[(e.name, e.uuid) for edges_lst in existing_edges_list for e in edges_lst]}'
+                f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
             )
-            logger.info(f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges]}')
-
-            deduped_edges: list[EntityEdge] = await resolve_extracted_edges(
-                self.llm_client, extracted_edges, existing_edges_list
+            logger.info(
+                f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges_with_resolved_pointers]}'
             )
 
-            # Extract dates for the newly extracted edges
-            edge_dates = await asyncio.gather(
-                *[
-                    extract_edge_dates(
-                        self.llm_client,
-                        edge,
-                        episode,
-                        previous_episodes,
-                    )
-                    for edge in deduped_edges
-                ]
+            existing_source_edges_list: list[list[EntityEdge]] = list(
+                await asyncio.gather(
+                    *[
+                        get_relevant_edges(
+                            self.driver,
+                            [edge],
+                            edge.source_node_uuid,
+                            None,
+                            RELEVANT_SCHEMA_LIMIT,
+                        )
+                        for edge in extracted_edges_with_resolved_pointers
+                    ]
+                )
             )
 
-            for i, edge in enumerate(deduped_edges):
-                valid_at = edge_dates[i][0]
-                invalid_at = edge_dates[i][1]
+            existing_target_edges_list: list[list[EntityEdge]] = list(
+                await asyncio.gather(
+                    *[
+                        get_relevant_edges(
+                            self.driver,
+                            [edge],
+                            None,
+                            edge.target_node_uuid,
+                            RELEVANT_SCHEMA_LIMIT,
+                        )
+                        for edge in extracted_edges_with_resolved_pointers
+                    ]
+                )
+            )
 
-                edge.valid_at = valid_at
-                edge.invalid_at = invalid_at
-                if edge.invalid_at is not None:
-                    edge.expired_at = now
-
-            entity_edges.extend(deduped_edges)
-
-            existing_edges: list[EntityEdge] = [
-                e for edge_lst in existing_edges_list for e in edge_lst
+            existing_edges_list: list[list[EntityEdge]] = [
+                source_lst + target_lst
+                for source_lst, target_lst in zip(
+                    existing_source_edges_list, existing_target_edges_list
+                )
             ]
 
-            (
-                old_edges_with_nodes_pending_invalidation,
-                new_edges_with_nodes,
-            ) = prepare_edges_for_invalidation(
-                existing_edges=existing_edges, new_edges=deduped_edges, nodes=nodes
-            )
-
-            invalidated_edges = await invalidate_edges(
+            resolved_edges, invalidated_edges = await resolve_extracted_edges(
                 self.llm_client,
-                old_edges_with_nodes_pending_invalidation,
-                new_edges_with_nodes,
+                extracted_edges_with_resolved_pointers,
+                related_edges_list,
+                existing_edges_list,
                 episode,
                 previous_episodes,
             )
 
-            for edge in invalidated_edges:
-                for existing_edge in existing_edges:
-                    if existing_edge.uuid == edge.uuid:
-                        existing_edge.expired_at = edge.expired_at
-                for deduped_edge in deduped_edges:
-                    if deduped_edge.uuid == edge.uuid:
-                        deduped_edge.expired_at = edge.expired_at
-            logger.info(f'Invalidated edges: {[(e.name, e.uuid) for e in invalidated_edges]}')
+            entity_edges.extend(resolved_edges + invalidated_edges)
 
-            entity_edges.extend(existing_edges)
-
-            logger.info(f'Deduped edges: {[(e.name, e.uuid) for e in deduped_edges]}')
+            logger.info(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
             episodic_edges: list[EpisodicEdge] = build_episodic_edges(
                 mentioned_nodes,

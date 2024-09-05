@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 from datetime import datetime
+from time import time
 from typing import List
 
 from graphiti_core.edges import EntityEdge
@@ -181,3 +182,36 @@ async def extract_edge_dates(
     logger.info(f'Edge date extraction explanation: {explanation}')
 
     return valid_at_datetime, invalid_at_datetime
+
+
+async def get_edge_contradictions(
+    llm_client: LLMClient, new_edge: EntityEdge, existing_edges: list[EntityEdge]
+) -> list[EntityEdge]:
+    start = time()
+    existing_edge_map = {edge.uuid: edge for edge in existing_edges}
+
+    new_edge_context = {'uuid': new_edge.uuid, 'name': new_edge.name, 'fact': new_edge.fact}
+    existing_edge_context = [
+        {'uuid': existing_edge.uuid, 'name': existing_edge.name, 'fact': existing_edge.fact}
+        for existing_edge in existing_edges
+    ]
+
+    context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
+
+    llm_response = await llm_client.generate_response(prompt_library.invalidate_edges.v2(context))
+
+    contradicted_edge_data = llm_response.get('invalidated_edges', [])
+
+    contradicted_edges: list[EntityEdge] = []
+    for edge_data in contradicted_edge_data:
+        if edge_data['uuid'] in existing_edge_map:
+            contradicted_edge = existing_edge_map[edge_data['uuid']]
+            contradicted_edge.fact = edge_data['fact']
+            contradicted_edges.append(contradicted_edge)
+
+    end = time()
+    logger.info(
+        f'Found invalidated edge candidates from {new_edge.fact}, in {(end - start) * 1000} ms'
+    )
+
+    return contradicted_edges
