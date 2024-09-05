@@ -86,4 +86,4 @@ async def main(use_bulk: bool = True):
     await client.add_episode_bulk(episodes)
 
 
-asyncio.run(main(True))
+asyncio.run(main(False))

@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 from datetime import datetime
+from time import time
 from typing import List
 
 from graphiti_core.edges import EntityEdge
@@ -29,13 +30,13 @@ NodeEdgeNodeTriplet = tuple[EntityNode, EntityEdge, EntityNode]
 
 
 def extract_node_and_edge_triplets(
-    edges: list[EntityEdge], nodes: list[EntityNode]
+        edges: list[EntityEdge], nodes: list[EntityNode]
 ) -> list[NodeEdgeNodeTriplet]:
     return [extract_node_edge_node_triplet(edge, nodes) for edge in edges]
 
 
 def extract_node_edge_node_triplet(
-    edge: EntityEdge, nodes: list[EntityNode]
+        edge: EntityEdge, nodes: list[EntityNode]
 ) -> NodeEdgeNodeTriplet:
     source_node = next((node for node in nodes if node.uuid == edge.source_node_uuid), None)
     target_node = next((node for node in nodes if node.uuid == edge.target_node_uuid), None)
@@ -45,9 +46,9 @@ def extract_node_edge_node_triplet(
 
 
 def prepare_edges_for_invalidation(
-    existing_edges: list[EntityEdge],
-    new_edges: list[EntityEdge],
-    nodes: list[EntityNode],
+        existing_edges: list[EntityEdge],
+        new_edges: list[EntityEdge],
+        nodes: list[EntityNode],
 ) -> tuple[list[NodeEdgeNodeTriplet], list[NodeEdgeNodeTriplet]]:
     existing_edges_pending_invalidation: list[NodeEdgeNodeTriplet] = []
     new_edges_with_nodes: list[NodeEdgeNodeTriplet] = []
@@ -67,11 +68,11 @@ def prepare_edges_for_invalidation(
 
 
 async def invalidate_edges(
-    llm_client: LLMClient,
-    existing_edges_pending_invalidation: list[NodeEdgeNodeTriplet],
-    new_edges: list[NodeEdgeNodeTriplet],
-    current_episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
+        llm_client: LLMClient,
+        existing_edges_pending_invalidation: list[NodeEdgeNodeTriplet],
+        new_edges: list[NodeEdgeNodeTriplet],
+        current_episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
 ) -> list[EntityEdge]:
     invalidated_edges = []  # TODO: this is not yet used?
 
@@ -101,10 +102,10 @@ def extract_date_strings_from_edge(edge: EntityEdge) -> str:
 
 
 def prepare_invalidation_context(
-    existing_edges: list[NodeEdgeNodeTriplet],
-    new_edges: list[NodeEdgeNodeTriplet],
-    current_episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
+        existing_edges: list[NodeEdgeNodeTriplet],
+        new_edges: list[NodeEdgeNodeTriplet],
+        current_episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
 ) -> dict:
     return {
         'existing_edges': [
@@ -125,7 +126,7 @@ def prepare_invalidation_context(
 
 
 def process_edge_invalidation_llm_response(
-    edges_to_invalidate: List[dict], existing_edges: List[NodeEdgeNodeTriplet]
+        edges_to_invalidate: List[dict], existing_edges: List[NodeEdgeNodeTriplet]
 ) -> List[EntityEdge]:
     invalidated_edges = []
     for edge_to_invalidate in edges_to_invalidate:
@@ -145,10 +146,10 @@ def process_edge_invalidation_llm_response(
 
 
 async def extract_edge_dates(
-    llm_client: LLMClient,
-    edge: EntityEdge,
-    current_episode: EpisodicNode,
-    previous_episodes: List[EpisodicNode],
+        llm_client: LLMClient,
+        edge: EntityEdge,
+        current_episode: EpisodicNode,
+        previous_episodes: List[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None]:
     context = {
         'edge_name': edge.name,
@@ -181,3 +182,33 @@ async def extract_edge_dates(
     logger.info(f'Edge date extraction explanation: {explanation}')
 
     return valid_at_datetime, invalid_at_datetime
+
+
+async def get_edge_contradictions(llm_client: LLMClient, new_edge: EntityEdge,
+                                  existing_edges: list[EntityEdge]) -> list[EntityEdge]:
+    start = time()
+    existing_edge_map = {edge.uuid: edge for edge in existing_edges}
+
+    new_edge_context = {'uuid': new_edge.uuid, 'name': new_edge.name, 'fact': new_edge.fact}
+    existing_edge_context = [{'uuid': existing_edge.uuid, 'name': existing_edge.name, 'fact': existing_edge.fact} for
+                             existing_edge in existing_edges]
+
+    context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
+
+    llm_response = await llm_client.generate_response(prompt_library.invalidate_edges.v2(context))
+
+    contradicted_edge_data = llm_response.get('invalidated_edges', [])
+
+    contradicted_edges: list[EntityEdge] = []
+    for edge_data in contradicted_edge_data:
+        if edge_data['uuid'] in existing_edge_map:
+            contradicted_edge = existing_edge_map[edge_data['uuid']]
+            contradicted_edge.fact = edge_data['fact']
+            contradicted_edges.append(contradicted_edge)
+
+    end = time()
+    logger.info(
+        f'Found invalidated edge candidates from {new_edge.fact}, in {(end - start) * 1000} ms'
+    )
+
+    return contradicted_edges
