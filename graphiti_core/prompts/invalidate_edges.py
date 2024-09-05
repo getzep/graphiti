@@ -21,10 +21,12 @@ from .models import Message, PromptFunction, PromptVersion
 
 class Prompt(Protocol):
     v1: PromptVersion
+    v2: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
+    v2: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
@@ -71,4 +73,38 @@ def v1(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1}
+def v2(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to contradictions with the New Edge.
+
+                Existing Edges:
+                {context['existing_edges']}
+
+                New Edge:
+                {context['new_edge']}
+
+
+                For each existing edge that should be invalidated, respond with a JSON object in the following format:
+                {{
+                    "invalidated_edges": [
+                        {{
+                            "uuid": "The UUID of the edge to be invalidated",
+                            "fact": "Updated fact of the edge"
+                        }}
+                    ]
+                }}
+
+                If no relationships need to be invalidated based on these strict criteria, return an empty list for "invalidated_edges".
+            """,
+        ),
+    ]
+
+
+versions: Versions = {'v1': v1, 'v2': v2}

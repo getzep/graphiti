@@ -24,6 +24,10 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
+from graphiti_core.utils.maintenance.temporal_operations import (
+    extract_edge_dates,
+    get_edge_contradictions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,28 +153,110 @@ async def dedupe_extracted_edges(
 async def resolve_extracted_edges(
     llm_client: LLMClient,
     extracted_edges: list[EntityEdge],
+    related_edges_lists: list[list[EntityEdge]],
     existing_edges_lists: list[list[EntityEdge]],
-) -> list[EntityEdge]:
-    resolved_edges: list[EntityEdge] = list(
+    current_episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+) -> tuple[list[EntityEdge], list[EntityEdge]]:
+    # resolve edges with related edges in the graph, extract temporal information, and find invalidation candidates
+    results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
         await asyncio.gather(
             *[
-                resolve_extracted_edge(llm_client, extracted_edge, existing_edges)
-                for extracted_edge, existing_edges in zip(extracted_edges, existing_edges_lists)
+                resolve_extracted_edge(
+                    llm_client,
+                    extracted_edge,
+                    related_edges,
+                    existing_edges,
+                    current_episode,
+                    previous_episodes,
+                )
+                for extracted_edge, related_edges, existing_edges in zip(
+                    extracted_edges, related_edges_lists, existing_edges_lists
+                )
             ]
         )
     )
 
-    return resolved_edges
+    resolved_edges: list[EntityEdge] = []
+    invalidated_edges: list[EntityEdge] = []
+    for result in results:
+        resolved_edge = result[0]
+        invalidated_edge_chunk = result[1]
+
+        resolved_edges.append(resolved_edge)
+        invalidated_edges.extend(invalidated_edge_chunk)
+
+    return resolved_edges, invalidated_edges
 
 
 async def resolve_extracted_edge(
-    llm_client: LLMClient, extracted_edge: EntityEdge, existing_edges: list[EntityEdge]
+    llm_client: LLMClient,
+    extracted_edge: EntityEdge,
+    related_edges: list[EntityEdge],
+    existing_edges: list[EntityEdge],
+    current_episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+) -> tuple[EntityEdge, list[EntityEdge]]:
+    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await asyncio.gather(
+        dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
+        extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
+        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
+    )
+
+    now = datetime.now()
+
+    resolved_edge.valid_at = valid_at if valid_at is not None else resolved_edge.valid_at
+    resolved_edge.invalid_at = invalid_at if invalid_at is not None else resolved_edge.invalid_at
+    if invalid_at is not None and resolved_edge.expired_at is None:
+        resolved_edge.expired_at = now
+
+    # Determine if the new_edge needs to be expired
+    if resolved_edge.expired_at is None:
+        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
+        for candidate in invalidation_candidates:
+            if (
+                candidate.valid_at is not None and resolved_edge.valid_at is not None
+            ) and candidate.valid_at > resolved_edge.valid_at:
+                # Expire new edge since we have information about more recent events
+                resolved_edge.invalid_at = candidate.valid_at
+                resolved_edge.expired_at = now
+                break
+
+    # Determine which contradictory edges need to be expired
+    invalidated_edges: list[EntityEdge] = []
+    for edge in invalidation_candidates:
+        # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
+        if (
+            edge.invalid_at is not None
+            and resolved_edge.valid_at is not None
+            and edge.invalid_at < resolved_edge.valid_at
+        ) or (
+            edge.valid_at is not None
+            and resolved_edge.invalid_at is not None
+            and resolved_edge.invalid_at < edge.valid_at
+        ):
+            continue
+        # New edge invalidates edge
+        elif (
+            edge.valid_at is not None
+            and resolved_edge.valid_at is not None
+            and edge.valid_at < resolved_edge.valid_at
+        ):
+            edge.invalid_at = resolved_edge.valid_at
+            edge.expired_at = edge.expired_at if edge.expired_at is not None else now
+            invalidated_edges.append(edge)
+
+    return resolved_edge, invalidated_edges
+
+
+async def dedupe_extracted_edge(
+    llm_client: LLMClient, extracted_edge: EntityEdge, related_edges: list[EntityEdge]
 ) -> EntityEdge:
     start = time()
 
     # Prepare context for LLM
-    existing_edges_context = [
-        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
+    related_edges_context = [
+        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in related_edges
     ]
 
     extracted_edge_context = {
@@ -180,7 +266,7 @@ async def resolve_extracted_edge(
     }
 
     context = {
-        'existing_edges': existing_edges_context,
+        'related_edges': related_edges_context,
         'extracted_edges': extracted_edge_context,
     }
 
@@ -191,14 +277,14 @@ async def resolve_extracted_edge(
 
     edge = extracted_edge
     if is_duplicate:
-        for existing_edge in existing_edges:
+        for existing_edge in related_edges:
             if existing_edge.uuid != uuid:
                 continue
             edge = existing_edge
 
     end = time()
     logger.info(
-        f'Resolved node: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
+        f'Resolved Edge: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
     )
 
     return edge

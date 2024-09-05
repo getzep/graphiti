@@ -129,7 +129,7 @@ def v3(context: dict[str, Any]) -> list[Message]:
         Given the following context, determine whether the New Edge represents any of the edges in the list of Existing Edges.
 
         Existing Edges:
-        {json.dumps(context['existing_edges'], indent=2)}
+        {json.dumps(context['related_edges'], indent=2)}
 
         New Edge:
         {json.dumps(context['extracted_edges'], indent=2)}
