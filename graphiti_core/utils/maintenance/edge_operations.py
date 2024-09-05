@@ -214,25 +214,23 @@ async def resolve_extracted_edge(
     if resolved_edge.expired_at is None:
         invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
         for candidate in invalidation_candidates:
-            if candidate.valid_at is not None and resolved_edge.valid_at is not None:
-                if candidate.valid_at > resolved_edge.valid_at:
-                    # Expire new edge since we have information about more recent events
-                    resolved_edge.invalid_at = candidate.valid_at
-                    resolved_edge.expired_at = now
-                    break
+            if (
+                candidate.valid_at is not None and resolved_edge.valid_at is not None
+            ) and candidate.valid_at > resolved_edge.valid_at:
+                # Expire new edge since we have information about more recent events
+                resolved_edge.invalid_at = candidate.valid_at
+                resolved_edge.expired_at = now
+                break
 
     # Determine which contradictory edges need to be expired
     invalidated_edges: list[EntityEdge] = []
     for edge in invalidated_edges:
-        # Edge invalid before new edge becomes valid
+        # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
         if (
             edge.invalid_at is not None
             and resolved_edge.valid_at is not None
             and edge.invalid_at < resolved_edge.valid_at
-        ):
-            continue
-        # New edge invalid before edge becomes valid
-        elif (
+        ) or (
             edge.valid_at is not None
             and resolved_edge.invalid_at is not None
             and resolved_edge.invalid_at < edge.valid_at

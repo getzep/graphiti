@@ -59,11 +59,6 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import (
-    extract_edge_dates,
-    invalidate_edges,
-    prepare_edges_for_invalidation,
-)
 
 logger = logging.getLogger(__name__)
 
