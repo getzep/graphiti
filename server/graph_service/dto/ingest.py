@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from graphiti_core.nodes import EpisodeType
 from pydantic import BaseModel, Field
