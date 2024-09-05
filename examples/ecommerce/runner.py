@@ -110,7 +110,7 @@ async def ingest_products_data(client: Graphiti):
         for i, product in enumerate(products)
     ]
 
-    [
+    for episode in episodes:
         await client.add_episode(
             episode.name,
             episode.content,
@@ -118,8 +118,6 @@ async def ingest_products_data(client: Graphiti):
             episode.reference_time,
             episode.source,
         )
-        for episode in episodes
-    ]
 
 
 asyncio.run(main())
