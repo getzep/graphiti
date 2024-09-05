@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from graphiti_core.nodes import EpisodeType
+from graphiti_core.nodes import EpisodeType  # type: ignore
 from pydantic import BaseModel, Field
 
 from graph_service.dto.common import Message
