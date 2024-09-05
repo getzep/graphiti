@@ -1,0 +1,60 @@
+[tool.poetry]
+name = "graph-service"
+version = "0.1.0"
+description = "Zep Graph service implementing Graphiti package"
+authors = ["Paul Paliychuk <paul@getzep.com>"]
+readme = "README.md"
+packages = [{ include = "graph_service" }]
+
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.112.2"
+graphiti-core = "^0.2.2"
+gunicorn = "^23.0.0"
+uvicorn = "^0.30.6"
+pydantic-settings = "^2.4.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^8.3.2"
+python-dotenv = "^1.0.1"
+pytest-asyncio = "^0.24.0"
+pytest-xdist = "^3.6.1"
+ruff = "^0.6.2"
+fastapi-cli = "^0.0.5"
+
+[tool.poetry.group.dev.dependencies]
+pydantic = "^2.8.2"
+mypy = "^1.11.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
