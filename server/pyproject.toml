@@ -11,8 +11,6 @@ packages = [{ include = "graph_service" }]
 python = "^3.10"
 fastapi = "^0.112.2"
 graphiti-core = "^0.2.2"
-gunicorn = "^23.0.0"
-uvicorn = "^0.30.6"
 pydantic-settings = "^2.4.0"
 
 [tool.poetry.dev-dependencies]
