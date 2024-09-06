@@ -16,7 +16,6 @@ COPY ./pyproject.toml ./poetry.lock* ./README.md /app/
 COPY ./graphiti_core /app/graphiti_core
 COPY ./server/pyproject.toml ./server/poetry.lock* /app/server/
 
-# Configure Poetry and install project dependencies
 RUN poetry config virtualenvs.create false 
 
 # Install the local package
