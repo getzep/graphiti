@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.10-slim as builder
+FROM python:3.12-slim as builder
 
 WORKDIR /app
 
@@ -25,10 +25,10 @@ RUN poetry build && pip install dist/*.whl
 WORKDIR /app/server
 RUN poetry install --no-interaction --no-ansi --no-dev
 
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # Copy only the necessary files from the builder stage
-COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Create the app directory and copy server files
