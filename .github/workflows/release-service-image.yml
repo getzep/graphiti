@@ -9,6 +9,10 @@ on:
         tag:
           description: 'Tag to build and publish'
           required: true
+        push_as_latest:
+          description: 'Also push as latest?'
+          type: boolean
+          default: false
 
 env:
   REGISTRY: docker.io
@@ -20,11 +24,16 @@ jobs:
       name: release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo for tag push
+        if: github.event_name == 'push'
         uses: actions/checkout@v4
         with:
-            ref:  ${{ github.event.inputs.tag || github.ref  }}
-        
+          ref: ${{ github.ref }}
+
+      - name: Checkout repo for manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+          
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
  
@@ -39,15 +48,18 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=raw,value=${{ github.event.inputs.tag }}
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=match,pattern=v(.*-beta),group=1
-            type=match,pattern=v.*-(beta),group=1
+            type=semver,pattern={{major}}
+
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
           token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
-          context: .
+          context: ${{ github.workspace }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags || env.TAGS }}
