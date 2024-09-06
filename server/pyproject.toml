@@ -1,25 +1,18 @@
 [tool.poetry]
-name = "graphiti-core"
-version = "0.2.2"
-description = "A temporal graph building library"
-authors = [
-    "Paul Paliychuk <paul@getzep.com>",
-    "Preston Rasmussen <preston@getzep.com>",
-    "Daniel Chalef <daniel@getzep.com>",
-]
+name = "graph-service"
+version = "0.1.0"
+description = "Zep Graph service implementing Graphiti package"
+authors = ["Paul Paliychuk <paul@getzep.com>"]
 readme = "README.md"
-license = "Apache-2.0"
+packages = [{ include = "graph_service" }]
 
-packages = [{ include = "graphiti_core", from = "." }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pydantic = "^2.8.2"
-neo4j = "^5.23.0"
-diskcache = "^5.6.3"
-openai = "^1.38.0"
-tenacity = "<9.0.0"
-numpy = "^2.1.1"
+fastapi = "^0.112.2"
+graphiti-core = { path = "../" }
+pydantic-settings = "^2.4.0"
+uvicorn = "^0.30.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.2"
@@ -27,19 +20,11 @@ python-dotenv = "^1.0.1"
 pytest-asyncio = "^0.24.0"
 pytest-xdist = "^3.6.1"
 ruff = "^0.6.2"
+fastapi-cli = "^0.0.5"
 
 [tool.poetry.group.dev.dependencies]
 pydantic = "^2.8.2"
 mypy = "^1.11.1"
-groq = ">=0.9,<0.11"
-anthropic = "^0.34.1"
-ipykernel = "^6.29.5"
-jupyterlab = "^4.2.4"
-diskcache-stubs = "^5.6.3.6.20240818"
-langgraph = "^0.2.15"
-langchain-anthropic = "^0.1.23"
-langsmith = "^0.1.108"
-langchain-openai = "^0.1.23"
 
 [build-system]
 requires = ["poetry-core"]
