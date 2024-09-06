@@ -281,7 +281,7 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
-            episode.uuid = episode.uuid if uuid is None else uuid
+            episode.uuid = uuid if uuid is not None else episode.uuid
 
             # Extract entities as nodes
 
