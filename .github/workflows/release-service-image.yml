@@ -2,8 +2,18 @@ name: Build image
  
 on:
   push:
-    tags: ["v*.*.*"]
- 
+    # Publish semver tags as releases.
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+        tag:
+          description: 'Tag to build and publish'
+          required: true
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: zepai/graph-service
+  
 jobs:
   docker-image:
     environment:
@@ -12,7 +22,9 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
- 
+        with:
+            ref:  ${{ github.event.inputs.tag || github.ref  }}
+        
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
  
@@ -21,7 +33,16 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
- 
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v4.4.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=match,pattern=v(.*-beta),group=1
+            type=match,pattern=v.*-(beta),group=1
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
@@ -29,4 +50,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: zepai/graph-service:latest
+          tags: ${{ steps.meta.outputs.tags || env.TAGS }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
