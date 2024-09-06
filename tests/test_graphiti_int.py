@@ -74,15 +74,15 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    edges = await graphiti.search('Freakenomics guest')
+    edges = await graphiti.search('Freakenomics guest', group_ids=['1'])
 
     logger.info('\nQUERY: Freakenomics guest\n' + format_context([edge.fact for edge in edges]))
 
-    edges = await graphiti.search('tania tetlow\n')
+    edges = await graphiti.search('tania tetlow', group_ids=['1'])
 
     logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
 
-    edges = await graphiti.search('issues with higher ed')
+    edges = await graphiti.search('issues with higher ed', group_ids=['1'])
 
     logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
     graphiti.close()

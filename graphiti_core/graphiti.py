@@ -304,7 +304,9 @@ class Graphiti:
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
                 resolve_extracted_nodes(self.llm_client, extracted_nodes, existing_nodes_lists),
-                extract_edges(self.llm_client, episode, extracted_nodes, previous_episodes),
+                extract_edges(
+                    self.llm_client, episode, extracted_nodes, previous_episodes, group_id
+                ),
             )
             logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
             nodes.extend(mentioned_nodes)

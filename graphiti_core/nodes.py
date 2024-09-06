@@ -248,6 +248,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
     return EntityNode(
         uuid=record['uuid'],
         name=record['name'],
+        group_id=record['group_id'],
         name_embedding=record['name_embedding'],
         labels=['Entity'],
         created_at=record['created_at'].to_native(),

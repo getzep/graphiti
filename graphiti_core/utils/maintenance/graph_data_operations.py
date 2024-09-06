@@ -113,7 +113,7 @@ async def retrieve_episodes(
             e.created_at AS created_at,
             e.valid_at AS valid_at,
             e.uuid AS uuid,
-            e.group_id AS group_id
+            e.group_id AS group_id,
             e.name AS name,
             e.source_description AS source_description,
             e.source AS source
