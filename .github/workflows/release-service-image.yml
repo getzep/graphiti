@@ -42,18 +42,26 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${{ github.event.inputs.tag || github.ref_name }}
+          VERSION=${VERSION#v}  # Remove leading 'v' if present
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major_minor=${VERSION%.*}" >> $GITHUB_OUTPUT
+          echo "major=${VERSION%%.*}" >> $GITHUB_OUTPUT
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v4.4.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
-            type=raw,value=${{ github.event.inputs.tag }}
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_as_latest == 'true') }}
+            type=raw,value=${{ steps.get_version.outputs.version }}
+            type=raw,value=${{ steps.get_version.outputs.major_minor }}
+            type=raw,value=${{ steps.get_version.outputs.major }}
 
       - name: Build and push
         uses: depot/build-push-action@v1
