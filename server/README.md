@@ -7,7 +7,7 @@ Graph service is a fast api server implementing the [graphiti](https://github.co
 
 1. Ensure you have Docker and Docker Compose installed on your system.
 
-2. Add `zepai/graph-service:latest` to your service setup
+2. Add `zepai/graphiti:latest` to your service setup
 
 3. Make sure to pass the following environment variables to the service
 
@@ -27,7 +27,7 @@ Graph service is a fast api server implementing the [graphiti](https://github.co
 
       services:
       graph:
-         image: zepai/graph-service:latest
+         image: zepai/graphiti:latest
          ports:
             - "8000:8000"
          
