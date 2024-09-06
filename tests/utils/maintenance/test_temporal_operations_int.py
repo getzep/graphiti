@@ -76,6 +76,7 @@ def create_test_data():
         valid_at=now,
         source=EpisodeType.message,
         source_description='Test episode for unit testing',
+        group_id='1',
     )
 
     # Create previous episodes
@@ -87,6 +88,7 @@ def create_test_data():
             valid_at=now - timedelta(days=1),
             source=EpisodeType.message,
             source_description='Test previous episode for unit testing',
+            group_id='1',
         )
     ]
 
@@ -142,10 +144,12 @@ def create_complex_test_data():
     now = datetime.now()
 
     # Create nodes
-    node1 = EntityNode(uuid='1', name='Alice', labels=['Person'], created_at=now)
-    node2 = EntityNode(uuid='2', name='Bob', labels=['Person'], created_at=now)
-    node3 = EntityNode(uuid='3', name='Charlie', labels=['Person'], created_at=now)
-    node4 = EntityNode(uuid='4', name='Company XYZ', labels=['Organization'], created_at=now)
+    node1 = EntityNode(uuid='1', name='Alice', labels=['Person'], created_at=now, group_id='1')
+    node2 = EntityNode(uuid='2', name='Bob', labels=['Person'], created_at=now, group_id='1')
+    node3 = EntityNode(uuid='3', name='Charlie', labels=['Person'], created_at=now, group_id='1')
+    node4 = EntityNode(
+        uuid='4', name='Company XYZ', labels=['Organization'], created_at=now, group_id='1'
+    )
 
     # Create edges
     edge1 = EntityEdge(
@@ -154,6 +158,7 @@ def create_complex_test_data():
         target_node_uuid='2',
         name='LIKES',
         fact='Alice likes Bob',
+        group_id='1',
         created_at=now - timedelta(days=5),
     )
     edge2 = EntityEdge(
@@ -162,6 +167,7 @@ def create_complex_test_data():
         target_node_uuid='3',
         name='FRIENDS_WITH',
         fact='Alice is friends with Charlie',
+        group_id='1',
         created_at=now - timedelta(days=3),
     )
     edge3 = EntityEdge(
@@ -170,6 +176,7 @@ def create_complex_test_data():
         target_node_uuid='4',
         name='WORKS_FOR',
         fact='Bob works for Company XYZ',
+        group_id='1',
         created_at=now - timedelta(days=2),
     )
 
@@ -199,6 +206,7 @@ async def test_invalidate_edges_complex():
             target_node_uuid='2',
             name='DISLIKES',
             fact='Alice dislikes Bob',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[1],
@@ -225,6 +233,7 @@ async def test_invalidate_edges_temporal_update():
             target_node_uuid='4',
             name='LEFT_JOB',
             fact='Bob left his job at Company XYZ',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[3],
@@ -251,6 +260,7 @@ async def test_invalidate_edges_multiple_invalidations():
             target_node_uuid='2',
             name='ENEMIES_WITH',
             fact='Alice and Bob are now enemies',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[1],
@@ -263,6 +273,7 @@ async def test_invalidate_edges_multiple_invalidations():
             target_node_uuid='3',
             name='ENDED_FRIENDSHIP',
             fact='Alice ended her friendship with Charlie',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[2],
@@ -292,6 +303,7 @@ async def test_invalidate_edges_no_effect():
             target_node_uuid='4',
             name='APPLIED_TO',
             fact='Charlie applied to Company XYZ',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[3],
@@ -316,6 +328,7 @@ async def test_invalidate_edges_partial_update():
             target_node_uuid='4',
             name='CHANGED_POSITION',
             fact='Bob changed his position at Company XYZ',
+            group_id='1',
             created_at=datetime.now(),
         ),
         nodes[3],

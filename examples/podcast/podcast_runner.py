@@ -69,6 +69,7 @@ async def main(use_bulk: bool = True):
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
+                group_id='1',
             )
         return
 

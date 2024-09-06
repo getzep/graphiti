@@ -18,7 +18,6 @@ import asyncio
 import logging
 from datetime import datetime
 from time import time
-from typing import Callable
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
@@ -120,7 +119,7 @@ class Graphiti:
 
         Parameters
         ----------
-        None
+        self
 
         Returns
         -------
@@ -151,7 +150,7 @@ class Graphiti:
 
         Parameters
         ----------
-        None
+        self
 
         Returns
         -------
@@ -178,6 +177,7 @@ class Graphiti:
         self,
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str | None] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -191,6 +191,8 @@ class Graphiti:
             The reference time to retrieve episodes before.
         last_n : int, optional
             The number of episodes to retrieve. Defaults to EPISODE_WINDOW_LEN.
+        group_ids : list[str | None], optional
+            The group ids to return data from.
 
         Returns
         -------
@@ -202,7 +204,7 @@ class Graphiti:
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module.
         """
-        return await retrieve_episodes(self.driver, reference_time, last_n)
+        return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
         self,
@@ -211,8 +213,8 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+        group_id: str | None = None,
+        uuid: str | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -232,10 +234,10 @@ class Graphiti:
             The reference time for the episode.
         source : EpisodeType, optional
             The type of the episode. Defaults to EpisodeType.message.
-        success_callback : Callable | None, optional
-            A callback function to be called upon successful processing.
-        error_callback : Callable | None, optional
-            A callback function to be called if an error occurs during processing.
+        group_id : str | None
+            An id for the graph partition the episode is a part of.
+        uuid : str | None
+            Optional uuid of the episode.
 
         Returns
         -------
@@ -266,9 +268,12 @@ class Graphiti:
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(reference_time, last_n=3)
+            previous_episodes = await self.retrieve_episodes(
+                reference_time, last_n=3, group_ids=[group_id]
+            )
             episode = EpisodicNode(
                 name=name,
+                group_id=group_id,
                 labels=[],
                 source=source,
                 content=episode_body,
@@ -276,6 +281,7 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
+            episode.uuid = uuid if uuid is not None else episode.uuid
 
             # Extract entities as nodes
 
@@ -299,7 +305,9 @@ class Graphiti:
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
                 resolve_extracted_nodes(self.llm_client, extracted_nodes, existing_nodes_lists),
-                extract_edges(self.llm_client, episode, extracted_nodes, previous_episodes),
+                extract_edges(
+                    self.llm_client, episode, extracted_nodes, previous_episodes, group_id
+                ),
             )
             logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
             nodes.extend(mentioned_nodes)
@@ -388,11 +396,7 @@ class Graphiti:
 
             logger.info(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
-            episodic_edges: list[EpisodicEdge] = build_episodic_edges(
-                mentioned_nodes,
-                episode,
-                now,
-            )
+            episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
 
             logger.info(f'Built episodic edges: {episodic_edges}')
 
@@ -405,18 +409,10 @@ class Graphiti:
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
-            if success_callback:
-                await success_callback(episode)
         except Exception as e:
-            if error_callback:
-                await error_callback(episode, e)
-            else:
-                raise e
+            raise e
 
-    async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
-    ):
+    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None):
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -427,6 +423,8 @@ class Graphiti:
         ----------
         bulk_episodes : list[RawEpisode]
             A list of RawEpisode objects to be processed and added to the graph.
+        group_id : str | None
+            An id for the graph partition the episode is a part of.
 
         Returns
         -------
@@ -463,6 +461,7 @@ class Graphiti:
                     source=episode.source,
                     content=episode.content,
                     source_description=episode.source_description,
+                    group_id=group_id,
                     created_at=now,
                     valid_at=episode.reference_time,
                 )
@@ -527,7 +526,13 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def search(self, query: str, center_node_uuid: str | None = None, num_results=10):
+    async def search(
+        self,
+        query: str,
+        center_node_uuid: str | None = None,
+        group_ids: list[str | None] | None = None,
+        num_results=10,
+    ):
         """
         Perform a hybrid search on the knowledge graph.
 
@@ -540,6 +545,8 @@ class Graphiti:
             The search query string.
         center_node_uuid: str, optional
             Facts will be reranked based on proximity to this node
+        group_ids : list[str | None] | None, optional
+            The graph partitions to return data from.
         num_results : int, optional
             The maximum number of results to return. Defaults to 10.
 
@@ -562,6 +569,7 @@ class Graphiti:
             num_episodes=0,
             num_edges=num_results,
             num_nodes=0,
+            group_ids=group_ids,
             search_methods=[SearchMethod.bm25, SearchMethod.cosine_similarity],
             reranker=reranker,
         )
@@ -590,7 +598,10 @@ class Graphiti:
         )
 
     async def get_nodes_by_query(
-        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+        self,
+        query: str,
+        group_ids: list[str | None] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
@@ -602,6 +613,8 @@ class Graphiti:
         ----------
         query : str
             The text query to search for in the graph.
+        group_ids : list[str | None] | None, optional
+            The graph partitions to return data from.
         limit : int | None, optional
             The maximum number of results to return per search method.
             If None, a default limit will be applied.
@@ -626,5 +639,7 @@ class Graphiti:
         """
         embedder = self.llm_client.get_embedder()
         query_embedding = await generate_embedding(embedder, query)
-        relevant_nodes = await hybrid_node_search([query], [query_embedding], self.driver, limit)
+        relevant_nodes = await hybrid_node_search(
+            [query], [query_embedding], self.driver, group_ids, limit
+        )
         return relevant_nodes

@@ -34,6 +34,10 @@ async def build_indices_and_constraints(driver: AsyncDriver):
         'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
         'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
         'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
+        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
+        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
+        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
         'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
         'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
         'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
@@ -86,6 +90,7 @@ async def retrieve_episodes(
     driver: AsyncDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
+    group_ids: list[str | None] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -96,25 +101,28 @@ async def retrieve_episodes(
                                    less than or equal to this reference_time will be retrieved. This allows for
                                    querying the graph's state at a specific point in time.
         last_n (int, optional): The number of most recent episodes to retrieve, relative to the reference_time.
+        group_ids (list[str], optional): The list of group ids to return data from.
 
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
     result = await driver.execute_query(
         """
-        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-        RETURN e.content as content,
-            e.created_at as created_at,
-            e.valid_at as valid_at,
-            e.uuid as uuid,
-            e.name as name,
-            e.source_description as source_description,
-            e.source as source
+        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time AND e.group_id in $group_ids
+        RETURN e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.group_id AS group_id,
+            e.name AS name,
+            e.source_description AS source_description,
+            e.source AS source
         ORDER BY e.created_at DESC
         LIMIT $num_episodes
         """,
         reference_time=reference_time,
         num_episodes=last_n,
+        group_ids=group_ids,
     )
     episodes = [
         EpisodicNode(
@@ -124,6 +132,7 @@ async def retrieve_episodes(
             ),
             valid_at=(record['valid_at'].to_native()),
             uuid=record['uuid'],
+            group_id=record['group_id'],
             source=EpisodeType.from_str(record['source']),
             name=record['name'],
             source_description=record['source_description'],

@@ -85,6 +85,7 @@ async def extract_nodes(
     for node_data in extracted_node_data:
         new_node = EntityNode(
             name=node_data['name'],
+            group_id=episode.group_id,
             labels=node_data['labels'],
             summary=node_data['summary'],
             created_at=datetime.now(),
