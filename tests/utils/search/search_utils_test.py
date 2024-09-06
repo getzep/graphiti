@@ -70,7 +70,9 @@ async def test_hybrid_node_search_only_fulltext():
     ) as mock_fulltext_search, patch(
         'graphiti_core.search.search_utils.entity_similarity_search'
     ) as mock_similarity_search:
-        mock_fulltext_search.return_value = [EntityNode(uuid='1', name='Alice', labels=['Entity'])]
+        mock_fulltext_search.return_value = [
+            EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')
+        ]
         mock_similarity_search.return_value = []
 
         queries = ['Alice']
@@ -93,18 +95,23 @@ async def test_hybrid_node_search_with_limit():
         'graphiti_core.search.search_utils.entity_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = [
-            EntityNode(uuid='1', name='Alice', labels=['Entity']),
-            EntityNode(uuid='2', name='Bob', labels=['Entity']),
+            EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
+            EntityNode(uuid='2', name='Bob', labels=['Entity'], group_id='1'),
         ]
         mock_similarity_search.return_value = [
-            EntityNode(uuid='3', name='Charlie', labels=['Entity']),
-            EntityNode(uuid='4', name='David', labels=['Entity']),
+            EntityNode(uuid='3', name='Charlie', labels=['Entity'], group_id='1'),
+            EntityNode(
+                uuid='4',
+                name='David',
+                labels=['Entity'],
+                group_id='1',
+            ),
         ]
 
         queries = ['Test']
         embeddings = [[0.1, 0.2, 0.3]]
         limit = 1
-        results = await hybrid_node_search(queries, embeddings, mock_driver, limit)
+        results = await hybrid_node_search(queries, embeddings, mock_driver, ['1'], limit)
 
         # We expect 4 results because the limit is applied per search method
         # before deduplication, and we're not actually limiting the results
@@ -127,18 +134,18 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         'graphiti_core.search.search_utils.entity_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = [
-            EntityNode(uuid='1', name='Alice', labels=['Entity']),
-            EntityNode(uuid='2', name='Bob', labels=['Entity']),
+            EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
+            EntityNode(uuid='2', name='Bob', labels=['Entity'], group_id='1'),
         ]
         mock_similarity_search.return_value = [
-            EntityNode(uuid='1', name='Alice', labels=['Entity']),  # Duplicate
-            EntityNode(uuid='3', name='Charlie', labels=['Entity']),
+            EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),  # Duplicate
+            EntityNode(uuid='3', name='Charlie', labels=['Entity'], group_id='1'),
         ]
 
         queries = ['Test']
         embeddings = [[0.1, 0.2, 0.3]]
         limit = 2
-        results = await hybrid_node_search(queries, embeddings, mock_driver, limit)
+        results = await hybrid_node_search(queries, embeddings, mock_driver, ['1'], limit)
 
         # We expect 3 results because:
         # 1. The limit of 2 is applied to each search method

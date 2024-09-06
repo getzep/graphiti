@@ -135,9 +135,9 @@ def test_prepare_invalidation_context():
     now = datetime.now()
 
     # Create nodes
-    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now)
-    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now)
-    node3 = EntityNode(uuid='3', name='Node3', labels=['Person'], created_at=now)
+    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now, group_id='1')
+    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now, group_id='1')
+    node3 = EntityNode(uuid='3', name='Node3', labels=['Person'], created_at=now, group_id='1')
 
     # Create edges
     edge1 = EntityEdge(
@@ -147,6 +147,7 @@ def test_prepare_invalidation_context():
         name='KNOWS',
         fact='Node1 knows Node2',
         created_at=now,
+        group_id='1',
     )
     edge2 = EntityEdge(
         uuid='e2',
@@ -155,6 +156,7 @@ def test_prepare_invalidation_context():
         name='LIKES',
         fact='Node2 likes Node3',
         created_at=now,
+        group_id='1',
     )
 
     # Create NodeEdgeNodeTriplet objects
@@ -173,6 +175,7 @@ def test_prepare_invalidation_context():
         valid_at=now,
         source=EpisodeType.message,
         source_description='Test episode for unit testing',
+        group_id='1',
     )
     previous_episodes = [
         EpisodicNode(
@@ -182,6 +185,7 @@ def test_prepare_invalidation_context():
             valid_at=now - timedelta(days=1),
             source=EpisodeType.message,
             source_description='Test previous episode 1 for unit testing',
+            group_id='1',
         ),
         EpisodicNode(
             name='Previous Episode 2',
@@ -190,6 +194,7 @@ def test_prepare_invalidation_context():
             valid_at=now - timedelta(days=2),
             source=EpisodeType.message,
             source_description='Test previous episode 2 for unit testing',
+            group_id='1',
         ),
     ]
 
@@ -235,6 +240,7 @@ def test_prepare_invalidation_context_empty_input():
         valid_at=now,
         source=EpisodeType.message,
         source_description='Test empty episode for unit testing',
+        group_id='1',
     )
     result = prepare_invalidation_context([], [], current_episode, [])
     assert isinstance(result, dict)
@@ -263,6 +269,7 @@ def test_prepare_invalidation_context_sorting():
         name='KNOWS',
         fact='Node1 knows Node2',
         created_at=now,
+        group_id='1',
     )
     edge2 = EntityEdge(
         uuid='e2',
@@ -271,6 +278,7 @@ def test_prepare_invalidation_context_sorting():
         name='LIKES',
         fact='Node2 likes Node1',
         created_at=now + timedelta(hours=1),
+        group_id='1',
     )
 
     edge_with_nodes1 = (node1, edge1, node2)
@@ -287,6 +295,7 @@ def test_prepare_invalidation_context_sorting():
         valid_at=now,
         source=EpisodeType.message,
         source_description='Test episode for unit testing',
+        group_id='1',
     )
     previous_episodes = [
         EpisodicNode(
@@ -296,6 +305,7 @@ def test_prepare_invalidation_context_sorting():
             valid_at=now - timedelta(days=1),
             source=EpisodeType.message,
             source_description='Test previous episode for unit testing',
+            group_id='1',
         ),
     ]
 
@@ -321,6 +331,7 @@ class TestExtractDateStringsFromEdge(unittest.TestCase):
             created_at=datetime.now(),
             valid_at=valid_at,
             invalid_at=invalid_at,
+            group_id='1',
         )
 
     def test_both_dates_present(self):
