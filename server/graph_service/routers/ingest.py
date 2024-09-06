@@ -6,7 +6,7 @@ from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils import clear_data  # type: ignore
 
-from graph_service.dto import AddMessagesRequest, Episode, Message, Result
+from graph_service.dto import AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 
@@ -46,24 +46,6 @@ async def lifespan(_: FastAPI):
 
 
 router = APIRouter(lifespan=lifespan)
-
-
-@router.post('/add_episode', status_code=status.HTTP_202_ACCEPTED)
-async def add_episode(
-    episode: Episode,
-    graphiti: ZepGraphitiDep,
-):
-    async def add_episode_task():
-        await graphiti.add_episode(
-            name=episode.name,
-            episode_body=episode.content,
-            reference_time=episode.timestamp,
-            source=episode.type,
-            source_description=episode.source_description,
-        )
-
-    await async_worker.queue.put(add_episode_task)
-    return Result(message='Episode added to processing queue', success=True)
 
 
 @router.post('/messages', status_code=status.HTTP_202_ACCEPTED)

@@ -1,7 +1,6 @@
 from .common import Message, Result
-from .ingest import AddMessagesRequest, Episode
+from .ingest import AddMessagesRequest
 from .retrieve import (
-    EntityResult,
     FactResult,
     GetMemoryRequest,
     GetMemoryResponse,
@@ -10,12 +9,10 @@ from .retrieve import (
 )
 
 __all__ = [
-    'Episode',
     'SearchQuery',
     'Message',
     'AddMessagesRequest',
     'SearchResults',
-    'EntityResult',
     'FactResult',
     'Result',
     'GetMemoryRequest',

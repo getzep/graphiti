@@ -25,13 +25,6 @@ class FactResult(BaseModel):
     expired_at: datetime | None
 
 
-class EntityResult(BaseModel):
-    uuid: str
-    name: str
-    summary: str
-    created_at: datetime
-
-
 class SearchResults(BaseModel):
     facts: list[FactResult]
 
