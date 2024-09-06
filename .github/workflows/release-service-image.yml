@@ -4,7 +4,7 @@ on:
   push:
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-    branches: [ main ]
+    branches: [ add-graph-service ]
   workflow_dispatch:
     inputs:
         tag:
