@@ -33,11 +33,6 @@ jobs:
       - name: Checkout repo for manual trigger
         if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
-      - name: Debug - Print working directory and list contents
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "GitHub ref: ${{ github.ref }}"
-          echo "Input tag: ${{ github.event.inputs.tag }}"
           
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
@@ -60,10 +55,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      - name: Debug - Print metadata outputs
-        run: |
-          echo "Tags: ${{ steps.meta.outputs.tags }}"
-          echo "Labels: ${{ steps.meta.outputs.labels }}"
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
