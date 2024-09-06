@@ -174,10 +174,10 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str | None] | None = None,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
+            group_ids: list[str | None] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -207,13 +207,14 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        group_id: str | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            group_id: str | None = None,
+            uuid: str = None
     ):
         """
         Process an episode and update the graph.
@@ -278,6 +279,7 @@ class Graphiti:
                 created_at=now,
                 valid_at=reference_time,
             )
+            episode.uuid = episode.uuid if uuid is None else uuid
 
             # Extract entities as nodes
 
@@ -523,11 +525,11 @@ class Graphiti:
             raise e
 
     async def search(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
-        num_results=10,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str | None] | None = None,
+            num_results=10,
     ):
         """
         Perform a hybrid search on the knowledge graph.
@@ -583,21 +585,21 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        timestamp: datetime,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            timestamp: datetime,
+            config: SearchConfig,
+            center_node_uuid: str | None = None,
     ):
         return await hybrid_search(
             self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
-        self,
-        query: str,
-        group_ids: list[str | None] | None = None,
-        limit: int = RELEVANT_SCHEMA_LIMIT,
+            self,
+            query: str,
+            group_ids: list[str | None] | None = None,
+            limit: int = RELEVANT_SCHEMA_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
