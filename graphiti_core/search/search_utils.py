@@ -7,9 +7,9 @@ from typing import Any
 
 from neo4j import AsyncDriver, Query
 
-from graphiti_core.edges import EntityEdge
+from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.helpers import parse_db_date
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodicNode, get_entity_node_from_record
 
 logger = logging.getLogger(__name__)
 
@@ -48,55 +48,6 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
     return nodes
 
 
-async def bfs(node_ids: list[str], driver: AsyncDriver):
-    records, _, _ = await driver.execute_query(
-        """
-        MATCH (n WHERE n.uuid in $node_ids)-[r]->(m)
-        RETURN DISTINCT
-            n.uuid AS source_node_uuid,
-            n.name AS source_name, 
-            n.summary AS source_summary,
-            m.uuid AS target_node_uuid,
-            m.name AS target_name, 
-            m.summary AS target_summary,
-            r.uuid AS uuid,
-            r.created_at AS created_at,
-            r.name AS name,
-            r.fact AS fact,
-            r.fact_embedding AS fact_embedding,
-            r.episodes AS episodes,
-            r.expired_at AS expired_at,
-            r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at
-
-    """,
-        node_ids=node_ids,
-    )
-
-    context: dict[str, Any] = {}
-
-    for record in records:
-        n_uuid = record['source_node_uuid']
-        if n_uuid in context:
-            context[n_uuid]['facts'].append(record['fact'])
-        else:
-            context[n_uuid] = {
-                'name': record['source_name'],
-                'summary': record['source_summary'],
-                'facts': [record['fact']],
-            }
-
-        m_uuid = record['target_node_uuid']
-        if m_uuid not in context:
-            context[m_uuid] = {
-                'name': record['target_name'],
-                'summary': record['target_summary'],
-                'facts': [],
-            }
-    logger.info(f'bfs search returned context: {context}')
-    return context
-
-
 async def edge_similarity_search(
     driver: AsyncDriver,
     search_vector: list[float],
@@ -111,6 +62,7 @@ async def edge_similarity_search(
                 MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
                 RETURN
                     r.uuid AS uuid,
+                    r.group_id AS group_id,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
                     r.created_at AS created_at,
@@ -131,6 +83,7 @@ async def edge_similarity_search(
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
                     RETURN
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -150,6 +103,7 @@ async def edge_similarity_search(
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
                     RETURN
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -169,6 +123,7 @@ async def edge_similarity_search(
                     MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
                     RETURN
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -190,24 +145,7 @@ async def edge_similarity_search(
         limit=limit,
     )
 
-    edges: list[EntityEdge] = []
-
-    for record in records:
-        edge = EntityEdge(
-            uuid=record['uuid'],
-            source_node_uuid=record['source_node_uuid'],
-            target_node_uuid=record['target_node_uuid'],
-            fact=record['fact'],
-            name=record['name'],
-            episodes=record['episodes'],
-            fact_embedding=record['fact_embedding'],
-            created_at=record['created_at'].to_native(),
-            expired_at=parse_db_date(record['expired_at']),
-            valid_at=parse_db_date(record['valid_at']),
-            invalid_at=parse_db_date(record['invalid_at']),
-        )
-
-        edges.append(edge)
+    edges = [get_entity_edge_from_record(record) for record in records]
 
     return edges
 
@@ -221,7 +159,8 @@ async def entity_similarity_search(
                 CALL db.index.vector.queryNodes("name_embedding", $limit, $search_vector)
                 YIELD node AS n, score
                 RETURN
-                    n.uuid As uuid, 
+                    n.uuid As uuid,
+                    n.group_id AS group_id,
                     n.name AS name, 
                     n.name_embedding AS name_embedding,
                     n.created_at AS created_at, 
@@ -231,19 +170,7 @@ async def entity_similarity_search(
         search_vector=search_vector,
         limit=limit,
     )
-    nodes: list[EntityNode] = []
-
-    for record in records:
-        nodes.append(
-            EntityNode(
-                uuid=record['uuid'],
-                name=record['name'],
-                name_embedding=record['name_embedding'],
-                labels=['Entity'],
-                created_at=record['created_at'].to_native(),
-                summary=record['summary'],
-            )
-        )
+    nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
 
@@ -257,7 +184,8 @@ async def entity_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) YIELD node, score
     RETURN
-        node.uuid AS uuid, 
+        node.uuid AS uuid,
+        node.group_id AS group_id, 
         node.name AS name, 
         node.name_embedding AS name_embedding,
         node.created_at AS created_at, 
@@ -268,19 +196,7 @@ async def entity_fulltext_search(
         query=fuzzy_query,
         limit=limit,
     )
-    nodes: list[EntityNode] = []
-
-    for record in records:
-        nodes.append(
-            EntityNode(
-                uuid=record['uuid'],
-                name=record['name'],
-                name_embedding=record['name_embedding'],
-                labels=['Entity'],
-                created_at=record['created_at'].to_native(),
-                summary=record['summary'],
-            )
-        )
+    nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
 
@@ -299,6 +215,7 @@ async def edge_fulltext_search(
               MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
               RETURN 
                     r.uuid AS uuid,
+                    r.group_id AS group_id,
                     n.uuid AS source_node_uuid,
                     m.uuid AS target_node_uuid,
                     r.created_at AS created_at,
@@ -319,6 +236,7 @@ async def edge_fulltext_search(
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
                   RETURN 
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -338,6 +256,7 @@ async def edge_fulltext_search(
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
                   RETURN 
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -357,6 +276,7 @@ async def edge_fulltext_search(
                   MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
                   RETURN 
                         r.uuid AS uuid,
+                        r.group_id AS group_id,
                         n.uuid AS source_node_uuid,
                         m.uuid AS target_node_uuid,
                         r.created_at AS created_at,
@@ -380,24 +300,7 @@ async def edge_fulltext_search(
         limit=limit,
     )
 
-    edges: list[EntityEdge] = []
-
-    for record in records:
-        edge = EntityEdge(
-            uuid=record['uuid'],
-            source_node_uuid=record['source_node_uuid'],
-            target_node_uuid=record['target_node_uuid'],
-            fact=record['fact'],
-            name=record['name'],
-            episodes=record['episodes'],
-            fact_embedding=record['fact_embedding'],
-            created_at=record['created_at'].to_native(),
-            expired_at=parse_db_date(record['expired_at']),
-            valid_at=parse_db_date(record['valid_at']),
-            invalid_at=parse_db_date(record['invalid_at']),
-        )
-
-        edges.append(edge)
+    edges = [get_entity_edge_from_record(record) for record in records]
 
     return edges
 

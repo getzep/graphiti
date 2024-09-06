@@ -70,6 +70,7 @@ async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
+    group_id: str | None,
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
@@ -85,6 +86,7 @@ async def extract_nodes(
     for node_data in extracted_node_data:
         new_node = EntityNode(
             name=node_data['name'],
+            group_id=group_id,
             labels=node_data['labels'],
             summary=node_data['summary'],
             created_at=datetime.now(),

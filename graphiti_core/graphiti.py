@@ -211,8 +211,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        success_callback: Callable | None = None,
-        error_callback: Callable | None = None,
+        group_id: str | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -232,10 +231,8 @@ class Graphiti:
             The reference time for the episode.
         source : EpisodeType, optional
             The type of the episode. Defaults to EpisodeType.message.
-        success_callback : Callable | None, optional
-            A callback function to be called upon successful processing.
-        error_callback : Callable | None, optional
-            A callback function to be called if an error occurs during processing.
+        group_id : str | None
+            An id for the graph partition the episode is a part of.
 
         Returns
         -------
@@ -269,6 +266,7 @@ class Graphiti:
             previous_episodes = await self.retrieve_episodes(reference_time, last_n=3)
             episode = EpisodicNode(
                 name=name,
+                group_id=group_id,
                 labels=[],
                 source=source,
                 content=episode_body,
@@ -279,7 +277,9 @@ class Graphiti:
 
             # Extract entities as nodes
 
-            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
+            extracted_nodes = await extract_nodes(
+                self.llm_client, episode, previous_episodes, group_id
+            )
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
@@ -389,9 +389,7 @@ class Graphiti:
             logger.info(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
             episodic_edges: list[EpisodicEdge] = build_episodic_edges(
-                mentioned_nodes,
-                episode,
-                now,
+                mentioned_nodes, episode, now, group_id
             )
 
             logger.info(f'Built episodic edges: {episodic_edges}')
@@ -405,13 +403,8 @@ class Graphiti:
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
-            if success_callback:
-                await success_callback(episode)
         except Exception as e:
-            if error_callback:
-                await error_callback(episode, e)
-            else:
-                raise e
+            raise e
 
     async def add_episode_bulk(
         self,
