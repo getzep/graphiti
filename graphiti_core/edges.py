@@ -18,6 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from time import time
+from typing import Any
 from uuid import uuid4
 
 from neo4j import AsyncDriver
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: uuid4().hex)
+    group_id: str | None = Field(description='partition of the graph')
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime
@@ -61,11 +63,12 @@ class EpisodicEdge(Edge):
         MATCH (episode:Episodic {uuid: $episode_uuid}) 
         MATCH (node:Entity {uuid: $entity_uuid}) 
         MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
-        SET r = {uuid: $uuid, created_at: $created_at}
+        SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
         RETURN r.uuid AS uuid""",
             episode_uuid=self.source_node_uuid,
             entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
+            group_id=self.group_id,
             created_at=self.created_at,
         )
 
@@ -92,7 +95,8 @@ class EpisodicEdge(Edge):
             """
         MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
         RETURN
-            e.uuid As uuid, 
+            e.uuid As uuid,
+            e.group_id AS group_id,
             n.uuid AS source_node_uuid, 
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
@@ -100,17 +104,7 @@ class EpisodicEdge(Edge):
             uuid=uuid,
         )
 
-        edges: list[EpisodicEdge] = []
-
-        for record in records:
-            edges.append(
-                EpisodicEdge(
-                    uuid=record['uuid'],
-                    source_node_uuid=record['source_node_uuid'],
-                    target_node_uuid=record['target_node_uuid'],
-                    created_at=record['created_at'].to_native(),
-                )
-            )
+        edges = [get_episodic_edge_from_record(record) for record in records]
 
         logger.info(f'Found Edge: {uuid}')
 
@@ -153,7 +147,7 @@ class EntityEdge(Edge):
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 
         MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
-        SET r = {uuid: $uuid, name: $name, fact: $fact, fact_embedding: $fact_embedding, 
+        SET r = {uuid: $uuid, name: $name, group_id: $group_id, fact: $fact, fact_embedding: $fact_embedding, 
         episodes: $episodes, created_at: $created_at, expired_at: $expired_at, 
         valid_at: $valid_at, invalid_at: $invalid_at}
         RETURN r.uuid AS uuid""",
@@ -161,6 +155,7 @@ class EntityEdge(Edge):
             target_uuid=self.target_node_uuid,
             uuid=self.uuid,
             name=self.name,
+            group_id=self.group_id,
             fact=self.fact,
             fact_embedding=self.fact_embedding,
             episodes=self.episodes,
@@ -198,6 +193,7 @@ class EntityEdge(Edge):
             m.uuid AS target_node_uuid,
             e.created_at AS created_at,
             e.name AS name,
+            e.group_id AS group_id,
             e.fact AS fact,
             e.fact_embedding AS fact_embedding,
             e.episodes AS episodes,
@@ -208,25 +204,36 @@ class EntityEdge(Edge):
             uuid=uuid,
         )
 
-        edges: list[EntityEdge] = []
-
-        for record in records:
-            edges.append(
-                EntityEdge(
-                    uuid=record['uuid'],
-                    source_node_uuid=record['source_node_uuid'],
-                    target_node_uuid=record['target_node_uuid'],
-                    fact=record['fact'],
-                    name=record['name'],
-                    episodes=record['episodes'],
-                    fact_embedding=record['fact_embedding'],
-                    created_at=record['created_at'].to_native(),
-                    expired_at=parse_db_date(record['expired_at']),
-                    valid_at=parse_db_date(record['valid_at']),
-                    invalid_at=parse_db_date(record['invalid_at']),
-                )
-            )
+        edges = [get_entity_edge_from_record(record) for record in records]
 
         logger.info(f'Found Edge: {uuid}')
 
         return edges[0]
+
+
+# Edge helpers
+def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
+    return EpisodicEdge(
+        uuid=record['uuid'],
+        group_id=record['group_id'],
+        source_node_uuid=record['source_node_uuid'],
+        target_node_uuid=record['target_node_uuid'],
+        created_at=record['created_at'].to_native(),
+    )
+
+
+def get_entity_edge_from_record(record: Any) -> EntityEdge:
+    return EntityEdge(
+        uuid=record['uuid'],
+        source_node_uuid=record['source_node_uuid'],
+        target_node_uuid=record['target_node_uuid'],
+        fact=record['fact'],
+        name=record['name'],
+        group_id=record['group_id'],
+        episodes=record['episodes'],
+        fact_embedding=record['fact_embedding'],
+        created_at=record['created_at'].to_native(),
+        expired_at=parse_db_date(record['expired_at']),
+        valid_at=parse_db_date(record['valid_at']),
+        invalid_at=parse_db_date(record['invalid_at']),
+    )

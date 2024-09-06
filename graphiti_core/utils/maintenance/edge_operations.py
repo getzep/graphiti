@@ -37,15 +37,15 @@ def build_episodic_edges(
     episode: EpisodicNode,
     created_at: datetime,
 ) -> List[EpisodicEdge]:
-    edges: List[EpisodicEdge] = []
-
-    for node in entity_nodes:
-        edge = EpisodicEdge(
+    edges: List[EpisodicEdge] = [
+        EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
             created_at=created_at,
+            group_id=episode.group_id,
         )
-        edges.append(edge)
+        for node in entity_nodes
+    ]
 
     return edges
 
@@ -55,6 +55,7 @@ async def extract_edges(
     episode: EpisodicNode,
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
+    group_id: str | None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -88,6 +89,7 @@ async def extract_edges(
                 source_node_uuid=edge_data['source_node_uuid'],
                 target_node_uuid=edge_data['target_node_uuid'],
                 name=edge_data['relation_type'],
+                group_id=group_id,
                 fact=edge_data['fact'],
                 episodes=[episode.uuid],
                 created_at=datetime.now(),

@@ -19,10 +19,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
+from typing import Any
 from uuid import uuid4
 
 from neo4j import AsyncDriver
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core.llm_client.config import EMBEDDING_DIM
@@ -69,6 +69,7 @@ class EpisodeType(Enum):
 class Node(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: uuid4().hex)
     name: str = Field(description='name of the node')
+    group_id: str | None = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now())
 
@@ -106,11 +107,12 @@ class EpisodicNode(Node):
         result = await driver.execute_query(
             """
         MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, source_description: $source_description, source: $source, content: $content, 
+        SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
         entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
+            group_id=self.group_id,
             source_description=self.source_description,
             content=self.content,
             entity_edges=self.entity_edges,
@@ -141,29 +143,19 @@ class EpisodicNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic {uuid: $uuid})
-            RETURN e.content as content,
-            e.created_at as created_at,
-            e.valid_at as valid_at,
-            e.uuid as uuid,
-            e.name as name,
-            e.source_description as source_description,
-            e.source as source
+            RETURN e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id
+            e.source_description AS source_description,
+            e.source AS source
         """,
             uuid=uuid,
         )
 
-        episodes = [
-            EpisodicNode(
-                content=record['content'],
-                created_at=record['created_at'].to_native().timestamp(),
-                valid_at=(record['valid_at'].to_native()),
-                uuid=record['uuid'],
-                source=EpisodeType.from_str(record['source']),
-                name=record['name'],
-                source_description=record['source_description'],
-            )
-            for record in records
-        ]
+        episodes = [get_episodic_node_from_record(record) for record in records]
 
         logger.info(f'Found Node: {uuid}')
 
@@ -173,10 +165,6 @@ class EpisodicNode(Node):
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
-
-    async def update_summary(self, driver: AsyncDriver): ...
-
-    async def refresh_summary(self, driver: AsyncDriver, llm_client: OpenAI): ...
 
     async def generate_name_embedding(self, embedder, model='text-embedding-3-small'):
         start = time()
@@ -192,10 +180,11 @@ class EntityNode(Node):
         result = await driver.execute_query(
             """
         MERGE (n:Entity {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, summary: $summary, created_at: $created_at}
+        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, group_id: $group_id, summary: $summary, created_at: $created_at}
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
+            group_id=self.group_id,
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
@@ -227,25 +216,14 @@ class EntityNode(Node):
             n.uuid As uuid, 
             n.name AS name,
             n.name_embedding AS name_embedding,
+            n.group_id AS group_id
             n.created_at AS created_at, 
             n.summary AS summary
         """,
             uuid=uuid,
         )
 
-        nodes: list[EntityNode] = []
-
-        for record in records:
-            nodes.append(
-                EntityNode(
-                    uuid=record['uuid'],
-                    name=record['name'],
-                    name_embedding=record['name_embedding'],
-                    labels=['Entity'],
-                    created_at=record['created_at'].to_native(),
-                    summary=record['summary'],
-                )
-            )
+        nodes = [get_entity_node_from_record(record) for record in records]
 
         logger.info(f'Found Node: {uuid}')
 
@@ -253,3 +231,26 @@ class EntityNode(Node):
 
 
 # Node helpers
+def get_episodic_node_from_record(record: Any) -> EpisodicNode:
+    return EpisodicNode(
+        content=record['content'],
+        created_at=record['created_at'].to_native().timestamp(),
+        valid_at=(record['valid_at'].to_native()),
+        uuid=record['uuid'],
+        group_id=record['group_id'],
+        source=EpisodeType.from_str(record['source']),
+        name=record['name'],
+        source_description=record['source_description'],
+    )
+
+
+def get_entity_node_from_record(record: Any) -> EntityNode:
+    return EntityNode(
+        uuid=record['uuid'],
+        name=record['name'],
+        group_id=record['group_id'],
+        name_embedding=record['name_embedding'],
+        labels=['Entity'],
+        created_at=record['created_at'].to_native(),
+        summary=record['summary'],
+    )

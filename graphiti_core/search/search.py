@@ -52,6 +52,7 @@ class SearchConfig(BaseModel):
     num_edges: int = Field(default=10)
     num_nodes: int = Field(default=10)
     num_episodes: int = EPISODE_WINDOW_LEN
+    group_ids: list[str | None] | None
     search_methods: list[SearchMethod]
     reranker: Reranker | None
 
@@ -83,7 +84,9 @@ async def hybrid_search(
         nodes.extend(await get_mentioned_nodes(driver, episodes))
 
     if SearchMethod.bm25 in config.search_methods:
-        text_search = await edge_fulltext_search(driver, query, None, None, 2 * config.num_edges)
+        text_search = await edge_fulltext_search(
+            driver, query, None, None, config.group_ids, 2 * config.num_edges
+        )
         search_results.append(text_search)
 
     if SearchMethod.cosine_similarity in config.search_methods:
@@ -95,7 +98,7 @@ async def hybrid_search(
         )
 
         similarity_search = await edge_similarity_search(
-            driver, search_vector, None, None, 2 * config.num_edges
+            driver, search_vector, None, None, config.group_ids, 2 * config.num_edges
         )
         search_results.append(similarity_search)
 
