@@ -2,7 +2,7 @@ name: Build image
  
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: ["add-graph-service"]
  
 jobs:
   docker-image:
@@ -28,4 +28,5 @@ jobs:
           token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: zepai/graph-service:latest
