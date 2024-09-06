@@ -33,9 +33,9 @@ def create_test_data():
     now = datetime.now()
 
     # Create nodes
-    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now)
-    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now)
-    node3 = EntityNode(uuid='3', name='Node3', labels=['Person'], created_at=now)
+    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now, group_id='1')
+    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now, group_id='1')
+    node3 = EntityNode(uuid='3', name='Node3', labels=['Person'], created_at=now, group_id='1')
 
     # Create edges
     existing_edge1 = EntityEdge(
@@ -45,6 +45,7 @@ def create_test_data():
         name='KNOWS',
         fact='Node1 knows Node2',
         created_at=now,
+        group_id='1',
     )
     existing_edge2 = EntityEdge(
         uuid='e2',
@@ -53,6 +54,7 @@ def create_test_data():
         name='LIKES',
         fact='Node2 likes Node3',
         created_at=now,
+        group_id='1',
     )
     new_edge1 = EntityEdge(
         uuid='e3',
@@ -61,6 +63,7 @@ def create_test_data():
         name='WORKS_WITH',
         fact='Node1 works with Node3',
         created_at=now,
+        group_id='1',
     )
     new_edge2 = EntityEdge(
         uuid='e4',
@@ -69,6 +72,7 @@ def create_test_data():
         name='DISLIKES',
         fact='Node1 dislikes Node2',
         created_at=now,
+        group_id='1',
     )
 
     return {
@@ -258,8 +262,8 @@ def test_prepare_invalidation_context_sorting():
     now = datetime.now()
 
     # Create nodes
-    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now)
-    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now)
+    node1 = EntityNode(uuid='1', name='Node1', labels=['Person'], created_at=now, group_id='1')
+    node2 = EntityNode(uuid='2', name='Node2', labels=['Person'], created_at=now, group_id='1')
 
     # Create edges with different timestamps
     edge1 = EntityEdge(

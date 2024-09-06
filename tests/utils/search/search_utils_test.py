@@ -19,12 +19,12 @@ async def test_hybrid_node_search_deduplication():
     ) as mock_similarity_search:
         # Set up mock return values
         mock_fulltext_search.side_effect = [
-            [EntityNode(uuid='1', name='Alice', labels=['Entity'])],
-            [EntityNode(uuid='2', name='Bob', labels=['Entity'])],
+            [EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')],
+            [EntityNode(uuid='2', name='Bob', labels=['Entity'], group_id='1')],
         ]
         mock_similarity_search.side_effect = [
-            [EntityNode(uuid='1', name='Alice', labels=['Entity'])],
-            [EntityNode(uuid='3', name='Charlie', labels=['Entity'])],
+            [EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')],
+            [EntityNode(uuid='3', name='Charlie', labels=['Entity'], group_id='1')],
         ]
 
         # Call the function with test data
@@ -120,8 +120,8 @@ async def test_hybrid_node_search_with_limit():
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
         # Verify that the limit was passed to the search functions
-        mock_fulltext_search.assert_called_with('Test', mock_driver, 2)
-        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, 2)
+        mock_fulltext_search.assert_called_with('Test', mock_driver, ['1'], 2)
+        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, ['1'], 2)
 
 
 @pytest.mark.asyncio
@@ -155,5 +155,5 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         assert set(node.name for node in results) == {'Alice', 'Bob', 'Charlie'}
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
-        mock_fulltext_search.assert_called_with('Test', mock_driver, 4)
-        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, 4)
+        mock_fulltext_search.assert_called_with('Test', mock_driver, ['1'], 4)
+        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, ['1'], 4)
