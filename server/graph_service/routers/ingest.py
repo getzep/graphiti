@@ -54,8 +54,8 @@ async def add_messages(
     graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
-        # Will pass a group_id to the add_episode call once it is implemented
         await graphiti.add_episode(
+            group_id=request.group_id,
             name=m.name,
             episode_body=f"{m.role or ''}({m.role_type}): {m.content}",
             reference_time=m.timestamp,
