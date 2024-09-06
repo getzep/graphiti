@@ -27,7 +27,7 @@ Graph service is a fast api server implementing the [graphiti](https://github.co
 
       services:
       graph:
-         build: .
+         image: zepai/graph-service:latest
          ports:
             - "8000:8000"
          
