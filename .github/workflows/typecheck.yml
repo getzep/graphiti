@@ -36,7 +36,9 @@ jobs:
           '
       - name: Install graph-service dependencies
         shell: bash
-        run: poetry install --no-interaction --with dev
+        run: |
+          cd server
+          poetry install --no-interaction --with dev
       - name: Run MyPy for graph-service
         shell: bash
         run: |
