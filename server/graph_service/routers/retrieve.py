@@ -20,6 +20,7 @@ async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
         if user_node:
             center_node_uuid = user_node.uuid
     relevant_edges = await graphiti.search(
+        group_ids=[query.group_id],
         query=query.query,
         num_results=query.max_facts,
         center_node_uuid=center_node_uuid,
@@ -37,6 +38,7 @@ async def get_memory(
 ):
     combined_query = compose_query_from_messages(request.messages)
     result = await graphiti.search(
+        group_ids=[request.group_id],
         query=combined_query,
         num_results=request.max_facts,
     )
