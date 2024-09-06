@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import logging
 import typing
+from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
@@ -42,7 +43,6 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
 )
 from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
-from graphiti_core.utils.utils import chunk_edges_by_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -351,3 +351,23 @@ async def extract_edge_dates_bulk(
             edge.expired_at = datetime.now()
 
     return edges
+
+
+def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
+    # We only want to dedupe edges that are between the same pair of nodes
+    # We build a map of the edges based on their source and target nodes.
+    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
+    for edge in edges:
+        # We drop loop edges
+        if edge.source_node_uuid == edge.target_node_uuid:
+            continue
+
+        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
+        pointers = [edge.source_node_uuid, edge.target_node_uuid]
+        pointers.sort()
+
+        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
+
+    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
+
+    return edge_chunks

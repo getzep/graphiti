@@ -177,7 +177,7 @@ class Graphiti:
         self,
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
+        group_ids: list[str | None] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -191,7 +191,7 @@ class Graphiti:
             The reference time to retrieve episodes before.
         last_n : int, optional
             The number of episodes to retrieve. Defaults to EPISODE_WINDOW_LEN.
-        group_ids : list[str], optional
+        group_ids : list[str | None], optional
             The group ids to return data from.
 
         Returns
@@ -526,7 +526,7 @@ class Graphiti:
         self,
         query: str,
         center_node_uuid: str | None = None,
-        group_ids: list[str] | None = None,
+        group_ids: list[str | None] | None = None,
         num_results=10,
     ):
         """
@@ -541,7 +541,7 @@ class Graphiti:
             The search query string.
         center_node_uuid: str, optional
             Facts will be reranked based on proximity to this node
-        group_ids : list[str] | None, optional
+        group_ids : list[str | None] | None, optional
             The graph partitions to return data from.
         num_results : int, optional
             The maximum number of results to return. Defaults to 10.
@@ -594,7 +594,10 @@ class Graphiti:
         )
 
     async def get_nodes_by_query(
-        self, query: str, group_ids: list[str] | None = None, limit: int = RELEVANT_SCHEMA_LIMIT
+        self,
+        query: str,
+        group_ids: list[str | None] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
@@ -606,7 +609,7 @@ class Graphiti:
         ----------
         query : str
             The text query to search for in the graph.
-        group_ids : list[str] | None, optional
+        group_ids : list[str | None] | None, optional
             The graph partitions to return data from.
         limit : int | None, optional
             The maximum number of results to return per search method.

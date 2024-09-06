@@ -90,7 +90,7 @@ async def retrieve_episodes(
     driver: AsyncDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
-    group_ids: list[str] | None = None,
+    group_ids: list[str | None] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.

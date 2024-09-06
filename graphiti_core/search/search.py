@@ -52,7 +52,7 @@ class SearchConfig(BaseModel):
     num_edges: int = Field(default=10)
     num_nodes: int = Field(default=10)
     num_episodes: int = EPISODE_WINDOW_LEN
-    group_ids: list[str] | None
+    group_ids: list[str | None] | None
     search_methods: list[SearchMethod]
     reranker: Reranker | None
 

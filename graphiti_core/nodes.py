@@ -23,7 +23,6 @@ from typing import Any
 from uuid import uuid4
 
 from neo4j import AsyncDriver
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core.llm_client.config import EMBEDDING_DIM
@@ -238,6 +237,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         created_at=record['created_at'].to_native().timestamp(),
         valid_at=(record['valid_at'].to_native()),
         uuid=record['uuid'],
+        group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
         name=record['name'],
         source_description=record['source_description'],
