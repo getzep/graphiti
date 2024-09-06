@@ -24,6 +24,7 @@ jobs:
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
+          token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
           context: .
           push: true
           tags: zepai/graph-service:latest
