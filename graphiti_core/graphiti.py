@@ -18,7 +18,6 @@ import asyncio
 import logging
 from datetime import datetime
 from time import time
-from typing import Callable
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
@@ -120,7 +119,7 @@ class Graphiti:
 
         Parameters
         ----------
-        None
+        self
 
         Returns
         -------
@@ -151,7 +150,7 @@ class Graphiti:
 
         Parameters
         ----------
-        None
+        self
 
         Returns
         -------
@@ -282,9 +281,7 @@ class Graphiti:
 
             # Extract entities as nodes
 
-            extracted_nodes = await extract_nodes(
-                self.llm_client, episode, previous_episodes, group_id
-            )
+            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
             logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
@@ -395,9 +392,7 @@ class Graphiti:
 
             logger.info(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
-            episodic_edges: list[EpisodicEdge] = build_episodic_edges(
-                mentioned_nodes, episode, now, group_id
-            )
+            episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
 
             logger.info(f'Built episodic edges: {episodic_edges}')
 
@@ -413,10 +408,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def add_episode_bulk(
-        self,
-        bulk_episodes: list[RawEpisode],
-    ):
+    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None):
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -427,6 +419,8 @@ class Graphiti:
         ----------
         bulk_episodes : list[RawEpisode]
             A list of RawEpisode objects to be processed and added to the graph.
+        group_id : str | None
+            An id for the graph partition the episode is a part of.
 
         Returns
         -------
@@ -463,6 +457,7 @@ class Graphiti:
                     source=episode.source,
                     content=episode.content,
                     source_description=episode.source_description,
+                    group_id=group_id,
                     created_at=now,
                     valid_at=episode.reference_time,
                 )
@@ -599,7 +594,7 @@ class Graphiti:
         )
 
     async def get_nodes_by_query(
-        self, query: str, limit: int = RELEVANT_SCHEMA_LIMIT
+        self, query: str, group_ids: list[str] | None = None, limit: int = RELEVANT_SCHEMA_LIMIT
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
@@ -611,6 +606,8 @@ class Graphiti:
         ----------
         query : str
             The text query to search for in the graph.
+        group_ids : list[str] | None, optional
+            The graph partitions to return data from.
         limit : int | None, optional
             The maximum number of results to return per search method.
             If None, a default limit will be applied.
@@ -635,5 +632,7 @@ class Graphiti:
         """
         embedder = self.llm_client.get_embedder()
         query_embedding = await generate_embedding(embedder, query)
-        relevant_nodes = await hybrid_node_search([query], [query_embedding], self.driver, limit)
+        relevant_nodes = await hybrid_node_search(
+            [query], [query_embedding], self.driver, group_ids, limit
+        )
         return relevant_nodes

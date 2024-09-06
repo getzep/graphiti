@@ -36,14 +36,13 @@ def build_episodic_edges(
     entity_nodes: List[EntityNode],
     episode: EpisodicNode,
     created_at: datetime,
-    group_id: str | None,
 ) -> List[EpisodicEdge]:
     edges: List[EpisodicEdge] = [
         EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
             created_at=created_at,
-            group_id=group_id,
+            group_id=episode.group_id,
         )
         for node in entity_nodes
     ]

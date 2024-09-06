@@ -62,7 +62,9 @@ async def retrieve_previous_episodes_bulk(
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await asyncio.gather(
         *[
-            retrieve_episodes(driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN)
+            retrieve_episodes(
+                driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id]
+            )
             for episode in episodes
         ]
     )
@@ -90,7 +92,13 @@ async def extract_nodes_and_edges_bulk(
 
     extracted_edges_bulk = await asyncio.gather(
         *[
-            extract_edges(llm_client, episode, extracted_nodes_bulk[i], previous_episodes_list[i])
+            extract_edges(
+                llm_client,
+                episode,
+                extracted_nodes_bulk[i],
+                previous_episodes_list[i],
+                episode.group_id,
+            )
             for i, episode in enumerate(episodes)
         ]
     )
