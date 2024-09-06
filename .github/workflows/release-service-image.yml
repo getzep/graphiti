@@ -39,10 +39,19 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ github.event.inputs.tag }}
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=match,pattern=v(.*-beta),group=1
-            type=match,pattern=v.*-(beta),group=1
+            type=semver,pattern={{major}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+
+      - name: Debug - Print metadata outputs
+        run: |
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Labels: ${{ steps.meta.outputs.labels }}"
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
