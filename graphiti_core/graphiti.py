@@ -214,7 +214,7 @@ class Graphiti:
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
         group_id: str | None = None,
-        uuid: str = None,
+        uuid: str | None = None,
     ):
         """
         Process an episode and update the graph.
@@ -236,6 +236,8 @@ class Graphiti:
             The type of the episode. Defaults to EpisodeType.message.
         group_id : str | None
             An id for the graph partition the episode is a part of.
+        uuid : str | None
+            Optional uuid of the episode.
 
         Returns
         -------
