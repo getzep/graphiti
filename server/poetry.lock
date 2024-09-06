@@ -316,20 +316,22 @@ name = "graphiti-core"
 version = "0.2.2"
 description = "A temporal graph building library"
 optional = false
-python-versions = "<4.0,>=3.10"
-files = [
-    {file = "graphiti_core-0.2.2-py3-none-any.whl", hash = "sha256:4d0dc810853dfed60d2b44ba8d993daab2467745ceab8aad3b5594bed076f2e6"},
-    {file = "graphiti_core-0.2.2.tar.gz", hash = "sha256:cc002b7874fb1a339b8349d1dce4a93403a34892bdef55d73f4046bec9222eec"},
-]
+python-versions = "^3.10"
+files = []
+develop = false
 
 [package.dependencies]
-diskcache = ">=5.6.3,<6.0.0"
-fastapi = ">=0.112.0,<0.113.0"
-neo4j = ">=5.23.0,<6.0.0"
-openai = ">=1.38.0,<2.0.0"
-pydantic = ">=2.8.2,<3.0.0"
-sentence-transformers = ">=3.0.1,<4.0.0"
+diskcache = "^5.6.3"
+fastapi = "^0.112.0"
+neo4j = "^5.23.0"
+openai = "^1.38.0"
+pydantic = "^2.8.2"
+sentence-transformers = "^3.0.1"
 tenacity = "<9.0.0"
+
+[package.source]
+type = "directory"
+url = ".."
 
 [[package]]
 name = "h11"
@@ -2583,4 +2585,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "e65e84a0b8b9a46e34f899295358d18decf0c28dde27375cd61a8608a1864671"
+content-hash = "ea2782f7ef3d10e877aa3c32c5060f958e8cb55ea044ca3ac546b731b6f9d382"
