@@ -3,12 +3,10 @@ import logging
 import re
 from collections import defaultdict
 from time import time
-from typing import Any
 
 from neo4j import AsyncDriver, Query
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
-from graphiti_core.helpers import parse_db_date
 from graphiti_core.nodes import EntityNode, EpisodicNode, get_entity_node_from_record
 
 logger = logging.getLogger(__name__)
@@ -38,12 +36,12 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
 
 
 async def edge_similarity_search(
-    driver: AsyncDriver,
-    search_vector: list[float],
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
-    group_ids: list[str | None] | None = None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        search_vector: list[float],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        group_ids: list[str | None] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     group_ids = group_ids if group_ids is not None else [None]
     # vector similarity search over embedded facts
@@ -147,10 +145,10 @@ async def edge_similarity_search(
 
 
 async def entity_similarity_search(
-    search_vector: list[float],
-    driver: AsyncDriver,
-    group_ids: list[str | None] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        search_vector: list[float],
+        driver: AsyncDriver,
+        group_ids: list[str | None] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     group_ids = group_ids if group_ids is not None else [None]
 
@@ -179,10 +177,10 @@ async def entity_similarity_search(
 
 
 async def entity_fulltext_search(
-    query: str,
-    driver: AsyncDriver,
-    group_ids: list[str | None] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        query: str,
+        driver: AsyncDriver,
+        group_ids: list[str | None] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     group_ids = group_ids if group_ids is not None else [None]
 
@@ -213,12 +211,12 @@ async def entity_fulltext_search(
 
 
 async def edge_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
-    group_ids: list[str | None] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        group_ids: list[str | None] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     group_ids = group_ids if group_ids is not None else [None]
 
@@ -325,11 +323,11 @@ async def edge_fulltext_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    group_ids: list[str | None] | None = None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        group_ids: list[str | None] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
@@ -393,8 +391,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
-    driver: AsyncDriver,
+        nodes: list[EntityNode],
+        driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -431,11 +429,11 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    driver: AsyncDriver,
-    edges: list[EntityEdge],
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        edges: list[EntityEdge],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -492,7 +490,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(results)
@@ -514,8 +512,8 @@ async def node_distance_reranker(
 
         for record in records:
             if (
-                record['source_uuid'] == center_node_uuid
-                or record['target_uuid'] == center_node_uuid
+                    record['source_uuid'] == center_node_uuid
+                    or record['target_uuid'] == center_node_uuid
             ):
                 continue
             distance = record['score']
