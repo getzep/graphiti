@@ -151,7 +151,7 @@ graphiti.close()
 
 ## Graph Service
 
-The `graph_service` directory contains a simple API service for interacting with the Graphiti API. It is built using FastAPI.
+The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
 
 Please see the [server README](./server/README.md) for more information.
 
