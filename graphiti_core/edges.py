@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: uuid4().hex)
-    group_id: str = Field(description='partition of the graph')
+    group_id: str | None = Field(description='partition of the graph')
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime

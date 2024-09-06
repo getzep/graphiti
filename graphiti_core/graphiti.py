@@ -178,6 +178,7 @@ class Graphiti:
         self,
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -191,6 +192,8 @@ class Graphiti:
             The reference time to retrieve episodes before.
         last_n : int, optional
             The number of episodes to retrieve. Defaults to EPISODE_WINDOW_LEN.
+        group_ids : list[str], optional
+            The group ids to return data from.
 
         Returns
         -------
@@ -202,7 +205,7 @@ class Graphiti:
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module.
         """
-        return await retrieve_episodes(self.driver, reference_time, last_n)
+        return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
         self,
@@ -263,7 +266,9 @@ class Graphiti:
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
-            previous_episodes = await self.retrieve_episodes(reference_time, last_n=3)
+            previous_episodes = await self.retrieve_episodes(
+                reference_time, last_n=3, group_ids=[group_id]
+            )
             episode = EpisodicNode(
                 name=name,
                 group_id=group_id,
@@ -520,7 +525,13 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def search(self, query: str, center_node_uuid: str | None = None, num_results=10):
+    async def search(
+        self,
+        query: str,
+        center_node_uuid: str | None = None,
+        group_ids: list[str] | None = None,
+        num_results=10,
+    ):
         """
         Perform a hybrid search on the knowledge graph.
 
@@ -533,6 +544,8 @@ class Graphiti:
             The search query string.
         center_node_uuid: str, optional
             Facts will be reranked based on proximity to this node
+        group_ids : list[str] | None, optional
+            The graph partitions to return data from.
         num_results : int, optional
             The maximum number of results to return. Defaults to 10.
 
@@ -555,6 +568,7 @@ class Graphiti:
             num_episodes=0,
             num_edges=num_results,
             num_nodes=0,
+            group_ids=group_ids,
             search_methods=[SearchMethod.bm25, SearchMethod.cosine_similarity],
             reranker=reranker,
         )
