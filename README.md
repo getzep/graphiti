@@ -149,6 +149,12 @@ await graphiti.search('Who was the California Attorney General?', center_node_uu
 graphiti.close()
 ```
 
+## Graph Service
+
+The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+
+Please see the [server README](./server/README.md) for more information.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
