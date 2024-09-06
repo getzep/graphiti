@@ -2,11 +2,12 @@ name: Build image
  
 on:
   push:
-    branches:
-      - add-graph-service
+    tags: ["v*.*.*"]
  
 jobs:
   docker-image:
+    environment:
+      name: release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
