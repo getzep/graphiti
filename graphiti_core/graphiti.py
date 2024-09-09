@@ -21,6 +21,7 @@ from time import time
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
+from graphdatascience import GraphDataScience
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
@@ -104,6 +105,7 @@ class Graphiti:
         """
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         self.database = 'neo4j'
+        self.gds = gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
         if llm_client:
             self.llm_client = llm_client
         else:
@@ -525,6 +527,9 @@ class Graphiti:
 
         except Exception as e:
             raise e
+
+    async def build_communities(self):
+
 
     async def search(
         self,
