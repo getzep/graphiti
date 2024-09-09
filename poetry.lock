@@ -679,13 +679,13 @@ tqdm = ["tqdm"]
 
 [[package]]
 name = "groq"
-version = "0.10.0"
+version = "0.11.0"
 description = "The official Python library for the groq API"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "groq-0.10.0-py3-none-any.whl", hash = "sha256:6939e3c62b005e7aa9cabca6ea2eaf96cea595e2f7d4658df6c0c7c8ccf59410"},
-    {file = "groq-0.10.0.tar.gz", hash = "sha256:7653aad4c0b363928970fc55626a83624f5eab6503ee74fb25f255e24e05fcf8"},
+    {file = "groq-0.11.0-py3-none-any.whl", hash = "sha256:e328531c979542e563668c62260aec13b43a6ee0ca9e2fb22dff1d26f8c8ce54"},
+    {file = "groq-0.11.0.tar.gz", hash = "sha256:dbb9aefedf388ddd4801ec7bf3eba7f5edb67948fec0cd2829d97244059f42a7"},
 ]
 
 [package.dependencies]
@@ -3249,4 +3249,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "0701936b35e876143edca27cea302f3655f0489012b0681773d2f15f3bd83bdc"
+content-hash = "c4c32796b3aed0e7163df95832912b2f241dc33f74ee23e51d20ddae9aea604a"
