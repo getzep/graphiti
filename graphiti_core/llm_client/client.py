@@ -22,10 +22,11 @@ from abc import ABC, abstractmethod
 
 import httpx
 from diskcache import Cache
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
 from .config import LLMConfig
+from .errors import RateLimitError
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
@@ -33,7 +34,10 @@ DEFAULT_CACHE_DIR = './llm_cache'
 logger = logging.getLogger(__name__)
 
 
-def is_server_error(exception):
+def is_server_or_retry_error(exception):
+    if isinstance(exception, RateLimitError):
+        return True
+
     return (
         isinstance(exception, httpx.HTTPStatusError) and 500 <= exception.response.status_code < 600
     )
@@ -56,18 +60,21 @@ class LLMClient(ABC):
         pass
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception(is_server_error),
+        stop=stop_after_attempt(4),
+        wait=wait_random_exponential(multiplier=10, min=5, max=120),
+        retry=retry_if_exception(is_server_or_retry_error),
+        after=lambda retry_state: logger.warning(
+            f'Retrying {retry_state.fn.__name__ if retry_state.fn else "function"} after {retry_state.attempt_number} attempts...'
+        )
+        if retry_state.attempt_number > 1
+        else None,
+        reraise=True,
     )
     async def _generate_response_with_retry(self, messages: list[Message]) -> dict[str, typing.Any]:
         try:
             return await self._generate_response(messages)
-        except httpx.HTTPStatusError as e:
-            if not is_server_error(e):
-                raise Exception(f'LLM request error: {e}') from e
-            else:
-                raise
+        except (httpx.HTTPStatusError, RateLimitError) as e:
+            raise e
 
     @abstractmethod
     async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
