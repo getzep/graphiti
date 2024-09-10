@@ -37,9 +37,6 @@ from .dedupe_nodes import (
 from .extract_edge_dates import (
     Prompt as ExtractEdgeDatesPrompt,
 )
-from .summarize_nodes import (
-    Prompt as SummarizeNodesPrompt,
-)
 from .extract_edge_dates import (
     Versions as ExtractEdgeDatesVersions,
 )
@@ -73,10 +70,11 @@ from .invalidate_edges import (
 from .invalidate_edges import (
     versions as invalidate_edges_versions,
 )
-from .summarize_nodes import (
-    versions as summarize_nodes_versions
-)
 from .models import Message, PromptFunction
+from .summarize_nodes import (
+    Prompt as SummarizeNodesPrompt,
+)
+from .summarize_nodes import versions as summarize_nodes_versions
 
 
 class PromptLibrary(Protocol):

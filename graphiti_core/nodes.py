@@ -284,6 +284,16 @@ class CommunityNode(Node):
 
         return result
 
+    async def generate_name_embedding(self, embedder, model='text-embedding-3-small'):
+        start = time()
+        text = self.name.replace('\n', ' ')
+        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
+        self.name_embedding = embedding[:EMBEDDING_DIM]
+        end = time()
+        logger.info(f'embedded {text} in {end - start} ms')
+
+        return embedding
+
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         records, _, _ = await driver.execute_query(
@@ -361,7 +371,6 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        labels=['Entity'],
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
     )
