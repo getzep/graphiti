@@ -100,6 +100,9 @@ class Node(BaseModel, ABC):
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
 
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]): ...
+
 
 class EpisodicNode(Node):
     source: EpisodeType = Field(description='source type')
@@ -158,6 +161,29 @@ class EpisodicNode(Node):
 
         return episodes[0]
 
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic WHERE e.uuid IN $uuids)
+            RETURN e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id
+            e.source_description AS source_description,
+            e.source AS source
+        """,
+            uuids=uuids,
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return episodes
+
 
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
@@ -213,6 +239,28 @@ class EntityNode(Node):
 
         return nodes[0]
 
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity WHERE n.uuid IN $uuids)
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuids=uuids,
+        )
+
+        nodes = [get_entity_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return nodes
+
 
 class CommunityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
@@ -257,6 +305,28 @@ class CommunityNode(Node):
         logger.info(f'Found Node: {uuid}')
 
         return nodes[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community WHERE n.uuid IN $uuids)
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuids=uuids,
+        )
+
+        nodes = [get_community_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return nodes
 
 
 # Node helpers

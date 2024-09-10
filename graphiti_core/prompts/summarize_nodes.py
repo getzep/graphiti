@@ -21,18 +21,20 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
+    summarize_pair: PromptVersion
+    summary_description: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
+    summarize_pair: PromptFunction
+    summary_description: PromptFunction
 
 
-def v1(context: dict[str, Any]) -> list[Message]:
+def summarize_pair(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
+            content='You are a helpful assistant that combines summaries.',
         ),
         Message(
             role='user',
@@ -40,7 +42,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Synthesize the information from the following two summaries into a single succinct summary.
 
         Summaries:
-        {json.dumps(context['existing_nodes'], indent=2)}
+        {json.dumps(context['node_summaries'], indent=2)}
 
         Respond with a JSON object in the following format:
             {{
@@ -51,4 +53,27 @@ def v1(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, }
+def summary_description(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that describes provided contents in a single sentence.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+        Create a one sentence description of the summary that explains what kind of information is summarized.
+
+        Summary:
+        {json.dumps(context['summary'], indent=2)}
+
+        Respond with a JSON object in the following format:
+            {{
+                "description": "One sentence description of the provided summary"
+            }}
+        """,
+        ),
+    ]
+
+
+versions: Versions = {'summarize_pair': summarize_pair, 'summary_description': summary_description}
