@@ -412,7 +412,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None):
+    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None = None):
         """
         Process multiple episodes in bulk and update the graph.
 
