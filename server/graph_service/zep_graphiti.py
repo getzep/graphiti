@@ -11,13 +11,19 @@ from graph_service.dto import FactResult
 
 
 class ZepGraphiti(Graphiti):
-    def __init__(
-        self, uri: str, user: str, password: str, user_id: str, llm_client: LLMClient | None = None
-    ):
+    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
         super().__init__(uri, user, password, llm_client)
-        self.user_id = user_id
 
-    async def get_user_node(self, user_id: str) -> EntityNode | None: ...
+    async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
+        new_node = EntityNode(
+            name=name,
+            uuid=uuid,
+            group_id=group_id,
+            summary=summary,
+        )
+        await new_node.generate_name_embedding(self.llm_client.get_embedder())
+        await new_node.save(self.driver)
+        return new_node
 
 
 async def get_graphiti(settings: ZepEnvDep):
@@ -25,7 +31,6 @@ async def get_graphiti(settings: ZepEnvDep):
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
-        user_id='test1234',
     )
     try:
         yield client

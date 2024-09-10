@@ -37,6 +37,7 @@ COPY ./server /app
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-
+ENV PORT=8000
 # Command to run the application
-CMD ["uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+CMD uvicorn graph_service.main:app --host 0.0.0.0 --port $PORT

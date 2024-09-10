@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, status
 
 from graph_service.dto import (
@@ -14,21 +16,23 @@ router = APIRouter()
 
 @router.post('/search', status_code=status.HTTP_200_OK)
 async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
-    center_node_uuid: str | None = None
-    if query.search_type == 'user_centered_facts':
-        user_node = await graphiti.get_user_node(query.group_id)
-        if user_node:
-            center_node_uuid = user_node.uuid
     relevant_edges = await graphiti.search(
         group_ids=[query.group_id],
         query=query.query,
         num_results=query.max_facts,
-        center_node_uuid=center_node_uuid,
     )
     facts = [get_fact_result_from_edge(edge) for edge in relevant_edges]
     return SearchResults(
         facts=facts,
     )
+
+
+@router.get('/episodes/{group_id}', status_code=status.HTTP_200_OK)
+async def get_episodes(group_id: str, last_n: int, graphiti: ZepGraphitiDep):
+    episodes = await graphiti.retrieve_episodes(
+        group_ids=[group_id], last_n=last_n, reference_time=datetime.now()
+    )
+    return episodes
 
 
 @router.post('/get-memory', status_code=status.HTTP_200_OK)
