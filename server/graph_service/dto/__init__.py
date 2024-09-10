@@ -1,5 +1,5 @@
 from .common import Message, Result
-from .ingest import AddMessagesRequest
+from .ingest import AddEntityNodeRequest, AddMessagesRequest
 from .retrieve import (
     FactResult,
     GetMemoryRequest,
@@ -12,6 +12,7 @@ __all__ = [
     'SearchQuery',
     'Message',
     'AddMessagesRequest',
+    'AddEntityNodeRequest',
     'SearchResults',
     'FactResult',
     'Result',
