@@ -18,12 +18,14 @@ import json
 import logging
 import typing
 
+import anthropic
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
 from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig
+from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,11 @@ class AnthropicClient(LLMClient):
         if config is None:
             config = LLMConfig()
         super().__init__(config, cache)
-        self.client = AsyncAnthropic(api_key=config.api_key)
+        self.client = AsyncAnthropic(
+            api_key=config.api_key,
+            # we'll use tenacity to retry
+            max_retries=1,
+        )
 
     def get_embedder(self) -> typing.Any:
         openai_client = AsyncOpenAI()
@@ -58,6 +64,8 @@ class AnthropicClient(LLMClient):
             )
 
             return json.loads('{' + result.content[0].text)  # type: ignore
+        except anthropic.RateLimitError as e:
+            raise RateLimitError from e
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise

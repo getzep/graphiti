@@ -18,12 +18,14 @@ import json
 import logging
 import typing
 
+import openai
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig
+from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,8 @@ class OpenAIClient(LLMClient):
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
+        except openai.RateLimitError as e:
+            raise RateLimitError from e
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise
