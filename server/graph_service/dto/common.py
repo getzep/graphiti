@@ -11,8 +11,9 @@ class Result(BaseModel):
 
 class Message(BaseModel):
     content: str = Field(..., description='The content of the message')
+    uuid: str | None = Field(default=None, description='The uuid of the message (optional)')
     name: str = Field(
-        default='', description='The name of the episodic node for the message (message uuid)'
+        default='', description='The name of the episodic node for the message (optional)'
     )
     role_type: Literal['user', 'assistant', 'system'] = Field(
         ..., description='The role type of the message (user, assistant or system)'
