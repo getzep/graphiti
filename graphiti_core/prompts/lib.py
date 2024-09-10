@@ -71,9 +71,8 @@ from .invalidate_edges import (
     versions as invalidate_edges_versions,
 )
 from .models import Message, PromptFunction
-from .summarize_nodes import (
-    Prompt as SummarizeNodesPrompt,
-)
+from .summarize_nodes import Prompt as SummarizeNodesPrompt
+from .summarize_nodes import Versions as SummarizeNodesVersions
 from .summarize_nodes import versions as summarize_nodes_versions
 
 

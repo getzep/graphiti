@@ -73,6 +73,7 @@ def format_context(facts):
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
+    await graphiti.build_communities()
 
     edges = await graphiti.search('Freakenomics guest', group_ids=['1'])
 

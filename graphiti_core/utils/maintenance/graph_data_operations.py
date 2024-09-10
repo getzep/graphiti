@@ -53,7 +53,7 @@ async def build_indices_and_constraints(driver: AsyncDriver):
 
     fulltext_indices: list[LiteralString] = [
         'CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]',
-        'CREATE FULLTEXT INDEX community_name IF NOT EXISTS FOR (n:Community) ON n.name',
+        'CREATE FULLTEXT INDEX community_name IF NOT EXISTS FOR (n:Community) ON EACH [n.name]',
         'CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact]',
     ]
 
