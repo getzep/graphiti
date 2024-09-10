@@ -98,7 +98,7 @@ async def build_community(
                 *[
                     summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
-                        summaries[: length / 2], summaries[length / 2 :]
+                        summaries[: int(length / 2)], summaries[int(length / 2) :]
                     )
                 ]
             )
