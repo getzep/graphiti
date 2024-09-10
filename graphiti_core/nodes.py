@@ -25,6 +25,7 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
+from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ class EpisodicNode(Node):
             e.valid_at AS valid_at,
             e.uuid AS uuid,
             e.name AS name,
-            e.group_id AS group_id
+            e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source
         """,
@@ -158,6 +159,9 @@ class EpisodicNode(Node):
         episodes = [get_episodic_node_from_record(record) for record in records]
 
         logger.info(f'Found Node: {uuid}')
+
+        if len(episodes) == 0:
+            raise NodeNotFoundError(uuid)
 
         return episodes[0]
 
