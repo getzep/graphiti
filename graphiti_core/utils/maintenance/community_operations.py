@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict
 from datetime import datetime
 
 from neo4j import AsyncDriver
@@ -12,7 +13,7 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 
 async def build_community_projection(driver: AsyncDriver) -> str:
     result, _, _ = await driver.execute_query("""
-    CALL gds.graph.project("communities", "Entity", "RELATES_TO")
+    CALL gds.graph.project("communities", "Entity", "RELATES_TO", {nodeProperties: "uuid")
     YIELD graphName AS graph, nodeProjection AS nodes, relationshipProjection AS edges
     """)
 
@@ -30,7 +31,23 @@ async def destroy_projection(driver: AsyncDriver, projection_name: str):
 
 async def get_community_clusters(
     driver: AsyncDriver, projection_name: str
-) -> list[list[EntityNode]]: ...
+) -> list[list[EntityNode]]:
+    records, _, _ = await driver.execute_query("""
+    CALL gds.leiden.stream("communities")
+    YIELD nodeId, communityId
+    RETURN gds.util.asNode(nodeId).uuid AS entity_uuid, communityId
+    """)
+    community_map: dict[str, list[str]] = defaultdict(list)
+    for record in records:
+        community_map[record['communityId']].append(record['entity_uuid'])
+
+    community_clusters: list[list[EntityNode]] = list(
+        await asyncio.gather(
+            *[EntityNode.get_by_uuids(driver, cluster) for _, cluster in community_map]
+        )
+    )
+
+    return community_clusters
 
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
@@ -118,3 +135,10 @@ async def build_communities(
 
     await destroy_projection(driver, projection)
     return community_nodes, community_edges
+
+
+async def remove_communities(driver: AsyncDriver):
+    await driver.execute_query("""
+    MATCH (c:Community)
+    DETACH DELETE c
+    """)

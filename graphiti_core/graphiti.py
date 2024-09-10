@@ -46,7 +46,10 @@ from graphiti_core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
-from graphiti_core.utils.maintenance.community_operations import build_communities
+from graphiti_core.utils.maintenance.community_operations import (
+    build_communities,
+    remove_communities,
+)
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
     resolve_extracted_edges,
@@ -529,6 +532,9 @@ class Graphiti:
 
     async def build_communities(self):
         embedder = self.llm_client.get_embedder()
+
+        # Clear existing communities
+        await remove_communities(self.driver)
 
         community_nodes, community_edges = await build_communities(self.driver, self.llm_client)
 
