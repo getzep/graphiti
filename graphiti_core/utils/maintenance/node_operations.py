@@ -48,6 +48,29 @@ async def extract_message_nodes(
     return extracted_node_data
 
 
+async def extract_text_nodes(
+    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+) -> list[dict[str, Any]]:
+    # Prepare context for LLM
+    context = {
+        'episode_content': episode.content,
+        'episode_timestamp': episode.valid_at.isoformat(),
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat(),
+            }
+            for ep in previous_episodes
+        ],
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.extract_text(context)
+    )
+    extracted_node_data = llm_response.get('extracted_nodes', [])
+    return extracted_node_data
+
+
 async def extract_json_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
@@ -73,8 +96,10 @@ async def extract_nodes(
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
-    if episode.source in [EpisodeType.message, EpisodeType.text]:
+    if episode.source == EpisodeType.message:
         extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
+    elif episode.source == EpisodeType.text:
+        extracted_node_data = await extract_text_nodes(llm_client, episode, previous_episodes)
     elif episode.source == EpisodeType.json:
         extracted_node_data = await extract_json_nodes(llm_client, episode)
 
