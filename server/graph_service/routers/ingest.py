@@ -83,6 +83,18 @@ async def add_entity_node(
     return node
 
 
+@router.delete('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)
+async def delete_entity_edge(uuid: str, graphiti: ZepGraphitiDep):
+    await graphiti.delete_entity_edge(uuid)
+    return Result(message='Entity Edge deleted', success=True)
+
+
+@router.delete('/episode/{uuid}', status_code=status.HTTP_200_OK)
+async def delete_episode(uuid: str, graphiti: ZepGraphitiDep):
+    await graphiti.delete_episodic_node(uuid)
+    return Result(message='Episode deleted', success=True)
+
+
 @router.post('/clear', status_code=status.HTTP_200_OK)
 async def clear(
     graphiti: ZepGraphitiDep,
