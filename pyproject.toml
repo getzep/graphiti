@@ -10,7 +10,7 @@ authors = [
 readme = "README.md"
 license = "Apache-2.0"
 
-packages = [{ include = "graphiti_core", from = "." }]
+packages = [{ include = "graphiti_core", from = ".", "py.typed" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
