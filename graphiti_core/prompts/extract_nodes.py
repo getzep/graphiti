@@ -24,12 +24,14 @@ class Prompt(Protocol):
     v1: PromptVersion
     v2: PromptVersion
     extract_json: PromptVersion
+    extract_text: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
     v2: PromptFunction
     extract_json: PromptFunction
+    extract_text: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
@@ -144,4 +146,44 @@ Respond with a JSON object in the following format:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2, 'extract_json': extract_json}
+def extract_text(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
+
+    user_prompt = f"""
+Given the following conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
+
+Conversation:
+{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+<CURRENT MESSAGE>
+{context["episode_content"]}
+
+Guidelines:
+2. Extract significant entities, concepts, or actors mentioned in the conversation.
+3. Provide concise but informative summaries for each extracted node.
+4. Avoid creating nodes for relationships or actions.
+5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
+6. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+
+Respond with a JSON object in the following format:
+{{
+    "extracted_nodes": [
+        {{
+            "name": "Unique identifier for the node (use the speaker's name for speaker nodes)",
+            "labels": ["Entity", "OptionalAdditionalLabel"],
+            "summary": "Brief summary of the node's role or significance"
+        }}
+    ]
+}}
+"""
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+versions: Versions = {
+    'v1': v1,
+    'v2': v2,
+    'extract_json': extract_json,
+    'extract_text': extract_text,
+}
