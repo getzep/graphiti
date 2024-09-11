@@ -46,6 +46,10 @@ from graphiti_core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
+from graphiti_core.utils.maintenance.community_operations import (
+    build_communities,
+    remove_communities,
+)
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
     resolve_extracted_edges,
@@ -525,6 +529,19 @@ class Graphiti:
 
         except Exception as e:
             raise e
+
+    async def build_communities(self):
+        embedder = self.llm_client.get_embedder()
+
+        # Clear existing communities
+        await remove_communities(self.driver)
+
+        community_nodes, community_edges = await build_communities(self.driver, self.llm_client)
+
+        await asyncio.gather(*[node.generate_name_embedding(embedder) for node in community_nodes])
+
+        await asyncio.gather(*[node.save(self.driver) for node in community_nodes])
+        await asyncio.gather(*[edge.save(self.driver) for edge in community_edges])
 
     async def search(
         self,

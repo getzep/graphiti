@@ -76,8 +76,18 @@ class Node(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
-    @abstractmethod
-    async def delete(self, driver: AsyncDriver): ...
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n {uuid: $uuid})
+        DETACH DELETE n
+        """,
+            uuid=self.uuid,
+        )
+
+        logger.info(f'Deleted Node: {self.uuid}')
+
+        return result
 
     def __hash__(self):
         return hash(self.uuid)
@@ -89,6 +99,9 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
+
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]): ...
 
 
 class EpisodicNode(Node):
@@ -125,19 +138,6 @@ class EpisodicNode(Node):
 
         return result
 
-    async def delete(self, driver: AsyncDriver):
-        result = await driver.execute_query(
-            """
-        MATCH (n:Episodic {uuid: $uuid})
-        DETACH DELETE n
-        """,
-            uuid=self.uuid,
-        )
-
-        logger.info(f'Deleted Node: {self.uuid}')
-
-        return result
-
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         records, _, _ = await driver.execute_query(
@@ -160,6 +160,29 @@ class EpisodicNode(Node):
         logger.info(f'Found Node: {uuid}')
 
         return episodes[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic) WHERE e.uuid IN $uuids
+            RETURN e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id
+            e.source_description AS source_description,
+            e.source AS source
+        """,
+            uuids=uuids,
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return episodes
 
 
 class EntityNode(Node):
@@ -194,19 +217,6 @@ class EntityNode(Node):
 
         return result
 
-    async def delete(self, driver: AsyncDriver):
-        result = await driver.execute_query(
-            """
-        MATCH (n:Entity {uuid: $uuid})
-        DETACH DELETE n
-        """,
-            uuid=self.uuid,
-        )
-
-        logger.info(f'Deleted Node: {self.uuid}')
-
-        return result
-
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         records, _, _ = await driver.execute_query(
@@ -228,6 +238,105 @@ class EntityNode(Node):
         logger.info(f'Found Node: {uuid}')
 
         return nodes[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity) WHERE n.uuid IN $uuids
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuids=uuids,
+        )
+
+        nodes = [get_entity_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return nodes
+
+
+class CommunityNode(Node):
+    name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
+    summary: str = Field(description='region summary of member nodes', default_factory=str)
+
+    async def save(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MERGE (n:Community {uuid: $uuid})
+        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, group_id: $group_id, summary: $summary, created_at: $created_at}
+        RETURN n.uuid AS uuid""",
+            uuid=self.uuid,
+            name=self.name,
+            group_id=self.group_id,
+            summary=self.summary,
+            name_embedding=self.name_embedding,
+            created_at=self.created_at,
+        )
+
+        logger.info(f'Saved Node to neo4j: {self.uuid}')
+
+        return result
+
+    async def generate_name_embedding(self, embedder, model='text-embedding-3-small'):
+        start = time()
+        text = self.name.replace('\n', ' ')
+        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
+        self.name_embedding = embedding[:EMBEDDING_DIM]
+        end = time()
+        logger.info(f'embedded {text} in {end - start} ms')
+
+        return embedding
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community {uuid: $uuid})
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuid=uuid,
+        )
+
+        nodes = [get_community_node_from_record(record) for record in records]
+
+        logger.info(f'Found Node: {uuid}')
+
+        return nodes[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community) WHERE n.uuid IN $uuids
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            uuids=uuids,
+        )
+
+        nodes = [get_community_node_from_record(record) for record in records]
+
+        logger.info(f'Found Nodes: {uuids}')
+
+        return nodes
 
 
 # Node helpers
@@ -251,6 +360,17 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
         labels=['Entity'],
+        created_at=record['created_at'].to_native(),
+        summary=record['summary'],
+    )
+
+
+def get_community_node_from_record(record: Any) -> CommunityNode:
+    return CommunityNode(
+        uuid=record['uuid'],
+        name=record['name'],
+        group_id=record['group_id'],
+        name_embedding=record['name_embedding'],
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
     )

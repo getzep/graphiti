@@ -41,8 +41,18 @@ class Edge(BaseModel, ABC):
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
 
-    @abstractmethod
-    async def delete(self, driver: AsyncDriver): ...
+    async def delete(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (n)-[e {uuid: $uuid}]->(m)
+        DELETE e
+        """,
+            uuid=self.uuid,
+        )
+
+        logger.info(f'Deleted Edge: {self.uuid}')
+
+        return result
 
     def __hash__(self):
         return hash(self.uuid)
@@ -73,19 +83,6 @@ class EpisodicEdge(Edge):
         )
 
         logger.info(f'Saved edge to neo4j: {self.uuid}')
-
-        return result
-
-    async def delete(self, driver: AsyncDriver):
-        result = await driver.execute_query(
-            """
-        MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
-        DELETE e
-        """,
-            uuid=self.uuid,
-        )
-
-        logger.info(f'Deleted Edge: {self.uuid}')
 
         return result
 
@@ -169,19 +166,6 @@ class EntityEdge(Edge):
 
         return result
 
-    async def delete(self, driver: AsyncDriver):
-        result = await driver.execute_query(
-            """
-        MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
-        DELETE e
-        """,
-            uuid=self.uuid,
-        )
-
-        logger.info(f'Deleted Edge: {self.uuid}')
-
-        return result
-
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         records, _, _ = await driver.execute_query(
@@ -205,6 +189,48 @@ class EntityEdge(Edge):
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
+
+        logger.info(f'Found Edge: {uuid}')
+
+        return edges[0]
+
+
+class CommunityEdge(Edge):
+    async def save(self, driver: AsyncDriver):
+        result = await driver.execute_query(
+            """
+        MATCH (community:Community {uuid: $community_uuid}) 
+        MATCH (node:Entity | Community {uuid: $entity_uuid}) 
+        MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
+        SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
+        RETURN r.uuid AS uuid""",
+            community_uuid=self.source_node_uuid,
+            entity_uuid=self.target_node_uuid,
+            uuid=self.uuid,
+            group_id=self.group_id,
+            created_at=self.created_at,
+        )
+
+        logger.info(f'Saved edge to neo4j: {self.uuid}')
+
+        return result
+
+    @classmethod
+    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community)-[e:HAS_MEMBER {uuid: $uuid}]->(m:Entity | Community)
+        RETURN
+            e.uuid As uuid,
+            e.group_id AS group_id,
+            n.uuid AS source_node_uuid, 
+            m.uuid AS target_node_uuid, 
+            e.created_at AS created_at
+        """,
+            uuid=uuid,
+        )
+
+        edges = [get_community_edge_from_record(record) for record in records]
 
         logger.info(f'Found Edge: {uuid}')
 
@@ -236,4 +262,14 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
+    )
+
+
+def get_community_edge_from_record(record: Any):
+    return CommunityEdge(
+        uuid=record['uuid'],
+        group_id=record['group_id'],
+        source_node_uuid=record['source_node_uuid'],
+        target_node_uuid=record['target_node_uuid'],
+        created_at=record['created_at'].to_native(),
     )
