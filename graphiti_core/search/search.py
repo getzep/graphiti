@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.search.search_config import SearchConfig, SearchResults
 from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
@@ -38,38 +39,13 @@ from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW
 logger = logging.getLogger(__name__)
 
 
-class SearchMethod(Enum):
-    cosine_similarity = 'cosine_similarity'
-    bm25 = 'bm25'
-
-
-class Reranker(Enum):
-    rrf = 'reciprocal_rank_fusion'
-    node_distance = 'node_distance'
-
-
-class SearchConfig(BaseModel):
-    num_edges: int = Field(default=10)
-    num_nodes: int = Field(default=10)
-    num_episodes: int = EPISODE_WINDOW_LEN
-    group_ids: list[str | None] | None
-    search_methods: list[SearchMethod]
-    reranker: Reranker | None
-
-
-class SearchResults(BaseModel):
-    episodes: list[EpisodicNode]
-    nodes: list[EntityNode]
-    edges: list[EntityEdge]
-
-
 async def hybrid_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    timestamp: datetime,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        timestamp: datetime,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
 
