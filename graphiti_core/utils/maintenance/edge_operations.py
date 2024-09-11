@@ -20,9 +20,9 @@ from datetime import datetime
 from time import time
 from typing import List
 
-from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
@@ -43,6 +43,24 @@ def build_episodic_edges(
             target_node_uuid=node.uuid,
             created_at=created_at,
             group_id=episode.group_id,
+        )
+        for node in entity_nodes
+    ]
+
+    return edges
+
+
+def build_community_edges(
+    entity_nodes: List[EntityNode],
+    community_node: CommunityNode,
+    created_at: datetime,
+) -> List[CommunityEdge]:
+    edges: List[CommunityEdge] = [
+        CommunityEdge(
+            source_node_uuid=community_node.uuid,
+            target_node_uuid=node.uuid,
+            created_at=created_at,
+            group_id=community_node.group_id,
         )
         for node in entity_nodes
     ]

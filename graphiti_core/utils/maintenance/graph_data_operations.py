@@ -32,8 +32,10 @@ async def build_indices_and_constraints(driver: AsyncDriver):
     range_indices: list[LiteralString] = [
         'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
         'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
+        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
         'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
         'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
         'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
         'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
         'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
@@ -51,6 +53,7 @@ async def build_indices_and_constraints(driver: AsyncDriver):
 
     fulltext_indices: list[LiteralString] = [
         'CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]',
+        'CREATE FULLTEXT INDEX community_name IF NOT EXISTS FOR (n:Community) ON EACH [n.name]',
         'CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact]',
     ]
 
@@ -66,6 +69,14 @@ async def build_indices_and_constraints(driver: AsyncDriver):
         """
         CREATE VECTOR INDEX name_embedding IF NOT EXISTS
         FOR (n:Entity) ON (n.name_embedding)
+        OPTIONS {indexConfig: {
+         `vector.dimensions`: 1024,
+         `vector.similarity_function`: 'cosine'
+        }}
+        """,
+        """
+        CREATE VECTOR INDEX community_name_embedding IF NOT EXISTS
+        FOR (n:Community) ON (n.name_embedding)
         OPTIONS {indexConfig: {
          `vector.dimensions`: 1024,
          `vector.similarity_function`: 'cosine'
