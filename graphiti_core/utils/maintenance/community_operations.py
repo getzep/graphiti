@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections import defaultdict
 from datetime import datetime
 
@@ -10,10 +11,10 @@ from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
+logger = logging.getLogger(__name__)
+
 
 async def build_community_projection(driver: AsyncDriver) -> str:
-    await destroy_projection(driver, 'communities')
-
     records, _, _ = await driver.execute_query("""
     CALL gds.graph.project("communities", "Entity",             
         {RELATES_TO: {
@@ -119,6 +120,8 @@ async def build_community(
         summary=summary,
     )
     community_edges = build_community_edges(community_cluster, community_node, now)
+
+    logger.info((community_node, community_edges))
 
     return community_node, community_edges
 

@@ -165,7 +165,7 @@ class EpisodicNode(Node):
     async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-        MATCH (e:Episodic WHERE e.uuid IN $uuids)
+        MATCH (e:Episodic) WHERE e.uuid IN $uuids
             RETURN e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
@@ -243,12 +243,12 @@ class EntityNode(Node):
     async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity WHERE n.uuid IN $uuids)
+        MATCH (n:Entity) WHERE n.uuid IN $uuids
         RETURN
             n.uuid As uuid, 
             n.name AS name,
             n.name_embedding AS name_embedding,
-            n.group_id AS group_id
+            n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
         """,
@@ -320,7 +320,7 @@ class CommunityNode(Node):
     async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-        MATCH (n:Community WHERE n.uuid IN $uuids)
+        MATCH (n:Community) WHERE n.uuid IN $uuids
         RETURN
             n.uuid As uuid, 
             n.name AS name,

@@ -62,7 +62,7 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-        Create a one sentence description of the summary that explains what kind of information is summarized.
+        Create a short one sentence description of the summary that explains what kind of information is summarized.
 
         Summary:
         {json.dumps(context['summary'], indent=2)}

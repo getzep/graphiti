@@ -201,7 +201,7 @@ class CommunityEdge(Edge):
             """
         MATCH (community:Community {uuid: $community_uuid}) 
         MATCH (node:Entity | Community {uuid: $entity_uuid}) 
-        MERGE (episode)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
+        MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
         SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
         RETURN r.uuid AS uuid""",
             community_uuid=self.source_node_uuid,

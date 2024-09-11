@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime
 
 from dotenv import load_dotenv
 from transcript_parser import parse_podcast_messages
@@ -84,7 +85,7 @@ async def main(use_bulk: bool = True):
         for i, message in enumerate(messages[3:20])
     ]
 
-    await client.add_episode_bulk(episodes)
+    await client.add_episode_bulk(episodes, None)
 
 
 asyncio.run(main(False))
