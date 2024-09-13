@@ -16,59 +16,63 @@ limitations under the License.
 
 import logging
 from datetime import datetime
-from enum import Enum
 from time import time
 
 from neo4j import AsyncDriver
-from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
+from graphiti_core.errors import SearchRerankerError
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.search.search_config import SearchConfig, SearchResults
+from graphiti_core.search.search_config import SearchConfig, SearchResults, NodeSearchConfig, NodeSearchMethod, \
+    EdgeSearchMethod, EdgeReranker, EdgeSearchConfig, NodeReranker
 from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
     get_mentioned_nodes,
     node_distance_reranker,
-    rrf,
+    rrf, node_fulltext_search, node_similarity_search,
 )
-from graphiti_core.utils import retrieve_episodes
-from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
 
 logger = logging.getLogger(__name__)
 
 
-async def hybrid_search(
+async def search(
         driver: AsyncDriver,
         embedder,
         query: str,
-        timestamp: datetime,
+        group_ids: list[str | None] | None,
         config: SearchConfig,
-        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
+    query = query.replace('\n', ' ')
 
-    episodes = []
-    nodes = []
-    edges = []
+    edges = await edge_search(driver, embedder, query, group_ids, config.edge_config)
 
-    search_results = []
+    context = SearchResults(
+        episodes=episodes, nodes=nodes[: config.num_nodes], edges=edges[: config.num_edges]
+    )
 
-    if config.num_episodes > 0:
-        episodes.extend(await retrieve_episodes(driver, timestamp, config.num_episodes))
-        nodes.extend(await get_mentioned_nodes(driver, episodes))
+    end = time()
 
-    if SearchMethod.bm25 in config.search_methods:
+    logger.info(f'search returned context for query {query} in {(end - start) * 1000} ms')
+
+    return context
+
+
+async def edge_search(driver: AsyncDriver, embedder, query: str, group_ids: list[str | None] | None,
+                      config: EdgeSearchConfig) -> list[EntityEdge]:
+    search_results: list[list[EntityEdge]] = []
+
+    if EdgeSearchMethod.bm25 in config.search_methods:
         text_search = await edge_fulltext_search(
             driver, query, None, None, config.group_ids, 2 * config.num_edges
         )
         search_results.append(text_search)
 
-    if SearchMethod.cosine_similarity in config.search_methods:
-        query_text = query.replace('\n', ' ')
+    if EdgeSearchMethod.cosine_similarity in config.search_methods:
         search_vector = (
-            (await embedder.create(input=[query_text], model='text-embedding-3-small'))
+            (await embedder.create(input=[query], model='text-embedding-3-small'))
             .data[0]
             .embedding[:EMBEDDING_DIM]
         )
@@ -78,11 +82,9 @@ async def hybrid_search(
         )
         search_results.append(similarity_search)
 
-    if len(search_results) > 1 and config.reranker is None:
-        logger.exception('Multiple searches enabled without a reranker')
-        raise Exception('Multiple searches enabled without a reranker')
+        if len(search_results) > 1 and config.reranker is None:
+            raise SearchRerankerError('Multiple edge searches enabled without a reranker')
 
-    else:
         edge_uuid_map = {}
         search_result_uuids = []
 
@@ -97,25 +99,66 @@ async def hybrid_search(
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
         reranked_uuids: list[str] = []
-        if config.reranker == Reranker.rrf:
+        if config.reranker == EdgeReranker.rrf:
             reranked_uuids = rrf(search_result_uuids)
-        elif config.reranker == Reranker.node_distance:
-            if center_node_uuid is None:
-                logger.exception('No center node provided for Node Distance reranker')
-                raise Exception('No center node provided for Node Distance reranker')
+        elif config.reranker == EdgeReranker.node_distance:
+            if config.center_node_uuid is None:
+                raise SearchRerankerError('No center node provided for Node Distance reranker')
             reranked_uuids = await node_distance_reranker(
-                driver, search_result_uuids, center_node_uuid
+                driver, search_result_uuids, config.center_node_uuid
             )
 
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
-        edges.extend(reranked_edges)
 
-    context = SearchResults(
-        episodes=episodes, nodes=nodes[: config.num_nodes], edges=edges[: config.num_edges]
-    )
+        return reranked_edges
 
-    end = time()
 
-    logger.info(f'search returned context for query {query} in {(end - start) * 1000} ms')
+async def node_search(driver: AsyncDriver, embedder, query: str, group_ids: list[str | None] | None,
+                      config: NodeSearchConfig) -> list[EntityNode]:
+    search_results: list[list[EntityNode]] = []
 
-    return context
+    if NodeSearchMethod.bm25 in config.search_methods:
+        text_search = await node_fulltext_search(driver, query, group_ids, 2 * config.num_nodes)
+        search_results.append(text_search)
+
+    if NodeSearchMethod.cosine_similarity in config.search_methods:
+        search_vector = (
+            (await embedder.create(input=[query], model='text-embedding-3-small'))
+            .data[0]
+            .embedding[:EMBEDDING_DIM]
+        )
+
+        similarity_search = await node_similarity_search(
+            driver, search_vector, config.group_ids, 2 * config.num_edges
+        )
+        search_results.append(similarity_search)
+
+    if len(search_results) > 1 and config.reranker is None:
+        raise SearchRerankerError('Multiple node searches enabled without a reranker')
+
+    node_uuid_map: dict[str: EntityNode] = {}
+    search_result_uuids: list[list[str]] = []
+
+    for result in search_results:
+        result_uuids = []
+        for node in result:
+            result_uuids.append(node.uuid)
+            node_uuid_map[node.uuid] = node
+
+        search_result_uuids.append(result_uuids)
+
+    search_result_uuids = [[node.uuid for node in result] for result in search_results]
+
+    reranked_uuids: list[str] = []
+    if config.reranker == NodeReranker.rrf:
+        reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == NodeReranker.node_distance:
+        if config.center_node_uuid is None:
+            raise SearchRerankerError('No center node provided for Node Distance reranker')
+        reranked_uuids = await node_distance_reranker(
+            driver, search_result_uuids, config.center_node_uuid
+        )
+
+    reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
+
+    return reranked_nodes
