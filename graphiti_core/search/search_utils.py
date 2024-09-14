@@ -506,24 +506,23 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-        driver: AsyncDriver, results: list[list[str]], center_node_uuid: str
+        driver: AsyncDriver, node_uuids: list[list[str]], center_node_uuid: str
 ) -> list[str]:
     # use rrf as a preliminary ranker
-    sorted_uuids = rrf(results)
+    sorted_uuids = rrf(node_uuids)
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
     query = Query("""  
-        MATCH (source:Entity)-[r:RELATES_TO {uuid: $edge_uuid}]->(target:Entity)
-        MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: source.uuid})
-        RETURN length(p) AS score, source.uuid AS source_uuid, target.uuid AS target_uuid
+        MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: $node_uuid})
+        RETURN length(p) AS score
         """)
 
     path_results = await asyncio.gather(
         *[
             driver.execute_query(
                 query,
-                edge_uuid=uuid,
+                node_uuid=uuid,
                 center_uuid=center_node_uuid,
             )
             for uuid in sorted_uuids
@@ -534,15 +533,8 @@ async def node_distance_reranker(
         records = result[0]
         record = records[0] if len(records) > 0 else None
         distance: float = record['score'] if record is not None else float('inf')
-        if record is not None and (
-                record['source_uuid'] == center_node_uuid or record['target_uuid'] == center_node_uuid
-        ):
-            distance = 0
-
-        if uuid in scores:
-            scores[uuid] = min(distance, scores[uuid])
-        else:
-            scores[uuid] = distance
+        distance = 0 if uuid == center_node_uuid else distance
+        scores[uuid] = distance
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
