@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 async def generate_embedding(
-        embedder: typing.Any, text: str, model: str = 'text-embedding-3-small'
+    embedder: typing.Any, text: str, model: str = 'text-embedding-3-small'
 ):
     start = time()
 
