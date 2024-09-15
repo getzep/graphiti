@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
 
 pytestmark = pytest.mark.integration
 
@@ -81,6 +82,17 @@ async def test_graphiti_init():
     edges = await graphiti.search('issues with higher ed', group_ids=['1'])
 
     logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
+
+    results = await graphiti._search(
+        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=['1']
+    )
+    pretty_results = {
+        'edges': [edge.fact for edge in results.edges],
+        'nodes': [node.name for node in results.nodes],
+        'communities': [community.name for community in results.communities],
+    }
+
+    logger.info(pretty_results)
     graphiti.close()
 
 

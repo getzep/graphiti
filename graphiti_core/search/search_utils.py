@@ -459,8 +459,8 @@ async def hybrid_node_search(
 
     results: list[list[EntityNode]] = list(
         await asyncio.gather(
-            *[node_fulltext_search(q, driver, group_ids, 2 * limit) for q in queries],
-            *[node_similarity_search(e, driver, group_ids, 2 * limit) for e in embeddings],
+            *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
+            *[node_similarity_search(driver, e, group_ids, 2 * limit) for e in embeddings],
         )
     )
 

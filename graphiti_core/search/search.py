@@ -24,6 +24,7 @@ from graphiti_core.errors import SearchRerankerError
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.search.search_config import (
+    DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
     CommunitySearchConfig,
     CommunitySearchMethod,
@@ -62,17 +63,23 @@ async def search(
     query = query.replace('\n', ' ')
 
     edges = (
-        await edge_search(driver, embedder, query, group_ids, config.edge_config, center_node_uuid)
+        await edge_search(
+            driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit
+        )
         if config.edge_config is not None
         else []
     )
     nodes = (
-        await node_search(driver, embedder, query, group_ids, config.node_config, center_node_uuid)
+        await node_search(
+            driver, embedder, query, group_ids, config.node_config, center_node_uuid, config.limit
+        )
         if config.node_config is not None
         else []
     )
     communities = (
-        await community_search(driver, embedder, query, group_ids, config.community_config)
+        await community_search(
+            driver, embedder, query, group_ids, config.community_config, config.limit
+        )
         if config.community_config is not None
         else []
     )
@@ -97,13 +104,12 @@ async def edge_search(
     group_ids: list[str | None] | None,
     config: EdgeSearchConfig,
     center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
     if EdgeSearchMethod.bm25 in config.search_methods:
-        text_search = await edge_fulltext_search(
-            driver, query, None, None, group_ids, 2 * config.num_edges
-        )
+        text_search = await edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit)
         search_results.append(text_search)
 
     if EdgeSearchMethod.cosine_similarity in config.search_methods:
@@ -114,7 +120,7 @@ async def edge_search(
         )
 
         similarity_search = await edge_similarity_search(
-            driver, search_vector, None, None, group_ids, 2 * config.num_edges
+            driver, search_vector, None, None, group_ids, 2 * limit
         )
         search_results.append(similarity_search)
 
@@ -157,11 +163,12 @@ async def node_search(
     group_ids: list[str | None] | None,
     config: NodeSearchConfig,
     center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
     if NodeSearchMethod.bm25 in config.search_methods:
-        text_search = await node_fulltext_search(driver, query, group_ids, 2 * config.num_nodes)
+        text_search = await node_fulltext_search(driver, query, group_ids, 2 * limit)
         search_results.append(text_search)
 
     if NodeSearchMethod.cosine_similarity in config.search_methods:
@@ -172,7 +179,7 @@ async def node_search(
         )
 
         similarity_search = await node_similarity_search(
-            driver, search_vector, config.group_ids, 2 * config.num_edges
+            driver, search_vector, group_ids, 2 * limit
         )
         search_results.append(similarity_search)
 
@@ -203,13 +210,12 @@ async def community_search(
     query: str,
     group_ids: list[str | None] | None,
     config: CommunitySearchConfig,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
     if CommunitySearchMethod.bm25 in config.search_methods:
-        text_search = await community_fulltext_search(
-            driver, query, group_ids, 2 * config.num_nodes
-        )
+        text_search = await community_fulltext_search(driver, query, group_ids, 2 * limit)
         search_results.append(text_search)
 
     if CommunitySearchMethod.cosine_similarity in config.search_methods:
@@ -220,7 +226,7 @@ async def community_search(
         )
 
         similarity_search = await community_similarity_search(
-            driver, search_vector, config.group_ids, 2 * config.num_edges
+            driver, search_vector, group_ids, 2 * limit
         )
         search_results.append(similarity_search)
 

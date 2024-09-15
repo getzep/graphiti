@@ -72,10 +72,10 @@ class SearchConfig(BaseModel):
     edge_config: EdgeSearchConfig | None = Field(default=None)
     node_config: NodeSearchConfig | None = Field(default=None)
     community_config: CommunitySearchConfig | None = Field(default=None)
+    limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
 
 
 class SearchResults(BaseModel):
     edges: list[EntityEdge]
     nodes: list[EntityNode]
     communities: list[CommunityNode]
-    limit: int = Field(default=DEFAULT_SEARCH_LIMIT)

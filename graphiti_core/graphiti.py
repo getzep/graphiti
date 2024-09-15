@@ -24,9 +24,8 @@ from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.search.search import SearchConfig, hybrid_search, search
+from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
 from graphiti_core.search.search_config_recipes import (
     EDGE_HYBRID_SEARCH_NODE_DISTANCE,
@@ -38,7 +37,6 @@ from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
     get_relevant_edges,
     get_relevant_nodes,
-    hybrid_node_search,
 )
 from graphiti_core.utils import (
     build_episodic_edges,
