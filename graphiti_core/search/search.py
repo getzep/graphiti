@@ -51,25 +51,36 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: SearchConfig,
-        center_node_uuid: str | None = None
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
 
-    edges = await edge_search(driver, embedder, query, group_ids, config.edge_config,
-                              center_node_uuid) if config.edge_config is not None else []
-    nodes = await node_search(driver, embedder, query, group_ids, config.node_config,
-                              center_node_uuid) if config.node_config is not None else []
-    communities = await community_search(driver, embedder, query, group_ids,
-                                         config.community_config) if config.community_config is not None else []
+    edges = (
+        await edge_search(driver, embedder, query, group_ids, config.edge_config, center_node_uuid)
+        if config.edge_config is not None
+        else []
+    )
+    nodes = (
+        await node_search(driver, embedder, query, group_ids, config.node_config, center_node_uuid)
+        if config.node_config is not None
+        else []
+    )
+    communities = (
+        await community_search(driver, embedder, query, group_ids, config.community_config)
+        if config.community_config is not None
+        else []
+    )
 
     context = SearchResults(
-        edges=edges, nodes=nodes, communities=communities
+        edges=edges[: config.limit],
+        nodes=nodes[: config.limit],
+        communities=communities[: config.limit],
     )
 
     end = time()
@@ -80,12 +91,12 @@ async def search(
 
 
 async def edge_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: EdgeSearchConfig,
-        center_node_uuid: str | None = None
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: EdgeSearchConfig,
+    center_node_uuid: str | None = None,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
@@ -136,16 +147,16 @@ async def edge_search(
 
         reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
-        return reranked_edges[:config.num_edges]
+        return reranked_edges
 
 
 async def node_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: NodeSearchConfig,
-        center_node_uuid: str | None = None
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: NodeSearchConfig,
+    center_node_uuid: str | None = None,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
@@ -183,15 +194,15 @@ async def node_search(
 
     reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
 
-    return reranked_nodes[:config.num_nodes]
+    return reranked_nodes
 
 
 async def community_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: CommunitySearchConfig,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: CommunitySearchConfig,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
@@ -227,4 +238,4 @@ async def community_search(
 
     reranked_communities = [community_uuid_map[uuid] for uuid in reranked_uuids]
 
-    return reranked_communities[:config.num_communities]
+    return reranked_communities

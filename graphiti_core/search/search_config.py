@@ -19,8 +19,9 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
-from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
+from graphiti_core.nodes import CommunityNode, EntityNode
+
+DEFAULT_SEARCH_LIMIT = 10
 
 
 class EdgeSearchMethod(Enum):
@@ -53,19 +54,16 @@ class CommunityReranker(Enum):
 
 
 class EdgeSearchConfig(BaseModel):
-    num_edges: int = Field(default=10)
     search_methods: list[EdgeSearchMethod]
     reranker: EdgeReranker | None
 
 
 class NodeSearchConfig(BaseModel):
-    num_nodes: int = Field(default=10)
     search_methods: list[NodeSearchMethod]
     reranker: NodeReranker | None
 
 
 class CommunitySearchConfig(BaseModel):
-    num_communities: int = Field(default=10)
     search_methods: list[CommunitySearchMethod]
     reranker: CommunityReranker | None
 
@@ -80,3 +78,4 @@ class SearchResults(BaseModel):
     edges: list[EntityEdge]
     nodes: list[EntityNode]
     communities: list[CommunityNode]
+    limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
