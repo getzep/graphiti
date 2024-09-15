@@ -52,12 +52,12 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
@@ -98,13 +98,13 @@ async def search(
 
 
 async def edge_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: EdgeSearchConfig,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: EdgeSearchConfig,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
@@ -157,13 +157,13 @@ async def edge_search(
 
 
 async def node_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: NodeSearchConfig,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: NodeSearchConfig,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
@@ -196,7 +196,7 @@ async def node_search(
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
         reranked_uuids = await node_distance_reranker(
-            driver, search_result_uuids, config.center_node_uuid
+            driver, search_result_uuids, center_node_uuid
         )
 
     reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
@@ -205,12 +205,12 @@ async def node_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: CommunitySearchConfig,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: CommunitySearchConfig,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
