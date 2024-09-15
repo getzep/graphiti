@@ -84,7 +84,7 @@ async def search(
         else []
     )
 
-    context = SearchResults(
+    results = SearchResults(
         edges=edges[: config.limit],
         nodes=nodes[: config.limit],
         communities=communities[: config.limit],
@@ -94,7 +94,7 @@ async def search(
 
     logger.info(f'search returned context for query {query} in {(end - start) * 1000} ms')
 
-    return context
+    return results
 
 
 async def edge_search(
@@ -124,36 +124,32 @@ async def edge_search(
         )
         search_results.append(similarity_search)
 
-        if len(search_results) > 1 and config.reranker is None:
-            raise SearchRerankerError('Multiple edge searches enabled without a reranker')
+    if len(search_results) > 1 and config.reranker is None:
+        raise SearchRerankerError('Multiple edge searches enabled without a reranker')
 
-        edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
+    edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
 
-        reranked_uuids: list[str] = []
-        if config.reranker == EdgeReranker.rrf:
-            search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
+    reranked_uuids: list[str] = []
+    if config.reranker == EdgeReranker.rrf:
+        search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
-            reranked_uuids = rrf(search_result_uuids)
-        elif config.reranker == EdgeReranker.node_distance:
-            if center_node_uuid is None:
-                raise SearchRerankerError('No center node provided for Node Distance reranker')
+        reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == EdgeReranker.node_distance:
+        if center_node_uuid is None:
+            raise SearchRerankerError('No center node provided for Node Distance reranker')
 
-            source_to_edge_uuid_map = {
-                edge.source_node_uuid: edge.uuid for result in search_results for edge in result
-            }
-            source_uuids = [[edge.source_node_uuid for edge in result] for result in search_results]
+        source_to_edge_uuid_map = {
+            edge.source_node_uuid: edge.uuid for result in search_results for edge in result
+        }
+        source_uuids = [[edge.source_node_uuid for edge in result] for result in search_results]
 
-            reranked_node_uuids = await node_distance_reranker(
-                driver, source_uuids, config.center_node_uuid
-            )
+        reranked_node_uuids = await node_distance_reranker(driver, source_uuids, center_node_uuid)
 
-            reranked_uuids = [
-                source_to_edge_uuid_map[node_uuid] for node_uuid in reranked_node_uuids
-            ]
+        reranked_uuids = [source_to_edge_uuid_map[node_uuid] for node_uuid in reranked_node_uuids]
 
-        reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
+    reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
-        return reranked_edges
+    return reranked_edges
 
 
 async def node_search(
