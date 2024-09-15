@@ -33,11 +33,6 @@ class NodeSearchMethod(Enum):
     bm25 = 'bm25'
 
 
-class EpisodeSearchMethod(Enum):
-    node_connections = 'node_connections'
-    edge_connections = 'edge_connections'
-
-
 class CommunitySearchMethod(Enum):
     cosine_similarity = 'cosine_similarity'
     bm25 = 'bm25'
@@ -53,10 +48,6 @@ class NodeReranker(Enum):
     node_distance = 'node_distance'
 
 
-class EpisodeReranker(Enum):
-    rrf = 'reciprocal_rank_fusion'
-
-
 class CommunityReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
 
@@ -65,37 +56,27 @@ class EdgeSearchConfig(BaseModel):
     num_edges: int = Field(default=10)
     search_methods: list[EdgeSearchMethod]
     reranker: EdgeReranker | None
-    center_node_uuid: str | None = None
 
 
 class NodeSearchConfig(BaseModel):
     num_nodes: int = Field(default=10)
     search_methods: list[NodeSearchMethod]
     reranker: NodeReranker | None
-    center_node_uuid: str | None = None
-
-
-class EpisodeSearchConfig(BaseModel):
-    num_edges: int = Field(default=EPISODE_WINDOW_LEN)
-    search_methods: list[EpisodeSearchMethod]
-    reranker: EpisodeReranker | None
 
 
 class CommunitySearchConfig(BaseModel):
-    num_edges: int = Field(default=10)
+    num_communities: int = Field(default=10)
     search_methods: list[CommunitySearchMethod]
     reranker: CommunityReranker | None
 
 
 class SearchConfig(BaseModel):
-    edge_config: EdgeSearchConfig
-    node_config: NodeSearchConfig
-    episode_config: EpisodeSearchConfig
-    community_config: CommunitySearchConfig
+    edge_config: EdgeSearchConfig | None = Field(default=None)
+    node_config: NodeSearchConfig | None = Field(default=None)
+    community_config: CommunitySearchConfig | None = Field(default=None)
 
 
 class SearchResults(BaseModel):
     edges: list[EntityEdge]
     nodes: list[EntityNode]
-    episodes: list[EpisodicNode]
     communities: list[CommunityNode]
