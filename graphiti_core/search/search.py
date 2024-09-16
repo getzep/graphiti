@@ -62,7 +62,7 @@ async def search(
     start = time()
     query = query.replace('\n', ' ')
     # if group_ids is empty, set it to None
-    if group_ids and len(group_ids) == 0:
+    if group_ids is not None and len(group_ids) == 0:
         group_ids = None
     edges = (
         await edge_search(
