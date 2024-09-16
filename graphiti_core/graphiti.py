@@ -24,14 +24,19 @@ from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.utils import generate_embedding
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.search.search import Reranker, SearchConfig, SearchMethod, hybrid_search
+from graphiti_core.search.search import SearchConfig, search
+from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
+from graphiti_core.search.search_config_recipes import (
+    EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+    EDGE_HYBRID_SEARCH_RRF,
+    NODE_HYBRID_SEARCH_NODE_DISTANCE,
+    NODE_HYBRID_SEARCH_RRF,
+)
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
     get_relevant_edges,
     get_relevant_nodes,
-    hybrid_node_search,
 )
 from graphiti_core.utils import (
     build_episodic_edges,
@@ -548,7 +553,7 @@ class Graphiti:
         query: str,
         center_node_uuid: str | None = None,
         group_ids: list[str | None] | None = None,
-        num_results=10,
+        num_results=DEFAULT_SEARCH_LIMIT,
     ):
         """
         Perform a hybrid search on the knowledge graph.
@@ -564,7 +569,7 @@ class Graphiti:
             Facts will be reranked based on proximity to this node
         group_ids : list[str | None] | None, optional
             The graph partitions to return data from.
-        num_results : int, optional
+        limit : int, optional
             The maximum number of results to return. Defaults to 10.
 
         Returns
@@ -581,21 +586,17 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
-        reranker = Reranker.rrf if center_node_uuid is None else Reranker.node_distance
-        search_config = SearchConfig(
-            num_episodes=0,
-            num_edges=num_results,
-            num_nodes=0,
-            group_ids=group_ids,
-            search_methods=[SearchMethod.bm25, SearchMethod.cosine_similarity],
-            reranker=reranker,
+        search_config = (
+            EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
+        search_config.limit = num_results
+
         edges = (
-            await hybrid_search(
+            await search(
                 self.driver,
                 self.llm_client.get_embedder(),
                 query,
-                datetime.now(),
+                group_ids,
                 search_config,
                 center_node_uuid,
             )
@@ -606,19 +607,20 @@ class Graphiti:
     async def _search(
         self,
         query: str,
-        timestamp: datetime,
         config: SearchConfig,
+        group_ids: list[str | None] | None = None,
         center_node_uuid: str | None = None,
-    ):
-        return await hybrid_search(
-            self.driver, self.llm_client.get_embedder(), query, timestamp, config, center_node_uuid
+    ) -> SearchResults:
+        return await search(
+            self.driver, self.llm_client.get_embedder(), query, group_ids, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
         self,
         query: str,
+        center_node_uuid: str | None = None,
         group_ids: list[str | None] | None = None,
-        limit: int = RELEVANT_SCHEMA_LIMIT,
+        limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
@@ -629,7 +631,9 @@ class Graphiti:
         Parameters
         ----------
         query : str
-            The text query to search for in the graph.
+            The text query to search for in the graph
+        center_node_uuid: str, optional
+            Facts will be reranked based on proximity to this node.
         group_ids : list[str | None] | None, optional
             The graph partitions to return data from.
         limit : int | None, optional
@@ -655,8 +659,12 @@ class Graphiti:
         If not specified, a default limit (defined in the search functions) will be used.
         """
         embedder = self.llm_client.get_embedder()
-        query_embedding = await generate_embedding(embedder, query)
-        relevant_nodes = await hybrid_node_search(
-            [query], [query_embedding], self.driver, group_ids, limit
+        search_config = (
+            NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE
         )
-        return relevant_nodes
+        search_config.limit = limit
+
+        nodes = (
+            await search(self.driver, embedder, query, group_ids, search_config, center_node_uuid)
+        ).nodes
+        return nodes

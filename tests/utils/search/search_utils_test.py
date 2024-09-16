@@ -11,11 +11,11 @@ async def test_hybrid_node_search_deduplication():
     # Mock the database driver
     mock_driver = AsyncMock()
 
-    # Mock the entity_fulltext_search and entity_similarity_search functions
+    # Mock the node_fulltext_search and entity_similarity_search functions
     with patch(
-        'graphiti_core.search.search_utils.entity_fulltext_search'
+        'graphiti_core.search.search_utils.node_fulltext_search'
     ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.entity_similarity_search'
+        'graphiti_core.search.search_utils.node_similarity_search'
     ) as mock_similarity_search:
         # Set up mock return values
         mock_fulltext_search.side_effect = [
@@ -47,9 +47,9 @@ async def test_hybrid_node_search_empty_results():
     mock_driver = AsyncMock()
 
     with patch(
-        'graphiti_core.search.search_utils.entity_fulltext_search'
+        'graphiti_core.search.search_utils.node_fulltext_search'
     ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.entity_similarity_search'
+        'graphiti_core.search.search_utils.node_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = []
         mock_similarity_search.return_value = []
@@ -66,9 +66,9 @@ async def test_hybrid_node_search_only_fulltext():
     mock_driver = AsyncMock()
 
     with patch(
-        'graphiti_core.search.search_utils.entity_fulltext_search'
+        'graphiti_core.search.search_utils.node_fulltext_search'
     ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.entity_similarity_search'
+        'graphiti_core.search.search_utils.node_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')
@@ -90,9 +90,9 @@ async def test_hybrid_node_search_with_limit():
     mock_driver = AsyncMock()
 
     with patch(
-        'graphiti_core.search.search_utils.entity_fulltext_search'
+        'graphiti_core.search.search_utils.node_fulltext_search'
     ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.entity_similarity_search'
+        'graphiti_core.search.search_utils.node_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
@@ -120,8 +120,8 @@ async def test_hybrid_node_search_with_limit():
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
         # Verify that the limit was passed to the search functions
-        mock_fulltext_search.assert_called_with('Test', mock_driver, ['1'], 2)
-        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, ['1'], 2)
+        mock_fulltext_search.assert_called_with(mock_driver, 'Test', ['1'], 2)
+        mock_similarity_search.assert_called_with(mock_driver, [0.1, 0.2, 0.3], ['1'], 2)
 
 
 @pytest.mark.asyncio
@@ -129,9 +129,9 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
     mock_driver = AsyncMock()
 
     with patch(
-        'graphiti_core.search.search_utils.entity_fulltext_search'
+        'graphiti_core.search.search_utils.node_fulltext_search'
     ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.entity_similarity_search'
+        'graphiti_core.search.search_utils.node_similarity_search'
     ) as mock_similarity_search:
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
@@ -155,5 +155,5 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         assert set(node.name for node in results) == {'Alice', 'Bob', 'Charlie'}
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
-        mock_fulltext_search.assert_called_with('Test', mock_driver, ['1'], 4)
-        mock_similarity_search.assert_called_with([0.1, 0.2, 0.3], mock_driver, ['1'], 4)
+        mock_fulltext_search.assert_called_with(mock_driver, 'Test', ['1'], 4)
+        mock_similarity_search.assert_called_with(mock_driver, [0.1, 0.2, 0.3], ['1'], 4)
