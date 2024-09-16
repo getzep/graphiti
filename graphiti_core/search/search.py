@@ -61,7 +61,8 @@ async def search(
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
-
+    # if group_ids is empty, set it to None
+    group_ids = group_ids if group_ids else None
     edges = (
         await edge_search(
             driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit
