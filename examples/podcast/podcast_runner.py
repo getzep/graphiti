@@ -63,7 +63,7 @@ async def main(use_bulk: bool = True):
     messages = parse_podcast_messages()
 
     if not use_bulk:
-        for i, message in enumerate(messages[3:130]):
+        for i, message in enumerate(messages[3:20]):
             await client.add_episode(
                 name=f'Message {i}',
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
