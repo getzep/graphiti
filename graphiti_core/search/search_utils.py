@@ -65,14 +65,15 @@ async def edge_fulltext_search(
     group_ids: list[str | None] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
-    group_ids = group_ids if group_ids is not None else [None]
-
     # fulltext search over facts
     cypher_query = Query("""
               CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
               YIELD relationship AS rel, score
               MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-              WHERE r.group_id IN $group_ids
+              WHERE CASE
+                WHEN $group_ids IS NULL THEN n.group_id IS NULL
+                ELSE n.group_id IN $group_ids
+              END
               RETURN 
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -94,7 +95,10 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-                  WHERE r.group_id IN $group_ids
+                  WHERE CASE
+                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                    ELSE r.group_id IN $group_ids
+                  END
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -115,7 +119,10 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})              
-                  WHERE r.group_id IN $group_ids
+                  WHERE CASE
+                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                    ELSE r.group_id IN $group_ids
+                  END
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -136,7 +143,10 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)              
-                  WHERE r.group_id IN $group_ids
+                  WHERE CASE
+                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                    ELSE r.group_id IN $group_ids
+                  END
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -177,13 +187,15 @@ async def edge_similarity_search(
     group_ids: list[str | None] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
-    group_ids = group_ids if group_ids is not None else [None]
     # vector similarity search over embedded facts
     query = Query("""
                 CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS rel, score
                 MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                WHERE r.group_id IN $group_ids
+                WHERE CASE
+                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                    ELSE r.group_id IN $group_ids
+                END
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -205,7 +217,10 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE r.group_id IN $group_ids
+                    WHERE CASE
+                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                        ELSE r.group_id IN $group_ids
+                    END
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -226,7 +241,10 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                    WHERE r.group_id IN $group_ids
+                    WHERE CASE
+                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                        ELSE r.group_id IN $group_ids
+                    END
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -247,7 +265,10 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE r.group_id IN $group_ids
+                    WHERE CASE
+                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
+                        ELSE r.group_id IN $group_ids
+                    END
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -284,15 +305,16 @@ async def node_fulltext_search(
     group_ids: list[str | None] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
-    group_ids = group_ids if group_ids is not None else [None]
-
     # BM25 search to get top nodes
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) 
     YIELD node AS n, score
-    MATCH (n WHERE n.group_id in $group_ids)
+    WHERE CASE
+        WHEN $group_ids IS NULL THEN n.group_id IS NULL
+        ELSE n.group_id IN $group_ids
+    END
     RETURN
         n.uuid AS uuid,
         n.group_id AS group_id, 
