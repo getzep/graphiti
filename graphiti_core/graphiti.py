@@ -53,7 +53,7 @@ from graphiti_core.utils.bulk_utils import (
 )
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
-    remove_communities,
+    remove_communities, update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
@@ -415,6 +415,9 @@ class Graphiti:
             await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
             await asyncio.gather(*[edge.save(self.driver) for edge in entity_edges])
 
+            # Update any communities
+            await asyncio.gather(
+                *[update_community(self.driver, self.llm_client, embedder, node) for node in nodes])
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
