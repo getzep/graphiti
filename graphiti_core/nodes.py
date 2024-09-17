@@ -175,7 +175,7 @@ class EpisodicNode(Node):
             e.valid_at AS valid_at,
             e.uuid AS uuid,
             e.name AS name,
-            e.group_id AS group_id
+            e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source
         """,
@@ -230,7 +230,7 @@ class EntityNode(Node):
             n.uuid As uuid, 
             n.name AS name,
             n.name_embedding AS name_embedding,
-            n.group_id AS group_id
+            n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
         """,
@@ -307,7 +307,7 @@ class CommunityNode(Node):
             n.uuid As uuid, 
             n.name AS name,
             n.name_embedding AS name_embedding,
-            n.group_id AS group_id
+            n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
         """,
@@ -329,7 +329,7 @@ class CommunityNode(Node):
             n.uuid As uuid, 
             n.name AS name,
             n.name_embedding AS name_embedding,
-            n.group_id AS group_id
+            n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
         """,
