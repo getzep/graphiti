@@ -127,7 +127,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient
+        driver: AsyncDriver, llm_client: LLMClient
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     projection = await build_community_projection(driver)
     community_clusters = await get_community_clusters(driver, projection)
