@@ -249,8 +249,6 @@ class Graphiti:
             An id for the graph partition the episode is a part of.
         uuid : str | None
             Optional uuid of the episode.
-        update_communities: bool
-            Optional. Determines if we should update communities
 
         Returns
         -------
@@ -617,22 +615,22 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        config: SearchConfig,
-        group_ids: list[str | None] | None = None,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            config: SearchConfig,
+            group_ids: list[str | None] | None = None,
+            center_node_uuid: str | None = None,
     ) -> SearchResults:
         return await search(
             self.driver, self.llm_client.get_embedder(), query, group_ids, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
-        limit: int = DEFAULT_SEARCH_LIMIT,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str | None] | None = None,
+            limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
