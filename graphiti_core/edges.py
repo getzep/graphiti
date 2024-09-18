@@ -114,7 +114,7 @@ class EpisodicEdge(Edge):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
-        WHERE e.uuid INN $uuids
+        WHERE e.uuid IN $uuids
         RETURN
             e.uuid As uuid,
             e.group_id AS group_id,
