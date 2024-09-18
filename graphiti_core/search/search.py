@@ -45,19 +45,19 @@ from graphiti_core.search.search_utils import (
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
-    rrf,
+    rrf, episode_mentions_reranker,
 )
 
 logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
@@ -99,13 +99,13 @@ async def search(
 
 
 async def edge_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: EdgeSearchConfig,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: EdgeSearchConfig,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
@@ -131,7 +131,7 @@ async def edge_search(
     edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
 
     reranked_uuids: list[str] = []
-    if config.reranker == EdgeReranker.rrf:
+    if config.reranker == EdgeReranker.rrf or config.reranker == EdgeReranker.episode_mentions:
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
         reranked_uuids = rrf(search_result_uuids)
@@ -150,17 +150,20 @@ async def edge_search(
 
     reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
+    if config.reranker == EdgeReranker.episode_mentions:
+        reranked_edges.sort(reverse=True, key=lambda edge: len(edge.episodes))
+
     return reranked_edges
 
 
 async def node_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: NodeSearchConfig,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: NodeSearchConfig,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
@@ -189,6 +192,8 @@ async def node_search(
     reranked_uuids: list[str] = []
     if config.reranker == NodeReranker.rrf:
         reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == NodeReranker.episode_mentions:
+        reranked_uuids = await episode_mentions_reranker(driver, search_result_uuids)
     elif config.reranker == NodeReranker.node_distance:
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
@@ -200,12 +205,12 @@ async def node_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
-    embedder,
-    query: str,
-    group_ids: list[str | None] | None,
-    config: CommunitySearchConfig,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        embedder,
+        query: str,
+        group_ids: list[str | None] | None,
+        config: CommunitySearchConfig,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
