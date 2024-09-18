@@ -159,7 +159,7 @@ async def determine_entity_community(
     driver: AsyncDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
-    _, _, records = await driver.execute_query(
+    records, _, _ = await driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
@@ -177,7 +177,7 @@ async def determine_entity_community(
         return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    _, _, records = await driver.execute_query(
+    records, _, _ = await driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN
@@ -191,9 +191,13 @@ async def determine_entity_community(
         entity_uuid=entity.uuid,
     )
 
+    communities: list[CommunityNode] = list(
+        await asyncio.gather(*[get_community_node_from_record(record) for record in records])
+    )
+
     community_map: dict[str, int] = defaultdict(int)
-    for record in records:
-        community_map[record['uuid']] += 1
+    for community in communities:
+        community_map[community.uuid] += 1
 
     community_uuid = None
     max_count = 0
@@ -205,9 +209,11 @@ async def determine_entity_community(
     if max_count == 0:
         return None, False
 
-    for record in records:
-        if record['uuid'] == community_uuid:
-            return get_community_node_from_record(record), True
+    for community in communities:
+        if community.uuid == community_uuid:
+            return community, True
+
+    return None, False
 
 
 async def update_community(
