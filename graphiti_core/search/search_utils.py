@@ -59,6 +59,29 @@ async def get_mentioned_nodes(
     return nodes
 
 
+async def get_communities_by_nodes(
+    driver: AsyncDriver, nodes: list[EntityNode]
+) -> list[CommunityNode]:
+    node_uuids = [node.uuid for node in nodes]
+    records, _, _ = await driver.execute_query(
+        """
+        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
+        RETURN DISTINCT
+            c.uuid As uuid, 
+            c.group_id AS group_id,
+            c.name AS name,
+            c.name_embedding AS name_embedding
+            c.created_at AS created_at, 
+            c.summary AS summary
+        """,
+        uuids=node_uuids,
+    )
+
+    communities = [get_community_node_from_record(record) for record in records]
+
+    return communities
+
+
 async def edge_fulltext_search(
     driver: AsyncDriver,
     query: str,
