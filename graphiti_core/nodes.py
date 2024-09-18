@@ -170,7 +170,8 @@ class EpisodicNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.uuid IN $uuids
-            RETURN e.content AS content,
+            RETURN DISTINCT
+            e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
             e.uuid AS uuid,

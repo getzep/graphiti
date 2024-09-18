@@ -42,22 +42,23 @@ from graphiti_core.search.search_utils import (
     community_similarity_search,
     edge_fulltext_search,
     edge_similarity_search,
+    episode_mentions_reranker,
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
-    rrf, episode_mentions_reranker,
+    rrf,
 )
 
 logger = logging.getLogger(__name__)
 
 
 async def search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
@@ -99,13 +100,13 @@ async def search(
 
 
 async def edge_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: EdgeSearchConfig,
-        center_node_uuid: str | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: EdgeSearchConfig,
+    center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
@@ -157,13 +158,13 @@ async def edge_search(
 
 
 async def node_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: NodeSearchConfig,
-        center_node_uuid: str | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: NodeSearchConfig,
+    center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
@@ -205,12 +206,12 @@ async def node_search(
 
 
 async def community_search(
-        driver: AsyncDriver,
-        embedder,
-        query: str,
-        group_ids: list[str | None] | None,
-        config: CommunitySearchConfig,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder,
+    query: str,
+    group_ids: list[str | None] | None,
+    config: CommunitySearchConfig,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
