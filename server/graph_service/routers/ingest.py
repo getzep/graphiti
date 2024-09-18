@@ -55,6 +55,7 @@ async def add_messages(
 ):
     async def add_messages_task(m: Message):
         await graphiti.add_episode(
+            uuid=m.uuid,
             group_id=request.group_id,
             name=m.name,
             episode_body=f"{m.role or ''}({m.role_type}): {m.content}",
