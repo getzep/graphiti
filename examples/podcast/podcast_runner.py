@@ -63,7 +63,7 @@ async def main(use_bulk: bool = True):
     messages = parse_podcast_messages()
 
     if not use_bulk:
-        for i, message in enumerate(messages[3:20]):
+        for i, message in enumerate(messages[3:14]):
             await client.add_episode(
                 name=f'Message {i}',
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
@@ -71,6 +71,20 @@ async def main(use_bulk: bool = True):
                 source_description='Podcast Transcript',
                 group_id='1',
             )
+
+        # build communities
+        await client.build_communities()
+
+        # add additional messages to update communities
+        for i, message in enumerate(messages[14:20]):
+            await client.add_episode(
+                name=f'Message {i}',
+                episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
+                reference_time=message.actual_timestamp,
+                source_description='Podcast Transcript',
+                group_id='1',
+            )
+
         return
 
     episodes: list[RawEpisode] = [

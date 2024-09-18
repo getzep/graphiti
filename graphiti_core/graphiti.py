@@ -54,6 +54,7 @@ from graphiti_core.utils.bulk_utils import (
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
+    update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
@@ -224,6 +225,7 @@ class Graphiti:
         source: EpisodeType = EpisodeType.message,
         group_id: str | None = None,
         uuid: str | None = None,
+        update_communities: bool = False,
     ):
         """
         Process an episode and update the graph.
@@ -247,6 +249,8 @@ class Graphiti:
             An id for the graph partition the episode is a part of.
         uuid : str | None
             Optional uuid of the episode.
+        update_communities: bool
+            Optional. Determines if we should update communities
 
         Returns
         -------
@@ -415,6 +419,14 @@ class Graphiti:
             await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
             await asyncio.gather(*[edge.save(self.driver) for edge in entity_edges])
 
+            # Update any communities
+            if update_communities:
+                await asyncio.gather(
+                    *[
+                        update_community(self.driver, self.llm_client, embedder, node)
+                        for node in nodes
+                    ]
+                )
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
@@ -569,7 +581,7 @@ class Graphiti:
             Facts will be reranked based on proximity to this node
         group_ids : list[str | None] | None, optional
             The graph partitions to return data from.
-        limit : int, optional
+        num_results : int, optional
             The maximum number of results to return. Defaults to 10.
 
         Returns

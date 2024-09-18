@@ -7,7 +7,7 @@ from neo4j import AsyncDriver
 
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import CommunityNode, EntityNode
+from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
@@ -153,3 +153,87 @@ async def remove_communities(driver: AsyncDriver):
     MATCH (c:Community)
     DETACH DELETE c
     """)
+
+
+async def determine_entity_community(
+    driver: AsyncDriver, entity: EntityNode
+) -> tuple[CommunityNode | None, bool]:
+    # Check if the node is already part of a community
+    records, _, _ = await driver.execute_query(
+        """
+    MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
+    RETURN
+        c.uuid As uuid, 
+        c.name AS name,
+        c.name_embedding AS name_embedding,
+        c.group_id AS group_id,
+        c.created_at AS created_at, 
+        c.summary AS summary
+    """,
+        entity_uuid=entity.uuid,
+    )
+
+    if len(records) > 0:
+        return get_community_node_from_record(records[0]), False
+
+    # If the node has no community, add it to the mode community of surrounding entities
+    records, _, _ = await driver.execute_query(
+        """
+    MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+    RETURN
+        c.uuid As uuid, 
+        c.name AS name,
+        c.name_embedding AS name_embedding,
+        c.group_id AS group_id,
+        c.created_at AS created_at, 
+        c.summary AS summary
+    """,
+        entity_uuid=entity.uuid,
+    )
+
+    communities: list[CommunityNode] = [
+        get_community_node_from_record(record) for record in records
+    ]
+
+    community_map: dict[str, int] = defaultdict(int)
+    for community in communities:
+        community_map[community.uuid] += 1
+
+    community_uuid = None
+    max_count = 0
+    for uuid, count in community_map.items():
+        if count > max_count:
+            community_uuid = uuid
+            max_count = count
+
+    if max_count == 0:
+        return None, False
+
+    for community in communities:
+        if community.uuid == community_uuid:
+            return community, True
+
+    return None, False
+
+
+async def update_community(
+    driver: AsyncDriver, llm_client: LLMClient, embedder, entity: EntityNode
+):
+    community, is_new = await determine_entity_community(driver, entity)
+
+    if community is None:
+        return
+
+    new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
+    new_name = await generate_summary_description(llm_client, new_summary)
+
+    community.summary = new_summary
+    community.name = new_name
+
+    if is_new:
+        community_edge = (build_community_edges([entity], community, datetime.now()))[0]
+        await community_edge.save(driver)
+
+    await community.generate_name_embedding(embedder)
+
+    await community.save(driver)
