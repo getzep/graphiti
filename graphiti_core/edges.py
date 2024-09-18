@@ -137,8 +137,8 @@ class EntityEdge(Edge):
     name: str = Field(description='name of the edge, relation name')
     fact: str = Field(description='fact representing the edge and nodes that it connects')
     fact_embedding: list[float] | None = Field(default=None, description='embedding of the fact')
-    episodes: list[str] | None = Field(
-        default=None,
+    episodes: list[str] = Field(
+        default=[],
         description='list of episode ids that reference these entity edges',
     )
     expired_at: datetime | None = Field(

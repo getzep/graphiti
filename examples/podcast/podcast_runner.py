@@ -83,6 +83,7 @@ async def main(use_bulk: bool = True):
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
                 group_id='1',
+                update_communities=True,
             )
 
         return
