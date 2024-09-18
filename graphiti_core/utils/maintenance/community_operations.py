@@ -191,9 +191,9 @@ async def determine_entity_community(
         entity_uuid=entity.uuid,
     )
 
-    communities: list[CommunityNode] = list(
-        await asyncio.gather(*[get_community_node_from_record(record) for record in records])
-    )
+    communities: list[CommunityNode] = [
+        get_community_node_from_record(record) for record in records
+    ]
 
     community_map: dict[str, int] = defaultdict(int)
     for community in communities:
