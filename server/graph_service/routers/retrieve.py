@@ -29,7 +29,8 @@ async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
 
 @router.get('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)
 async def get_entity_edge(uuid: str, graphiti: ZepGraphitiDep):
-    return await graphiti.get_entity_edge(uuid)
+    entity_edge = await graphiti.get_entity_edge(uuid)
+    return get_fact_result_from_edge(entity_edge)
 
 
 @router.get('/episodes/{group_id}', status_code=status.HTTP_200_OK)
