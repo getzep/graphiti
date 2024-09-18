@@ -42,11 +42,13 @@ class CommunitySearchMethod(Enum):
 class EdgeReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
     node_distance = 'node_distance'
+    episode_mentions = 'episode_mentions'
 
 
 class NodeReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
     node_distance = 'node_distance'
+    episode_mentions = 'episode_mentions'
 
 
 class CommunityReranker(Enum):

@@ -36,7 +36,9 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 
 
-async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode]):
+async def get_mentioned_nodes(
+    driver: AsyncDriver, episodes: list[EpisodicNode]
+) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
     records, _, _ = await driver.execute_query(
         """
@@ -55,6 +57,29 @@ async def get_mentioned_nodes(driver: AsyncDriver, episodes: list[EpisodicNode])
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
+
+
+async def get_communities_by_nodes(
+    driver: AsyncDriver, nodes: list[EntityNode]
+) -> list[CommunityNode]:
+    node_uuids = [node.uuid for node in nodes]
+    records, _, _ = await driver.execute_query(
+        """
+        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
+        RETURN DISTINCT
+            c.uuid As uuid, 
+            c.group_id AS group_id,
+            c.name AS name,
+            c.name_embedding AS name_embedding
+            c.created_at AS created_at, 
+            c.summary AS summary
+        """,
+        uuids=node_uuids,
+    )
+
+    communities = [get_community_node_from_record(record) for record in records]
+
+    return communities
 
 
 async def edge_fulltext_search(
@@ -629,6 +654,37 @@ async def node_distance_reranker(
         distance: float = record['score'] if record is not None else float('inf')
         distance = 0 if uuid == center_node_uuid else distance
         scores[uuid] = distance
+
+    # rerank on shortest distance
+    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+
+    return sorted_uuids
+
+
+async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[str]]) -> list[str]:
+    # use rrf as a preliminary ranker
+    sorted_uuids = rrf(node_uuids)
+    scores: dict[str, float] = {}
+
+    # Find the shortest path to center node
+    query = Query("""  
+        MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $node_uuid})
+        RETURN count(*) AS score
+        """)
+
+    result_scores = await asyncio.gather(
+        *[
+            driver.execute_query(
+                query,
+                node_uuid=uuid,
+            )
+            for uuid in sorted_uuids
+        ]
+    )
+
+    for uuid, result in zip(sorted_uuids, result_scores):
+        record = result[0][0]
+        scores[uuid] = record['score']
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
