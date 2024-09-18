@@ -68,7 +68,7 @@ class EpisodeType(Enum):
 
 
 class Node(BaseModel, ABC):
-    uuid: str = Field(default_factory=lambda: uuid4().hex)
+    uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(description='name of the node')
     group_id: str | None = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
