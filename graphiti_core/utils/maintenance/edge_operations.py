@@ -163,6 +163,8 @@ async def dedupe_extracted_edges(
         if edge.uuid in duplicate_uuid_map:
             existing_uuid = duplicate_uuid_map[edge.uuid]
             existing_edge = edge_map[existing_uuid]
+            # Add current episode to the episodes list
+            existing_edge.episodes += edge.episodes
             edges.append(existing_edge)
         else:
             edges.append(edge)

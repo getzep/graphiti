@@ -35,6 +35,8 @@ from graphiti_core.search.search_config_recipes import (
 )
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
+    get_communities_by_nodes,
+    get_mentioned_nodes,
     get_relevant_edges,
     get_relevant_nodes,
 )
@@ -249,8 +251,6 @@ class Graphiti:
             An id for the graph partition the episode is a part of.
         uuid : str | None
             Optional uuid of the episode.
-        update_communities: bool
-            Optional. Determines if we should update communities
 
         Returns
         -------
@@ -412,6 +412,8 @@ class Graphiti:
             episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
 
             logger.info(f'Built episodic edges: {episodic_edges}')
+
+            episode.entity_edges = [edge.uuid for edge in entity_edges]
 
             # Future optimization would be using batch operations to save nodes and edges
             await episode.save(self.driver)
@@ -680,3 +682,19 @@ class Graphiti:
             await search(self.driver, embedder, query, group_ids, search_config, center_node_uuid)
         ).nodes
         return nodes
+
+
+async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
+    episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
+
+    edges_list = await asyncio.gather(
+        *[EntityEdge.get_by_uuids(self.driver, episode.entity_edges) for episode in episodes]
+    )
+
+    edges: list[EntityEdge] = [edge for lst in edges_list for edge in lst]
+
+    nodes = await get_mentioned_nodes(self.driver, episodes)
+
+    communities = await get_communities_by_nodes(self.driver, nodes)
+
+    return SearchResults(edges=edges, nodes=nodes, communities=communities)

@@ -59,6 +59,14 @@ EDGE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
     )
 )
 
+# performs a hybrid search over edges with episode mention reranking
+EDGE_HYBRID_SEARCH_EPISODE_MENTIONS = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        reranker=EdgeReranker.episode_mentions,
+    )
+)
+
 # performs a hybrid search over nodes with rrf reranking
 NODE_HYBRID_SEARCH_RRF = SearchConfig(
     node_config=NodeSearchConfig(
@@ -72,6 +80,14 @@ NODE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
     node_config=NodeSearchConfig(
         search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
         reranker=NodeReranker.node_distance,
+    )
+)
+
+# performs a hybrid search over nodes with episode mentions reranking
+NODE_HYBRID_SEARCH_EPISODE_MENTIONS = SearchConfig(
+    node_config=NodeSearchConfig(
+        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        reranker=NodeReranker.episode_mentions,
     )
 )
 
