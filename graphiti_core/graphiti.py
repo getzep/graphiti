@@ -411,6 +411,8 @@ class Graphiti:
 
             logger.info(f'Built episodic edges: {episodic_edges}')
 
+            episode.entity_edges = [edge.uuid for edge in entity_edges]
+
             # Future optimization would be using batch operations to save nodes and edges
             await episode.save(self.driver)
             await asyncio.gather(*[node.save(self.driver) for node in nodes])
