@@ -1,6 +1,7 @@
 <div align="center">
 
-# Graphiti
+<img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
+
 
 ## Temporal Knowledge Graphs for Agentic Applications
 
