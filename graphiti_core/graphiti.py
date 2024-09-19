@@ -186,10 +186,10 @@ class Graphiti:
         await build_indices_and_constraints(self.driver)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str | None] | None = None,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
+            group_ids: list[str | None] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -219,15 +219,15 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        group_id: str | None = None,
-        uuid: str | None = None,
-        update_communities: bool = False,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            group_id: str | None = None,
+            uuid: str | None = None,
+            update_communities: bool = False,
     ):
         """
         Process an episode and update the graph.
@@ -251,6 +251,8 @@ class Graphiti:
             An id for the graph partition the episode is a part of.
         uuid : str | None
             Optional uuid of the episode.
+        update_communities : bool
+            Optional. Whether to update communities with new node information
 
         Returns
         -------
@@ -276,7 +278,6 @@ class Graphiti:
         try:
             start = time()
 
-            nodes: list[EntityNode] = []
             entity_edges: list[EntityEdge] = []
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
@@ -323,7 +324,7 @@ class Graphiti:
                 ),
             )
             logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
-            nodes.extend(mentioned_nodes)
+            nodes = mentioned_nodes
 
             extracted_edges_with_resolved_pointers = resolve_edge_pointers(
                 extracted_edges, uuid_map
@@ -563,11 +564,11 @@ class Graphiti:
         await asyncio.gather(*[edge.save(self.driver) for edge in community_edges])
 
     async def search(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
-        num_results=DEFAULT_SEARCH_LIMIT,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str | None] | None = None,
+            num_results=DEFAULT_SEARCH_LIMIT,
     ):
         """
         Perform a hybrid search on the knowledge graph.
@@ -619,22 +620,22 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        config: SearchConfig,
-        group_ids: list[str | None] | None = None,
-        center_node_uuid: str | None = None,
+            self,
+            query: str,
+            config: SearchConfig,
+            group_ids: list[str | None] | None = None,
+            center_node_uuid: str | None = None,
     ) -> SearchResults:
         return await search(
             self.driver, self.llm_client.get_embedder(), query, group_ids, config, center_node_uuid
         )
 
     async def get_nodes_by_query(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
-        limit: int = DEFAULT_SEARCH_LIMIT,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str | None] | None = None,
+            limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
