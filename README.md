@@ -16,7 +16,9 @@
 
 </div>
 
-Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using a fusion of time, full-text, semantic, and graph algorithm approaches.
+Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between
+entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using
+a fusion of time, full-text, semantic, and graph algorithm approaches.
 
 <br />
 
@@ -26,25 +28,39 @@ Graphiti builds dynamic, temporally aware Knowledge Graphs that represent comple
 
 <br />
 
-Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
+Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of
+interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or
+nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored
+extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
+while handling changing relationships and maintaining historical context.
 
 With Graphiti, you can build LLM applications such as:
 
-- Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
+- Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like
+  CRMs and billing platforms.
 - Agents that autonomously execute complex tasks, reasoning with state changes from multiple dynamic sources.
 
-Graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term recall and state-based reasoning for both assistants and agents.
+Graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term
+recall and state-based reasoning for both assistants and agents.
 
 ## Why Graphiti?
 
-We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal aspects of data.
+We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a
+document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did
+not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal
+aspects of data.
 
-Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and scale:
+Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and
+scale:
 
-- **Temporal Awareness:** Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph edges include temporal metadata to record relationship lifecycles.
-- **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental entity and relationship extraction.
-- **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a central node e.g. “Kendra”.
-- **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while preserving the chronology of events.
+- **Temporal Awareness:** Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph
+  edges include temporal metadata to record relationship lifecycles.
+- **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental
+  entity and relationship extraction.
+- **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a
+  central node e.g. “Kendra”.
+- **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while
+  preserving the chronology of events.
 - **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data.
 
 <p align="center">
@@ -63,6 +79,7 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.21 or higher
+- Neo4j GraphDataScience Plugin (required for community flows)
 - OpenAI API key (for LLM inference and embedding)
 
 Optional:
@@ -70,7 +87,8 @@ Optional:
 - Anthropic or Groq API key (for alternative LLM providers)
 
 > [!TIP]
-> The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly interface to manage Neo4j instances and databases.
+> The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
+> interface to manage Neo4j instances and databases.
 
 ```bash
 pip install graphiti-core
@@ -85,7 +103,8 @@ poetry add graphiti-core
 ## Quick Start
 
 > [!IMPORTANT]
-> Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment. Support for Anthropic and Groq LLM inferences is available, too.
+> Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
+> Support for Anthropic and Groq LLM inferences is available, too.
 
 ```python
 from graphiti_core import Graphiti
@@ -119,25 +138,25 @@ for i, episode in enumerate(episodes):
 results = await graphiti.search('Who was the California Attorney General?')
 [
     EntityEdge(
-    │   uuid='3133258f738e487383f07b04e15d4ac0',
-    │   source_node_uuid='2a85789b318d4e418050506879906e62',
-    │   target_node_uuid='baf7781f445945989d6e4f927f881556',
-    │   created_at=datetime.datetime(2024, 8, 26, 13, 13, 24, 861097),
-    │   name='HELD_POSITION',
-        # the fact reflects the updated state that Harris is
-        # no longer the AG of California
-    │   fact='Kamala Harris was the Attorney General of California',
-    │   fact_embedding=[
-    │   │   -0.009955154731869698,
-    │       ...
-    │   │   0.00784289836883545
-    │   ],
-    │   episodes=['b43e98ad0a904088a76c67985caecc22'],
-    │   expired_at=datetime.datetime(2024, 8, 26, 20, 18, 1, 53812),
-        # These dates represent the date this edge was true.
-    │   valid_at=datetime.datetime(2011, 1, 3, 0, 0, tzinfo=<UTC>),
-    │   invalid_at=datetime.datetime(2017, 1, 3, 0, 0, tzinfo=<UTC>)
-    )
+│   uuid = '3133258f738e487383f07b04e15d4ac0',
+│   source_node_uuid = '2a85789b318d4e418050506879906e62',
+│   target_node_uuid = 'baf7781f445945989d6e4f927f881556',
+│   created_at = datetime.datetime(2024, 8, 26, 13, 13, 24, 861097),
+│   name = 'HELD_POSITION',
+# the fact reflects the updated state that Harris is
+# no longer the AG of California
+│   fact = 'Kamala Harris was the Attorney General of California',
+│   fact_embedding = [
+│   │   -0.009955154731869698,
+│       ...
+│   │   0.00784289836883545
+│],
+│   episodes = ['b43e98ad0a904088a76c67985caecc22'],
+│   expired_at = datetime.datetime(2024, 8, 26, 20, 18, 1, 53812),
+# These dates represent the date this edge was true.
+│   valid_at = datetime.datetime(2011, 1, 3, 0, 0, tzinfo= < UTC >),
+│   invalid_at = datetime.datetime(2017, 1, 3, 0, 0, tzinfo= < UTC >)
+)
 ]
 
 # Rerank search results based on graph distance
@@ -170,14 +189,16 @@ Graphiti is under active development. We aim to maintain API stability while wor
 - [ ] Achieving good performance with different LLM and embedding models
 - [ ] Creating a dedicated embedder interface
 - [ ] Supporting custom graph schemas:
-  - Allow developers to provide their own defined node and edge classes when ingesting episodes
-  - Enable more flexible knowledge representation tailored to specific use cases
+    - Allow developers to provide their own defined node and edge classes when ingesting episodes
+    - Enable more flexible knowledge representation tailored to specific use cases
 - [ ] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
 ## Contributing
 
-We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer to [CONTRIBUTING](CONTRIBUTING.md).
+We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
+answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
+to [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Support
 

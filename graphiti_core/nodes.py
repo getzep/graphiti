@@ -158,8 +158,6 @@ class EpisodicNode(Node):
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         if len(episodes) == 0:
             raise NodeNotFoundError(uuid)
 
@@ -185,7 +183,27 @@ class EpisodicNode(Node):
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
+        return episodes
+
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic) WHERE e.group_id IN $group_ids
+            RETURN DISTINCT
+            e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.source_description AS source_description,
+            e.source AS source
+        """,
+            group_ids=group_ids,
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
 
         return episodes
 
@@ -240,8 +258,6 @@ class EntityNode(Node):
 
         nodes = [get_entity_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         return nodes[0]
 
     @classmethod
@@ -262,7 +278,25 @@ class EntityNode(Node):
 
         nodes = [get_entity_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
+        return nodes
+
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity) WHERE n.group_id IN $group_ids
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            group_ids=group_ids,
+        )
+
+        nodes = [get_entity_node_from_record(record) for record in records]
 
         return nodes
 
@@ -317,8 +351,6 @@ class CommunityNode(Node):
 
         nodes = [get_community_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         return nodes[0]
 
     @classmethod
@@ -337,11 +369,29 @@ class CommunityNode(Node):
             uuids=uuids,
         )
 
-        nodes = [get_community_node_from_record(record) for record in records]
+        communities = [get_community_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
+        return communities
 
-        return nodes
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community) WHERE n.group_id IN $group_ids
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+            group_ids=group_ids,
+        )
+
+        communities = [get_community_node_from_record(record) for record in records]
+
+        return communities
 
 
 # Node helpers

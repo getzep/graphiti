@@ -104,7 +104,6 @@ class EpisodicEdge(Edge):
 
         edges = [get_episodic_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -127,7 +126,29 @@ class EpisodicEdge(Edge):
 
         edges = [get_episodic_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
+        if len(edges) == 0:
+            raise EdgeNotFoundError(uuids[0])
+        return edges
+
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
+        WHERE e.group_id IN $group_ids
+        RETURN
+            e.uuid As uuid,
+            e.group_id AS group_id,
+            n.uuid AS source_node_uuid, 
+            m.uuid AS target_node_uuid, 
+            e.created_at AS created_at
+        """,
+            group_ids=group_ids,
+        )
+
+        edges = [get_episodic_edge_from_record(record) for record in records]
+        uuids = [edge.uuid for edge in edges]
+
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -215,7 +236,6 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -245,7 +265,36 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
+        if len(edges) == 0:
+            raise EdgeNotFoundError(uuids[0])
+        return edges
+
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+        WHERE e.group_id IN $group_ids
+        RETURN
+            e.uuid AS uuid,
+            n.uuid AS source_node_uuid,
+            m.uuid AS target_node_uuid,
+            e.created_at AS created_at,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.fact AS fact,
+            e.fact_embedding AS fact_embedding,
+            e.episodes AS episodes,
+            e.expired_at AS expired_at,
+            e.valid_at AS valid_at,
+            e.invalid_at AS invalid_at
+        """,
+            group_ids=group_ids,
+        )
+
+        edges = [get_entity_edge_from_record(record) for record in records]
+        uuids = [edge.uuid for edge in edges]
+
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -288,8 +337,6 @@ class CommunityEdge(Edge):
 
         edges = [get_community_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
-
         return edges[0]
 
     @classmethod
@@ -310,7 +357,25 @@ class CommunityEdge(Edge):
 
         edges = [get_community_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
+        return edges
+
+    @classmethod
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
+        WHERE e.group_id IN $group_ids
+        RETURN
+            e.uuid As uuid,
+            e.group_id AS group_id,
+            n.uuid AS source_node_uuid, 
+            m.uuid AS target_node_uuid, 
+            e.created_at AS created_at
+        """,
+            group_ids=group_ids,
+        )
+
+        edges = [get_community_edge_from_record(record) for record in records]
 
         return edges
 
