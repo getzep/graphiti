@@ -158,8 +158,6 @@ class EpisodicNode(Node):
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         if len(episodes) == 0:
             raise NodeNotFoundError(uuid)
 
@@ -185,15 +183,13 @@ class EpisodicNode(Node):
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
-
         return episodes
 
     @classmethod
     async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
         records, _, _ = await driver.execute_query(
             """
-        MATCH (e:Episodic) WHERE e.group_id IN group_ids
+        MATCH (e:Episodic) WHERE e.group_id IN $group_ids
             RETURN DISTINCT
             e.content AS content,
             e.created_at AS created_at,
@@ -208,9 +204,6 @@ class EpisodicNode(Node):
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
-        uuids = [episode.uuid for episode in episodes]
-
-        logger.info(f'Found Nodes: {uuids}')
 
         return episodes
 
@@ -265,8 +258,6 @@ class EntityNode(Node):
 
         nodes = [get_entity_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         return nodes[0]
 
     @classmethod
@@ -287,15 +278,13 @@ class EntityNode(Node):
 
         nodes = [get_entity_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
-
         return nodes
 
     @classmethod
     async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
         records, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity) WHERE n.group_id IN group_ids
+        MATCH (n:Entity) WHERE n.group_id IN $group_ids
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -308,9 +297,6 @@ class EntityNode(Node):
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
-        uuids = [node.uuid for node in nodes]
-
-        logger.info(f'Found Nodes: {uuids}')
 
         return nodes
 
@@ -365,8 +351,6 @@ class CommunityNode(Node):
 
         nodes = [get_community_node_from_record(record) for record in records]
 
-        logger.info(f'Found Node: {uuid}')
-
         return nodes[0]
 
     @classmethod
@@ -387,8 +371,6 @@ class CommunityNode(Node):
 
         communities = [get_community_node_from_record(record) for record in records]
 
-        logger.info(f'Found Nodes: {uuids}')
-
         return communities
 
     @classmethod
@@ -408,9 +390,6 @@ class CommunityNode(Node):
         )
 
         communities = [get_community_node_from_record(record) for record in records]
-        uuids = [community.uuid for community in communities]
-
-        logger.info(f'Found Nodes: {uuids}')
 
         return communities
 

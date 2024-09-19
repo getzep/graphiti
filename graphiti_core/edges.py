@@ -104,7 +104,6 @@ class EpisodicEdge(Edge):
 
         edges = [get_episodic_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -127,7 +126,6 @@ class EpisodicEdge(Edge):
 
         edges = [get_episodic_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -151,7 +149,6 @@ class EpisodicEdge(Edge):
         edges = [get_episodic_edge_from_record(record) for record in records]
         uuids = [edge.uuid for edge in edges]
 
-        logger.info(f'Found Edges: {uuids}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -239,7 +236,6 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -269,7 +265,6 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -300,7 +295,6 @@ class EntityEdge(Edge):
         edges = [get_entity_edge_from_record(record) for record in records]
         uuids = [edge.uuid for edge in edges]
 
-        logger.info(f'Found Edges: {uuids}')
         if len(edges) == 0:
             raise EdgeNotFoundError(uuids[0])
         return edges
@@ -343,8 +337,6 @@ class CommunityEdge(Edge):
 
         edges = [get_community_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edge: {uuid}')
-
         return edges[0]
 
     @classmethod
@@ -365,8 +357,6 @@ class CommunityEdge(Edge):
 
         edges = [get_community_edge_from_record(record) for record in records]
 
-        logger.info(f'Found Edges: {uuids}')
-
         return edges
 
     @classmethod
@@ -386,9 +376,6 @@ class CommunityEdge(Edge):
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
-        uuids = [edge.uuid for edge in edges]
-
-        logger.info(f'Found Edges: {uuids}')
 
         return edges
 
