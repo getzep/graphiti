@@ -77,7 +77,14 @@ load_dotenv()
 
 
 class Graphiti:
-    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        llm_client: LLMClient | None = None,
+        store_raw_episode_content: bool = True,
+    ):
         """
         Initialize a Graphiti instance.
 
@@ -116,6 +123,7 @@ class Graphiti:
         """
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         self.database = 'neo4j'
+        self.store_raw_episode_content = store_raw_episode_content
         if llm_client:
             self.llm_client = llm_client
         else:
@@ -251,6 +259,8 @@ class Graphiti:
             An id for the graph partition the episode is a part of.
         uuid : str | None
             Optional uuid of the episode.
+        update_communities : bool
+            Optional. Whether to update communities with new node information
 
         Returns
         -------
@@ -276,7 +286,6 @@ class Graphiti:
         try:
             start = time()
 
-            nodes: list[EntityNode] = []
             entity_edges: list[EntityEdge] = []
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
@@ -295,6 +304,8 @@ class Graphiti:
                 valid_at=reference_time,
             )
             episode.uuid = uuid if uuid is not None else episode.uuid
+            if not self.store_raw_episode_content:
+                episode.content = ''
 
             # Extract entities as nodes
 
@@ -323,7 +334,7 @@ class Graphiti:
                 ),
             )
             logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
-            nodes.extend(mentioned_nodes)
+            nodes = mentioned_nodes
 
             extracted_edges_with_resolved_pointers = resolve_edge_pointers(
                 extracted_edges, uuid_map
