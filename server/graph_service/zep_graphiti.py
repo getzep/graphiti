@@ -46,6 +46,8 @@ class ZepGraphiti(Graphiti):
                 await episode.delete(self.driver)
         except EdgeNotFoundError as e:
             raise HTTPException(status_code=404, detail=e.message) from e
+        except NodeNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.message) from e
 
     async def delete_entity_edge(self, uuid: str):
         try:
