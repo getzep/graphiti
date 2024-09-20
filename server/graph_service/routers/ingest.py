@@ -90,6 +90,12 @@ async def delete_entity_edge(uuid: str, graphiti: ZepGraphitiDep):
     return Result(message='Entity Edge deleted', success=True)
 
 
+@router.delete('/group/{group_id}', status_code=status.HTTP_200_OK)
+async def delete_group(group_id: str, graphiti: ZepGraphitiDep):
+    await graphiti.delete_group(group_id)
+    return Result(message='Group deleted', success=True)
+
+
 @router.delete('/episode/{uuid}', status_code=status.HTTP_200_OK)
 async def delete_episode(uuid: str, graphiti: ZepGraphitiDep):
     await graphiti.delete_episodic_node(uuid)
