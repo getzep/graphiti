@@ -17,6 +17,12 @@ We're excited you're interested in contributing to Graphiti! This document outli
      ```
      make install
      ```
+   - For running integration tests, tell Graphiti how to connect to your Neo4j database through environment variables
+     ```
+     export NEO4J_URI=neo4j://...
+     export NEO4J_USER=...
+     export NEO4J_PASSWORD=...
+     ```
 
 ## Making Changes
 
