@@ -272,9 +272,12 @@ async def dedupe_node_list(
     unique_nodes = []
     uuid_map: dict[str, str] = {}
     for node_data in nodes_data:
-        node = node_map[node_data['uuids'][0]]
-        node.summary = node_data['summary']
-        unique_nodes.append(node)
+        node_instance: EntityNode | None = node_map.get(node_data['uuids'][0])
+        if node_instance is None:
+            logger.warning(f'Node {node_data["uuids"][0]} not found in node map')
+            continue
+        node_instance.summary = node_data['summary']
+        unique_nodes.append(node_instance)
 
         for uuid in node_data['uuids'][1:]:
             uuid_value = node_map[node_data['uuids'][0]].uuid
