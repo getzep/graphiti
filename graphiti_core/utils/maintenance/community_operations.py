@@ -95,7 +95,7 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
         for uuid, neighbors in projection.items():
             curr_community = community_map[uuid]
 
-            community_candidates = defaultdict(int)
+            community_candidates: dict[str, int] = defaultdict(int)
             for neighbor in neighbors:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
 
