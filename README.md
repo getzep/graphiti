@@ -2,7 +2,6 @@
 
 <img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
 
-
 ## Temporal Knowledge Graphs for Agentic Applications
 
 <br />
@@ -80,7 +79,6 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.21 or higher
-- Neo4j GraphDataScience Plugin (required for community flows)
 - OpenAI API key (for LLM inference and embedding)
 
 Optional:
