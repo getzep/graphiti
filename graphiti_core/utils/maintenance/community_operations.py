@@ -35,15 +35,6 @@ async def build_community_projection(driver: AsyncDriver) -> str:
     return records[0]['graph']
 
 
-async def destroy_projection(driver: AsyncDriver, projection_name: str):
-    await driver.execute_query(
-        """
-    CALL gds.graph.drop($projection_name)
-    """,
-        projection_name=projection_name,
-    )
-
-
 async def get_community_clusters(driver: AsyncDriver) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -76,9 +67,11 @@ async def get_community_clusters(driver: AsyncDriver) -> list[list[EntityNode]]:
 
         cluster_uuids = label_propagation(projection)
 
-        community_clusters = list(
-            await asyncio.gather(
-                *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
+        community_clusters.extend(
+            list(
+                await asyncio.gather(
+                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
+                )
             )
         )
 
@@ -86,6 +79,12 @@ async def get_community_clusters(driver: AsyncDriver) -> list[list[EntityNode]]:
 
 
 def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
+    # Implement the label propagation community detection algorithm.
+    # 1. Start with each node being assigned its own community
+    # 2. Each node will take on the community of the plurality of its neighbors
+    # 3. Ties are broken by going to the largest community
+    # 4. Continue until no communities change during propagation
+
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
     while True:
@@ -95,7 +94,7 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
         for uuid, neighbors in projection.items():
             curr_community = community_map[uuid]
 
-            community_candidates: dict[str, int] = defaultdict(int)
+            community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
 
