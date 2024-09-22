@@ -37,12 +37,10 @@ DEFAULT_MAX_TOKENS = 2048
 class GroqClient(LLMClient):
     def __init__(self, config: LLMConfig | None = None, cache: bool = False):
         if config is None:
-            config = LLMConfig()
+            config = LLMConfig(max_tokens=DEFAULT_MAX_TOKENS)
+        elif config.max_tokens is None:
+            config.max_tokens = DEFAULT_MAX_TOKENS
         super().__init__(config, cache)
-
-        # Override the default max tokens for Groq
-        if self.max_tokens is None:
-            self.max_tokens = DEFAULT_MAX_TOKENS
 
         self.client = AsyncGroq(api_key=config.api_key)
 

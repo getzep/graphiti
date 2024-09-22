@@ -36,12 +36,10 @@ DEFAULT_MAX_TOKENS = 8192
 class AnthropicClient(LLMClient):
     def __init__(self, config: LLMConfig | None = None, cache: bool = False):
         if config is None:
-            config = LLMConfig()
+            config = LLMConfig(max_tokens=DEFAULT_MAX_TOKENS)
+        elif config.max_tokens is None:
+            config.max_tokens = DEFAULT_MAX_TOKENS
         super().__init__(config, cache)
-
-        # Override the default max tokens for Anthropic
-        if self.max_tokens is None:
-            self.max_tokens = DEFAULT_MAX_TOKENS
 
         self.client = AsyncAnthropic(
             api_key=config.api_key,
