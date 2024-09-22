@@ -41,7 +41,8 @@ class GroqClient(LLMClient):
         super().__init__(config, cache)
 
         # Override the default max tokens for Groq
-        self.max_tokens = DEFAULT_MAX_TOKENS
+        if self.max_tokens is None:
+            self.max_tokens = DEFAULT_MAX_TOKENS
 
         self.client = AsyncGroq(api_key=config.api_key)
 
