@@ -13,6 +13,8 @@ async def lifespan(_: FastAPI):
     settings = get_settings()
     await initialize_graphiti(settings)
     yield
+    # Shutdown
+    # No need to close Graphiti here, as it's handled per-request
 
 
 app = FastAPI(lifespan=lifespan)
