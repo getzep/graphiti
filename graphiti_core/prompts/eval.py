@@ -1,0 +1,84 @@
+"""
+Copyright 2024, Zep Software, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import json
+from typing import Any, Protocol, TypedDict
+
+from .models import Message, PromptFunction, PromptVersion
+
+
+class Prompt(Protocol):
+    qa_prompt: PromptVersion
+    eval_prompt: PromptVersion
+
+
+class Versions(TypedDict):
+    qa_prompt: PromptFunction
+    eval_prompt: PromptFunction
+
+
+def qa_prompt(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are Alice and should respond to all questions from the first person perspective of Alice"""
+
+    user_prompt = f"""
+    Your task is to answer the question in the way that you think Alice would answer the question.
+    You are given the following facts to help you determine the answer to your question.
+    <FACTS>
+    {json.dumps(context['facts'])}
+    </FACTS>
+    <QUESTION>
+    {context['query']}
+    </QUESTION>
+    respond with a JSON object in the following format:
+    {{
+        "ANSWER": "how Alice would answer the question"
+    }}
+    """
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+def eval_prompt(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are a judge that determines if answers to questions match a gold standard answer"""
+
+    user_prompt = f"""
+    Given the QUESTION and the gold standard ANSWER determine if the RESPONSE to the question is correct or incorrect
+    <QUESTION>
+    {context['query']}
+    </QUESTION>
+    <ANSWER>
+    {context['answer']}
+    </ANSWER>
+    <RESPONSE>
+    {context['response']}
+    </RESPONSE>
+    
+    respond with a JSON object in the following format:
+    {{
+        "is_correct": "boolean if the answer is correct or incorrect"
+    }}
+    """
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+versions: Versions = {
+    'qa_prompt': qa_prompt, 'eval_prompt': eval_prompt
+}
