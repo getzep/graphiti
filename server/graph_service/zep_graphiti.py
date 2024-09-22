@@ -33,6 +33,22 @@ class ZepGraphiti(Graphiti):
         except EdgeNotFoundError as e:
             raise HTTPException(status_code=404, detail=e.message) from e
 
+    async def delete_group(self, group_id: str):
+        try:
+            edges = await EntityEdge.get_by_group_ids(self.driver, [group_id])
+            nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
+            episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
+            for edge in edges:
+                await edge.delete(self.driver)
+            for node in nodes:
+                await node.delete(self.driver)
+            for episode in episodes:
+                await episode.delete(self.driver)
+        except EdgeNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.message) from e
+        except NodeNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.message) from e
+
     async def delete_entity_edge(self, uuid: str):
         try:
             edge = await EntityEdge.get_by_uuid(self.driver, uuid)
