@@ -30,6 +30,7 @@ from .errors import RateLimitError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'claude-3-5-sonnet-20240620'
+DEFAULT_MAX_TOKENS = 8192
 
 
 class AnthropicClient(LLMClient):
@@ -37,6 +38,10 @@ class AnthropicClient(LLMClient):
         if config is None:
             config = LLMConfig()
         super().__init__(config, cache)
+
+        # Override the default max tokens for Anthropic
+        self.max_tokens = DEFAULT_MAX_TOKENS
+
         self.client = AsyncAnthropic(
             api_key=config.api_key,
             # we'll use tenacity to retry

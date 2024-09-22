@@ -31,6 +31,7 @@ from .errors import RateLimitError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'llama-3.1-70b-versatile'
+DEFAULT_MAX_TOKENS = 2048
 
 
 class GroqClient(LLMClient):
@@ -38,6 +39,10 @@ class GroqClient(LLMClient):
         if config is None:
             config = LLMConfig()
         super().__init__(config, cache)
+
+        # Override the default max tokens for Groq
+        self.max_tokens = DEFAULT_MAX_TOKENS
+
         self.client = AsyncGroq(api_key=config.api_key)
 
     def get_embedder(self) -> typing.Any:
