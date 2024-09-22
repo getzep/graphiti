@@ -11,6 +11,9 @@ from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_fr
 from graphiti_core.prompts import prompt_library
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
+MAX_COMMUNITY_BUILD_CONCURRENCY = 10
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,10 +135,14 @@ async def build_communities(
     projection = await build_community_projection(driver)
     community_clusters = await get_community_clusters(driver, projection)
 
+    semaphore = asyncio.Semaphore(MAX_COMMUNITY_BUILD_CONCURRENCY)
+
+    async def limited_build_community(cluster):
+        async with semaphore:
+            return await build_community(llm_client, cluster)
+
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
-        await asyncio.gather(
-            *[build_community(llm_client, cluster) for cluster in community_clusters]
-        )
+        await asyncio.gather(*[limited_build_community(cluster) for cluster in community_clusters])
     )
 
     community_nodes: list[CommunityNode] = []
