@@ -47,6 +47,7 @@ def parse_msc_messages() -> dict[str, list[ParsedMscMessage]]:
                         ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
                                          actual_timestamp=datetime.now(), group_id=str(i))
                     )
+                    print(speakers[speaker_idx] + ': ' + content)
 
             dialog = conversation['dialog']
             speaker_idx = 0
@@ -58,6 +59,7 @@ def parse_msc_messages() -> dict[str, list[ParsedMscMessage]]:
                     ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
                                      actual_timestamp=datetime.now(), group_id=str(i))
                 )
+                print(speakers[speaker_idx] + ': ' + content)
 
             message_map[str(i)] = messages
 
@@ -75,3 +77,7 @@ def conversation_q_and_a() -> dict[str, tuple[str, str]]:
 
             qa_map[str(i)] = query, answer
         return qa_map
+
+
+print(parse_msc_messages())
+print(conversation_q_and_a())
