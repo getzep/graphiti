@@ -579,7 +579,7 @@ class Graphiti:
         center_node_uuid: str | None = None,
         group_ids: list[str | None] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
-    ):
+    ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
 
