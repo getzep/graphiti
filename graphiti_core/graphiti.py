@@ -158,8 +158,8 @@ class Graphiti:
                 # Use graphiti...
             finally:
                 graphiti.close()
-        self.driver.close()
         """
+        self.driver.close()
 
     async def build_indices_and_constraints(self):
         """
