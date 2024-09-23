@@ -1342,17 +1342,17 @@ tiktoken = ">=0.7,<1"
 
 [[package]]
 name = "langgraph"
-version = "0.2.19"
+version = "0.2.23"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = "<4.0,>=3.9.0"
 files = [
-    {file = "langgraph-0.2.19-py3-none-any.whl", hash = "sha256:f341de2d13a6b6256ddce23454e50273164344f13909e231c50ad2c0d0dbef89"},
-    {file = "langgraph-0.2.19.tar.gz", hash = "sha256:7d3f41cd61e4dcf248919fa3f66d0033bc70c5017148f7657c25c47f0daf8450"},
+    {file = "langgraph-0.2.23-py3-none-any.whl", hash = "sha256:fc8e2f2e03eef446bc4a8458cce04a77ad41f4bd4b7f0f514a5cdd436d11454b"},
+    {file = "langgraph-0.2.23.tar.gz", hash = "sha256:9f3e486994621c403f0d659a03b15f86ec77b4dfca6fe6ad69686ba60a6b5520"},
 ]
 
 [package.dependencies]
-langchain-core = ">=0.2.38,<0.4"
+langchain-core = ">=0.2.39,<0.4"
 langgraph-checkpoint = ">=1.0.2,<2.0.0"
 
 [[package]]
