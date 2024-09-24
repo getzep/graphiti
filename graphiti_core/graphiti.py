@@ -233,7 +233,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str | None = None,
+        group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
     ):
@@ -289,7 +289,6 @@ class Graphiti:
             entity_edges: list[EntityEdge] = []
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
-            group_id = '' if group_id is None else group_id
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=3, group_ids=[group_id]
@@ -447,7 +446,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None = None):
+    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str = ''):
         """
         Process multiple episodes in bulk and update the graph.
 

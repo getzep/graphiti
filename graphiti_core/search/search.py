@@ -154,7 +154,6 @@ async def edge_search(
 
         reranked_node_uuids = await node_distance_reranker(driver, source_uuids, center_node_uuid)
 
-        reranked_uuids: list[str] = []
         for node_uuid in reranked_node_uuids:
             reranked_uuids.extend(source_to_edge_uuid_map[node_uuid])
 
