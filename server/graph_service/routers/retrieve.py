@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post('/search', status_code=status.HTTP_200_OK)
 async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
     relevant_edges = await graphiti.search(
-        group_ids=[query.group_id],
+        group_ids=query.group_ids,
         query=query.query,
         num_results=query.max_facts,
     )

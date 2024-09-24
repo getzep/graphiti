@@ -129,7 +129,7 @@ class Graphiti:
         else:
             self.llm_client = OpenAIClient()
 
-    def close(self):
+    async def close(self):
         """
         Close the connection to the Neo4j database.
 
@@ -159,7 +159,7 @@ class Graphiti:
             finally:
                 graphiti.close()
         """
-        self.driver.close()
+        await self.driver.close()
 
     async def build_indices_and_constraints(self):
         """
