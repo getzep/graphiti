@@ -61,14 +61,14 @@ async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 
-    qa_map = conversation_q_and_a()
+    qa = conversation_q_and_a()[0:5]
 
     fields = ['Group id', 'Question', 'Answer', 'Response', 'Score', 'Search Duration (ms)']
     msc_eval_map: list[dict] = []
 
-    for group_id, (query, answer) in qa_map.items():
+    for group_id, (query, answer) in enumerate(qa):
         search_start = time()
-        results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[group_id])
+        results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[str(group_id)])
         search_end = time()
         search_duration = (search_end - search_start) * 1000
 

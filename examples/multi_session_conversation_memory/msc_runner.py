@@ -61,7 +61,7 @@ async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[Par
     csv_items: list[dict] = []
 
     for i, message in enumerate(messages):
-        word_count = len(message.split(" "))
+        word_count = len(message.content.split(" "))
         start = time()
         await graphiti.add_episode(
             name=f'Message {group_id + "-" + str(i)}',
@@ -75,7 +75,7 @@ async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[Par
         duration = (end - start) * 1000
 
         csv_items.append({'Group id': group_id, 'Episode #': i, 'Word Count': word_count,
-                          'Ingestion Duration (ms)': duration, 'Ingestion Rate (word/ms)': word_count / duration})
+                          'Ingestion Duration (ms)': duration, 'Ingestion Rate (words/ms)': word_count / duration})
 
     with open('../data/msc_ingestion.csv', 'a', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=fields)
@@ -86,10 +86,10 @@ async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[Par
 async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    message_map = parse_msc_messages()
+    msc_messages = parse_msc_messages()[5:10]
 
     await asyncio.gather(
-        *[add_conversation(graphiti, group_id, messages) for group_id, messages in message_map.items()])
+        *[add_conversation(graphiti, str(group_id), messages) for group_id, messages in enumerate(msc_messages)])
 
     # build communities
     # await client.build_communities()
