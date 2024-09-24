@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
-    group_id: str | None = Field(description='partition of the graph')
+    group_id: str = Field(description='partition of the graph')
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime
@@ -131,7 +131,7 @@ class EpisodicEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
@@ -270,7 +270,7 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
@@ -360,7 +360,7 @@ class CommunityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)

@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from collections import defaultdict
 from time import time
 
 from neo4j import AsyncDriver
@@ -56,7 +57,7 @@ async def search(
     driver: AsyncDriver,
     embedder,
     query: str,
-    group_ids: list[str | None] | None,
+    group_ids: list[str] | None,
     config: SearchConfig,
     center_node_uuid: str | None = None,
 ) -> SearchResults:
@@ -103,7 +104,7 @@ async def edge_search(
     driver: AsyncDriver,
     embedder,
     query: str,
-    group_ids: list[str | None] | None,
+    group_ids: list[str] | None,
     config: EdgeSearchConfig,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
@@ -140,14 +141,21 @@ async def edge_search(
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
 
-        source_to_edge_uuid_map = {
-            edge.source_node_uuid: edge.uuid for result in search_results for edge in result
-        }
-        source_uuids = [[edge.source_node_uuid for edge in result] for result in search_results]
+        # use rrf as a preliminary sort
+        sorted_result_uuids = rrf([[edge.uuid for edge in result] for result in search_results])
+        sorted_results = [edge_uuid_map[uuid] for uuid in sorted_result_uuids]
+
+        # node distance reranking
+        source_to_edge_uuid_map = defaultdict(list)
+        for edge in sorted_results:
+            source_to_edge_uuid_map[edge.source_node_uuid].append(edge.uuid)
+
+        source_uuids = [edge.source_node_uuid for edge in sorted_results]
 
         reranked_node_uuids = await node_distance_reranker(driver, source_uuids, center_node_uuid)
 
-        reranked_uuids = [source_to_edge_uuid_map[node_uuid] for node_uuid in reranked_node_uuids]
+        for node_uuid in reranked_node_uuids:
+            reranked_uuids.extend(source_to_edge_uuid_map[node_uuid])
 
     reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
@@ -161,7 +169,7 @@ async def node_search(
     driver: AsyncDriver,
     embedder,
     query: str,
-    group_ids: list[str | None] | None,
+    group_ids: list[str] | None,
     config: NodeSearchConfig,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
@@ -198,7 +206,9 @@ async def node_search(
     elif config.reranker == NodeReranker.node_distance:
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
-        reranked_uuids = await node_distance_reranker(driver, search_result_uuids, center_node_uuid)
+        reranked_uuids = await node_distance_reranker(
+            driver, rrf(search_result_uuids), center_node_uuid
+        )
 
     reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
 
@@ -209,7 +219,7 @@ async def community_search(
     driver: AsyncDriver,
     embedder,
     query: str,
-    group_ids: list[str | None] | None,
+    group_ids: list[str] | None,
     config: CommunitySearchConfig,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
