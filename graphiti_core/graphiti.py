@@ -224,8 +224,6 @@ class Graphiti:
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module.
         """
-        group_ids = [''] if group_ids is None else group_ids
-
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
@@ -614,7 +612,6 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
-        group_ids = [''] if group_ids is None else group_ids
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
@@ -687,8 +684,6 @@ class Graphiti:
         to each individual search method before results are combined and deduplicated.
         If not specified, a default limit (defined in the search functions) will be used.
         """
-        group_ids = [''] if group_ids is None else group_ids
-
         embedder = self.llm_client.get_embedder()
         search_config = (
             NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE

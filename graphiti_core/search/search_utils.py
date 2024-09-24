@@ -91,13 +91,12 @@ async def edge_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    group_ids = [''] if group_ids is None else group_ids
-
     cypher_query = Query("""
               CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
               YIELD relationship AS rel, score
               MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-              WHERE n.group_id IN $group_ids
+              CASE 
+              WHERE $group_ids IS NULL OR n.group_id IN $group_ids
               RETURN 
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -203,13 +202,11 @@ async def edge_similarity_search(
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
-    group_ids = [''] if group_ids is None else group_ids
-
     query = Query("""
                 CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS rel, score
                 MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                WHERE r.group_id IN $group_ids
+                WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -231,7 +228,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE r.group_id IN $group_ids
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -252,7 +249,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                    WHERE r.group_id IN $group_ids
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -273,7 +270,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE r.group_id IN $group_ids
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -311,14 +308,12 @@ async def node_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    group_ids = [''] if group_ids is None else group_ids
-
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) 
     YIELD node AS n, score
-    WHERE n.group_id IN $group_ids
+    WHERE $group_ids IS NULL OR n.group_id IN $group_ids
     RETURN
         n.uuid AS uuid,
         n.group_id AS group_id, 
@@ -344,14 +339,13 @@ async def node_similarity_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
-    group_ids = [''] if group_ids is None else group_ids
-
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.vector.queryNodes("name_embedding", $limit, $search_vector)
                 YIELD node AS n, score
-                MATCH (n WHERE n.group_id IN $group_ids)
+                MATCH (n:Entity)
+                WHERE $group_ids IS NULL OR n.group_id IN $group_ids
                 RETURN
                     n.uuid As uuid,
                     n.group_id AS group_id,
@@ -376,15 +370,14 @@ async def community_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
-    group_ids = [''] if group_ids is None else group_ids
-
     # BM25 search to get top communities
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("community_name", $query) 
     YIELD node AS comm, score
-    MATCH (comm WHERE comm.group_id in $group_ids)
+    MATCH (comm:Community)
+    WHERE $group_ids IS NULL OR comm.group_id in $group_ids
     RETURN
         comm.uuid AS uuid,
         comm.group_id AS group_id, 
@@ -410,14 +403,13 @@ async def community_similarity_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
-    group_ids = [''] if group_ids is None else group_ids
-
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.vector.queryNodes("community_name_embedding", $limit, $search_vector)
                 YIELD node AS comm, score
-                MATCH (comm WHERE comm.group_id IN $group_ids)
+                MATCH (comm:Community)
+                WHERE $group_ids IS NULL OR comm.group_id IN $group_ids
                 RETURN
                     comm.uuid As uuid,
                     comm.group_id AS group_id,
@@ -482,8 +474,6 @@ async def hybrid_node_search(
     """
 
     start = time()
-    group_ids = [''] if group_ids is None else group_ids
-
     results: list[list[EntityNode]] = list(
         await asyncio.gather(
             *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
