@@ -197,7 +197,7 @@ class Graphiti:
         self,
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -233,7 +233,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str | None = None,
+        group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
     ):
@@ -446,7 +446,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str | None = None):
+    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str = ''):
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -577,7 +577,7 @@ class Graphiti:
         self,
         query: str,
         center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityEdge]:
         """
@@ -633,7 +633,7 @@ class Graphiti:
         self,
         query: str,
         config: SearchConfig,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
     ) -> SearchResults:
         return await search(
@@ -644,7 +644,7 @@ class Graphiti:
         self,
         query: str,
         center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """

@@ -70,7 +70,7 @@ class EpisodeType(Enum):
 class Node(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(description='name of the node')
-    group_id: str | None = Field(description='partition of the graph')
+    group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now())
 
@@ -186,7 +186,7 @@ class EpisodicNode(Node):
         return episodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.group_id IN $group_ids
@@ -281,7 +281,7 @@ class EntityNode(Node):
         return nodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
@@ -374,7 +374,7 @@ class CommunityNode(Node):
         return communities
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community) WHERE n.group_id IN $group_ids

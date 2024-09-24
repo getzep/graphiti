@@ -29,7 +29,7 @@ from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4o-2024-08-06'
+DEFAULT_MODEL = 'gpt-4o-mini'
 
 
 class OpenAIClient(LLMClient):

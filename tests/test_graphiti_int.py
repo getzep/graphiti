@@ -76,16 +76,18 @@ async def test_graphiti_init():
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
     await graphiti.build_communities()
 
-    edges = await graphiti.search('tania tetlow', group_ids=['1'])
+    edges = await graphiti.search(
+        'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
+    )
 
     logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
 
-    edges = await graphiti.search('issues with higher ed', group_ids=['1'])
+    edges = await graphiti.search('issues with higher ed', group_ids=None)
 
     logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
 
     results = await graphiti._search(
-        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=['1']
+        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
     )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],

@@ -87,7 +87,7 @@ async def edge_fulltext_search(
     query: str,
     source_node_uuid: str | None,
     target_node_uuid: str | None,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
@@ -95,10 +95,7 @@ async def edge_fulltext_search(
               CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
               YIELD relationship AS rel, score
               MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-              WHERE CASE
-                WHEN $group_ids IS NULL THEN n.group_id IS NULL
-                ELSE n.group_id IN $group_ids
-              END
+              WHERE $group_ids IS NULL OR n.group_id IN $group_ids
               RETURN 
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -120,10 +117,7 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-                  WHERE CASE
-                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                    ELSE r.group_id IN $group_ids
-                  END
+                  WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -144,10 +138,7 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})              
-                  WHERE CASE
-                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                    ELSE r.group_id IN $group_ids
-                  END
+                  WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -168,10 +159,7 @@ async def edge_fulltext_search(
                   CALL db.index.fulltext.queryRelationships("name_and_fact", $query) 
                   YIELD relationship AS rel, score
                   MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)              
-                  WHERE CASE
-                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                    ELSE r.group_id IN $group_ids
-                  END
+                  WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                   RETURN 
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -209,7 +197,7 @@ async def edge_similarity_search(
     search_vector: list[float],
     source_node_uuid: str | None,
     target_node_uuid: str | None,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
@@ -217,10 +205,7 @@ async def edge_similarity_search(
                 CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                 YIELD relationship AS rel, score
                 MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                WHERE CASE
-                    WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                    ELSE r.group_id IN $group_ids
-                END
+                WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -242,10 +227,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE CASE
-                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                        ELSE r.group_id IN $group_ids
-                    END
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -266,10 +248,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity {uuid: $target_uuid})
-                    WHERE CASE
-                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                        ELSE r.group_id IN $group_ids
-                    END
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -290,10 +269,7 @@ async def edge_similarity_search(
                     CALL db.index.vector.queryRelationships("fact_embedding", $limit, $search_vector)
                     YIELD relationship AS rel, score
                     MATCH (n:Entity {uuid: $source_uuid})-[r {uuid: rel.uuid}]-(m:Entity)
-                    WHERE CASE
-                        WHEN $group_ids IS NULL THEN r.group_id IS NULL
-                        ELSE r.group_id IN $group_ids
-                    END
+                    WHERE $group_ids IS NULL OR r.group_id IN $group_ids
                     RETURN
                         r.uuid AS uuid,
                         r.group_id AS group_id,
@@ -327,7 +303,7 @@ async def edge_similarity_search(
 async def node_fulltext_search(
     driver: AsyncDriver,
     query: str,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
@@ -336,10 +312,7 @@ async def node_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("name_and_summary", $query) 
     YIELD node AS n, score
-    WHERE CASE
-        WHEN $group_ids IS NULL THEN n.group_id IS NULL
-        ELSE n.group_id IN $group_ids
-    END
+    WHERE $group_ids IS NULL OR n.group_id IN $group_ids
     RETURN
         n.uuid AS uuid,
         n.group_id AS group_id, 
@@ -362,17 +335,16 @@ async def node_fulltext_search(
 async def node_similarity_search(
     driver: AsyncDriver,
     search_vector: list[float],
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
-    group_ids = group_ids if group_ids is not None else [None]
-
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.vector.queryNodes("name_embedding", $limit, $search_vector)
                 YIELD node AS n, score
-                MATCH (n WHERE n.group_id IN $group_ids)
+                MATCH (n:Entity)
+                WHERE $group_ids IS NULL OR n.group_id IN $group_ids
                 RETURN
                     n.uuid As uuid,
                     n.group_id AS group_id,
@@ -394,18 +366,17 @@ async def node_similarity_search(
 async def community_fulltext_search(
     driver: AsyncDriver,
     query: str,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
-    group_ids = group_ids if group_ids is not None else [None]
-
     # BM25 search to get top communities
     fuzzy_query = re.sub(r'[^\w\s]', '', query) + '~'
     records, _, _ = await driver.execute_query(
         """
     CALL db.index.fulltext.queryNodes("community_name", $query) 
     YIELD node AS comm, score
-    MATCH (comm WHERE comm.group_id in $group_ids)
+    MATCH (comm:Community)
+    WHERE $group_ids IS NULL OR comm.group_id in $group_ids
     RETURN
         comm.uuid AS uuid,
         comm.group_id AS group_id, 
@@ -428,17 +399,16 @@ async def community_fulltext_search(
 async def community_similarity_search(
     driver: AsyncDriver,
     search_vector: list[float],
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
-    group_ids = group_ids if group_ids is not None else [None]
-
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
                 CALL db.index.vector.queryNodes("community_name_embedding", $limit, $search_vector)
                 YIELD node AS comm, score
-                MATCH (comm WHERE comm.group_id IN $group_ids)
+                MATCH (comm:Community)
+                WHERE $group_ids IS NULL OR comm.group_id IN $group_ids
                 RETURN
                     comm.uuid As uuid,
                     comm.group_id AS group_id,
@@ -461,7 +431,7 @@ async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
     driver: AsyncDriver,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
@@ -503,7 +473,6 @@ async def hybrid_node_search(
     """
 
     start = time()
-
     results: list[list[EntityNode]] = list(
         await asyncio.gather(
             *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
@@ -625,14 +594,14 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, node_uuids: list[list[str]], center_node_uuid: str
+    driver: AsyncDriver, node_uuids: list[str], center_node_uuid: str
 ) -> list[str]:
-    # use rrf as a preliminary ranker
-    sorted_uuids = rrf(node_uuids)
+    # filter out node_uuid center node node uuid
+    filtered_uuids = list(filter(lambda uuid: uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
-    query = Query("""  
+    query = Query("""
         MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: $node_uuid})
         RETURN length(p) AS score
         """)
@@ -644,21 +613,23 @@ async def node_distance_reranker(
                 node_uuid=uuid,
                 center_uuid=center_node_uuid,
             )
-            for uuid in sorted_uuids
+            for uuid in filtered_uuids
         ]
     )
 
-    for uuid, result in zip(sorted_uuids, path_results):
+    for uuid, result in zip(filtered_uuids, path_results):
         records = result[0]
         record = records[0] if len(records) > 0 else None
         distance: float = record['score'] if record is not None else float('inf')
-        distance = 0 if uuid == center_node_uuid else distance
         scores[uuid] = distance
 
     # rerank on shortest distance
-    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
 
-    return sorted_uuids
+    # add back in filtered center uuids
+    filtered_uuids = [center_node_uuid] + filtered_uuids
+
+    return filtered_uuids
 
 
 async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[str]]) -> list[str]:

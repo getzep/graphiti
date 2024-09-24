@@ -73,7 +73,7 @@ async def extract_edges(
     episode: EpisodicNode,
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
-    group_id: str | None,
+    group_id: str = '',
 ) -> list[EntityEdge]:
     start = time()
 
