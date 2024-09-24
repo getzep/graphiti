@@ -101,7 +101,7 @@ async def retrieve_episodes(
     driver: AsyncDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
-    group_ids: list[str | None] | None = None,
+    group_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -117,6 +117,8 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
+    group_ids = [''] if group_ids is None else group_ids
+
     result = await driver.execute_query(
         """
         MATCH (e:Episodic) WHERE e.valid_at <= $reference_time AND e.group_id in $group_ids

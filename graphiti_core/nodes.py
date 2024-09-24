@@ -186,7 +186,7 @@ class EpisodicNode(Node):
         return episodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.group_id IN $group_ids
@@ -281,7 +281,7 @@ class EntityNode(Node):
         return nodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
@@ -374,7 +374,7 @@ class CommunityNode(Node):
         return communities
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community) WHERE n.group_id IN $group_ids

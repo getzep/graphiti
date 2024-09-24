@@ -197,7 +197,7 @@ class Graphiti:
         self,
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -224,6 +224,8 @@ class Graphiti:
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module.
         """
+        group_ids = [''] if group_ids is None else group_ids
+
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
@@ -289,6 +291,7 @@ class Graphiti:
             entity_edges: list[EntityEdge] = []
             embedder = self.llm_client.get_embedder()
             now = datetime.now()
+            group_id = '' if group_id is None else group_id
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=3, group_ids=[group_id]
@@ -577,7 +580,7 @@ class Graphiti:
         self,
         query: str,
         center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityEdge]:
         """
@@ -611,6 +614,7 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
+        group_ids = [''] if group_ids is None else group_ids
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
@@ -633,7 +637,7 @@ class Graphiti:
         self,
         query: str,
         config: SearchConfig,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
     ) -> SearchResults:
         return await search(
@@ -644,7 +648,7 @@ class Graphiti:
         self,
         query: str,
         center_node_uuid: str | None = None,
-        group_ids: list[str | None] | None = None,
+        group_ids: list[str] | None = None,
         limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """
@@ -683,6 +687,8 @@ class Graphiti:
         to each individual search method before results are combined and deduplicated.
         If not specified, a default limit (defined in the search functions) will be used.
         """
+        group_ids = [''] if group_ids is None else group_ids
+
         embedder = self.llm_client.get_embedder()
         search_config = (
             NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE

@@ -131,7 +131,7 @@ class EpisodicEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
@@ -270,7 +270,7 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
@@ -360,7 +360,7 @@ class CommunityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str | None]):
+    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
