@@ -57,7 +57,7 @@ async def search(
     driver: AsyncDriver,
     embedder,
     query: str,
-    group_ids: list[str],
+    group_ids: list[str] | None,
     config: SearchConfig,
     center_node_uuid: str | None = None,
 ) -> SearchResults:
@@ -156,7 +156,7 @@ async def edge_search(
 
         reranked_uuids: list[str] = []
         for node_uuid in reranked_node_uuids:
-            reranked_uuids += source_to_edge_uuid_map[node_uuid]
+            reranked_uuids.extend(source_to_edge_uuid_map[node_uuid])
 
     reranked_edges = [edge_uuid_map[uuid] for uuid in reranked_uuids]
 
