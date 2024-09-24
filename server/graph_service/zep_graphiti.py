@@ -39,20 +39,20 @@ class ZepGraphiti(Graphiti):
     async def delete_group(self, group_id: str):
         try:
             edges = await EntityEdge.get_by_group_ids(self.driver, [group_id])
-        except Exception as e:
-            logger.warning(f'Error fetching edges for group {group_id}: {str(e)}')
+        except EdgeNotFoundError:
+            logger.warning(f'No edges found for group {group_id}')
             edges = []
 
         try:
             nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
-        except Exception as e:
-            logger.warning(f'Error fetching nodes for group {group_id}: {str(e)}')
+        except NodeNotFoundError:
+            logger.warning(f'No nodes found for group {group_id}')
             nodes = []
 
         try:
             episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
-        except Exception as e:
-            logger.warning(f'Error fetching episodes for group {group_id}: {str(e)}')
+        except NodeNotFoundError:
+            logger.warning(f'No episodes found for group {group_id}')
             episodes = []
 
         for edge in edges:
