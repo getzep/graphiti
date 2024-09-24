@@ -79,7 +79,7 @@ async def get_graphiti(settings: ZepEnvDep):
     try:
         yield client
     finally:
-        client.close()
+        await client.close()
 
 
 async def initialize_graphiti(settings: ZepEnvDep):
