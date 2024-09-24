@@ -6,7 +6,9 @@ from graph_service.dto.common import Message
 
 
 class SearchQuery(BaseModel):
-    group_ids: list[str] = Field(description='The group ids for the memories to search')
+    group_ids: list[str] | None = Field(
+        None, description='The group ids for the memories to search'
+    )
     query: str
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
 
