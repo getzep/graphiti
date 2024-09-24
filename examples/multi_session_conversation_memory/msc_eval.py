@@ -15,19 +15,19 @@ limitations under the License.
 """
 
 import asyncio
+import csv
 import json
 import logging
 import os
 import sys
+from time import time
 
 from dotenv import load_dotenv
 
-from examples.multi_session_conversation_memory.parse_msc_messages import parse_msc_messages, conversation_q_and_a
+from examples.multi_session_conversation_memory.parse_msc_messages import conversation_q_and_a
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
 from graphiti_core.prompts import prompt_library
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
-from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
@@ -63,30 +63,35 @@ async def main():
 
     qa_map = conversation_q_and_a()
 
-    for group_id, (query, answer) in qa_map.items():
-        results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[group_id])
+    fields = ['Group id', 'Question', 'Answer', 'Response', 'Score', 'Search Duration (ms)']
+    msc_eval_map: list[dict] = []
 
-        pretty_results = {
-            'edges': [edge.fact for edge in results.edges],
-            'nodes': [node.name for node in results.nodes],
-            'communities': [community.name for community in results.communities],
-        }
+    for group_id, (query, answer) in qa_map.items():
+        search_start = time()
+        results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[group_id])
+        search_end = time()
+        search_duration = (search_end - search_start) * 1000
 
         facts = [edge.fact for edge in results.edges]
-        context = {'facts': facts, 'query': query}
+        entity_summaries = [node.name + ': ' + node.summary for node in results.nodes]
+        context = {'facts': facts, 'entity_summaries': entity_summaries, 'query': query}
 
         llm_response = await graphiti.llm_client.generate_response(prompt_library.eval.qa_prompt(context))
         response = llm_response.get('ANSWER', '')
-        print(query)
-        print(answer)
-        print(response)
 
         eval_context = {'query': query, 'answer': answer, 'response': response}
 
         eval_llm_response = await graphiti.llm_client.generate_response(prompt_library.eval.eval_prompt(eval_context))
-        eval_response = eval_llm_response.get('is_correct', '')
-        print(eval_response)
-        graphiti.close()
+        eval_response = 1 if eval_llm_response.get('is_correct', False) else 0
+        msc_eval_map.append({'Group id': int(group_id), 'Question': query, 'Answer': answer, 'Response': response,
+                             'Score': eval_response, 'Search Duration (ms)': search_duration})
+
+    with open('../data/msc_eval.csv', 'a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=fields)
+
+        writer.writerows(msc_eval_map)
+
+    await graphiti.close()
 
 
 asyncio.run(main())

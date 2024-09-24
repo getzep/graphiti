@@ -18,6 +18,8 @@ import asyncio
 import logging
 import os
 import sys
+import csv
+from time import time
 
 from dotenv import load_dotenv
 
@@ -55,21 +57,35 @@ def setup_logging():
 
 
 async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[ParsedMscMessage]):
+    fields = ['Group id', 'Episode #', 'Word Count', 'Ingestion Duration (ms)', 'Ingestion Rate (words/ms)']
+    csv_items: list[dict] = []
+
     for i, message in enumerate(messages):
+        word_count = len(message.split(" "))
+        start = time()
         await graphiti.add_episode(
-            name=f'Message {i}',
+            name=f'Message {group_id + "-" + str(i)}',
             episode_body=f'{message.speaker_name}: {message.content}',
             reference_time=message.actual_timestamp,
             source_description='Multi-Session Conversation',
             group_id=group_id,
         )
+        end = time()
+
+        duration = (end - start) * 1000
+
+        csv_items.append({'Group id': group_id, 'Episode #': i, 'Word Count': word_count,
+                          'Ingestion Duration (ms)': duration, 'Ingestion Rate (word/ms)': word_count / duration})
+
+    with open('../data/msc_ingestion.csv', 'a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=fields)
+
+        writer.writerows(csv_items)
 
 
 async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    await clear_data(graphiti.driver)
-    await graphiti.build_indices_and_constraints()
     message_map = parse_msc_messages()
 
     await asyncio.gather(

@@ -31,35 +31,35 @@ def parse_msc_messages() -> dict[str, list[ParsedMscMessage]]:
     message_map: dict[str, list[ParsedMscMessage]] = {}
     speakers = ['Alice', 'Bob']
 
-    with open('../data/msc.jsonl') as f:
-        data = [json.loads(line) for line in f]
+    with open('../data/msc.json') as file:
+        data = json.load(file)['data']
         for i, conversation in enumerate(data):
             messages: list[ParsedMscMessage] = []
-            for dialog_data in conversation['previous_dialogs']:
-                dialog = dialog_data['dialog']
+            for previous_dialog in conversation['previous_dialogs']:
+                dialog = previous_dialog['dialog']
                 speaker_idx = 0
 
                 for utterance in dialog:
-                    speaker_idx += 1
-                    speaker_idx %= 2
                     content = utterance['text']
                     messages.append(
                         ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
                                          actual_timestamp=datetime.now(), group_id=str(i))
                     )
                     print(speakers[speaker_idx] + ': ' + content)
+                    speaker_idx += 1
+                    speaker_idx %= 2
 
             dialog = conversation['dialog']
             speaker_idx = 0
             for utterance in dialog:
-                speaker_idx += 1
-                speaker_idx %= 2
                 content = utterance['text']
                 messages.append(
                     ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
                                      actual_timestamp=datetime.now(), group_id=str(i))
                 )
                 print(speakers[speaker_idx] + ': ' + content)
+                speaker_idx += 1
+                speaker_idx %= 2
 
             message_map[str(i)] = messages
 
@@ -67,17 +67,13 @@ def parse_msc_messages() -> dict[str, list[ParsedMscMessage]]:
 
 
 def conversation_q_and_a() -> dict[str, tuple[str, str]]:
-    with open('../data/msc.jsonl') as f:
-        data = [json.loads(line) for line in f]
+    with open('../data/msc.json') as file:
+        data = json.load(file)['data']
 
         qa_map: dict[str, tuple[str, str]] = {}
         for i, conversation in enumerate(data):
-            query = conversation['self_instruct']['B']
-            answer = conversation['self_instruct']['A']
+            query = "Bob: " + conversation['self_instruct']['B']
+            answer = "Alice: " + conversation['self_instruct']['A']
 
             qa_map[str(i)] = query, answer
         return qa_map
-
-
-print(parse_msc_messages())
-print(conversation_q_and_a())

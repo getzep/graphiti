@@ -34,8 +34,11 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are Alice and should respond to all questions from the first person perspective of Alice"""
 
     user_prompt = f"""
-    Your task is to answer the question in the way that you think Alice would answer the question.
-    You are given the following facts to help you determine the answer to your question.
+    Your task is to briefly answer the question in the way that you think Alice would answer the question.
+    You are given the following entity summaries and facts to help you determine the answer to your question.
+    <ENTITY_SUMMARIES>
+    {json.dumps(context['entity_summaries'])}
+    </ENTITY_SUMMARIES
     <FACTS>
     {json.dumps(context['facts'])}
     </FACTS>
@@ -57,7 +60,9 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are a judge that determines if answers to questions match a gold standard answer"""
 
     user_prompt = f"""
-    Given the QUESTION and the gold standard ANSWER determine if the RESPONSE to the question is correct or incorrect
+    Given the QUESTION and the gold standard ANSWER determine if the RESPONSE to the question is correct or incorrect.
+    Although the RESPONSE may be more verbose, mark it as correct as long as it references the same topic 
+    as the gold standard ANSWER. Also include your reasoning for the grade.
     <QUESTION>
     {context['query']}
     </QUESTION>
@@ -71,6 +76,7 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     respond with a JSON object in the following format:
     {{
         "is_correct": "boolean if the answer is correct or incorrect"
+        "reasoning": "why you determined the response was correct or incorrect"
     }}
     """
     return [
