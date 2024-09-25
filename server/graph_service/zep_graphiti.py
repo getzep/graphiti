@@ -1,14 +1,17 @@
+import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
 from graphiti_core import Graphiti  # type: ignore
 from graphiti_core.edges import EntityEdge  # type: ignore
-from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError  # type: ignore
+from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
 from graph_service.config import ZepEnvDep
 from graph_service.dto import FactResult
+
+logger = logging.getLogger(__name__)
 
 
 class ZepGraphiti(Graphiti):
@@ -36,18 +39,22 @@ class ZepGraphiti(Graphiti):
     async def delete_group(self, group_id: str):
         try:
             edges = await EntityEdge.get_by_group_ids(self.driver, [group_id])
-            nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
-            episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
-            for edge in edges:
-                await edge.delete(self.driver)
-            for node in nodes:
-                await node.delete(self.driver)
-            for episode in episodes:
-                await episode.delete(self.driver)
-        except EdgeNotFoundError as e:
-            raise HTTPException(status_code=404, detail=e.message) from e
-        except NodeNotFoundError as e:
-            raise HTTPException(status_code=404, detail=e.message) from e
+        except GroupsEdgesNotFoundError:
+            logger.warning(f'No edges found for group {group_id}')
+            edges = []
+
+        nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
+
+        episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
+
+        for edge in edges:
+            await edge.delete(self.driver)
+
+        for node in nodes:
+            await node.delete(self.driver)
+
+        for episode in episodes:
+            await episode.delete(self.driver)
 
     async def delete_entity_edge(self, uuid: str):
         try:
