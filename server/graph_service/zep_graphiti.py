@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 from graphiti_core import Graphiti  # type: ignore
 from graphiti_core.edges import EntityEdge  # type: ignore
-from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError  # type: ignore
+from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
@@ -39,21 +39,13 @@ class ZepGraphiti(Graphiti):
     async def delete_group(self, group_id: str):
         try:
             edges = await EntityEdge.get_by_group_ids(self.driver, [group_id])
-        except EdgeNotFoundError:
+        except GroupsEdgesNotFoundError:
             logger.warning(f'No edges found for group {group_id}')
             edges = []
 
-        try:
-            nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
-        except NodeNotFoundError:
-            logger.warning(f'No nodes found for group {group_id}')
-            nodes = []
+        nodes = await EntityNode.get_by_group_ids(self.driver, [group_id])
 
-        try:
-            episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
-        except NodeNotFoundError:
-            logger.warning(f'No episodes found for group {group_id}')
-            episodes = []
+        episodes = await EpisodicNode.get_by_group_ids(self.driver, [group_id])
 
         for edge in edges:
             await edge.delete(self.driver)
