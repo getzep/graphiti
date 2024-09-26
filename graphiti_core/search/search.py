@@ -68,12 +68,34 @@ async def search(
     group_ids = group_ids if group_ids else None
     edges, nodes, communities = await asyncio.gather(
         edge_search(
-            driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit
+            driver,
+            embedder,
+            query,
+            group_ids,
+            config.edge_config,
+            center_node_uuid,
+            config.limit,
+            config.embedding_model,
         ),
         node_search(
-            driver, embedder, query, group_ids, config.node_config, center_node_uuid, config.limit
+            driver,
+            embedder,
+            query,
+            group_ids,
+            config.node_config,
+            center_node_uuid,
+            config.limit,
+            config.embedding_model,
         ),
-        community_search(driver, embedder, query, group_ids, config.community_config, config.limit),
+        community_search(
+            driver,
+            embedder,
+            query,
+            group_ids,
+            config.community_config,
+            config.limit,
+            config.embedding_model,
+        ),
     )
 
     results = SearchResults(
