@@ -146,7 +146,7 @@ async def test_graph_integration():
         invalid_at=now,
     )
 
-    await entity_edge.generate_embedding(embedder)
+    await entity_edge.generate_embedding(embedder, client.llm_client.embedding_model)
 
     nodes = [episode, alice_node, bob_node]
     edges = [episodic_edge_1, episodic_edge_2, entity_edge]

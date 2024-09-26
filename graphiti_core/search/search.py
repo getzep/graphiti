@@ -22,7 +22,7 @@ from neo4j import AsyncDriver
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import SearchRerankerError
-from graphiti_core.llm_client.config import EMBEDDING_DIM
+from graphiti_core.llm_client.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
@@ -67,21 +67,21 @@ async def search(
     group_ids = group_ids if group_ids else None
     edges = (
         await edge_search(
-            driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit
+            driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit, config.embedding_model
         )
         if config.edge_config is not None
         else []
     )
     nodes = (
         await node_search(
-            driver, embedder, query, group_ids, config.node_config, center_node_uuid, config.limit
+            driver, embedder, query, group_ids, config.node_config, center_node_uuid, config.limit, config.embedding_model
         )
         if config.node_config is not None
         else []
     )
     communities = (
         await community_search(
-            driver, embedder, query, group_ids, config.community_config, config.limit
+            driver, embedder, query, group_ids, config.community_config, config.limit, config.embedding_model
         )
         if config.community_config is not None
         else []
@@ -108,6 +108,7 @@ async def edge_search(
     config: EdgeSearchConfig,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
+    embedding_model: str | None = None,
 ) -> list[EntityEdge]:
     search_results: list[list[EntityEdge]] = []
 
@@ -117,7 +118,7 @@ async def edge_search(
 
     if EdgeSearchMethod.cosine_similarity in config.search_methods:
         search_vector = (
-            (await embedder.create(input=[query], model='text-embedding-3-small'))
+            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
             .data[0]
             .embedding[:EMBEDDING_DIM]
         )
@@ -173,6 +174,7 @@ async def node_search(
     config: NodeSearchConfig,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
+    embedding_model: str | None = None,
 ) -> list[EntityNode]:
     search_results: list[list[EntityNode]] = []
 
@@ -182,7 +184,7 @@ async def node_search(
 
     if NodeSearchMethod.cosine_similarity in config.search_methods:
         search_vector = (
-            (await embedder.create(input=[query], model='text-embedding-3-small'))
+            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
             .data[0]
             .embedding[:EMBEDDING_DIM]
         )
@@ -222,6 +224,7 @@ async def community_search(
     group_ids: list[str] | None,
     config: CommunitySearchConfig,
     limit=DEFAULT_SEARCH_LIMIT,
+    embedding_model: str | None = None,
 ) -> list[CommunityNode]:
     search_results: list[list[CommunityNode]] = []
 
@@ -231,7 +234,7 @@ async def community_search(
 
     if CommunitySearchMethod.cosine_similarity in config.search_methods:
         search_vector = (
-            (await embedder.create(input=[query], model='text-embedding-3-small'))
+            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
             .data[0]
             .embedding[:EMBEDDING_DIM]
         )

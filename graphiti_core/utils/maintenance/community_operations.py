@@ -305,6 +305,6 @@ async def update_community(
         community_edge = (build_community_edges([entity], community, datetime.now()))[0]
         await community_edge.save(driver)
 
-    await community.generate_name_embedding(embedder)
+    await community.generate_name_embedding(embedder, llm_client.embedding_model)
 
     await community.save(driver)

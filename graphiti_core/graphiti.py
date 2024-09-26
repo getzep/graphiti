@@ -315,7 +315,7 @@ class Graphiti:
             # Calculate Embeddings
 
             await asyncio.gather(
-                *[node.generate_name_embedding(embedder) for node in extracted_nodes]
+                *[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in extracted_nodes]
             )
 
             # Resolve extracted nodes with nodes already in the graph and extract facts
@@ -343,7 +343,7 @@ class Graphiti:
             # calculate embeddings
             await asyncio.gather(
                 *[
-                    edge.generate_embedding(embedder)
+                    edge.generate_embedding(embedder, self.llm_client.embedding_model)
                     for edge in extracted_edges_with_resolved_pointers
                 ]
             )
@@ -517,8 +517,8 @@ class Graphiti:
 
             # Generate embeddings
             await asyncio.gather(
-                *[node.generate_name_embedding(embedder) for node in extracted_nodes],
-                *[edge.generate_embedding(embedder) for edge in extracted_edges],
+                *[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in extracted_nodes],
+                *[edge.generate_embedding(embedder, self.llm_client.embedding_model) for edge in extracted_edges],
             )
 
             # Dedupe extracted nodes, compress extracted edges
@@ -568,7 +568,7 @@ class Graphiti:
 
         community_nodes, community_edges = await build_communities(self.driver, self.llm_client)
 
-        await asyncio.gather(*[node.generate_name_embedding(embedder) for node in community_nodes])
+        await asyncio.gather(*[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in community_nodes])
 
         await asyncio.gather(*[node.save(self.driver) for node in community_nodes])
         await asyncio.gather(*[edge.save(self.driver) for edge in community_edges])
@@ -615,6 +615,7 @@ class Graphiti:
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
         search_config.limit = num_results
+        search_config.embedding_model = self.llm_client.embedding_model
 
         edges = (
             await search(
