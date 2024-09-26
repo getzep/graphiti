@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from collections import defaultdict
 from time import time
@@ -65,32 +66,20 @@ async def search(
     query = query.replace('\n', ' ')
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids else None
-    edges = (
-        await edge_search(
+    edges, nodes, communities = await asyncio.gather(
+        edge_search(
             driver, embedder, query, group_ids, config.edge_config, center_node_uuid, config.limit
-        )
-        if config.edge_config is not None
-        else []
-    )
-    nodes = (
-        await node_search(
+        ),
+        node_search(
             driver, embedder, query, group_ids, config.node_config, center_node_uuid, config.limit
-        )
-        if config.node_config is not None
-        else []
-    )
-    communities = (
-        await community_search(
-            driver, embedder, query, group_ids, config.community_config, config.limit
-        )
-        if config.community_config is not None
-        else []
+        ),
+        community_search(driver, embedder, query, group_ids, config.community_config, config.limit),
     )
 
     results = SearchResults(
-        edges=edges[: config.limit],
-        nodes=nodes[: config.limit],
-        communities=communities[: config.limit],
+        edges=edges,
+        nodes=nodes,
+        communities=communities,
     )
 
     end = time()
@@ -105,10 +94,13 @@ async def edge_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: EdgeSearchConfig,
+    config: EdgeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
+    if config is None:
+        return []
+
     search_results: list[list[EntityEdge]] = []
 
     if EdgeSearchMethod.bm25 in config.search_methods:
@@ -162,7 +154,7 @@ async def edge_search(
     if config.reranker == EdgeReranker.episode_mentions:
         reranked_edges.sort(reverse=True, key=lambda edge: len(edge.episodes))
 
-    return reranked_edges
+    return reranked_edges[:limit]
 
 
 async def node_search(
@@ -170,10 +162,13 @@ async def node_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: NodeSearchConfig,
+    config: NodeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
+    if config is None:
+        return []
+
     search_results: list[list[EntityNode]] = []
 
     if NodeSearchMethod.bm25 in config.search_methods:
@@ -212,7 +207,7 @@ async def node_search(
 
     reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
 
-    return reranked_nodes
+    return reranked_nodes[:limit]
 
 
 async def community_search(
@@ -220,9 +215,12 @@ async def community_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: CommunitySearchConfig,
+    config: CommunitySearchConfig | None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
+    if config is None:
+        return []
+
     search_results: list[list[CommunityNode]] = []
 
     if CommunitySearchMethod.bm25 in config.search_methods:
@@ -255,4 +253,4 @@ async def community_search(
 
     reranked_communities = [community_uuid_map[uuid] for uuid in reranked_uuids]
 
-    return reranked_communities
+    return reranked_communities[:limit]
