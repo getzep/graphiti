@@ -52,8 +52,8 @@ class LLMConfig:
                                                                         Defaults to "https://api.openai.com", which is OpenAI's standard API endpoint.
                                                                         This can be changed if using a different provider or a custom endpoint.
                 embedding_model (str, optional): The specific embedding model.
-                                                                        Defaults to "text-embedding-3-small", which appears to be a custom model name.
-                                                                        Common values might include "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002".
+                                                                        Defaults to openai "text-embedding-3-small" model.
+                                                                        We currently only support openai embedding models, such as "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002".
         """
         self.base_url = base_url
         self.api_key = api_key
