@@ -24,7 +24,7 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
-from graphiti_core.errors import EdgeNotFoundError
+from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.llm_client.config import EMBEDDING_DIM
 from graphiti_core.nodes import Node
@@ -147,10 +147,9 @@ class EpisodicEdge(Edge):
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
-        uuids = [edge.uuid for edge in edges]
 
         if len(edges) == 0:
-            raise EdgeNotFoundError(uuids[0])
+            raise GroupsEdgesNotFoundError(group_ids)
         return edges
 
 
@@ -293,10 +292,9 @@ class EntityEdge(Edge):
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
-        uuids = [edge.uuid for edge in edges]
 
         if len(edges) == 0:
-            raise EdgeNotFoundError(uuids[0])
+            raise GroupsEdgesNotFoundError(group_ids)
         return edges
 
 
