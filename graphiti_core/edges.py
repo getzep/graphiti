@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
-from graphiti_core.llm_client.config import EMBEDDING_DIM
+from graphiti_core.llm_client.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ class EntityEdge(Edge):
         default=None, description='datetime of when the fact stopped being true'
     )
 
-    async def generate_embedding(self, embedder, model='text-embedding-3-small'):
+    async def generate_embedding(self, embedder, model=DEFAULT_EMBEDDING_MODEL):
         start = time()
 
         text = self.fact.replace('\n', ' ')

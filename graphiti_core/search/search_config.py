@@ -74,6 +74,7 @@ class SearchConfig(BaseModel):
     edge_config: EdgeSearchConfig | None = Field(default=None)
     node_config: NodeSearchConfig | None = Field(default=None)
     community_config: CommunitySearchConfig | None = Field(default=None)
+    embedding_model: str | None = Field(default=None)
     limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
 
 
