@@ -25,7 +25,7 @@ class ZepGraphiti(Graphiti):
             group_id=group_id,
             summary=summary,
         )
-        await new_node.generate_name_embedding(self.llm_client.get_embedder())
+        await new_node.generate_name_embedding(self.llm_client.get_embedder(), self.llm_client.embedding_model)
         await new_node.save(self.driver)
         return new_node
 
@@ -83,6 +83,8 @@ async def get_graphiti(settings: ZepEnvDep):
         client.llm_client.config.api_key = settings.openai_api_key
     if settings.model_name is not None:
         client.llm_client.model = settings.model_name
+    if settings.embedding_model_name is not None:
+        client.llm_client.embedding_model = settings.embedding_model_name
     try:
         yield client
     finally:
