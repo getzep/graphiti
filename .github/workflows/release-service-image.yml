@@ -4,15 +4,6 @@ on:
   push:
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-  workflow_dispatch:
-    inputs:
-        tag:
-          description: 'Tag to build and publish'
-          required: true
-        push_as_latest:
-          description: 'Also push as latest?'
-          type: boolean
-          default: false
 
 env:
   REGISTRY: docker.io
@@ -23,16 +14,14 @@ jobs:
     environment:
       name: release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repo for tag push
-        if: github.event_name == 'push'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
-
-      - name: Checkout repo for manual trigger
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@v4
+          ref: ${{ github.event.inputs.tag || github.ref  }}
           
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
@@ -42,15 +31,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Extract version from tag
-        id: get_version
-        run: |
-          VERSION=${{ github.event.inputs.tag || github.ref_name }}
-          VERSION=${VERSION#v}  # Remove leading 'v' if present
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "major_minor=${VERSION%.*}" >> $GITHUB_OUTPUT
-          echo "major=${VERSION%%.*}" >> $GITHUB_OUTPUT
 
       - name: Extract Docker metadata
         id: meta
@@ -58,18 +38,17 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_as_latest == 'true') }}
-            type=raw,value=${{ steps.get_version.outputs.version }}
-            type=raw,value=${{ steps.get_version.outputs.major_minor }}
-            type=raw,value=${{ steps.get_version.outputs.major }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=match,pattern=v(.*-beta),group=1
+            type=match,pattern=v.*-(beta),group=1
 
-      - name: Build and push
+      - name: Depot build and push image
         uses: depot/build-push-action@v1
         with:
-          token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
-          context: ${{ github.workspace }}
-          push: true
+          context: .
           platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags || env.TAGS }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
