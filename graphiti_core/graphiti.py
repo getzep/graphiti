@@ -161,7 +161,7 @@ class Graphiti:
         """
         await self.driver.close()
 
-    async def build_indices_and_constraints(self):
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
         """
         Build indices and constraints in the Neo4j database.
 
@@ -171,6 +171,9 @@ class Graphiti:
         Parameters
         ----------
         self
+        delete_existing : bool, optional
+            Whether to clear existing indices before creating new ones.
+
 
         Returns
         -------
@@ -191,7 +194,7 @@ class Graphiti:
         Caution: Running this method on a large existing database may take some time
         and could impact database performance during execution.
         """
-        await build_indices_and_constraints(self.driver)
+        await build_indices_and_constraints(self.driver, delete_existing)
 
     async def retrieve_episodes(
         self,

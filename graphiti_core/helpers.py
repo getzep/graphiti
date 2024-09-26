@@ -21,3 +21,33 @@ from neo4j import time as neo4j_time
 
 def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
     return neo_date.to_native() if neo_date else None
+
+
+def lucene_sanitize(query: str) -> str:
+    # Escape special characters from a query before passing into Lucene
+    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \
+    escape_map = str.maketrans(
+        {
+            '+': r'\+',
+            '-': r'\-',
+            '&': r'\&',
+            '|': r'\|',
+            '!': r'\!',
+            '(': r'\(',
+            ')': r'\)',
+            '{': r'\{',
+            '}': r'\}',
+            '[': r'\[',
+            ']': r'\]',
+            '^': r'\^',
+            '"': r'\"',
+            '~': r'\~',
+            '*': r'\*',
+            '?': r'\?',
+            ':': r'\:',
+            '\\': r'\\',
+        }
+    )
+
+    sanitized = query.translate(escape_map)
+    return sanitized

@@ -74,7 +74,6 @@ def format_context(facts):
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
-    await graphiti.build_communities()
 
     edges = await graphiti.search(
         'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
@@ -96,7 +95,7 @@ async def test_graphiti_init():
     }
 
     logger.info(pretty_results)
-    graphiti.close()
+    await graphiti.close()
 
 
 @pytest.mark.asyncio
