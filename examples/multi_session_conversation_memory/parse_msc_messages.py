@@ -77,7 +77,7 @@ def conversation_q_and_a() -> list[tuple[str, str]]:
         data = json.load(file)['data']
 
         qa: list[tuple[str, str]] = []
-        for i, conversation in enumerate(data):
+        for conversation in data:
             query = conversation['self_instruct']['B']
             answer = conversation['self_instruct']['A']
 

@@ -37,10 +37,12 @@ RELEVANT_SCHEMA_LIMIT = 3
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
-    group_ids_filter_list = [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+    group_ids_filter_list = (
+        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+    )
     group_ids_filter = ''
     for f in group_ids_filter_list:
-        group_ids_filter += f if not group_ids_filter else f"OR {f}"
+        group_ids_filter += f if not group_ids_filter else f'OR {f}'
 
     group_ids_filter += ' AND ' if group_ids_filter else ''
 
@@ -51,7 +53,7 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
 
 
 async def get_mentioned_nodes(
-        driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
     records, _, _ = await driver.execute_query(
@@ -74,7 +76,7 @@ async def get_mentioned_nodes(
 
 
 async def get_communities_by_nodes(
-        driver: AsyncDriver, nodes: list[EntityNode]
+    driver: AsyncDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
     records, _, _ = await driver.execute_query(
@@ -97,12 +99,12 @@ async def get_communities_by_nodes(
 
 
 async def edge_fulltext_search(
-        driver: AsyncDriver,
-        query: str,
-        source_node_uuid: str | None,
-        target_node_uuid: str | None,
-        group_ids: list[str] | None = None,
-        limit=RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    query: str,
+    source_node_uuid: str | None,
+    target_node_uuid: str | None,
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids)
@@ -145,12 +147,12 @@ async def edge_fulltext_search(
 
 
 async def edge_similarity_search(
-        driver: AsyncDriver,
-        search_vector: list[float],
-        source_node_uuid: str | None,
-        target_node_uuid: str | None,
-        group_ids: list[str] | None = None,
-        limit: int = RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    search_vector: list[float],
+    source_node_uuid: str | None,
+    target_node_uuid: str | None,
+    group_ids: list[str] | None = None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     query = Query("""
@@ -191,10 +193,10 @@ async def edge_similarity_search(
 
 
 async def node_fulltext_search(
-        driver: AsyncDriver,
-        query: str,
-        group_ids: list[str] | None = None,
-        limit=RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    query: str,
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids)
@@ -224,10 +226,10 @@ async def node_fulltext_search(
 
 
 async def node_similarity_search(
-        driver: AsyncDriver,
-        search_vector: list[float],
-        group_ids: list[str] | None = None,
-        limit=RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    search_vector: list[float],
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -255,10 +257,10 @@ async def node_similarity_search(
 
 
 async def community_fulltext_search(
-        driver: AsyncDriver,
-        query: str,
-        group_ids: list[str] | None = None,
-        limit=RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    query: str,
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids)
@@ -289,10 +291,10 @@ async def community_fulltext_search(
 
 
 async def community_similarity_search(
-        driver: AsyncDriver,
-        search_vector: list[float],
-        group_ids: list[str] | None = None,
-        limit=RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    search_vector: list[float],
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
@@ -320,11 +322,11 @@ async def community_similarity_search(
 
 
 async def hybrid_node_search(
-        queries: list[str],
-        embeddings: list[list[float]],
-        driver: AsyncDriver,
-        group_ids: list[str] | None = None,
-        limit: int = RELEVANT_SCHEMA_LIMIT,
+    queries: list[str],
+    embeddings: list[list[float]],
+    driver: AsyncDriver,
+    group_ids: list[str] | None = None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
@@ -387,8 +389,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-        nodes: list[EntityNode],
-        driver: AsyncDriver,
+    nodes: list[EntityNode],
+    driver: AsyncDriver,
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -425,11 +427,11 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-        driver: AsyncDriver,
-        edges: list[EntityEdge],
-        source_node_uuid: str | None,
-        target_node_uuid: str | None,
-        limit: int = RELEVANT_SCHEMA_LIMIT,
+    driver: AsyncDriver,
+    edges: list[EntityEdge],
+    source_node_uuid: str | None,
+    target_node_uuid: str | None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -486,7 +488,7 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-        driver: AsyncDriver, node_uuids: list[str], center_node_uuid: str
+    driver: AsyncDriver, node_uuids: list[str], center_node_uuid: str
 ) -> list[str]:
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda uuid: uuid != center_node_uuid, node_uuids))

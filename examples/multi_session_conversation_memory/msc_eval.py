@@ -72,7 +72,11 @@ async def evaluate_qa(graphiti: Graphiti, group_id: str, query: str, answer: str
     )
     response = llm_response.get('ANSWER', '')
 
-    eval_context = {'query': 'Bob: ' + query, 'answer': 'Alice: ' + answer, 'response': 'Alice: ' + response}
+    eval_context = {
+        'query': 'Bob: ' + query,
+        'answer': 'Alice: ' + answer,
+        'response': 'Alice: ' + response,
+    }
 
     eval_llm_response = await graphiti.llm_client.generate_response(
         prompt_library.eval.eval_prompt(eval_context)
@@ -101,8 +105,8 @@ async def main():
     qa = conversation_q_and_a()[0:500]
     i = 0
     while i < 500:
-        qa_chunk = qa[i: i + 20]
-        group_ids = range((len(qa)))[i: i + 20]
+        qa_chunk = qa[i : i + 20]
+        group_ids = range(len(qa))[i : i + 20]
         results = list(
             await asyncio.gather(
                 *[

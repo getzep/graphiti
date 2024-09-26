@@ -15,11 +15,9 @@ limitations under the License.
 """
 
 import asyncio
-import csv
 import logging
 import os
 import sys
-from time import time
 
 from dotenv import load_dotenv
 
@@ -28,8 +26,6 @@ from examples.multi_session_conversation_memory.parse_msc_messages import (
     parse_msc_messages,
 )
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
-from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
@@ -74,10 +70,10 @@ async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     msc_messages = parse_msc_messages()
-    i = 460
+    i = 0
     while i <= 490:
         msc_message_slice = msc_messages[i : i + 10]
-        group_ids = range((len(msc_messages)))[i : i + 10]
+        group_ids = range(len(msc_messages))[i : i + 10]
 
         await asyncio.gather(
             *[
