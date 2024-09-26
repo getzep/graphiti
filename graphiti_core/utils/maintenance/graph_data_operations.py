@@ -28,7 +28,16 @@ EPISODE_WINDOW_LEN = 3
 logger = logging.getLogger(__name__)
 
 
-async def build_indices_and_constraints(driver: AsyncDriver):
+async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
+    if delete_existing:
+        records, _, _ = await driver.execute_query("""
+        SHOW INDEXES YIELD name
+        """)
+        index_names = [record['name'] for record in records]
+        await asyncio.gather(
+            *[driver.execute_query("""DROP INDEX $name""", name=name) for name in index_names]
+        )
+
     range_indices: list[LiteralString] = [
         'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
         'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
@@ -52,38 +61,15 @@ async def build_indices_and_constraints(driver: AsyncDriver):
     ]
 
     fulltext_indices: list[LiteralString] = [
-        'CREATE FULLTEXT INDEX name_and_summary IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]',
-        'CREATE FULLTEXT INDEX community_name IF NOT EXISTS FOR (n:Community) ON EACH [n.name]',
-        'CREATE FULLTEXT INDEX name_and_fact IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact]',
+        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
+        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
+        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
+        FOR (n:Community) ON EACH [n.name, n.group_id]""",
+        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
+        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
 
-    vector_indices: list[LiteralString] = [
-        """
-        CREATE VECTOR INDEX fact_embedding IF NOT EXISTS
-        FOR ()-[r:RELATES_TO]-() ON (r.fact_embedding)
-        OPTIONS {indexConfig: {
-         `vector.dimensions`: 1024,
-         `vector.similarity_function`: 'cosine'
-        }}
-        """,
-        """
-        CREATE VECTOR INDEX name_embedding IF NOT EXISTS
-        FOR (n:Entity) ON (n.name_embedding)
-        OPTIONS {indexConfig: {
-         `vector.dimensions`: 1024,
-         `vector.similarity_function`: 'cosine'
-        }}
-        """,
-        """
-        CREATE VECTOR INDEX community_name_embedding IF NOT EXISTS
-        FOR (n:Community) ON (n.name_embedding)
-        OPTIONS {indexConfig: {
-         `vector.dimensions`: 1024,
-         `vector.similarity_function`: 'cosine'
-        }}
-        """,
-    ]
-    index_queries: list[LiteralString] = range_indices + fulltext_indices + vector_indices
+    index_queries: list[LiteralString] = range_indices + fulltext_indices
 
     await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
 

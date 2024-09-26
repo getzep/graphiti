@@ -57,7 +57,9 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
 
 
 def eval_prompt(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are a judge that determines if answers to questions match a gold standard answer"""
+    sys_prompt = (
+        """You are a judge that determines if answers to questions match a gold standard answer"""
+    )
 
     user_prompt = f"""
     Given the QUESTION and the gold standard ANSWER determine if the RESPONSE to the question is correct or incorrect.
@@ -85,6 +87,4 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {
-    'qa_prompt': qa_prompt, 'eval_prompt': eval_prompt
-}
+versions: Versions = {'qa_prompt': qa_prompt, 'eval_prompt': eval_prompt}

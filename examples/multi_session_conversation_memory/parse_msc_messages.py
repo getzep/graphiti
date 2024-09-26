@@ -42,8 +42,12 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
                 for utterance in dialog:
                     content = utterance['text']
                     messages.append(
-                        ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
-                                         actual_timestamp=datetime.now(), group_id=str(i))
+                        ParsedMscMessage(
+                            speaker_name=speakers[speaker_idx],
+                            content=content,
+                            actual_timestamp=datetime.now(),
+                            group_id=str(i),
+                        )
                     )
                     speaker_idx += 1
                     speaker_idx %= 2
@@ -53,8 +57,12 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
             for utterance in dialog:
                 content = utterance['text']
                 messages.append(
-                    ParsedMscMessage(speaker_name=speakers[speaker_idx], content=content,
-                                     actual_timestamp=datetime.now(), group_id=str(i))
+                    ParsedMscMessage(
+                        speaker_name=speakers[speaker_idx],
+                        content=content,
+                        actual_timestamp=datetime.now(),
+                        group_id=str(i),
+                    )
                 )
                 speaker_idx += 1
                 speaker_idx %= 2
@@ -70,8 +78,8 @@ def conversation_q_and_a() -> list[tuple[str, str]]:
 
         qa: list[tuple[str, str]] = []
         for i, conversation in enumerate(data):
-            query = "Bob: " + conversation['self_instruct']['B']
-            answer = "Alice: " + conversation['self_instruct']['A']
+            query = conversation['self_instruct']['B']
+            answer = conversation['self_instruct']['A']
 
             qa.append((query, answer))
         return qa
