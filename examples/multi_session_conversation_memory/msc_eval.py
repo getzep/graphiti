@@ -16,7 +16,6 @@ limitations under the License.
 
 import asyncio
 import csv
-import json
 import logging
 import os
 import sys

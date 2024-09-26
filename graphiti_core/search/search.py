@@ -94,7 +94,7 @@ async def edge_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: EdgeSearchConfig,
+    config: EdgeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
@@ -162,7 +162,7 @@ async def node_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: NodeSearchConfig,
+    config: NodeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
@@ -215,7 +215,7 @@ async def community_search(
     embedder,
     query: str,
     group_ids: list[str] | None,
-    config: CommunitySearchConfig,
+    config: CommunitySearchConfig | None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     if config is None:
