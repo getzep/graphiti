@@ -14,21 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
-from time import time
+from abc import ABC, abstractmethod
+from typing import Iterable, List, Literal
 
-from graphiti_core.embedder.client import EmbedderClient
+from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
+EMBEDDING_DIM = 1024
 
 
-async def generate_embedding(embedder: EmbedderClient, text: str):
-    start = time()
+class EmbedderConfig(BaseModel):
+    embedding_dim: Literal[1024] = Field(default=EMBEDDING_DIM, frozen=True)
 
-    text = text.replace('\n', ' ')
-    embedding = await embedder.create(input=[text])
 
-    end = time()
-    logger.debug(f'embedded text of length {len(text)} in {end - start} ms')
-
-    return embedding
+class EmbedderClient(ABC):
+    @abstractmethod
+    async def create(
+        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+    ) -> list[float]:
+        pass

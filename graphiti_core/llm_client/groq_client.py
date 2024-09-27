@@ -21,7 +21,6 @@ import typing
 import groq
 from groq import AsyncGroq
 from groq.types.chat import ChatCompletionMessageParam
-from openai import AsyncOpenAI
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -43,10 +42,6 @@ class GroqClient(LLMClient):
         super().__init__(config, cache)
 
         self.client = AsyncGroq(api_key=config.api_key)
-
-    def get_embedder(self) -> typing.Any:
-        openai_client = AsyncOpenAI()
-        return openai_client.embeddings
 
     async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         msgs: list[ChatCompletionMessageParam] = []

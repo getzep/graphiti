@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -83,6 +84,7 @@ class Graphiti:
         user: str,
         password: str,
         llm_client: LLMClient | None = None,
+        embedder: EmbedderClient | None = None,
         store_raw_episode_content: bool = True,
     ):
         """
@@ -128,6 +130,10 @@ class Graphiti:
             self.llm_client = llm_client
         else:
             self.llm_client = OpenAIClient()
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = OpenAIEmbedder()
 
     async def close(self):
         """
@@ -290,7 +296,6 @@ class Graphiti:
             start = time()
 
             entity_edges: list[EntityEdge] = []
-            embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
             previous_episodes = await self.retrieve_episodes(
@@ -318,7 +323,7 @@ class Graphiti:
             # Calculate Embeddings
 
             await asyncio.gather(
-                *[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in extracted_nodes]
+                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
             )
 
             # Resolve extracted nodes with nodes already in the graph and extract facts
@@ -346,7 +351,7 @@ class Graphiti:
             # calculate embeddings
             await asyncio.gather(
                 *[
-                    edge.generate_embedding(embedder, self.llm_client.embedding_model)
+                    edge.generate_embedding(self.embedder)
                     for edge in extracted_edges_with_resolved_pointers
                 ]
             )
@@ -439,7 +444,7 @@ class Graphiti:
             if update_communities:
                 await asyncio.gather(
                     *[
-                        update_community(self.driver, self.llm_client, embedder, node)
+                        update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
                     ]
                 )
@@ -488,7 +493,6 @@ class Graphiti:
         """
         try:
             start = time()
-            embedder = self.llm_client.get_embedder()
             now = datetime.now()
 
             episodes = [
@@ -520,8 +524,8 @@ class Graphiti:
 
             # Generate embeddings
             await asyncio.gather(
-                *[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in extracted_nodes],
-                *[edge.generate_embedding(embedder, self.llm_client.embedding_model) for edge in extracted_edges],
+                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes],
+                *[edge.generate_embedding(self.embedder) for edge in extracted_edges],
             )
 
             # Dedupe extracted nodes, compress extracted edges
@@ -564,14 +568,14 @@ class Graphiti:
             raise e
 
     async def build_communities(self):
-        embedder = self.llm_client.get_embedder()
-
         # Clear existing communities
         await remove_communities(self.driver)
 
         community_nodes, community_edges = await build_communities(self.driver, self.llm_client)
 
-        await asyncio.gather(*[node.generate_name_embedding(embedder, self.llm_client.embedding_model) for node in community_nodes])
+        await asyncio.gather(
+            *[node.generate_name_embedding(self.embedder) for node in community_nodes]
+        )
 
         await asyncio.gather(*[node.save(self.driver) for node in community_nodes])
         await asyncio.gather(*[edge.save(self.driver) for edge in community_edges])
@@ -618,12 +622,11 @@ class Graphiti:
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
         search_config.limit = num_results
-        search_config.embedding_model = self.llm_client.embedding_model
 
         edges = (
             await search(
                 self.driver,
-                self.llm_client.get_embedder(),
+                self.embedder,
                 query,
                 group_ids,
                 search_config,
@@ -640,9 +643,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
     ) -> SearchResults:
-        return await search(
-            self.driver, self.llm_client.get_embedder(), query, group_ids, config, center_node_uuid
-        )
+        return await search(self.driver, self.embedder, query, group_ids, config, center_node_uuid)
 
     async def get_nodes_by_query(
         self,
@@ -687,14 +688,15 @@ class Graphiti:
         to each individual search method before results are combined and deduplicated.
         If not specified, a default limit (defined in the search functions) will be used.
         """
-        embedder = self.llm_client.get_embedder()
         search_config = (
             NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE
         )
         search_config.limit = limit
 
         nodes = (
-            await search(self.driver, embedder, query, group_ids, search_config, center_node_uuid)
+            await search(
+                self.driver, self.embedder, query, group_ids, search_config, center_node_uuid
+            )
         ).nodes
         return nodes
 
