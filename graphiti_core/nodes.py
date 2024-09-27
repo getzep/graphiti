@@ -25,8 +25,8 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.llm_client.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
 
@@ -212,15 +212,14 @@ class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
 
-    async def generate_name_embedding(self, embedder, model=DEFAULT_EMBEDDING_MODEL):
+    async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
-        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
-        self.name_embedding = embedding[:EMBEDDING_DIM]
+        self.name_embedding = await embedder.create(input=[text])
         end = time()
         logger.info(f'embedded {text} in {end - start} ms')
 
-        return embedding
+        return self.name_embedding
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
@@ -323,15 +322,14 @@ class CommunityNode(Node):
 
         return result
 
-    async def generate_name_embedding(self, embedder, model=DEFAULT_EMBEDDING_MODEL):
+    async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
-        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
-        self.name_embedding = embedding[:EMBEDDING_DIM]
+        self.name_embedding = await embedder.create(input=[text])
         end = time()
         logger.info(f'embedded {text} in {end - start} ms')
 
-        return embedding
+        return self.name_embedding
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):

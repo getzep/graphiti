@@ -54,11 +54,6 @@ class LLMClient(ABC):
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
         self.cache_dir = Cache(DEFAULT_CACHE_DIR)  # Create a cache directory
-        self.embedding_model = config.embedding_model
-
-    @abstractmethod
-    def get_embedder(self) -> typing.Any:
-        pass
 
     @retry(
         stop=stop_after_attempt(4),

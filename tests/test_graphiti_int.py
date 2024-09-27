@@ -101,7 +101,7 @@ async def test_graphiti_init():
 @pytest.mark.asyncio
 async def test_graph_integration():
     client = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
-    embedder = client.llm_client.get_embedder()
+    embedder = client.embedder
     driver = client.driver
 
     now = datetime.now()
@@ -145,7 +145,7 @@ async def test_graph_integration():
         invalid_at=now,
     )
 
-    await entity_edge.generate_embedding(embedder, client.llm_client.embedding_model)
+    await entity_edge.generate_embedding(embedder)
 
     nodes = [episode, alice_node, bob_node]
     edges = [episodic_edge_1, episodic_edge_2, entity_edge]

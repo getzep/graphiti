@@ -24,9 +24,9 @@ from uuid import uuid4
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
-from graphiti_core.llm_client.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
@@ -171,17 +171,16 @@ class EntityEdge(Edge):
         default=None, description='datetime of when the fact stopped being true'
     )
 
-    async def generate_embedding(self, embedder, model=DEFAULT_EMBEDDING_MODEL):
+    async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
 
         text = self.fact.replace('\n', ' ')
-        embedding = (await embedder.create(input=[text], model=model)).data[0].embedding
-        self.fact_embedding = embedding[:EMBEDDING_DIM]
+        self.fact_embedding = await embedder.create(input=[text])
 
         end = time()
         logger.info(f'embedded {text} in {end - start} ms')
 
-        return embedding
+        return self.fact_embedding
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(

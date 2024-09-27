@@ -7,6 +7,7 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 
 from graphiti_core.edges import CommunityEdge
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
@@ -288,7 +289,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: AsyncDriver, llm_client: LLMClient, embedder, entity: EntityNode
+    driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 
@@ -305,6 +306,6 @@ async def update_community(
         community_edge = (build_community_edges([entity], community, datetime.now()))[0]
         await community_edge.save(driver)
 
-    await community.generate_name_embedding(embedder, llm_client.embedding_model)
+    await community.generate_name_embedding(embedder)
 
     await community.save(driver)

@@ -22,8 +22,8 @@ from time import time
 from neo4j import AsyncDriver
 
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
-from graphiti_core.llm_client.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 async def search(
     driver: AsyncDriver,
-    embedder,
+    embedder: EmbedderClient,
     query: str,
     group_ids: list[str] | None,
     config: SearchConfig,
@@ -75,7 +75,6 @@ async def search(
             config.edge_config,
             center_node_uuid,
             config.limit,
-            config.embedding_model,
         ),
         node_search(
             driver,
@@ -85,7 +84,6 @@ async def search(
             config.node_config,
             center_node_uuid,
             config.limit,
-            config.embedding_model,
         ),
         community_search(
             driver,
@@ -94,7 +92,6 @@ async def search(
             group_ids,
             config.community_config,
             config.limit,
-            config.embedding_model,
         ),
     )
 
@@ -113,13 +110,12 @@ async def search(
 
 async def edge_search(
     driver: AsyncDriver,
-    embedder,
+    embedder: EmbedderClient,
     query: str,
     group_ids: list[str] | None,
     config: EdgeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
-    embedding_model: str | None = None,
 ) -> list[EntityEdge]:
     if config is None:
         return []
@@ -131,11 +127,7 @@ async def edge_search(
         search_results.append(text_search)
 
     if EdgeSearchMethod.cosine_similarity in config.search_methods:
-        search_vector = (
-            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
-            .data[0]
-            .embedding[:EMBEDDING_DIM]
-        )
+        search_vector = await embedder.create(input=[query])
 
         similarity_search = await edge_similarity_search(
             driver, search_vector, None, None, group_ids, 2 * limit
@@ -182,13 +174,12 @@ async def edge_search(
 
 async def node_search(
     driver: AsyncDriver,
-    embedder,
+    embedder: EmbedderClient,
     query: str,
     group_ids: list[str] | None,
     config: NodeSearchConfig | None,
     center_node_uuid: str | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
-    embedding_model: str | None = None,
 ) -> list[EntityNode]:
     if config is None:
         return []
@@ -200,11 +191,7 @@ async def node_search(
         search_results.append(text_search)
 
     if NodeSearchMethod.cosine_similarity in config.search_methods:
-        search_vector = (
-            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
-            .data[0]
-            .embedding[:EMBEDDING_DIM]
-        )
+        search_vector = await embedder.create(input=[query])
 
         similarity_search = await node_similarity_search(
             driver, search_vector, group_ids, 2 * limit
@@ -236,12 +223,11 @@ async def node_search(
 
 async def community_search(
     driver: AsyncDriver,
-    embedder,
+    embedder: EmbedderClient,
     query: str,
     group_ids: list[str] | None,
     config: CommunitySearchConfig | None,
     limit=DEFAULT_SEARCH_LIMIT,
-    embedding_model: str | None = None,
 ) -> list[CommunityNode]:
     if config is None:
         return []
@@ -253,11 +239,7 @@ async def community_search(
         search_results.append(text_search)
 
     if CommunitySearchMethod.cosine_similarity in config.search_methods:
-        search_vector = (
-            (await embedder.create(input=[query], model=embedding_model or DEFAULT_EMBEDDING_MODEL))
-            .data[0]
-            .embedding[:EMBEDDING_DIM]
-        )
+        search_vector = await embedder.create(input=[query])
 
         similarity_search = await community_similarity_search(
             driver, search_vector, group_ids, 2 * limit
