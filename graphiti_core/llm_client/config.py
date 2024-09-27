@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-EMBEDDING_DIM = 1024
 DEFAULT_MAX_TOKENS = 16384
 DEFAULT_TEMPERATURE = 0
-DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'
+
 
 class LLMConfig:
     """
@@ -33,7 +32,6 @@ class LLMConfig:
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
-        embedding_model: str | None = DEFAULT_EMBEDDING_MODEL,
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
@@ -51,15 +49,9 @@ class LLMConfig:
                 base_url (str, optional): The base URL of the LLM API service.
                                                                         Defaults to "https://api.openai.com", which is OpenAI's standard API endpoint.
                                                                         This can be changed if using a different provider or a custom endpoint.
-                embedding_model (str, optional): The specific embedding model.
-                                                                        Defaults to openai "text-embedding-3-small" model.
-                                                                        We currently only support openai embedding models, such as "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002".
         """
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        if not embedding_model:
-            embedding_model = DEFAULT_EMBEDDING_MODEL
-        self.embedding_model = embedding_model

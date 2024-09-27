@@ -49,9 +49,6 @@ class OpenAIClient(LLMClient):
         __init__(config: LLMConfig | None = None, cache: bool = False, client: typing.Any = None):
             Initializes the OpenAIClient with the provided configuration, cache setting, and client.
 
-        get_embedder() -> typing.Any:
-            Returns the embedder from the OpenAI client.
-
         _generate_response(messages: list[Message]) -> dict[str, typing.Any]:
             Generates a response from the language model based on the provided messages.
     """
@@ -77,9 +74,6 @@ class OpenAIClient(LLMClient):
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
         else:
             self.client = client
-
-    def get_embedder(self) -> typing.Any:
-        return self.client.embeddings
 
     async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []

@@ -20,7 +20,6 @@ import typing
 
 import anthropic
 from anthropic import AsyncAnthropic
-from openai import AsyncOpenAI
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -46,10 +45,6 @@ class AnthropicClient(LLMClient):
             # we'll use tenacity to retry
             max_retries=1,
         )
-
-    def get_embedder(self) -> typing.Any:
-        openai_client = AsyncOpenAI()
-        return openai_client.embeddings
 
     async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
         system_message = messages[0]
