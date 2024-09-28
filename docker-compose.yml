@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   graph:
-    # image: zepai/graphiti:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: zepai/graphiti:latest
     ports:
       - "8000:8000"
     
