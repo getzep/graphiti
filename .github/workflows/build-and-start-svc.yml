@@ -32,16 +32,16 @@ jobs:
         tags: graphiti-service:${{ github.sha }}
 
     - name: Run Docker Compose
-      run: docker-compose -f docker-compose.test.yml up -d --wait
+      run: docker compose -f docker-compose.test.yml up -d --wait
 
     - name: Check service logs
       if: always()
       run: |
         echo "Graphiti service logs:"
-        docker-compose -f docker-compose.test.yml logs graph
+        docker compose -f docker-compose.test.yml logs graph
         echo "Neo4j logs:"
-        docker-compose -f docker-compose.test.yml logs neo4j
+        docker compose -f docker-compose.test.yml logs neo4j
 
     - name: Cleanup
       if: always()
-      run: docker-compose -f docker-compose.test.yml down
+      run: docker compose -f docker-compose.test.yml down
