@@ -25,8 +25,6 @@ services:
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - PORT=8000
-    depends_on:
-      - neo4j
 
   neo4j:
     image: neo4j:5.22.0
