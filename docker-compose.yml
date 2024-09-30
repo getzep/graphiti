@@ -11,7 +11,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8003/healthcheck')",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')",
         ]
       interval: 10s
       timeout: 5s
