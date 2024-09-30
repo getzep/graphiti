@@ -57,6 +57,8 @@ def setup_logging():
 
 async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[ParsedMscMessage]):
     for i, message in enumerate(messages):
+        if '1995' in message.content:
+            print('hello')
         await graphiti.add_episode(
             name=f'Message {group_id + "-" + str(i)}',
             episode_body=f'{message.speaker_name}: {message.content}',
@@ -71,9 +73,9 @@ async def main():
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     msc_messages = parse_msc_messages()
     i = 0
-    while i <= 490:
-        msc_message_slice = msc_messages[i : i + 10]
-        group_ids = range(len(msc_messages))[i : i + 10]
+    while i <= 1:
+        msc_message_slice = msc_messages[46:47]
+        group_ids = range(len(msc_messages))[46:47]
 
         await asyncio.gather(
             *[

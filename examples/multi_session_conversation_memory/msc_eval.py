@@ -27,6 +27,7 @@ from examples.multi_session_conversation_memory.parse_msc_messages import conver
 from graphiti_core import Graphiti
 from graphiti_core.prompts import prompt_library
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
+from graphiti_core.search.search_utils import get_episodes_by_mentions
 
 load_dotenv()
 
@@ -58,13 +59,24 @@ def setup_logging():
 
 async def evaluate_qa(graphiti: Graphiti, group_id: str, query: str, answer: str):
     search_start = time()
-    results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[str(group_id)])
+    results = await graphiti._search(
+        query,
+        COMBINED_HYBRID_SEARCH_RRF,
+        group_ids=[str(group_id)],
+    )
     search_end = time()
     search_duration = search_end - search_start
 
     facts = [edge.fact for edge in results.edges]
     entity_summaries = [node.name + ': ' + node.summary for node in results.nodes]
-    context = {'facts': facts, 'entity_summaries': entity_summaries, 'query': 'Bob: ' + query}
+    episodes = await get_episodes_by_mentions(graphiti.driver, [], results.edges, 10)
+    messages = []  # [episode.content for episode in episodes]
+    context = {
+        'facts': facts,
+        'entity_summaries': entity_summaries,
+        'messages': messages,
+        'query': 'Bob: ' + query,
+    }
 
     llm_response = await graphiti.llm_client.generate_response(
         prompt_library.eval.qa_prompt(context)
@@ -96,7 +108,14 @@ async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 
-    fields = ['Group id', 'Question', 'Answer', 'Response', 'Score', 'Search Duration (ms)']
+    fields = [
+        'Group id',
+        'Question',
+        'Answer',
+        'Response',
+        'Score',
+        'Search Duration (ms)',
+    ]
     with open('../data/msc_eval.csv', 'w', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
@@ -104,8 +123,8 @@ async def main():
     qa = conversation_q_and_a()[0:500]
     i = 0
     while i < 500:
-        qa_chunk = qa[i : i + 20]
-        group_ids = range(len(qa))[i : i + 20]
+        qa_chunk = qa[i: i + 20]
+        group_ids = range(len(qa))[i: i + 20]
         results = list(
             await asyncio.gather(
                 *[

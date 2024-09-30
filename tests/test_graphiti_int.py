@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
-from graphiti_core.nodes import EntityNode, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
 
 pytestmark = pytest.mark.integration
@@ -75,18 +75,50 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    edges = await graphiti.search(
-        'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
-    )
+    # edges = await graphiti.search(
+    #     'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
+    # )
+    #
+    # logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
+    #
+    # edges = await graphiti.search('issues with higher ed', group_ids=None)
+    #
+    # logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
+    #
+    # results = await graphiti._search(
+    #     'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
+    # )
+    # pretty_results = {
+    #     'edges': [edge.fact for edge in results.edges],
+    #     'nodes': [node.name for node in results.nodes],
+    #     'communities': [community.name for community in results.communities],
+    # }
 
-    logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
-
-    edges = await graphiti.search('issues with higher ed', group_ids=None)
-
-    logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
+    dialog = [
+        'Alice: Hello I love music. Are you familiar with tom petty?',
+        'Bob: Hi! I do but I rarely have time to listen in between school and work.',
+        'Alice: What is the focus of your studies?',
+        'Bob: Are you in school too?',
+        'Alice: No. I finished in 1995. What year are in?',
+        'Bob: First year, I just moved here with my best friend for school too.',
+        "Alice: Its great to have friends. I hope you look after each other that's very important",
+        'Bob: So true! So what do you do for a living?',
+        "Alice: I'm in mining but I hate it. What is your field of interest",
+        'Bob: Aside from nursing, I work at a bar to pay for school.',
+        'Alice: Bar work can be fun. You learn so much about human nature. Thank you for caring about others',
+        'Bob: Of course, it is like a live sociology class too.',
+        'Alice: Absolutely!! The subjects are already prepped with truth serum',
+        'Bob: I definitely agree! Good perspective. Why do you not like mining?',
+    ]
+    for i, message in enumerate(dialog):
+        await graphiti.add_episode(
+            f'Message 500-{i}', message, 'test', datetime.now(), EpisodeType.message, '500'
+        )
 
     results = await graphiti._search(
-        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
+        'Hey, remember that time we talked about our jobs? Can you remind me what year you said you finished school?',
+        COMBINED_HYBRID_SEARCH_RRF,
+        group_ids=['500'],
     )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],

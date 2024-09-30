@@ -52,6 +52,21 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
     return full_query
 
 
+async def get_episodes_by_mentions(
+    driver: AsyncDriver,
+    nodes: list[EntityNode],
+    edges: list[EntityEdge],
+    limit: int = RELEVANT_SCHEMA_LIMIT,
+) -> list[EpisodicNode]:
+    episode_uuids: list[str] = []
+    for edge in edges:
+        episode_uuids.extend(edge.episodes)
+
+    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids[:limit])
+
+    return episodes
+
+
 async def get_mentioned_nodes(
     driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
