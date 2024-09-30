@@ -26,4 +26,6 @@ app.include_router(ingest.router)
 
 @app.get('/healthcheck')
 async def healthcheck():
+    # Simulate error
+    raise Exception('Simulated error')
     return JSONResponse(content={'status': 'healthy'}, status_code=200)
