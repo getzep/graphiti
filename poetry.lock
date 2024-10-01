@@ -1342,13 +1342,13 @@ tiktoken = ">=0.7,<1"
 
 [[package]]
 name = "langgraph"
-version = "0.2.23"
+version = "0.2.28"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = "<4.0,>=3.9.0"
 files = [
-    {file = "langgraph-0.2.23-py3-none-any.whl", hash = "sha256:fc8e2f2e03eef446bc4a8458cce04a77ad41f4bd4b7f0f514a5cdd436d11454b"},
-    {file = "langgraph-0.2.23.tar.gz", hash = "sha256:9f3e486994621c403f0d659a03b15f86ec77b4dfca6fe6ad69686ba60a6b5520"},
+    {file = "langgraph-0.2.28-py3-none-any.whl", hash = "sha256:23390763c025139f71dc1f1576b31b6755fecff8dcc51a84505e24e63ec1218b"},
+    {file = "langgraph-0.2.28.tar.gz", hash = "sha256:c968a1ed85025e0651d9390a7ba978447ab80d676f81dd0a049a7456754b3bce"},
 ]
 
 [package.dependencies]
