@@ -57,8 +57,6 @@ def setup_logging():
 
 async def add_conversation(graphiti: Graphiti, group_id: str, messages: list[ParsedMscMessage]):
     for i, message in enumerate(messages):
-        if '1995' in message.content:
-            print('hello')
         await graphiti.add_episode(
             name=f'Message {group_id + "-" + str(i)}',
             episode_body=f'{message.speaker_name}: {message.content}',

@@ -57,10 +57,7 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
     Your task is to briefly answer the question in the way that you think Alice would answer the question.
-    You are given the following messages, entity summaries and facts to help you determine the answer to your question.
-    <MESSAGES>
-    {json.dumps(context['messages'])}
-    </MESSAGES>
+    You are given the following entity summaries and facts to help you determine the answer to your question.
     <ENTITY_SUMMARIES>
     {json.dumps(context['entity_summaries'])}
     </ENTITY_SUMMARIES>

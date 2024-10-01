@@ -27,7 +27,6 @@ from examples.multi_session_conversation_memory.parse_msc_messages import conver
 from graphiti_core import Graphiti
 from graphiti_core.prompts import prompt_library
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
-from graphiti_core.search.search_utils import get_episodes_by_mentions
 
 load_dotenv()
 
@@ -69,12 +68,9 @@ async def evaluate_qa(graphiti: Graphiti, group_id: str, query: str, answer: str
 
     facts = [edge.fact for edge in results.edges]
     entity_summaries = [node.name + ': ' + node.summary for node in results.nodes]
-    episodes = await get_episodes_by_mentions(graphiti.driver, [], results.edges, 10)
-    messages = []  # [episode.content for episode in episodes]
     context = {
         'facts': facts,
         'entity_summaries': entity_summaries,
-        'messages': messages,
         'query': 'Bob: ' + query,
     }
 

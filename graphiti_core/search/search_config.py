@@ -57,17 +57,17 @@ class CommunityReranker(Enum):
 
 class EdgeSearchConfig(BaseModel):
     search_methods: list[EdgeSearchMethod]
-    reranker: EdgeReranker | None
+    reranker: EdgeReranker = Field(default=EdgeReranker.rrf)
 
 
 class NodeSearchConfig(BaseModel):
     search_methods: list[NodeSearchMethod]
-    reranker: NodeReranker | None
+    reranker: NodeReranker = Field(default=NodeReranker.rrf)
 
 
 class CommunitySearchConfig(BaseModel):
     search_methods: list[CommunitySearchMethod]
-    reranker: CommunityReranker | None
+    reranker: CommunityReranker = Field(default=CommunityReranker.rrf)
 
 
 class SearchConfig(BaseModel):

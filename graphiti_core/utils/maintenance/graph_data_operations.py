@@ -18,7 +18,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, Query
 from typing_extensions import LiteralString
 
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -69,14 +69,37 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
         FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
 
-    index_queries: list[LiteralString] = range_indices + fulltext_indices
+    vector_indices: list[LiteralString] = [
+        """CREATE VECTOR INDEX node_name_embedding IF NOT EXISTS
+        FOR (n:Entity)
+        ON n.name_embedding
+        OPTIONS { indexConfig: {
+         `vector.dimensions`: 1024,
+         `vector.similarity_function`: 'cosine'
+        }}""",
+        """CREATE VECTOR INDEX edge_fact_embedding IF NOT EXISTS
+                FOR ()-[r:RELATES_TO]-()
+                ON r.fact_embedding
+                OPTIONS { indexConfig: {
+                 `vector.dimensions`: 1024,
+                 `vector.similarity_function`: 'cosine'
+                }}""",
+        """CREATE VECTOR INDEX community_name_embedding IF NOT EXISTS
+                FOR (c:Community)
+                ON c.name_embedding
+                OPTIONS { indexConfig: {
+                 `vector.dimensions`: 1024,
+                 `vector.similarity_function`: 'cosine'
+                }}"""
+    ]
+
+    index_queries: list[LiteralString] = range_indices + fulltext_indices + vector_indices
 
     await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
 
 
 async def clear_data(driver: AsyncDriver):
     async with driver.session() as session:
-
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
@@ -84,10 +107,10 @@ async def clear_data(driver: AsyncDriver):
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver,
-    reference_time: datetime,
-    last_n: int = EPISODE_WINDOW_LEN,
-    group_ids: list[str] | None = None,
+        driver: AsyncDriver,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
