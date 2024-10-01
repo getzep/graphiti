@@ -55,12 +55,12 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-        driver: AsyncDriver,
-        embedder: EmbedderClient,
-        query: str,
-        group_ids: list[str] | None,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
+    driver: AsyncDriver,
+    embedder: EmbedderClient,
+    query: str,
+    group_ids: list[str] | None,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query = query.replace('\n', ' ')
@@ -109,21 +109,27 @@ async def search(
 
 
 async def edge_search(
-        driver: AsyncDriver,
-        embedder: EmbedderClient,
-        query: str,
-        group_ids: list[str] | None,
-        config: EdgeSearchConfig | None,
-        center_node_uuid: str | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder: EmbedderClient,
+    query: str,
+    group_ids: list[str] | None,
+    config: EdgeSearchConfig | None,
+    center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     if config is None:
         return []
 
-    search_results: list[list[EntityEdge]] = list(await asyncio.gather(
-        *[edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit), edge_similarity_search(
-            driver, await embedder.create(input=[query]), None, None, group_ids, 2 * limit
-        )]))
+    search_results: list[list[EntityEdge]] = list(
+        await asyncio.gather(
+            *[
+                edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit),
+                edge_similarity_search(
+                    driver, await embedder.create(input=[query]), None, None, group_ids, 2 * limit
+                ),
+            ]
+        )
+    )
 
     edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
 
@@ -161,20 +167,27 @@ async def edge_search(
 
 
 async def node_search(
-        driver: AsyncDriver,
-        embedder: EmbedderClient,
-        query: str,
-        group_ids: list[str] | None,
-        config: NodeSearchConfig | None,
-        center_node_uuid: str | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder: EmbedderClient,
+    query: str,
+    group_ids: list[str] | None,
+    config: NodeSearchConfig | None,
+    center_node_uuid: str | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     if config is None:
         return []
 
     search_results: list[list[EntityNode]] = list(
-        await asyncio.gather(*[node_fulltext_search(driver, query, group_ids, 2 * limit), node_similarity_search(
-            driver, await embedder.create(input=[query]), group_ids, 2 * limit)]))
+        await asyncio.gather(
+            *[
+                node_fulltext_search(driver, query, group_ids, 2 * limit),
+                node_similarity_search(
+                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                ),
+            ]
+        )
+    )
 
     search_result_uuids = [[node.uuid for node in result] for result in search_results]
     node_uuid_map = {node.uuid: node for result in search_results for node in result}
@@ -197,20 +210,26 @@ async def node_search(
 
 
 async def community_search(
-        driver: AsyncDriver,
-        embedder: EmbedderClient,
-        query: str,
-        group_ids: list[str] | None,
-        config: CommunitySearchConfig | None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    embedder: EmbedderClient,
+    query: str,
+    group_ids: list[str] | None,
+    config: CommunitySearchConfig | None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     if config is None:
         return []
 
-    search_results: list[list[CommunityNode]] = list(await asyncio.gather(
-        *[community_fulltext_search(driver, query, group_ids, 2 * limit), community_similarity_search(
-            driver, await embedder.create(input=[query]), group_ids, 2 * limit
-        )]))
+    search_results: list[list[CommunityNode]] = list(
+        await asyncio.gather(
+            *[
+                community_fulltext_search(driver, query, group_ids, 2 * limit),
+                community_similarity_search(
+                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                ),
+            ]
+        )
+    )
 
     search_result_uuids = [[community.uuid for community in result] for result in search_results]
     community_uuid_map = {

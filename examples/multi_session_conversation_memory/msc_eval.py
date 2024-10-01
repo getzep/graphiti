@@ -119,8 +119,8 @@ async def main():
     qa = conversation_q_and_a()[0:500]
     i = 0
     while i < 500:
-        qa_chunk = qa[i: i + 20]
-        group_ids = range(len(qa))[i: i + 20]
+        qa_chunk = qa[i : i + 20]
+        group_ids = range(len(qa))[i : i + 20]
         results = list(
             await asyncio.gather(
                 *[
