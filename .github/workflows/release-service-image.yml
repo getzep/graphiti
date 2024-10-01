@@ -11,6 +11,7 @@ env:
   
 jobs:
   docker-image:
+    needs: build-and-start-svc
     environment:
       name: release
     runs-on: ubuntu-latest
