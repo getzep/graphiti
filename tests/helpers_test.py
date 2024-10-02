@@ -1,3 +1,5 @@
+import pytest
+
 from graphiti_core.helpers import lucene_sanitize
 
 
@@ -14,3 +16,7 @@ def test_lucene_sanitize():
     for query, assert_result in queries:
         result = lucene_sanitize(query)
         assert assert_result == result
+
+
+if __name__ == '__main__':
+    pytest.main([__file__])
