@@ -46,6 +46,7 @@ def lucene_sanitize(query: str) -> str:
             '?': r'\?',
             ':': r'\:',
             '\\': r'\\',
+            '/': r'\/'
         }
     )
 
