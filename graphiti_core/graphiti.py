@@ -700,18 +700,17 @@ class Graphiti:
         ).nodes
         return nodes
 
+    async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
+        episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
 
-async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
-    episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
+        edges_list = await asyncio.gather(
+            *[EntityEdge.get_by_uuids(self.driver, episode.entity_edges) for episode in episodes]
+        )
 
-    edges_list = await asyncio.gather(
-        *[EntityEdge.get_by_uuids(self.driver, episode.entity_edges) for episode in episodes]
-    )
+        edges: list[EntityEdge] = [edge for lst in edges_list for edge in lst]
 
-    edges: list[EntityEdge] = [edge for lst in edges_list for edge in lst]
+        nodes = await get_mentioned_nodes(self.driver, episodes)
 
-    nodes = await get_mentioned_nodes(self.driver, episodes)
+        communities = await get_communities_by_nodes(self.driver, nodes)
 
-    communities = await get_communities_by_nodes(self.driver, nodes)
-
-    return SearchResults(edges=edges, nodes=nodes, communities=communities)
+        return SearchResults(edges=edges, nodes=nodes, communities=communities)

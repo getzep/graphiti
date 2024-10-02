@@ -128,9 +128,6 @@ async def edge_fulltext_search(
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query) 
               YIELD relationship AS rel, score
               MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-              WHERE ($source_uuid IS NULL OR n.uuid = $source_uuid)
-              AND ($target_uuid IS NULL OR m.uuid = $target_uuid)
-              AND ($group_ids IS NULL OR n.group_id IN $group_ids)
               RETURN 
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -177,6 +174,7 @@ async def edge_similarity_search(
                 AND ($source_uuid IS NULL OR n.uuid = $source_uuid)
                 AND ($target_uuid IS NULL OR m.uuid = $target_uuid)
                 WITH n, r, m, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -221,7 +219,6 @@ async def node_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
     YIELD node AS n, score
-    WHERE $group_ids IS NULL OR n.group_id IN $group_ids
     RETURN
         n.uuid AS uuid,
         n.group_id AS group_id, 
@@ -254,6 +251,7 @@ async def node_similarity_search(
                 MATCH (n:Entity)
                 WHERE $group_ids IS NULL OR n.group_id IN $group_ids
                 WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
                     n.uuid As uuid,
                     n.group_id AS group_id,
@@ -286,8 +284,6 @@ async def community_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("community_name", $query) 
     YIELD node AS comm, score
-    MATCH (comm:Community)
-    WHERE $group_ids IS NULL OR comm.group_id in $group_ids
     RETURN
         comm.uuid AS uuid,
         comm.group_id AS group_id, 
@@ -320,6 +316,7 @@ async def community_similarity_search(
                 MATCH (comm:Community)
                 WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
                 WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
                     comm.uuid As uuid,
                     comm.group_id AS group_id,

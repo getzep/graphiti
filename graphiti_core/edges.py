@@ -188,9 +188,9 @@ class EntityEdge(Edge):
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 
         MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
-        SET r = {uuid: $uuid, name: $name, group_id: $group_id, fact: $fact, fact_embedding: $fact_embedding, 
-        episodes: $episodes, created_at: $created_at, expired_at: $expired_at, 
-        valid_at: $valid_at, invalid_at: $invalid_at}
+        SET r = {uuid: $uuid, name: $name, group_id: $group_id, fact: $fact, episodes: $episodes, 
+        created_at: $created_at, expired_at: $expired_at, valid_at: $valid_at, invalid_at: $invalid_at}
+        WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $fact_embedding)
         RETURN r.uuid AS uuid""",
             source_uuid=self.source_node_uuid,
             target_uuid=self.target_node_uuid,
