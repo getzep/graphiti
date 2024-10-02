@@ -80,6 +80,7 @@ async def add_messages(client: Graphiti):
             source=EpisodeType.message,
             reference_time=datetime.now(),
             source_description='Shoe conversation',
+            group_id='500'
         )
 
 
@@ -117,6 +118,7 @@ async def ingest_products_data(client: Graphiti):
             episode.source_description,
             episode.reference_time,
             episode.source,
+            group_id='500'
         )
 
 
