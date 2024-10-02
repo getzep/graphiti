@@ -1,5 +1,3 @@
-import pytest
-
 from graphiti_core.helpers import lucene_sanitize
 
 
