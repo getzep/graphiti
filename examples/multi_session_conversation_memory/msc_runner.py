@@ -71,7 +71,7 @@ async def main():
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     msc_messages = parse_msc_messages()
     i = 0
-    while i <= 490:
+    while i < len(msc_messages):
         msc_message_slice = msc_messages[i : i + 10]
         group_ids = range(len(msc_messages))[i : i + 10]
 
@@ -83,9 +83,6 @@ async def main():
         )
 
         i += 10
-
-    # build communities
-    # await client.build_communities()
 
 
 asyncio.run(main())

@@ -29,13 +29,10 @@ from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
     CommunitySearchConfig,
-    CommunitySearchMethod,
     EdgeReranker,
     EdgeSearchConfig,
-    EdgeSearchMethod,
     NodeReranker,
     NodeSearchConfig,
-    NodeSearchMethod,
     SearchConfig,
     SearchResults,
 )
@@ -120,22 +117,16 @@ async def edge_search(
     if config is None:
         return []
 
-    search_results: list[list[EntityEdge]] = []
-
-    if EdgeSearchMethod.bm25 in config.search_methods:
-        text_search = await edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit)
-        search_results.append(text_search)
-
-    if EdgeSearchMethod.cosine_similarity in config.search_methods:
-        search_vector = await embedder.create(input=[query])
-
-        similarity_search = await edge_similarity_search(
-            driver, search_vector, None, None, group_ids, 2 * limit
+    search_results: list[list[EntityEdge]] = list(
+        await asyncio.gather(
+            *[
+                edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit),
+                edge_similarity_search(
+                    driver, await embedder.create(input=[query]), None, None, group_ids, 2 * limit
+                ),
+            ]
         )
-        search_results.append(similarity_search)
-
-    if len(search_results) > 1 and config.reranker is None:
-        raise SearchRerankerError('Multiple edge searches enabled without a reranker')
+    )
 
     edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
 
@@ -184,22 +175,16 @@ async def node_search(
     if config is None:
         return []
 
-    search_results: list[list[EntityNode]] = []
-
-    if NodeSearchMethod.bm25 in config.search_methods:
-        text_search = await node_fulltext_search(driver, query, group_ids, 2 * limit)
-        search_results.append(text_search)
-
-    if NodeSearchMethod.cosine_similarity in config.search_methods:
-        search_vector = await embedder.create(input=[query])
-
-        similarity_search = await node_similarity_search(
-            driver, search_vector, group_ids, 2 * limit
+    search_results: list[list[EntityNode]] = list(
+        await asyncio.gather(
+            *[
+                node_fulltext_search(driver, query, group_ids, 2 * limit),
+                node_similarity_search(
+                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                ),
+            ]
         )
-        search_results.append(similarity_search)
-
-    if len(search_results) > 1 and config.reranker is None:
-        raise SearchRerankerError('Multiple node searches enabled without a reranker')
+    )
 
     search_result_uuids = [[node.uuid for node in result] for result in search_results]
     node_uuid_map = {node.uuid: node for result in search_results for node in result}
@@ -232,22 +217,16 @@ async def community_search(
     if config is None:
         return []
 
-    search_results: list[list[CommunityNode]] = []
-
-    if CommunitySearchMethod.bm25 in config.search_methods:
-        text_search = await community_fulltext_search(driver, query, group_ids, 2 * limit)
-        search_results.append(text_search)
-
-    if CommunitySearchMethod.cosine_similarity in config.search_methods:
-        search_vector = await embedder.create(input=[query])
-
-        similarity_search = await community_similarity_search(
-            driver, search_vector, group_ids, 2 * limit
+    search_results: list[list[CommunityNode]] = list(
+        await asyncio.gather(
+            *[
+                community_fulltext_search(driver, query, group_ids, 2 * limit),
+                community_similarity_search(
+                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                ),
+            ]
         )
-        search_results.append(similarity_search)
-
-    if len(search_results) > 1 and config.reranker is None:
-        raise SearchRerankerError('Multiple node searches enabled without a reranker')
+    )
 
     search_result_uuids = [[community.uuid for community in result] for result in search_results]
     community_uuid_map = {

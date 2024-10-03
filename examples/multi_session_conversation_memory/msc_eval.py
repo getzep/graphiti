@@ -58,13 +58,21 @@ def setup_logging():
 
 async def evaluate_qa(graphiti: Graphiti, group_id: str, query: str, answer: str):
     search_start = time()
-    results = await graphiti._search(query, COMBINED_HYBRID_SEARCH_RRF, group_ids=[str(group_id)])
+    results = await graphiti._search(
+        query,
+        COMBINED_HYBRID_SEARCH_RRF,
+        group_ids=[str(group_id)],
+    )
     search_end = time()
     search_duration = search_end - search_start
 
     facts = [edge.fact for edge in results.edges]
     entity_summaries = [node.name + ': ' + node.summary for node in results.nodes]
-    context = {'facts': facts, 'entity_summaries': entity_summaries, 'query': 'Bob: ' + query}
+    context = {
+        'facts': facts,
+        'entity_summaries': entity_summaries,
+        'query': 'Bob: ' + query,
+    }
 
     llm_response = await graphiti.llm_client.generate_response(
         prompt_library.eval.qa_prompt(context)
@@ -96,7 +104,14 @@ async def main():
     setup_logging()
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 
-    fields = ['Group id', 'Question', 'Answer', 'Response', 'Score', 'Search Duration (ms)']
+    fields = [
+        'Group id',
+        'Question',
+        'Answer',
+        'Response',
+        'Score',
+        'Search Duration (ms)',
+    ]
     with open('../data/msc_eval.csv', 'w', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()

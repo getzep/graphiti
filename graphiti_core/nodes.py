@@ -225,7 +225,8 @@ class EntityNode(Node):
         result = await driver.execute_query(
             """
         MERGE (n:Entity {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, group_id: $group_id, summary: $summary, created_at: $created_at}
+        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
@@ -308,7 +309,8 @@ class CommunityNode(Node):
         result = await driver.execute_query(
             """
         MERGE (n:Community {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, name_embedding: $name_embedding, group_id: $group_id, summary: $summary, created_at: $created_at}
+        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
         RETURN n.uuid AS uuid""",
             uuid=self.uuid,
             name=self.name,
