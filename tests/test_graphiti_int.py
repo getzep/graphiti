@@ -75,29 +75,18 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    # edges = await graphiti.search(
-    #     'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
-    # )
-    #
-    # logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
-    #
-    # edges = await graphiti.search('issues with higher ed', group_ids=None)
-    #
-    # logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
-    #
-    # results = await graphiti._search(
-    #     'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
-    # )
-    # pretty_results = {
-    #     'edges': [edge.fact for edge in results.edges],
-    #     'nodes': [node.name for node in results.nodes],
-    #     'communities': [community.name for community in results.communities],
-    # }
+    edges = await graphiti.search(
+        'tania tetlow', center_node_uuid='4bf7ebb3-3a98-46c7-90a6-8e516c487961', group_ids=None
+    )
+
+    logger.info('\nQUERY: Tania Tetlow\n' + format_context([edge.fact for edge in edges]))
+
+    edges = await graphiti.search('issues with higher ed', group_ids=None)
+
+    logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
 
     results = await graphiti._search(
-        'Hey, remember that time we talked about our jobs? Can you remind me what year you said you finished school?',
-        COMBINED_HYBRID_SEARCH_RRF,
-        group_ids=['46'],
+        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
     )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
