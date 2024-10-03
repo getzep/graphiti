@@ -29,13 +29,10 @@ from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
     CommunitySearchConfig,
-    CommunitySearchMethod,
     EdgeReranker,
     EdgeSearchConfig,
-    EdgeSearchMethod,
     NodeReranker,
     NodeSearchConfig,
-    NodeSearchMethod,
     SearchConfig,
     SearchResults,
 )

@@ -18,7 +18,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from neo4j import AsyncDriver, Query
+from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
 from graphiti_core.nodes import EpisodeType, EpisodicNode

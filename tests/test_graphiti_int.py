@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
 
 pytestmark = pytest.mark.integration
