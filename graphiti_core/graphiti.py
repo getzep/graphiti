@@ -21,6 +21,7 @@ from time import time
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
+from pydantic import BaseModel
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
@@ -75,6 +76,12 @@ from graphiti_core.utils.maintenance.node_operations import (
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+
+class AddEpisodeResults(BaseModel):
+    episode: EpisodicNode
+    nodes: list[EntityNode]
+    edges: list[EntityEdge]
 
 
 class Graphiti:
@@ -245,7 +252,7 @@ class Graphiti:
         group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
-    ):
+    ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
 
@@ -450,6 +457,8 @@ class Graphiti:
                 )
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
+
+            return AddEpisodeResults(episode=episode, nodes=nodes, edges=entity_edges)
 
         except Exception as e:
             raise e
