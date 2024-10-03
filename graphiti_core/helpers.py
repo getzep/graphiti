@@ -25,7 +25,7 @@ def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
 
 def lucene_sanitize(query: str) -> str:
     # Escape special characters from a query before passing into Lucene
-    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \
+    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
     escape_map = str.maketrans(
         {
             '+': r'\+',
@@ -46,7 +46,7 @@ def lucene_sanitize(query: str) -> str:
             '?': r'\?',
             ':': r'\:',
             '\\': r'\\',
-            '/': r'\/'
+            '/': r'\/',
         }
     )
 
