@@ -113,8 +113,9 @@ def v2(context: dict[str, Any]) -> list[Message]:
         2. Each edge should represent a clear relationship between two DISTINCT nodes.
         3. The relation_type should be a concise, all-caps description of the relationship (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
         4. Provide a more detailed fact describing the relationship.
-        5. Consider temporal aspects of relationships when relevant.
-        6. Avoid using the same node as the source and target of a relationship
+        5. The fact should include any specific relevant information, including numeric information
+        6. Consider temporal aspects of relationships when relevant.
+        7. Avoid using the same node as the source and target of a relationship
 
         Respond with a JSON object in the following format:
         {{

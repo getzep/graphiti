@@ -52,6 +52,21 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
     return full_query
 
 
+async def get_episodes_by_mentions(
+    driver: AsyncDriver,
+    nodes: list[EntityNode],
+    edges: list[EntityEdge],
+    limit: int = RELEVANT_SCHEMA_LIMIT,
+) -> list[EpisodicNode]:
+    episode_uuids: list[str] = []
+    for edge in edges:
+        episode_uuids.extend(edge.episodes)
+
+    episodes = await EpisodicNode.get_by_uuids(driver, episode_uuids[:limit])
+
+    return episodes
+
+
 async def get_mentioned_nodes(
     driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
@@ -113,9 +128,6 @@ async def edge_fulltext_search(
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query) 
               YIELD relationship AS rel, score
               MATCH (n:Entity)-[r {uuid: rel.uuid}]-(m:Entity)
-              WHERE ($source_uuid IS NULL OR n.uuid = $source_uuid)
-              AND ($target_uuid IS NULL OR m.uuid = $target_uuid)
-              AND ($group_ids IS NULL OR n.group_id IN $group_ids)
               RETURN 
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -156,12 +168,14 @@ async def edge_similarity_search(
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     query = Query("""
+                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
                 WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
                 AND ($source_uuid IS NULL OR n.uuid = $source_uuid)
                 AND ($target_uuid IS NULL OR m.uuid = $target_uuid)
+                WITH n, r, m, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
-                    vector.similarity.cosine(r.fact_embedding, $search_vector) AS score,
                     r.uuid AS uuid,
                     r.group_id AS group_id,
                     n.uuid AS source_node_uuid,
@@ -205,7 +219,6 @@ async def node_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
     YIELD node AS n, score
-    WHERE $group_ids IS NULL OR n.group_id IN $group_ids
     RETURN
         n.uuid AS uuid,
         n.group_id AS group_id, 
@@ -234,10 +247,12 @@ async def node_similarity_search(
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
+                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)
                 WHERE $group_ids IS NULL OR n.group_id IN $group_ids
+                WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
-                    vector.similarity.cosine(n.name_embedding, $search_vector) AS score,
                     n.uuid As uuid,
                     n.group_id AS group_id,
                     n.name AS name, 
@@ -269,8 +284,6 @@ async def community_fulltext_search(
         """
     CALL db.index.fulltext.queryNodes("community_name", $query) 
     YIELD node AS comm, score
-    MATCH (comm:Community)
-    WHERE $group_ids IS NULL OR comm.group_id in $group_ids
     RETURN
         comm.uuid AS uuid,
         comm.group_id AS group_id, 
@@ -299,10 +312,12 @@ async def community_similarity_search(
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
+                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (comm:Community)
                 WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
+                WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+                WHERE score > 0.6
                 RETURN
-                    vector.similarity.cosine(comm.name_embedding, $search_vector) AS score,
                     comm.uuid As uuid,
                     comm.group_id AS group_id,
                     comm.name AS name, 

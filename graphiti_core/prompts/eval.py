@@ -23,11 +23,33 @@ from .models import Message, PromptFunction, PromptVersion
 class Prompt(Protocol):
     qa_prompt: PromptVersion
     eval_prompt: PromptVersion
+    query_expansion: PromptVersion
 
 
 class Versions(TypedDict):
     qa_prompt: PromptFunction
     eval_prompt: PromptFunction
+    query_expansion: PromptFunction
+
+
+def query_expansion(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an expert at rephrasing questions into queries used in a database retrieval system"""
+
+    user_prompt = f"""
+    Bob is asking Alice a question, are you able to rephrase the question into a simpler one about Alice in the third person
+    that maintains the relevant context?
+    <QUESTION>
+    {json.dumps(context['query'])}
+    </QUESTION>
+    respond with a JSON object in the following format:
+    {{
+        "query": "query optimized for database search"
+    }}
+    """
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
 
 
 def qa_prompt(context: dict[str, Any]) -> list[Message]:
@@ -38,7 +60,7 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
     You are given the following entity summaries and facts to help you determine the answer to your question.
     <ENTITY_SUMMARIES>
     {json.dumps(context['entity_summaries'])}
-    </ENTITY_SUMMARIES
+    </ENTITY_SUMMARIES>
     <FACTS>
     {json.dumps(context['facts'])}
     </FACTS>
@@ -87,4 +109,8 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'qa_prompt': qa_prompt, 'eval_prompt': eval_prompt}
+versions: Versions = {
+    'qa_prompt': qa_prompt,
+    'eval_prompt': eval_prompt,
+    'query_expansion': query_expansion,
+}
