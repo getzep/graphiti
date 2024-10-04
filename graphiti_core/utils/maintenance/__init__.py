@@ -4,7 +4,6 @@ from .graph_data_operations import (
     retrieve_episodes,
 )
 from .node_operations import extract_nodes
-from .temporal_operations import invalidate_edges
 
 __all__ = [
     'extract_edges',
@@ -12,5 +11,4 @@ __all__ = [
     'extract_nodes',
     'clear_data',
     'retrieve_episodes',
-    'invalidate_edges',
 ]

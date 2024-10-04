@@ -23,9 +23,6 @@ from dotenv import load_dotenv
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.utils.maintenance.temporal_operations import (
-    invalidate_edges,
-)
 
 load_dotenv()
 
