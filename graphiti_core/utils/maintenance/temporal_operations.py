@@ -27,15 +27,6 @@ from graphiti_core.prompts import prompt_library
 logger = logging.getLogger(__name__)
 
 
-def extract_date_strings_from_edge(edge: EntityEdge) -> str:
-    start = edge.valid_at
-    end = edge.invalid_at
-    date_string = f'Start Date: {start.isoformat()}' if start else ''
-    if end:
-        date_string += f' (End Date: {end.isoformat()})'
-    return date_string
-
-
 async def extract_edge_dates(
     llm_client: LLMClient,
     edge: EntityEdge,

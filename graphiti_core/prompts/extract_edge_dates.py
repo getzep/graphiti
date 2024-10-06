@@ -64,8 +64,8 @@ def v1(context: dict[str, Any]) -> list[Message]:
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
             Respond with a JSON object:
             {{
-                "valid_at": "YYYY-MM-DDTHH:MM:SSZ or null",
-                "invalid_at": "YYYY-MM-DDTHH:MM:SSZ or null",
+                "valid_at": "YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null",
+                "invalid_at": "YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null",
             }}
             """,
         ),
