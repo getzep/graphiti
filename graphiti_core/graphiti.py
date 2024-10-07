@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, CommunityNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
 from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResults
 from graphiti_core.search.search_config_recipes import (
@@ -86,13 +86,13 @@ class AddEpisodeResults(BaseModel):
 
 class Graphiti:
     def __init__(
-            self,
-            uri: str,
-            user: str,
-            password: str,
-            llm_client: LLMClient | None = None,
-            embedder: EmbedderClient | None = None,
-            store_raw_episode_content: bool = True,
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        llm_client: LLMClient | None = None,
+        embedder: EmbedderClient | None = None,
+        store_raw_episode_content: bool = True,
     ):
         """
         Initialize a Graphiti instance.
@@ -210,10 +210,10 @@ class Graphiti:
         await build_indices_and_constraints(self.driver, delete_existing)
 
     async def retrieve_episodes(
-            self,
-            reference_time: datetime,
-            last_n: int = EPISODE_WINDOW_LEN,
-            group_ids: list[str] | None = None,
+        self,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -243,15 +243,15 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
-            self,
-            name: str,
-            episode_body: str,
-            source_description: str,
-            reference_time: datetime,
-            source: EpisodeType = EpisodeType.message,
-            group_id: str = '',
-            uuid: str | None = None,
-            update_communities: bool = False,
+        self,
+        name: str,
+        episode_body: str,
+        source_description: str,
+        reference_time: datetime,
+        source: EpisodeType = EpisodeType.message,
+        group_id: str = '',
+        uuid: str | None = None,
+        update_communities: bool = False,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -601,11 +601,11 @@ class Graphiti:
         return community_nodes
 
     async def search(
-            self,
-            query: str,
-            center_node_uuid: str | None = None,
-            group_ids: list[str] | None = None,
-            num_results=DEFAULT_SEARCH_LIMIT,
+        self,
+        query: str,
+        center_node_uuid: str | None = None,
+        group_ids: list[str] | None = None,
+        num_results=DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -657,20 +657,20 @@ class Graphiti:
         return edges
 
     async def _search(
-            self,
-            query: str,
-            config: SearchConfig,
-            group_ids: list[str] | None = None,
-            center_node_uuid: str | None = None,
+        self,
+        query: str,
+        config: SearchConfig,
+        group_ids: list[str] | None = None,
+        center_node_uuid: str | None = None,
     ) -> SearchResults:
         return await search(self.driver, self.embedder, query, group_ids, config, center_node_uuid)
 
     async def get_nodes_by_query(
-            self,
-            query: str,
-            center_node_uuid: str | None = None,
-            group_ids: list[str] | None = None,
-            limit: int = DEFAULT_SEARCH_LIMIT,
+        self,
+        query: str,
+        center_node_uuid: str | None = None,
+        group_ids: list[str] | None = None,
+        limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityNode]:
         """
         Retrieve nodes from the graph database based on a text query.
