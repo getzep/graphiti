@@ -576,11 +576,20 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def build_communities(self):
+    async def build_communities(self, group_ids: list[str] | None = None):
+        """
+        Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
+        the content of these communities.
+        ----------
+        query : list[str] | None
+            Optional. Create communities only for the listed group_ids. If blank the entire graph will be used.
+        """
         # Clear existing communities
         await remove_communities(self.driver)
 
-        community_nodes, community_edges = await build_communities(self.driver, self.llm_client)
+        community_nodes, community_edges = await build_communities(
+            self.driver, self.llm_client, group_ids
+        )
 
         await asyncio.gather(
             *[node.generate_name_embedding(self.embedder) for node in community_nodes]
