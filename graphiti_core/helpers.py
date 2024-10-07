@@ -16,6 +16,7 @@ limitations under the License.
 
 from datetime import datetime
 
+import numpy as np
 from neo4j import time as neo4j_time
 
 
@@ -52,3 +53,15 @@ def lucene_sanitize(query: str) -> str:
 
     sanitized = query.translate(escape_map)
     return sanitized
+
+
+def normalize_l2(x: list[float]) -> list[float]:
+    x = np.array(x)
+    if x.ndim == 1:
+        norm = np.linalg.norm(x)
+        if norm == 0:
+            return x.tolist()
+        return (x / norm).tolist()
+    else:
+        norm = np.linalg.norm(x, 2, axis=1, keepdims=True)
+        return (np.where(norm == 0, x, x / norm)).tolist()
