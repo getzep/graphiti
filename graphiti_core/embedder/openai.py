@@ -19,8 +19,8 @@ from typing import Iterable, List
 from openai import AsyncOpenAI
 from openai.types import EmbeddingModel
 
-from .client import EmbedderClient, EmbedderConfig
 from ..helpers import normalize_l2
+from .client import EmbedderClient, EmbedderConfig
 
 DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'
 
@@ -43,7 +43,7 @@ class OpenAIEmbedder(EmbedderClient):
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def create(
-            self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embeddings.create(input=input, model=self.config.embedding_model)
         return normalize_l2(result.data[0].embedding[: self.config.embedding_dim])

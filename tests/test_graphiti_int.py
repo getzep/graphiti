@@ -85,9 +85,7 @@ async def test_graphiti_init():
 
     logger.info('\nQUERY: issues with higher ed\n' + format_context([edge.fact for edge in edges]))
 
-    results = await graphiti._search(
-        'issues with higher ed', COMBINED_HYBRID_SEARCH_RRF, group_ids=None
-    )
+    results = await graphiti._search('new house', COMBINED_HYBRID_SEARCH_RRF, group_ids=None)
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
         'nodes': [node.name for node in results.nodes],

@@ -19,8 +19,8 @@ from typing import Iterable, List
 import voyageai  # type: ignore
 from pydantic import Field
 
-from .client import EmbedderClient, EmbedderConfig
 from ..helpers import normalize_l2
+from .client import EmbedderClient, EmbedderConfig
 
 DEFAULT_EMBEDDING_MODEL = 'voyage-3'
 
@@ -42,7 +42,7 @@ class VoyageAIEmbedder(EmbedderClient):
         self.client = voyageai.AsyncClient(api_key=config.api_key)
 
     async def create(
-            self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embed(input, model=self.config.embedding_model)
         return normalize_l2(result.embeddings[0][: self.config.embedding_dim])
