@@ -82,7 +82,7 @@ def v2(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to contradictions with the New Edge.
+               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to invalidations with the New Edge.
 
                 Existing Edges:
                 {context['existing_edges']}

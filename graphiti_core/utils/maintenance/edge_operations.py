@@ -122,12 +122,6 @@ async def extract_edges(
     return edges
 
 
-def create_edge_identifier(
-    source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
-) -> str:
-    return f'{source_node.name}-{edge.name}-{target_node.name}'
-
-
 async def dedupe_extracted_edges(
     llm_client: LLMClient,
     extracted_edges: list[EntityEdge],
@@ -251,11 +245,11 @@ async def resolve_extracted_edge(
         if (
             edge.invalid_at is not None
             and resolved_edge.valid_at is not None
-            and edge.invalid_at < resolved_edge.valid_at
+            and edge.invalid_at <= resolved_edge.valid_at
         ) or (
             edge.valid_at is not None
             and resolved_edge.invalid_at is not None
-            and resolved_edge.invalid_at < edge.valid_at
+            and resolved_edge.invalid_at <= edge.valid_at
         ):
             continue
         # New edge invalidates edge
