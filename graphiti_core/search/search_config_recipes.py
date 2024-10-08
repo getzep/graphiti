@@ -43,11 +43,35 @@ COMBINED_HYBRID_SEARCH_RRF = SearchConfig(
     ),
 )
 
+# Performs a hybrid search with mmr reranking over edges, nodes, and communities
+COMBINED_HYBRID_SEARCH_MMR = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        reranker=EdgeReranker.mmr,
+    ),
+    node_config=NodeSearchConfig(
+        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        reranker=NodeReranker.mmr,
+    ),
+    community_config=CommunitySearchConfig(
+        search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
+        reranker=CommunityReranker.mmr,
+    ),
+)
+
 # performs a hybrid search over edges with rrf reranking
 EDGE_HYBRID_SEARCH_RRF = SearchConfig(
     edge_config=EdgeSearchConfig(
         search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
         reranker=EdgeReranker.rrf,
+    )
+)
+
+# performs a hybrid search over edges with mmr reranking
+EDGE_HYBRID_SEARCH_mmr = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        reranker=EdgeReranker.mmr,
     )
 )
 
@@ -75,6 +99,14 @@ NODE_HYBRID_SEARCH_RRF = SearchConfig(
     )
 )
 
+# performs a hybrid search over nodes with mmr reranking
+NODE_HYBRID_SEARCH_MMR = SearchConfig(
+    node_config=NodeSearchConfig(
+        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        reranker=NodeReranker.mmr,
+    )
+)
+
 # performs a hybrid search over nodes with node distance reranking
 NODE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
     node_config=NodeSearchConfig(
@@ -96,5 +128,13 @@ COMMUNITY_HYBRID_SEARCH_RRF = SearchConfig(
     community_config=CommunitySearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
         reranker=CommunityReranker.rrf,
+    )
+)
+
+# performs a hybrid search over communities with mmr reranking
+COMMUNITY_HYBRID_SEARCH_MMR = SearchConfig(
+    community_config=CommunitySearchConfig(
+        search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
+        reranker=CommunityReranker.mmr,
     )
 )
