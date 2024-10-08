@@ -1620,13 +1620,13 @@ msgpack = ">=1.1.0,<2.0.0"
 
 [[package]]
 name = "langsmith"
-version = "0.1.130"
+version = "0.1.131"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.130-py3-none-any.whl", hash = "sha256:acf27d77e699d84b03045f3f226e78be1dffb3e756aa1a085f9993a45380e8b2"},
-    {file = "langsmith-0.1.130.tar.gz", hash = "sha256:3e43f87655a86395133e3a745d5968667d4d05dc9a24c617f89224c8cbf54dce"},
+    {file = "langsmith-0.1.131-py3-none-any.whl", hash = "sha256:80c106b1c42307195cc0bb3a596472c41ef91b79d15bcee9938307800336c563"},
+    {file = "langsmith-0.1.131.tar.gz", hash = "sha256:626101a3bf3ca481e5110d5155ace8aa066e4e9cc2fa7d96c8290ade0fbff797"},
 ]
 
 [package.dependencies]
