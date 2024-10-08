@@ -15,7 +15,6 @@ from graphiti_core.utils.maintenance.edge_operations import build_community_edge
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -24,31 +23,20 @@ class Neighbor(BaseModel):
     edge_count: int
 
 
-async def build_community_projection(driver: AsyncDriver) -> str:
-    records, _, _ = await driver.execute_query("""
-    CALL gds.graph.project("communities", "Entity",             
-        {RELATES_TO: {
-            type: "RELATES_TO",
-            orientation: "UNDIRECTED",
-            properties: {weight: {property: "*", aggregation: "COUNT"}}
-        }}
-    )
-    YIELD graphName AS graph, nodeProjection AS nodes, relationshipProjection AS edges
-    """)
-
-    return records[0]['graph']
-
-
-async def get_community_clusters(driver: AsyncDriver) -> list[list[EntityNode]]:
+async def get_community_clusters(
+    driver: AsyncDriver, group_ids: list[str] | None
+) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
-    group_id_values, _, _ = await driver.execute_query("""
-    MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-    RETURN 
-        collect(DISTINCT n.group_id) AS group_ids
-    """)
+    if group_ids is None:
+        group_id_values, _, _ = await driver.execute_query("""
+        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
+        RETURN 
+            collect(DISTINCT n.group_id) AS group_ids
+        """)
 
-    group_ids = group_id_values[0]['group_ids']
+        group_ids = group_id_values[0]['group_ids']
+
     for group_id in group_ids:
         projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
@@ -197,9 +185,9 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient
+    driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
-    community_clusters = await get_community_clusters(driver)
+    community_clusters = await get_community_clusters(driver, group_ids)
 
     semaphore = asyncio.Semaphore(MAX_COMMUNITY_BUILD_CONCURRENCY)
 

@@ -42,6 +42,7 @@ from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
     episode_mentions_reranker,
+    maximal_marginal_relevance,
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
@@ -117,12 +118,14 @@ async def edge_search(
     if config is None:
         return []
 
+    query_vector = await embedder.create(input=[query])
+
     search_results: list[list[EntityEdge]] = list(
         await asyncio.gather(
             *[
                 edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit),
                 edge_similarity_search(
-                    driver, await embedder.create(input=[query]), None, None, group_ids, 2 * limit
+                    driver, query_vector, None, None, group_ids, 2 * limit, config.sim_min_score
                 ),
             ]
         )
@@ -135,6 +138,15 @@ async def edge_search(
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
         reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == EdgeReranker.mmr:
+        search_result_uuids_and_vectors = [
+            (edge.uuid, edge.fact_embedding if edge.fact_embedding is not None else [0.0] * 1024)
+            for result in search_results
+            for edge in result
+        ]
+        reranked_uuids = maximal_marginal_relevance(
+            query_vector, search_result_uuids_and_vectors, config.mmr_lambda
+        )
     elif config.reranker == EdgeReranker.node_distance:
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
@@ -175,12 +187,14 @@ async def node_search(
     if config is None:
         return []
 
+    query_vector = await embedder.create(input=[query])
+
     search_results: list[list[EntityNode]] = list(
         await asyncio.gather(
             *[
                 node_fulltext_search(driver, query, group_ids, 2 * limit),
                 node_similarity_search(
-                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                    driver, query_vector, group_ids, 2 * limit, config.sim_min_score
                 ),
             ]
         )
@@ -192,6 +206,15 @@ async def node_search(
     reranked_uuids: list[str] = []
     if config.reranker == NodeReranker.rrf:
         reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == NodeReranker.mmr:
+        search_result_uuids_and_vectors = [
+            (node.uuid, node.name_embedding if node.name_embedding is not None else [0.0] * 1024)
+            for result in search_results
+            for node in result
+        ]
+        reranked_uuids = maximal_marginal_relevance(
+            query_vector, search_result_uuids_and_vectors, config.mmr_lambda
+        )
     elif config.reranker == NodeReranker.episode_mentions:
         reranked_uuids = await episode_mentions_reranker(driver, search_result_uuids)
     elif config.reranker == NodeReranker.node_distance:
@@ -217,12 +240,14 @@ async def community_search(
     if config is None:
         return []
 
+    query_vector = await embedder.create(input=[query])
+
     search_results: list[list[CommunityNode]] = list(
         await asyncio.gather(
             *[
                 community_fulltext_search(driver, query, group_ids, 2 * limit),
                 community_similarity_search(
-                    driver, await embedder.create(input=[query]), group_ids, 2 * limit
+                    driver, query_vector, group_ids, 2 * limit, config.sim_min_score
                 ),
             ]
         )
@@ -236,6 +261,18 @@ async def community_search(
     reranked_uuids: list[str] = []
     if config.reranker == CommunityReranker.rrf:
         reranked_uuids = rrf(search_result_uuids)
+    elif config.reranker == CommunityReranker.mmr:
+        search_result_uuids_and_vectors = [
+            (
+                community.uuid,
+                community.name_embedding if community.name_embedding is not None else [0.0] * 1024,
+            )
+            for result in search_results
+            for community in result
+        ]
+        reranked_uuids = maximal_marginal_relevance(
+            query_vector, search_result_uuids_and_vectors, config.mmr_lambda
+        )
 
     reranked_communities = [community_uuid_map[uuid] for uuid in reranked_uuids]
 
