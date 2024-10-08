@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   push:
     tags: [ 'v*.*.*' ]
+  workflow_call:
 jobs:
   build-and-start:
     runs-on: ubuntu-latest
