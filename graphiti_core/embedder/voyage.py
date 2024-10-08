@@ -45,4 +45,4 @@ class VoyageAIEmbedder(EmbedderClient):
         self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embed(input, model=self.config.embedding_model)
-        return normalize_l2(result.embeddings[0][: self.config.embedding_dim])
+        return result.embeddings[0][: self.config.embedding_dim]

@@ -46,4 +46,4 @@ class OpenAIEmbedder(EmbedderClient):
         self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embeddings.create(input=input, model=self.config.embedding_model)
-        return normalize_l2(result.data[0].embedding[: self.config.embedding_dim])
+        return result.data[0].embedding[: self.config.embedding_dim]

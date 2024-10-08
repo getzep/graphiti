@@ -23,7 +23,7 @@ import numpy as np
 from neo4j import AsyncDriver, Query
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
-from graphiti_core.helpers import lucene_sanitize
+from graphiti_core.helpers import lucene_sanitize, normalize_l2
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -588,7 +588,12 @@ def maximal_marginal_relevance(
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
-        max_sim = max([np.dot(candidate[1], c[1]) for c in candidates])
+        max_sim = max(
+            [
+                np.dot(candidate[1], c[1]) / (normalize_l2(candidate[1]) * normalize_l2(c[1]))
+                for c in candidates
+            ]
+        )
         mmr = mmr_lambda * np.dot(candidate[1], query_vector) + (1 - mmr_lambda) * max_sim
         candidates_with_mmr.append((candidate[0], mmr))
 
