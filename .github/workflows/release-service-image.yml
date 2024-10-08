@@ -10,8 +10,10 @@ env:
   IMAGE_NAME: zepai/graphiti
   
 jobs:
+  build_and_start_svc:
+    uses: ./.github/workflows/build-and-start-svc.yml
   docker-image:
-    needs: build-and-start-svc
+    needs: build_and_start_svc
     environment:
       name: release
     runs-on: ubuntu-latest

@@ -9,7 +9,6 @@ env:
 
 jobs:
   release:
-    needs: build-and-start-svc
     runs-on: ubuntu-latest
     permissions:
       id-token: write
