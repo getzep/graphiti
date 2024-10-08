@@ -41,7 +41,7 @@ class VoyageAIEmbedder(EmbedderClient):
         self.client = voyageai.AsyncClient(api_key=config.api_key)
 
     async def create(
-        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+            self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embed(input, model=self.config.embedding_model)
         return result.embeddings[0][: self.config.embedding_dim]

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import CommunityNode, EntityNode
+from graphiti_core.search.search_utils import DEFAULT_MIN_SCORE, DEFAULT_MMR_LAMBDA
 
 DEFAULT_SEARCH_LIMIT = 10
 
@@ -43,31 +44,40 @@ class EdgeReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
     node_distance = 'node_distance'
     episode_mentions = 'episode_mentions'
+    mmr = 'mmr'
 
 
 class NodeReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
     node_distance = 'node_distance'
     episode_mentions = 'episode_mentions'
+    mmr = 'mmr'
 
 
 class CommunityReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
+    mmr = 'mmr'
 
 
 class EdgeSearchConfig(BaseModel):
     search_methods: list[EdgeSearchMethod]
     reranker: EdgeReranker = Field(default=EdgeReranker.rrf)
+    sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
+    mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
 
 
 class NodeSearchConfig(BaseModel):
     search_methods: list[NodeSearchMethod]
     reranker: NodeReranker = Field(default=NodeReranker.rrf)
+    sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
+    mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
 
 
 class CommunitySearchConfig(BaseModel):
     search_methods: list[CommunitySearchMethod]
     reranker: CommunityReranker = Field(default=CommunityReranker.rrf)
+    sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
+    mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
 
 
 class SearchConfig(BaseModel):
