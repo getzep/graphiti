@@ -84,6 +84,7 @@ Requirements:
 Optional:
 
 - Anthropic or Groq API key (for alternative LLM providers)
+- Voyage API key (for alternative embedding providers)
 
 > [!TIP]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
@@ -103,7 +104,8 @@ poetry add graphiti-core
 
 > [!IMPORTANT]
 > Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
-> Support for Anthropic and Groq LLM inferences is available, too.
+> Alternatively, Graphiti also supports Anthropic and Groq for LLM inferences.
+> Voyage embedding support is also available.
 
 ```python
 from graphiti_core import Graphiti

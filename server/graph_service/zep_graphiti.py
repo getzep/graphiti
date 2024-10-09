@@ -4,8 +4,9 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 from graphiti_core import Graphiti  # type: ignore
 from graphiti_core.edges import EntityEdge  # type: ignore
+from graphiti_core.embedder import EmbedderClient  # type: ignore
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
-from graphiti_core.llm_client import LLMClient  # type: ignore
+from graphiti_core.llm_client import LLMClient, LLMConfig  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
 from graph_service.config import ZepEnvDep
@@ -15,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class ZepGraphiti(Graphiti):
-    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
-        super().__init__(uri, user, password, llm_client)
+    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None, embedder: EmbedderClient | None = None):
+        super().__init__(uri, user, password, llm_client, embedder)
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -72,17 +73,44 @@ class ZepGraphiti(Graphiti):
 
 
 async def get_graphiti(settings: ZepEnvDep):
+    llm_client: LLMClient | None = None
+    embedder: EmbedderClient | None = None
+
+    llm_config = LLMConfig(model=settings.model_name)
+
+    if settings.llm_provider == 'groq':
+        from graphiti_core.llm_client.groq_client import GroqClient
+        llm_config.api_key = settings.groq_api_key
+        llm_client = GroqClient(config=llm_config)
+    elif settings.llm_provider == 'anthropic':
+        from graphiti_core.llm_client.anthropic_client import AnthropicClient
+        llm_config.api_key = settings.anthropic_api_key
+        llm_client = AnthropicClient(config=llm_config)
+    else:
+        # fallback to openai
+        from graphiti_core.llm_client.openai_client import OpenAIClient
+        llm_config.api_key = settings.openai_api_key
+        llm_config.base_url = settings.openai_base_url
+        llm_client = OpenAIClient(config=llm_config)
+
+    if settings.embedding_provider == 'voyage':
+        from graphiti_core.embedder.voyage import VoyageAIEmbedder, VoyageAIEmbedderConfig
+        embedder = VoyageAIEmbedder(config=VoyageAIEmbedderConfig(api_key=settings.voyage_api_key))
+    else:
+        # fallback to openai
+        from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+        embedder = OpenAIEmbedder(config=OpenAIEmbedderConfig(api_key=settings.openai_api_key, base_url=settings.openai_base_url))
+
+    if settings.embedding_model_name is not None:
+        embedder.config.embedding_model = settings.embedding_model_name
+
     client = ZepGraphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        llm_client=llm_client,
+        embedder = embedder
     )
-    if settings.openai_base_url is not None:
-        client.llm_client.config.base_url = settings.openai_base_url
-    if settings.openai_api_key is not None:
-        client.llm_client.config.api_key = settings.openai_api_key
-    if settings.model_name is not None:
-        client.llm_client.model = settings.model_name
 
     try:
         yield client
