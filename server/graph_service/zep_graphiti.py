@@ -109,7 +109,7 @@ async def get_graphiti(settings: ZepEnvDep):
         user=settings.neo4j_user,
         password=settings.neo4j_password,
         llm_client=llm_client,
-        embedder = embedder
+        embedder=embedder
     )
 
     try:
