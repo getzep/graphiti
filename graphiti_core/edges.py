@@ -51,7 +51,7 @@ class Edge(BaseModel, ABC):
             uuid=self.uuid,
         )
 
-        logger.info(f'Deleted Edge: {self.uuid}')
+        logger.debug(f'Deleted Edge: {self.uuid}')
 
         return result
 
@@ -83,7 +83,7 @@ class EpisodicEdge(Edge):
             created_at=self.created_at,
         )
 
-        logger.info(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to neo4j: {self.uuid}')
 
         return result
 
@@ -178,7 +178,7 @@ class EntityEdge(Edge):
         self.fact_embedding = await embedder.create(input=[text])
 
         end = time()
-        logger.info(f'embedded {text} in {end - start} ms')
+        logger.debug(f'embedded {text} in {end - start} ms')
 
         return self.fact_embedding
 
@@ -206,7 +206,7 @@ class EntityEdge(Edge):
             invalid_at=self.invalid_at,
         )
 
-        logger.info(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to neo4j: {self.uuid}')
 
         return result
 
@@ -313,7 +313,7 @@ class CommunityEdge(Edge):
             created_at=self.created_at,
         )
 
-        logger.info(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to neo4j: {self.uuid}')
 
         return result
 

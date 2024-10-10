@@ -325,7 +325,7 @@ class Graphiti:
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
-            logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
 
@@ -340,7 +340,7 @@ class Graphiti:
                 )
             )
 
-            logger.info(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
                 resolve_extracted_nodes(self.llm_client, extracted_nodes, existing_nodes_lists),
@@ -348,7 +348,7 @@ class Graphiti:
                     self.llm_client, episode, extracted_nodes, previous_episodes, group_id
                 ),
             )
-            logger.info(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
+            logger.debug(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
             nodes = mentioned_nodes
 
             extracted_edges_with_resolved_pointers = resolve_edge_pointers(
@@ -378,10 +378,10 @@ class Graphiti:
                     ]
                 )
             )
-            logger.info(
+            logger.debug(
                 f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
             )
-            logger.info(
+            logger.debug(
                 f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges_with_resolved_pointers]}'
             )
 
@@ -433,11 +433,11 @@ class Graphiti:
 
             entity_edges.extend(resolved_edges + invalidated_edges)
 
-            logger.info(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
+            logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
             episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
 
-            logger.info(f'Built episodic edges: {episodic_edges}')
+            logger.debug(f'Built episodic edges: {episodic_edges}')
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -563,7 +563,7 @@ class Graphiti:
             edges = await dedupe_edges_bulk(
                 self.driver, self.llm_client, extracted_edges_with_resolved_pointers
             )
-            logger.info(f'extracted edge length: {len(edges)}')
+            logger.debug(f'extracted edge length: {len(edges)}')
 
             # invalidate edges
 

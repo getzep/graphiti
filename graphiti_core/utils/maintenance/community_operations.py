@@ -179,7 +179,7 @@ async def build_community(
     )
     community_edges = build_community_edges(community_cluster, community_node, now)
 
-    logger.info((community_node, community_edges))
+    logger.debug((community_node, community_edges))
 
     return community_node, community_edges
 

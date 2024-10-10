@@ -104,7 +104,7 @@ async def extract_nodes(
         extracted_node_data = await extract_json_nodes(llm_client, episode)
 
     end = time()
-    logger.info(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')
+    logger.debug(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
     new_nodes = []
     for node_data in extracted_node_data:
@@ -116,7 +116,7 @@ async def extract_nodes(
             created_at=datetime.now(),
         )
         new_nodes.append(new_node)
-        logger.info(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
+        logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
     return new_nodes
 
@@ -152,7 +152,7 @@ async def dedupe_extracted_nodes(
     duplicate_data = llm_response.get('duplicates', [])
 
     end = time()
-    logger.info(f'Deduplicated nodes: {duplicate_data} in {(end - start) * 1000} ms')
+    logger.debug(f'Deduplicated nodes: {duplicate_data} in {(end - start) * 1000} ms')
 
     uuid_map: dict[str, str] = {}
     for duplicate in duplicate_data:
@@ -232,7 +232,7 @@ async def resolve_extracted_node(
             uuid_map[extracted_node.uuid] = existing_node.uuid
 
     end = time()
-    logger.info(
+    logger.debug(
         f'Resolved node: {extracted_node.name} is {node.name}, in {(end - start) * 1000} ms'
     )
 
@@ -266,7 +266,7 @@ async def dedupe_node_list(
     nodes_data = llm_response.get('nodes', [])
 
     end = time()
-    logger.info(f'Deduplicated nodes: {nodes_data} in {(end - start) * 1000} ms')
+    logger.debug(f'Deduplicated nodes: {nodes_data} in {(end - start) * 1000} ms')
 
     # Get full node data
     unique_nodes = []

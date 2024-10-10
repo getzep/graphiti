@@ -97,7 +97,7 @@ async def extract_edges(
     edges_data = llm_response.get('edges', [])
 
     end = time()
-    logger.info(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
+    logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
 
     # Convert the extracted data into EntityEdge objects
     edges = []
@@ -115,7 +115,7 @@ async def extract_edges(
                 invalid_at=None,
             )
             edges.append(edge)
-            logger.info(
+            logger.debug(
                 f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
             )
 
@@ -144,7 +144,7 @@ async def dedupe_extracted_edges(
 
     llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))
     duplicate_data = llm_response.get('duplicates', [])
-    logger.info(f'Extracted unique edges: {duplicate_data}')
+    logger.debug(f'Extracted unique edges: {duplicate_data}')
 
     duplicate_uuid_map: dict[str, str] = {}
     for duplicate in duplicate_data:
@@ -299,7 +299,7 @@ async def dedupe_extracted_edge(
             edge = existing_edge
 
     end = time()
-    logger.info(
+    logger.debug(
         f'Resolved Edge: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
     )
 
@@ -326,7 +326,7 @@ async def dedupe_edge_list(
     unique_edges_data = llm_response.get('unique_facts', [])
 
     end = time()
-    logger.info(f'Extracted edge duplicates: {unique_edges_data} in {(end - start) * 1000} ms ')
+    logger.debug(f'Extracted edge duplicates: {unique_edges_data} in {(end - start) * 1000} ms ')
 
     # Get full edge data
     unique_edges = []

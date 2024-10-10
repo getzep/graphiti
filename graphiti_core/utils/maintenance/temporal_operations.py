@@ -88,7 +88,7 @@ async def get_edge_contradictions(
             contradicted_edges.append(contradicted_edge)
 
     end = time()
-    logger.info(
+    logger.debug(
         f'Found invalidated edge candidates from {new_edge.fact}, in {(end - start) * 1000} ms'
     )
 
