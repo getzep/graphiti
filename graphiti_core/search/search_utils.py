@@ -172,7 +172,6 @@ async def edge_similarity_search(
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     query = Query("""
-                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
                 WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
                 AND ($source_uuid IS NULL OR n.uuid = $source_uuid)
@@ -253,7 +252,6 @@ async def node_similarity_search(
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
-                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)
                 WHERE $group_ids IS NULL OR n.group_id IN $group_ids
                 WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
@@ -320,7 +318,6 @@ async def community_similarity_search(
     # vector similarity search over entity names
     records, _, _ = await driver.execute_query(
         """
-                CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (comm:Community)
                 WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
                 WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
