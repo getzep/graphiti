@@ -84,9 +84,9 @@ async def get_graphiti(settings: ZepEnvDep):
     if settings.model_name is not None:
         client.llm_client.model = settings.model_name
     if settings.embedding_model_name is not None and \
-        hasattr(client.embedder, 'config') and  \
-        hasattr(client.embedder.config, 'embedding_model'):
-            client.embedder.config.embedding_model = settings.embedding_model_name
+            hasattr(client.embedder, 'config') and  \
+            hasattr(client.embedder.config, 'embedding_model'):
+        client.embedder.config.embedding_model = settings.embedding_model_name
 
     try:
         yield client
