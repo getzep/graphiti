@@ -544,7 +544,7 @@ async def node_distance_reranker(
     # rerank on shortest distance
     filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
 
-    # add back in filtered center uuids
+    # add back in filtered center uuid
     filtered_uuids = [center_node_uuid] + filtered_uuids
 
     return filtered_uuids
