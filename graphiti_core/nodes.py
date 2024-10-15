@@ -258,6 +258,9 @@ class EntityNode(Node):
 
         nodes = [get_entity_node_from_record(record) for record in records]
 
+        if len(nodes) == 0:
+            raise NodeNotFoundError(uuid)
+
         return nodes[0]
 
     @classmethod
@@ -350,6 +353,9 @@ class CommunityNode(Node):
         )
 
         nodes = [get_community_node_from_record(record) for record in records]
+
+        if len(nodes) == 0:
+            raise NodeNotFoundError(uuid)
 
         return nodes[0]
 

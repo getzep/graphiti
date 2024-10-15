@@ -68,7 +68,7 @@ EDGE_HYBRID_SEARCH_RRF = SearchConfig(
 )
 
 # performs a hybrid search over edges with mmr reranking
-EDGE_HYBRID_SEARCH_mmr = SearchConfig(
+EDGE_HYBRID_SEARCH_MMR = SearchConfig(
     edge_config=EdgeSearchConfig(
         search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
         reranker=EdgeReranker.mmr,
@@ -80,7 +80,8 @@ EDGE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
     edge_config=EdgeSearchConfig(
         search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
         reranker=EdgeReranker.node_distance,
-    )
+    ),
+    limit=30,
 )
 
 # performs a hybrid search over edges with episode mention reranking
