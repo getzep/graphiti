@@ -49,8 +49,8 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
 
     group_ids_filter += ' AND ' if group_ids_filter else ''
 
-    fuzzy_query = lucene_sanitize(query) + '~'
-    full_query = group_ids_filter + fuzzy_query
+    lucene_query = lucene_sanitize(query)
+    full_query = group_ids_filter + lucene_query
 
     return full_query
 
