@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
+MAX_QUERY_LENGTH = 512
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
@@ -50,7 +51,11 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter += ' AND ' if group_ids_filter else ''
 
     lucene_query = lucene_sanitize(query)
-    full_query = group_ids_filter + lucene_query
+    # If the lucene query is too long return no query
+    if len(lucene_query.split(' ')) + len(group_ids or '') >= MAX_QUERY_LENGTH:
+        return ''
+
+    full_query = group_ids_filter + '(' + lucene_query + ')'
 
     return full_query
 
@@ -126,6 +131,8 @@ async def edge_fulltext_search(
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids)
+    if fuzzy_query == '':
+        return []
 
     cypher_query = Query("""
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query) 
@@ -219,6 +226,8 @@ async def node_fulltext_search(
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids)
+    if fuzzy_query == '':
+        return []
 
     records, _, _ = await driver.execute_query(
         """
@@ -286,6 +295,8 @@ async def community_fulltext_search(
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids)
+    if fuzzy_query == '':
+        return []
 
     records, _, _ = await driver.execute_query(
         """
