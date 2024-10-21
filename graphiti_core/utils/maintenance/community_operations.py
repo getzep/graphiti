@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
@@ -24,7 +25,7 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: AsyncDriver, group_ids: list[str] | None
+        driver: AsyncDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -33,7 +34,8 @@ async def get_community_clusters(
         MATCH (n:Entity WHERE n.group_id IS NOT NULL)
         RETURN 
             collect(DISTINCT n.group_id) AS group_ids
-        """)
+        """, _database=DEFAULT_DATABASE,
+                                                           )
 
         group_ids = group_id_values[0]['group_ids']
 
@@ -51,6 +53,7 @@ async def get_community_clusters(
             """,
                 uuid=node.uuid,
                 group_id=group_id,
+                _database=DEFAULT_DATABASE,
             )
 
             projection[node.uuid] = [
@@ -143,7 +146,7 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode]
+        llm_client: LLMClient, community_cluster: list[EntityNode]
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -157,7 +160,7 @@ async def build_community(
                 *[
                     summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
-                        summaries[: int(length / 2)], summaries[int(length / 2) :]
+                        summaries[: int(length / 2)], summaries[int(length / 2):]
                     )
                 ]
             )
@@ -185,7 +188,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
+        driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -212,11 +215,12 @@ async def remove_communities(driver: AsyncDriver):
     await driver.execute_query("""
     MATCH (c:Community)
     DETACH DELETE c
-    """)
+    """, _database=DEFAULT_DATABASE,
+                               )
 
 
 async def determine_entity_community(
-    driver: AsyncDriver, entity: EntityNode
+        driver: AsyncDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
@@ -231,6 +235,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
+        _database=DEFAULT_DATABASE,
     )
 
     if len(records) > 0:
@@ -249,6 +254,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
+        _database=DEFAULT_DATABASE,
     )
 
     communities: list[CommunityNode] = [
@@ -277,7 +283,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
+        driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 

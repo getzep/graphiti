@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.helpers import DEFAULT_DATABASE
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class Node(BaseModel, ABC):
         DETACH DELETE n
         """,
             uuid=self.uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Deleted Node: {self.uuid}')
@@ -133,6 +135,7 @@ class EpisodicNode(Node):
             created_at=self.created_at,
             valid_at=self.valid_at,
             source=self.source.value,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -154,6 +157,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -179,6 +183,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -201,6 +206,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -234,6 +240,7 @@ class EntityNode(Node):
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -254,6 +261,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -277,6 +285,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -297,6 +306,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -321,6 +331,7 @@ class CommunityNode(Node):
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -350,6 +361,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_community_node_from_record(record) for record in records]
@@ -373,6 +385,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         communities = [get_community_node_from_record(record) for record in records]
@@ -393,6 +406,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         communities = [get_community_node_from_record(record) for record in records]

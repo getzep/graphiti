@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -32,10 +33,12 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
     if delete_existing:
         records, _, _ = await driver.execute_query("""
         SHOW INDEXES YIELD name
-        """)
+        """, _database=DEFAULT_DATABASE,
+                                                   )
         index_names = [record['name'] for record in records]
         await asyncio.gather(
-            *[driver.execute_query("""DROP INDEX $name""", name=name) for name in index_names]
+            *[driver.execute_query("""DROP INDEX $name""", name=name, _database=DEFAULT_DATABASE,
+                                   ) for name in index_names]
         )
 
     range_indices: list[LiteralString] = [
@@ -71,12 +74,12 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-    await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
+    await asyncio.gather(*[driver.execute_query(query, _database=DEFAULT_DATABASE,
+                                                ) for query in index_queries])
 
 
 async def clear_data(driver: AsyncDriver):
     async with driver.session() as session:
-
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
@@ -84,10 +87,10 @@ async def clear_data(driver: AsyncDriver):
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver,
-    reference_time: datetime,
-    last_n: int = EPISODE_WINDOW_LEN,
-    group_ids: list[str] | None = None,
+        driver: AsyncDriver,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -121,6 +124,7 @@ async def retrieve_episodes(
         reference_time=reference_time,
         num_episodes=last_n,
         group_ids=group_ids,
+        _database=DEFAULT_DATABASE,
     )
     episodes = [
         EpisodicNode(

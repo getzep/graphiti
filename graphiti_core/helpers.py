@@ -13,11 +13,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import os
 from datetime import datetime
 
 import numpy as np
 from neo4j import time as neo4j_time
+
+DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 
 
 def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:

@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import parse_db_date
+from graphiti_core.helpers import parse_db_date, DEFAULT_DATABASE
 from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class Edge(BaseModel, ABC):
         DELETE e
         """,
             uuid=self.uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Deleted Edge: {self.uuid}')
@@ -81,6 +82,7 @@ class EpisodicEdge(Edge):
             uuid=self.uuid,
             group_id=self.group_id,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to neo4j: {self.uuid}')
@@ -100,6 +102,7 @@ class EpisodicEdge(Edge):
             e.created_at AS created_at
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -122,6 +125,7 @@ class EpisodicEdge(Edge):
             e.created_at AS created_at
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -144,6 +148,7 @@ class EpisodicEdge(Edge):
             e.created_at AS created_at
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -204,6 +209,7 @@ class EntityEdge(Edge):
             expired_at=self.expired_at,
             valid_at=self.valid_at,
             invalid_at=self.invalid_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to neo4j: {self.uuid}')
@@ -230,6 +236,7 @@ class EntityEdge(Edge):
             e.invalid_at AS invalid_at
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -259,6 +266,7 @@ class EntityEdge(Edge):
             e.invalid_at AS invalid_at
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -288,6 +296,7 @@ class EntityEdge(Edge):
             e.invalid_at AS invalid_at
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -311,6 +320,7 @@ class CommunityEdge(Edge):
             uuid=self.uuid,
             group_id=self.group_id,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to neo4j: {self.uuid}')
@@ -330,6 +340,7 @@ class CommunityEdge(Edge):
             e.created_at AS created_at
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
@@ -350,6 +361,7 @@ class CommunityEdge(Edge):
             e.created_at AS created_at
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
@@ -370,6 +382,7 @@ class CommunityEdge(Edge):
             e.created_at AS created_at
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
