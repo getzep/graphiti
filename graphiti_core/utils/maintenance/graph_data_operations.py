@@ -31,14 +31,22 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
     if delete_existing:
-        records, _, _ = await driver.execute_query("""
+        records, _, _ = await driver.execute_query(
+            """
         SHOW INDEXES YIELD name
-        """, _database=DEFAULT_DATABASE,
-                                                   )
+        """,
+            _database=DEFAULT_DATABASE,
+        )
         index_names = [record['name'] for record in records]
         await asyncio.gather(
-            *[driver.execute_query("""DROP INDEX $name""", name=name, _database=DEFAULT_DATABASE,
-                                   ) for name in index_names]
+            *[
+                driver.execute_query(
+                    """DROP INDEX $name""",
+                    name=name,
+                    _database=DEFAULT_DATABASE,
+                )
+                for name in index_names
+            ]
         )
 
     range_indices: list[LiteralString] = [
@@ -74,12 +82,20 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-    await asyncio.gather(*[driver.execute_query(query, _database=DEFAULT_DATABASE,
-                                                ) for query in index_queries])
+    await asyncio.gather(
+        *[
+            driver.execute_query(
+                query,
+                _database=DEFAULT_DATABASE,
+            )
+            for query in index_queries
+        ]
+    )
 
 
 async def clear_data(driver: AsyncDriver):
     async with driver.session() as session:
+
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
@@ -87,10 +103,10 @@ async def clear_data(driver: AsyncDriver):
 
 
 async def retrieve_episodes(
-        driver: AsyncDriver,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
+    driver: AsyncDriver,
+    reference_time: datetime,
+    last_n: int = EPISODE_WINDOW_LEN,
+    group_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.

@@ -28,6 +28,11 @@ from pydantic import BaseModel, Field
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.models.nodes.node_db_queries import (
+    COMMUNITY_NODE_SAVE,
+    ENTITY_NODE_SAVE,
+    EPISODIC_NODE_SAVE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +126,7 @@ class EpisodicNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
-        entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
-        RETURN n.uuid AS uuid""",
+            EPISODIC_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
@@ -229,11 +230,7 @@ class EntityNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Entity {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid""",
+            ENTITY_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
@@ -320,11 +317,7 @@ class CommunityNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Community {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid""",
+            COMMUNITY_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,

@@ -26,7 +26,12 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import parse_db_date, DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
+from graphiti_core.models.edges.edge_db_queries import (
+    COMMUNITY_EDGE_SAVE,
+    ENTITY_EDGE_SAVE,
+    EPISODIC_EDGE_SAVE,
+)
 from graphiti_core.nodes import Node
 
 logger = logging.getLogger(__name__)
@@ -71,12 +76,7 @@ class Edge(BaseModel, ABC):
 class EpisodicEdge(Edge):
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MATCH (episode:Episodic {uuid: $episode_uuid}) 
-        MATCH (node:Entity {uuid: $entity_uuid}) 
-        MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
-        SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
-        RETURN r.uuid AS uuid""",
+            EPISODIC_EDGE_SAVE,
             episode_uuid=self.source_node_uuid,
             entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
@@ -189,14 +189,7 @@ class EntityEdge(Edge):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MATCH (source:Entity {uuid: $source_uuid}) 
-        MATCH (target:Entity {uuid: $target_uuid}) 
-        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
-        SET r = {uuid: $uuid, name: $name, group_id: $group_id, fact: $fact, episodes: $episodes, 
-        created_at: $created_at, expired_at: $expired_at, valid_at: $valid_at, invalid_at: $invalid_at}
-        WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $fact_embedding)
-        RETURN r.uuid AS uuid""",
+            ENTITY_EDGE_SAVE,
             source_uuid=self.source_node_uuid,
             target_uuid=self.target_node_uuid,
             uuid=self.uuid,
@@ -309,12 +302,7 @@ class EntityEdge(Edge):
 class CommunityEdge(Edge):
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MATCH (community:Community {uuid: $community_uuid}) 
-        MATCH (node:Entity | Community {uuid: $entity_uuid}) 
-        MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
-        SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
-        RETURN r.uuid AS uuid""",
+            COMMUNITY_EDGE_SAVE,
             community_uuid=self.source_node_uuid,
             entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
