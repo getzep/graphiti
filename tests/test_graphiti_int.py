@@ -75,7 +75,7 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    results = await graphiti._search('new house', COMBINED_HYBRID_SEARCH_RRF, group_ids=['1'])
+    results = await graphiti._search('new house', COMBINED_HYBRID_SEARCH_RRF, group_ids=None)
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
         'nodes': [node.name for node in results.nodes],
