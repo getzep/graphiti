@@ -27,6 +27,12 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.models.nodes.node_db_queries import (
+    COMMUNITY_NODE_SAVE,
+    ENTITY_NODE_SAVE,
+    EPISODIC_NODE_SAVE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +90,7 @@ class Node(BaseModel, ABC):
         DETACH DELETE n
         """,
             uuid=self.uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Deleted Node: {self.uuid}')
@@ -119,11 +126,7 @@ class EpisodicNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
-        entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
-        RETURN n.uuid AS uuid""",
+            EPISODIC_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
@@ -133,6 +136,7 @@ class EpisodicNode(Node):
             created_at=self.created_at,
             valid_at=self.valid_at,
             source=self.source.value,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -154,6 +158,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -179,6 +184,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -201,6 +207,7 @@ class EpisodicNode(Node):
             e.source AS source
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -223,17 +230,14 @@ class EntityNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Entity {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid""",
+            ENTITY_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -254,6 +258,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -277,6 +282,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -297,6 +303,7 @@ class EntityNode(Node):
             n.summary AS summary
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -310,17 +317,14 @@ class CommunityNode(Node):
 
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
-            """
-        MERGE (n:Community {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid""",
+            COMMUNITY_NODE_SAVE,
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
+            _database=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to neo4j: {self.uuid}')
@@ -350,6 +354,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuid=uuid,
+            _database=DEFAULT_DATABASE,
         )
 
         nodes = [get_community_node_from_record(record) for record in records]
@@ -373,6 +378,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuids=uuids,
+            _database=DEFAULT_DATABASE,
         )
 
         communities = [get_community_node_from_record(record) for record in records]
@@ -393,6 +399,7 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             group_ids=group_ids,
+            _database=DEFAULT_DATABASE,
         )
 
         communities = [get_community_node_from_record(record) for record in records]
