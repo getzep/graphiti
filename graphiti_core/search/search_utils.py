@@ -23,7 +23,7 @@ import numpy as np
 from neo4j import AsyncDriver, Query
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
-from graphiti_core.helpers import lucene_sanitize, normalize_l2
+from graphiti_core.helpers import DEFAULT_DATABASE, lucene_sanitize, normalize_l2
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
-MAX_QUERY_LENGTH = 512
+MAX_QUERY_LENGTH = 128
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
@@ -91,6 +91,7 @@ async def get_mentioned_nodes(
             n.summary AS summary
         """,
         uuids=episode_uuids,
+        _database=DEFAULT_DATABASE,
     )
 
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -114,6 +115,7 @@ async def get_communities_by_nodes(
             c.summary AS summary
         """,
         uuids=node_uuids,
+        _database=DEFAULT_DATABASE,
     )
 
     communities = [get_community_node_from_record(record) for record in records]
@@ -161,6 +163,7 @@ async def edge_fulltext_search(
         target_uuid=target_node_uuid,
         group_ids=group_ids,
         limit=limit,
+        _database=DEFAULT_DATABASE,
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -211,6 +214,7 @@ async def edge_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
+        _database=DEFAULT_DATABASE,
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -246,6 +250,7 @@ async def node_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
+        _database=DEFAULT_DATABASE,
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -281,6 +286,7 @@ async def node_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
+        _database=DEFAULT_DATABASE,
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -315,6 +321,7 @@ async def community_fulltext_search(
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
+        _database=DEFAULT_DATABASE,
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -350,6 +357,7 @@ async def community_similarity_search(
         group_ids=group_ids,
         limit=limit,
         min_score=min_score,
+        _database=DEFAULT_DATABASE,
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -541,6 +549,7 @@ async def node_distance_reranker(
                 query,
                 node_uuid=uuid,
                 center_uuid=center_node_uuid,
+                _database=DEFAULT_DATABASE,
             )
             for uuid in filtered_uuids
         ]
@@ -577,6 +586,7 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
             driver.execute_query(
                 query,
                 node_uuid=uuid,
+                _database=DEFAULT_DATABASE,
             )
             for uuid in sorted_uuids
         ]

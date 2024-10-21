@@ -8,8 +8,13 @@ from pydantic import BaseModel
 
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
+from graphiti_core.nodes import (
+    CommunityNode,
+    EntityNode,
+    get_community_node_from_record,
+)
 from graphiti_core.prompts import prompt_library
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
@@ -29,11 +34,14 @@ async def get_community_clusters(
     community_clusters: list[list[EntityNode]] = []
 
     if group_ids is None:
-        group_id_values, _, _ = await driver.execute_query("""
+        group_id_values, _, _ = await driver.execute_query(
+            """
         MATCH (n:Entity WHERE n.group_id IS NOT NULL)
         RETURN 
             collect(DISTINCT n.group_id) AS group_ids
-        """)
+        """,
+            _database=DEFAULT_DATABASE,
+        )
 
         group_ids = group_id_values[0]['group_ids']
 
@@ -51,6 +59,7 @@ async def get_community_clusters(
             """,
                 uuid=node.uuid,
                 group_id=group_id,
+                _database=DEFAULT_DATABASE,
             )
 
             projection[node.uuid] = [
@@ -209,10 +218,13 @@ async def build_communities(
 
 
 async def remove_communities(driver: AsyncDriver):
-    await driver.execute_query("""
+    await driver.execute_query(
+        """
     MATCH (c:Community)
     DETACH DELETE c
-    """)
+    """,
+        _database=DEFAULT_DATABASE,
+    )
 
 
 async def determine_entity_community(
@@ -231,6 +243,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
+        _database=DEFAULT_DATABASE,
     )
 
     if len(records) > 0:
@@ -249,6 +262,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
+        _database=DEFAULT_DATABASE,
     )
 
     communities: list[CommunityNode] = [

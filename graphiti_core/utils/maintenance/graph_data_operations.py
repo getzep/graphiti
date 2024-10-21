@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -30,12 +31,22 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
     if delete_existing:
-        records, _, _ = await driver.execute_query("""
+        records, _, _ = await driver.execute_query(
+            """
         SHOW INDEXES YIELD name
-        """)
+        """,
+            _database=DEFAULT_DATABASE,
+        )
         index_names = [record['name'] for record in records]
         await asyncio.gather(
-            *[driver.execute_query("""DROP INDEX $name""", name=name) for name in index_names]
+            *[
+                driver.execute_query(
+                    """DROP INDEX $name""",
+                    name=name,
+                    _database=DEFAULT_DATABASE,
+                )
+                for name in index_names
+            ]
         )
 
     range_indices: list[LiteralString] = [
@@ -71,7 +82,15 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-    await asyncio.gather(*[driver.execute_query(query) for query in index_queries])
+    await asyncio.gather(
+        *[
+            driver.execute_query(
+                query,
+                _database=DEFAULT_DATABASE,
+            )
+            for query in index_queries
+        ]
+    )
 
 
 async def clear_data(driver: AsyncDriver):
@@ -121,6 +140,7 @@ async def retrieve_episodes(
         reference_time=reference_time,
         num_episodes=last_n,
         group_ids=group_ids,
+        _database=DEFAULT_DATABASE,
     )
     episodes = [
         EpisodicNode(
