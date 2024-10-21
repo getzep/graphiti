@@ -25,9 +25,9 @@ from neo4j import AsyncDriver
 from numpy import dot, sqrt
 from pydantic import BaseModel
 
-from graphiti_core.edges import CommunityEdge, Edge, EntityEdge, EpisodicEdge
+from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
 from graphiti_core.utils import retrieve_episodes
 from graphiti_core.utils.maintenance.edge_operations import (
