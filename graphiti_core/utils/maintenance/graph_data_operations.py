@@ -35,7 +35,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
             """
         SHOW INDEXES YIELD name
         """,
-            _database=DEFAULT_DATABASE,
+            database_=DEFAULT_DATABASE,
         )
         index_names = [record['name'] for record in records]
         await asyncio.gather(

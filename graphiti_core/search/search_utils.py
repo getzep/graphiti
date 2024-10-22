@@ -79,20 +79,21 @@ async def get_mentioned_nodes(
     driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
-    records, _, _ = await driver.execute_query(
-        """
-        MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
-        RETURN DISTINCT
-            n.uuid As uuid, 
-            n.group_id AS group_id,
-            n.name AS name,
-            n.name_embedding AS name_embedding
-            n.created_at AS created_at, 
-            n.summary AS summary
-        """,
-        uuids=episode_uuids,
-        _database=DEFAULT_DATABASE,
-    )
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
+            MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
+            RETURN DISTINCT
+                n.uuid As uuid, 
+                n.group_id AS group_id,
+                n.name AS name,
+                n.name_embedding AS name_embedding,
+                n.created_at AS created_at, 
+                n.summary AS summary
+            """,
+            {'uuids': episode_uuids},
+        )
+        records = [record async for record in result]
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -103,8 +104,9 @@ async def get_communities_by_nodes(
     driver: AsyncDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
-    records, _, _ = await driver.execute_query(
-        """
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
         MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
         RETURN DISTINCT
             c.uuid As uuid, 
@@ -114,9 +116,9 @@ async def get_communities_by_nodes(
             c.created_at AS created_at, 
             c.summary AS summary
         """,
-        uuids=node_uuids,
-        _database=DEFAULT_DATABASE,
-    )
+            {'uuids': node_uuids},
+        )
+        records = [record async for record in result]
 
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -156,15 +158,18 @@ async def edge_fulltext_search(
                 ORDER BY score DESC LIMIT $limit
                 """)
 
-    records, _, _ = await driver.execute_query(
-        cypher_query,
-        query=fuzzy_query,
-        source_uuid=source_node_uuid,
-        target_uuid=target_node_uuid,
-        group_ids=group_ids,
-        limit=limit,
-        _database=DEFAULT_DATABASE,
-    )
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            cypher_query,
+            {
+                'query': fuzzy_query,
+                'source_uuid': source_node_uuid,
+                'target_uuid': target_node_uuid,
+                'group_ids': group_ids,
+                'limit': limit,
+            },
+        )
+        records = [record async for record in result]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -206,16 +211,19 @@ async def edge_similarity_search(
                 LIMIT $limit
         """)
 
-    records, _, _ = await driver.execute_query(
-        query,
-        search_vector=search_vector,
-        source_uuid=source_node_uuid,
-        target_uuid=target_node_uuid,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        _database=DEFAULT_DATABASE,
-    )
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            query,
+            {
+                'search_vector': search_vector,
+                'source_uuid': source_node_uuid,
+                'target_uuid': target_node_uuid,
+                'group_ids': group_ids,
+                'limit': limit,
+                'min_score': min_score,
+            },
+        )
+        records = [record async for record in result]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -233,8 +241,9 @@ async def node_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    records, _, _ = await driver.execute_query(
-        """
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
     CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
     YIELD node AS n, score
     RETURN
@@ -247,11 +256,13 @@ async def node_fulltext_search(
     ORDER BY score DESC
     LIMIT $limit
     """,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        _database=DEFAULT_DATABASE,
-    )
+            {
+                'query': fuzzy_query,
+                'group_ids': group_ids,
+                'limit': limit,
+            },
+        )
+        records = [record async for record in result]
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -265,8 +276,9 @@ async def node_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
-    records, _, _ = await driver.execute_query(
-        """
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
                 CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)
                 WHERE $group_ids IS NULL OR n.group_id IN $group_ids
@@ -282,12 +294,14 @@ async def node_similarity_search(
                 ORDER BY score DESC
                 LIMIT $limit
                 """,
-        search_vector=search_vector,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        _database=DEFAULT_DATABASE,
-    )
+            {
+                'search_vector': search_vector,
+                'group_ids': group_ids,
+                'limit': limit,
+                'min_score': min_score,
+            },
+        )
+        records = [record async for record in result]
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -304,8 +318,9 @@ async def community_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    records, _, _ = await driver.execute_query(
-        """
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
     CALL db.index.fulltext.queryNodes("community_name", $query) 
     YIELD node AS comm, score
     RETURN
@@ -318,11 +333,13 @@ async def community_fulltext_search(
     ORDER BY score DESC
     LIMIT $limit
     """,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        _database=DEFAULT_DATABASE,
-    )
+            {
+                'query': fuzzy_query,
+                'group_ids': group_ids,
+                'limit': limit,
+            },
+        )
+        records = [record async for record in result]
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities
@@ -336,8 +353,9 @@ async def community_similarity_search(
     min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
-    records, _, _ = await driver.execute_query(
-        """
+    async with driver.session(database=DEFAULT_DATABASE) as session:
+        result = await session.run(
+            """
                 CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (comm:Community)
                 WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
@@ -353,12 +371,14 @@ async def community_similarity_search(
                 ORDER BY score DESC
                 LIMIT $limit
                 """,
-        search_vector=search_vector,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        _database=DEFAULT_DATABASE,
-    )
+            {
+                'search_vector': search_vector,
+                'group_ids': group_ids,
+                'limit': limit,
+                'min_score': min_score,
+            },
+        )
+        records = [record async for record in result]
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities
@@ -549,7 +569,7 @@ async def node_distance_reranker(
                 query,
                 node_uuid=uuid,
                 center_uuid=center_node_uuid,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for uuid in filtered_uuids
         ]
@@ -586,7 +606,7 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
             driver.execute_query(
                 query,
                 node_uuid=uuid,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for uuid in sorted_uuids
         ]
