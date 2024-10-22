@@ -569,7 +569,7 @@ async def node_distance_reranker(
                 query,
                 node_uuid=uuid,
                 center_uuid=center_node_uuid,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for uuid in filtered_uuids
         ]
@@ -606,7 +606,7 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
             driver.execute_query(
                 query,
                 node_uuid=uuid,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for uuid in sorted_uuids
         ]
