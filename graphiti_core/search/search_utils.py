@@ -87,7 +87,7 @@ async def get_mentioned_nodes(
                 n.uuid As uuid, 
                 n.group_id AS group_id,
                 n.name AS name,
-                n.name_embedding AS name_embedding
+                n.name_embedding AS name_embedding,
                 n.created_at AS created_at, 
                 n.summary AS summary
             """,
