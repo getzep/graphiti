@@ -40,7 +40,7 @@ async def get_community_clusters(
         RETURN 
             collect(DISTINCT n.group_id) AS group_ids
         """,
-            _database=DEFAULT_DATABASE,
+            database_=DEFAULT_DATABASE,
         )
 
         group_ids = group_id_values[0]['group_ids']
@@ -59,7 +59,7 @@ async def get_community_clusters(
             """,
                 uuid=node.uuid,
                 group_id=group_id,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
 
             projection[node.uuid] = [
@@ -223,7 +223,7 @@ async def remove_communities(driver: AsyncDriver):
     MATCH (c:Community)
     DETACH DELETE c
     """,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
 
 
@@ -243,7 +243,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
 
     if len(records) > 0:
@@ -262,7 +262,7 @@ async def determine_entity_community(
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
 
     communities: list[CommunityNode] = [
