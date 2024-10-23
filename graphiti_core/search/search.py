@@ -53,12 +53,12 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
-    embedder: EmbedderClient,
-    query: str,
-    group_ids: list[str] | None,
-    config: SearchConfig,
-    center_node_uuid: str | None = None,
+        driver: AsyncDriver,
+        embedder: EmbedderClient,
+        query: str,
+        group_ids: list[str] | None,
+        config: SearchConfig,
+        center_node_uuid: str | None = None,
 ) -> SearchResults:
     start = time()
     query_vector = await embedder.create(input=[query.replace('\n', ' ')])
@@ -102,19 +102,19 @@ async def search(
 
     latency = (time() - start) * 1000
 
-    logger.info(f'search returned context for query {query} in {latency} ms')
+    logger.debug(f'search returned context for query {query} in {latency} ms')
 
     return results
 
 
 async def edge_search(
-    driver: AsyncDriver,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: EdgeSearchConfig | None,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: EdgeSearchConfig | None,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     if config is None:
         return []
@@ -175,13 +175,13 @@ async def edge_search(
 
 
 async def node_search(
-    driver: AsyncDriver,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: NodeSearchConfig | None,
-    center_node_uuid: str | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: NodeSearchConfig | None,
+        center_node_uuid: str | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     if config is None:
         return []
@@ -227,12 +227,12 @@ async def node_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: CommunitySearchConfig | None,
-    limit=DEFAULT_SEARCH_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: CommunitySearchConfig | None,
+        limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     if config is None:
         return []
