@@ -594,25 +594,20 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
-    query = Query("""  
-        MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $node_uuid})
-        RETURN count(*) AS score
+    query = Query("""
+        UNWIND $node_uuids AS node_uuid 
+        MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
+        RETURN count(*) AS score, n.uuid AS uuid
         """)
 
-    result_scores = await asyncio.gather(
-        *[
-            driver.execute_query(
-                query,
-                node_uuid=uuid,
-                database_=DEFAULT_DATABASE,
-            )
-            for uuid in sorted_uuids
-        ]
+    results, _, _ = await driver.execute_query(
+        query,
+        node_uuids=sorted_uuids,
+        database_=DEFAULT_DATABASE,
     )
 
-    for uuid, result in zip(sorted_uuids, result_scores):
-        record = result[0][0]
-        scores[uuid] = record['score']
+    for result in results:
+        scores[result['uuid']] = result['score']
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
