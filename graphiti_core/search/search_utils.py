@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
+MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
 
 
@@ -241,6 +242,58 @@ async def edge_similarity_search(
     return edges
 
 
+async def edge_bfs_search(
+    driver: AsyncDriver,
+    bfs_origin_node_uuids: list[str],
+    bfs_max_depth: int,
+) -> list[EntityEdge]:
+    # vector similarity search over embedded facts
+    query = Query("""
+                CYPHER runtime = parallel parallelRuntimeSupport=all
+                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
+                AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
+                AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
+                WITH DISTINCT n, r, m, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+                WHERE score > $min_score
+                RETURN
+                    r.uuid AS uuid,
+                    r.group_id AS group_id,
+                    n.uuid AS source_node_uuid,
+                    m.uuid AS target_node_uuid,
+                    r.created_at AS created_at,
+                    r.name AS name,
+                    r.fact AS fact,
+                    r.fact_embedding AS fact_embedding,
+                    r.episodes AS episodes,
+                    r.expired_at AS expired_at,
+                    r.valid_at AS valid_at,
+                    r.invalid_at AS invalid_at
+                ORDER BY score DESC
+                LIMIT $limit
+        """)
+
+    async with driver.session(
+        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
+    ) as session:
+        result = await session.run(
+            query,
+            {
+                'search_vector': search_vector,
+                'source_uuid': source_node_uuid,
+                'target_uuid': target_node_uuid,
+                'group_ids': group_ids,
+                'limit': limit,
+                'min_score': min_score,
+            },
+        )
+        records = [record async for record in result]
+
+    edges = [get_entity_edge_from_record(record) for record in records]
+
+    return edges
+
+
 async def node_fulltext_search(
     driver: AsyncDriver,
     query: str,
@@ -314,6 +367,42 @@ async def node_similarity_search(
                 'group_ids': group_ids,
                 'limit': limit,
                 'min_score': min_score,
+            },
+        )
+        records = [record async for record in result]
+    nodes = [get_entity_node_from_record(record) for record in records]
+
+    return nodes
+
+
+async def node_bfs_search(
+    driver: AsyncDriver,
+    bfs_origin_node_uuids: list[str],
+    bfs_max_depth: int,
+) -> list[EntityNode]:
+    # vector similarity search over entity names
+    async with driver.session(
+        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
+    ) as session:
+        result = await session.run(
+            """
+                UNWIND $bfs_origin_node_uuids AS origin_uuid
+                MATCH (n:Entity)
+                WHERE $group_ids IS NULL OR n.group_id IN $group_ids
+                WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
+                WHERE score > $min_score
+                RETURN
+                    n.uuid As uuid,
+                    n.group_id AS group_id,
+                    n.name AS name, 
+                    n.name_embedding AS name_embedding,
+                    n.created_at AS created_at, 
+                    n.summary AS summary
+                ORDER BY score DESC
+                LIMIT $limit
+                """,
+            {
+                'bfs_origin_node_uuids': bfs_origin_node_uuids,
             },
         )
         records = [record async for record in result]

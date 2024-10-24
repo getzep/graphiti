@@ -21,6 +21,7 @@ from time import time
 
 from neo4j import AsyncDriver
 
+from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
@@ -55,10 +56,12 @@ logger = logging.getLogger(__name__)
 async def search(
     driver: AsyncDriver,
     embedder: EmbedderClient,
+    cross_encoder: CrossEncoderClient,
     query: str,
     group_ids: list[str] | None,
     config: SearchConfig,
     center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
     start = time()
     query_vector = await embedder.create(input=[query.replace('\n', ' ')])
@@ -68,28 +71,34 @@ async def search(
     edges, nodes, communities = await asyncio.gather(
         edge_search(
             driver,
+            cross_encoder,
             query,
             query_vector,
             group_ids,
             config.edge_config,
             center_node_uuid,
+            bfs_origin_node_uuids,
             config.limit,
         ),
         node_search(
             driver,
+            cross_encoder,
             query,
             query_vector,
             group_ids,
             config.node_config,
             center_node_uuid,
+            bfs_origin_node_uuids,
             config.limit,
         ),
         community_search(
             driver,
+            cross_encoder,
             query,
             query_vector,
             group_ids,
             config.community_config,
+            bfs_origin_node_uuids,
             config.limit,
         ),
     )
@@ -109,11 +118,13 @@ async def search(
 
 async def edge_search(
     driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
     config: EdgeSearchConfig | None,
     center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     if config is None:
@@ -146,6 +157,10 @@ async def edge_search(
         reranked_uuids = maximal_marginal_relevance(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda
         )
+    elif config.reranker == EdgeReranker.cross_encoder:
+        fact_to_uuid_map = {edge.fact: edge.uuid for result in search_results for edge in result}
+        reranked_facts = await cross_encoder.rank(query, list(fact_to_uuid_map.keys()))
+        reranked_uuids = [fact_to_uuid_map[fact] for fact, _ in reranked_facts]
     elif config.reranker == EdgeReranker.node_distance:
         if center_node_uuid is None:
             raise SearchRerankerError('No center node provided for Node Distance reranker')
@@ -176,11 +191,13 @@ async def edge_search(
 
 async def node_search(
     driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
     config: NodeSearchConfig | None,
     center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     if config is None:
@@ -212,6 +229,12 @@ async def node_search(
         reranked_uuids = maximal_marginal_relevance(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda
         )
+    elif config.reranker == NodeReranker.cross_encoder:
+        summary_to_uuid_map = {
+            node.summary: node.uuid for result in search_results for node in result
+        }
+        reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
+        reranked_uuids = [summary_to_uuid_map[fact] for fact, _ in reranked_summaries]
     elif config.reranker == NodeReranker.episode_mentions:
         reranked_uuids = await episode_mentions_reranker(driver, search_result_uuids)
     elif config.reranker == NodeReranker.node_distance:
@@ -228,10 +251,12 @@ async def node_search(
 
 async def community_search(
     driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
     config: CommunitySearchConfig | None,
+    bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     if config is None:
@@ -268,6 +293,12 @@ async def community_search(
         reranked_uuids = maximal_marginal_relevance(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda
         )
+    elif config.reranker == CommunityReranker.cross_encoder:
+        summary_to_uuid_map = {
+            node.summary: node.uuid for result in search_results for node in result
+        }
+        reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
+        reranked_uuids = [summary_to_uuid_map[fact] for fact, _ in reranked_summaries]
 
     reranked_communities = [community_uuid_map[uuid] for uuid in reranked_uuids]
 

@@ -48,14 +48,33 @@ COMBINED_HYBRID_SEARCH_MMR = SearchConfig(
     edge_config=EdgeSearchConfig(
         search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
         reranker=EdgeReranker.mmr,
+        mmr_lambda=1,
     ),
     node_config=NodeSearchConfig(
         search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
         reranker=NodeReranker.mmr,
+        mmr_lambda=1,
     ),
     community_config=CommunitySearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
         reranker=CommunityReranker.mmr,
+        mmr_lambda=1,
+    ),
+)
+
+# Performs a hybrid search with cross_encoder reranking over edges, nodes, and communities
+COMBINED_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        reranker=EdgeReranker.cross_encoder,
+    ),
+    node_config=NodeSearchConfig(
+        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        reranker=NodeReranker.cross_encoder,
+    ),
+    community_config=CommunitySearchConfig(
+        search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
+        reranker=CommunityReranker.cross_encoder,
     ),
 )
 
@@ -81,7 +100,6 @@ EDGE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
         search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
         reranker=EdgeReranker.node_distance,
     ),
-    limit=30,
 )
 
 # performs a hybrid search over edges with episode mention reranking
