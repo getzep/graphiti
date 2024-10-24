@@ -17,6 +17,7 @@ limitations under the License.
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
+
 class CrossEncoderClient(ABC):
     """
     CrossEncoderClient is an abstract base class that defines the interface

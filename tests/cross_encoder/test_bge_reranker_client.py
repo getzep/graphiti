@@ -18,6 +18,8 @@ import pytest
 
 from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def client():
