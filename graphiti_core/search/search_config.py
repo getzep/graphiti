@@ -20,7 +20,11 @@ from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import CommunityNode, EntityNode
-from graphiti_core.search.search_utils import DEFAULT_MIN_SCORE, DEFAULT_MMR_LAMBDA
+from graphiti_core.search.search_utils import (
+    DEFAULT_MIN_SCORE,
+    DEFAULT_MMR_LAMBDA,
+    MAX_SEARCH_DEPTH,
+)
 
 DEFAULT_SEARCH_LIMIT = 10
 
@@ -28,11 +32,13 @@ DEFAULT_SEARCH_LIMIT = 10
 class EdgeSearchMethod(Enum):
     cosine_similarity = 'cosine_similarity'
     bm25 = 'bm25'
+    bfs = 'breadth_first_search'
 
 
 class NodeSearchMethod(Enum):
     cosine_similarity = 'cosine_similarity'
     bm25 = 'bm25'
+    bfs = 'breadth_first_search'
 
 
 class CommunitySearchMethod(Enum):
@@ -45,6 +51,7 @@ class EdgeReranker(Enum):
     node_distance = 'node_distance'
     episode_mentions = 'episode_mentions'
     mmr = 'mmr'
+    cross_encoder = 'cross_encoder'
 
 
 class NodeReranker(Enum):
@@ -52,11 +59,13 @@ class NodeReranker(Enum):
     node_distance = 'node_distance'
     episode_mentions = 'episode_mentions'
     mmr = 'mmr'
+    cross_encoder = 'cross_encoder'
 
 
 class CommunityReranker(Enum):
     rrf = 'reciprocal_rank_fusion'
     mmr = 'mmr'
+    cross_encoder = 'cross_encoder'
 
 
 class EdgeSearchConfig(BaseModel):
@@ -64,6 +73,7 @@ class EdgeSearchConfig(BaseModel):
     reranker: EdgeReranker = Field(default=EdgeReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class NodeSearchConfig(BaseModel):
@@ -71,6 +81,7 @@ class NodeSearchConfig(BaseModel):
     reranker: NodeReranker = Field(default=NodeReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class CommunitySearchConfig(BaseModel):
@@ -78,6 +89,7 @@ class CommunitySearchConfig(BaseModel):
     reranker: CommunityReranker = Field(default=CommunityReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class SearchConfig(BaseModel):
