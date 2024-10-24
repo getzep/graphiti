@@ -40,6 +40,7 @@ from graphiti_core.search.search_config import (
 from graphiti_core.search.search_utils import (
     community_fulltext_search,
     community_similarity_search,
+    edge_bfs_search,
     edge_fulltext_search,
     edge_similarity_search,
     episode_mentions_reranker,
@@ -137,6 +138,7 @@ async def edge_search(
                 edge_similarity_search(
                     driver, query_vector, None, None, group_ids, 2 * limit, config.sim_min_score
                 ),
+                edge_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth),
             ]
         )
     )

@@ -73,6 +73,7 @@ class EdgeSearchConfig(BaseModel):
     reranker: EdgeReranker = Field(default=EdgeReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class NodeSearchConfig(BaseModel):
@@ -80,7 +81,7 @@ class NodeSearchConfig(BaseModel):
     reranker: NodeReranker = Field(default=NodeReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
-    # bfs_max_depth: int = Field(defaukt=MAX_SEARCH_DEPTH)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class CommunitySearchConfig(BaseModel):
@@ -88,7 +89,7 @@ class CommunitySearchConfig(BaseModel):
     reranker: CommunityReranker = Field(default=CommunityReranker.rrf)
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
-    # bfs_max_depth: int = Field(defaukt=MAX_SEARCH_DEPTH)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
 class SearchConfig(BaseModel):

@@ -27,8 +27,6 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
-    COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-    COMBINED_HYBRID_SEARCH_MMR,
     COMBINED_HYBRID_SEARCH_RRF,
 )
 
@@ -70,9 +68,9 @@ async def test_graphiti_init():
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
     results = await graphiti._search(
-        "Emily: I can't log in",
+        'new house',
         COMBINED_HYBRID_SEARCH_RRF,
-        group_ids=['f8c808d5-4174-4053-9ed2-362c82208aa8'],
+        group_ids=None,
     )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
@@ -80,33 +78,8 @@ async def test_graphiti_init():
         'communities': [community.name for community in results.communities],
     }
 
-    logger.info('RRF results: ' + str(pretty_results))
+    logger.info(pretty_results)
 
-    results = await graphiti._search(
-        "Emily: I can't log in",
-        COMBINED_HYBRID_SEARCH_MMR,
-        group_ids=['f8c808d5-4174-4053-9ed2-362c82208aa8'],
-    )
-    pretty_results = {
-        'edges': [edge.fact for edge in results.edges],
-        'nodes': [node.name for node in results.nodes],
-        'communities': [community.name for community in results.communities],
-    }
-
-    logger.info('MMR lambda = .5 results: ' + str(pretty_results))
-
-    results = await graphiti._search(
-        "Emily: I can't log in",
-        COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-        group_ids=['f8c808d5-4174-4053-9ed2-362c82208aa8'],
-    )
-    pretty_results = {
-        'edges': [edge.fact for edge in results.edges],
-        'nodes': [node.name for node in results.nodes],
-        'communities': [community.name for community in results.communities],
-    }
-
-    logger.info('Cross Encoder results: ' + str(pretty_results))
     await graphiti.close()
 
 

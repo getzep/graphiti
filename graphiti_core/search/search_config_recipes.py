@@ -62,14 +62,22 @@ COMBINED_HYBRID_SEARCH_MMR = SearchConfig(
     ),
 )
 
-# Performs a hybrid search with cross_encoder reranking over edges, nodes, and communities
+# Performs a full-text search, similarity search, and bfs with cross_encoder reranking over edges, nodes, and communities
 COMBINED_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
     edge_config=EdgeSearchConfig(
-        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        search_methods=[
+            EdgeSearchMethod.bm25,
+            EdgeSearchMethod.cosine_similarity,
+            EdgeSearchMethod.bfs,
+        ],
         reranker=EdgeReranker.cross_encoder,
     ),
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.bfs,
+        ],
         reranker=NodeReranker.cross_encoder,
     ),
     community_config=CommunitySearchConfig(

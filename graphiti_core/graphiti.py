@@ -148,7 +148,7 @@ class Graphiti:
         if cross_encoder:
             self.cross_encoder = cross_encoder
         else:
-            self.cross_encoder = BGERerankerClient()
+            self.cross_encoder = None
 
     async def close(self):
         """
@@ -672,6 +672,7 @@ class Graphiti:
         config: SearchConfig,
         group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
     ) -> SearchResults:
         return await search(
             self.driver,
@@ -681,6 +682,7 @@ class Graphiti:
             group_ids,
             config,
             center_node_uuid,
+            bfs_origin_node_uuids,
         )
 
     async def get_nodes_by_query(
