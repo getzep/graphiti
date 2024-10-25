@@ -54,13 +54,13 @@ class OpenAIRerankerClient(CrossEncoderClient):
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         openai_messages_list = [
             [
-                ChatCompletionSystemMessageParam(
-                    role='system',
-                    content='You are an expert tasked with determining whether the passage is relevant to the query',
-                ),
-                ChatCompletionUserMessageParam(
-                    role='user',
-                    content=f"""
+                {
+                    'role': 'system',
+                    'content': 'You are an expert tasked with determining whether the passage is relevant to the query',
+                },
+                {
+                    'role': 'user',
+                    'content': f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
                            <PASSAGE>
                            {query}
@@ -69,7 +69,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                            <QUERY>
                            </QUERY>
                            """,
-                ),
+                },
             ]
             for passage in passages
         ]
