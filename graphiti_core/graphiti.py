@@ -23,8 +23,11 @@ from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
 
+from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -92,6 +95,7 @@ class Graphiti:
         password: str,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
+        cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
     ):
         """
@@ -131,7 +135,7 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
-        self.database = 'neo4j'
+        self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         if llm_client:
             self.llm_client = llm_client
@@ -141,6 +145,10 @@ class Graphiti:
             self.embedder = embedder
         else:
             self.embedder = OpenAIEmbedder()
+        if cross_encoder:
+            self.cross_encoder = cross_encoder
+        else:
+            self.cross_encoder = OpenAIRerankerClient()
 
     async def close(self):
         """
@@ -648,6 +656,7 @@ class Graphiti:
             await search(
                 self.driver,
                 self.embedder,
+                self.cross_encoder,
                 query,
                 group_ids,
                 search_config,
@@ -663,8 +672,18 @@ class Graphiti:
         config: SearchConfig,
         group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
     ) -> SearchResults:
-        return await search(self.driver, self.embedder, query, group_ids, config, center_node_uuid)
+        return await search(
+            self.driver,
+            self.embedder,
+            self.cross_encoder,
+            query,
+            group_ids,
+            config,
+            center_node_uuid,
+            bfs_origin_node_uuids,
+        )
 
     async def get_nodes_by_query(
         self,
@@ -716,7 +735,13 @@ class Graphiti:
 
         nodes = (
             await search(
-                self.driver, self.embedder, query, group_ids, search_config, center_node_uuid
+                self.driver,
+                self.embedder,
+                self.cross_encoder,
+                query,
+                group_ids,
+                search_config,
+                center_node_uuid,
             )
         ).nodes
         return nodes

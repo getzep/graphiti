@@ -19,7 +19,6 @@ import logging
 from collections import defaultdict
 from time import time
 
-import neo4j
 import numpy as np
 from neo4j import AsyncDriver, Query
 
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
+MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
 
 
@@ -80,23 +80,21 @@ async def get_mentioned_nodes(
     driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-            MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
-            RETURN DISTINCT
-                n.uuid As uuid, 
-                n.group_id AS group_id,
-                n.name AS name,
-                n.name_embedding AS name_embedding,
-                n.created_at AS created_at, 
-                n.summary AS summary
-            """,
-            {'uuids': episode_uuids},
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+        MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
+        RETURN DISTINCT
+            n.uuid As uuid, 
+            n.group_id AS group_id,
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.created_at AS created_at, 
+            n.summary AS summary
+        """,
+        uuids=episode_uuids,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -107,23 +105,21 @@ async def get_communities_by_nodes(
     driver: AsyncDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
-        RETURN DISTINCT
-            c.uuid As uuid, 
-            c.group_id AS group_id,
-            c.name AS name,
-            c.name_embedding AS name_embedding
-            c.created_at AS created_at, 
-            c.summary AS summary
-        """,
-            {'uuids': node_uuids},
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+    MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
+    RETURN DISTINCT
+        c.uuid As uuid, 
+        c.group_id AS group_id,
+        c.name AS name,
+        c.name_embedding AS name_embedding
+        c.created_at AS created_at, 
+        c.summary AS summary
+    """,
+        uuids=node_uuids,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
 
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -149,7 +145,7 @@ async def edge_fulltext_search(
               MATCH (n:Entity)-[r {uuid: rel.uuid}]->(m:Entity)
               WHERE ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
               AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
-              RETURN 
+              RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
                     n.uuid AS source_node_uuid,
@@ -165,20 +161,16 @@ async def edge_fulltext_search(
                 ORDER BY score DESC LIMIT $limit
                 """)
 
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            cypher_query,
-            {
-                'query': fuzzy_query,
-                'source_uuid': source_node_uuid,
-                'target_uuid': target_node_uuid,
-                'group_ids': group_ids,
-                'limit': limit,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        cypher_query,
+        query=fuzzy_query,
+        source_uuid=source_node_uuid,
+        target_uuid=target_node_uuid,
+        group_ids=group_ids,
+        limit=limit,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -201,13 +193,13 @@ async def edge_similarity_search(
                 WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
                 AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
                 AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
-                WITH DISTINCT n, r, m, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+                WITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
                 WHERE score > $min_score
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
-                    n.uuid AS source_node_uuid,
-                    m.uuid AS target_node_uuid,
+                    startNode(r).uuid AS source_node_uuid,
+                    endNode(r).uuid AS target_node_uuid,
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
@@ -220,21 +212,59 @@ async def edge_similarity_search(
                 LIMIT $limit
         """)
 
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            query,
-            {
-                'search_vector': search_vector,
-                'source_uuid': source_node_uuid,
-                'target_uuid': target_node_uuid,
-                'group_ids': group_ids,
-                'limit': limit,
-                'min_score': min_score,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        query,
+        search_vector=search_vector,
+        source_uuid=source_node_uuid,
+        target_uuid=target_node_uuid,
+        group_ids=group_ids,
+        limit=limit,
+        min_score=min_score,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
+    edges = [get_entity_edge_from_record(record) for record in records]
+
+    return edges
+
+
+async def edge_bfs_search(
+    driver: AsyncDriver,
+    bfs_origin_node_uuids: list[str] | None,
+    bfs_max_depth: int,
+) -> list[EntityEdge]:
+    # vector similarity search over embedded facts
+    if bfs_origin_node_uuids is None:
+        return []
+
+    query = Query("""
+                UNWIND $bfs_origin_node_uuids AS origin_uuid
+                MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                UNWIND relationships(path) AS rel
+                MATCH ()-[r:RELATES_TO {uuid: rel.uuid}]-()
+                RETURN DISTINCT
+                    r.uuid AS uuid,
+                    r.group_id AS group_id,
+                    startNode(r).uuid AS source_node_uuid,
+                    endNode(r).uuid AS target_node_uuid,
+                    r.created_at AS created_at,
+                    r.name AS name,
+                    r.fact AS fact,
+                    r.fact_embedding AS fact_embedding,
+                    r.episodes AS episodes,
+                    r.expired_at AS expired_at,
+                    r.valid_at AS valid_at,
+                    r.invalid_at AS invalid_at
+        """)
+
+    records, _, _ = await driver.execute_query(
+        query,
+        bfs_origin_node_uuids=bfs_origin_node_uuids,
+        depth=bfs_max_depth,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -252,30 +282,26 @@ async def node_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
-    YIELD node AS n, score
-    RETURN
-        n.uuid AS uuid,
-        n.group_id AS group_id, 
-        n.name AS name, 
-        n.name_embedding AS name_embedding,
-        n.created_at AS created_at, 
-        n.summary AS summary
-    ORDER BY score DESC
-    LIMIT $limit
-    """,
-            {
-                'query': fuzzy_query,
-                'group_ids': group_ids,
-                'limit': limit,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
+        YIELD node AS n, score
+        RETURN
+            n.uuid AS uuid,
+            n.group_id AS group_id, 
+            n.name AS name, 
+            n.name_embedding AS name_embedding,
+            n.created_at AS created_at, 
+            n.summary AS summary
+        ORDER BY score DESC
+        LIMIT $limit
+        """,
+        query=fuzzy_query,
+        group_ids=group_ids,
+        limit=limit,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -289,34 +315,62 @@ async def node_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-                CYPHER runtime = parallel parallelRuntimeSupport=all
-                MATCH (n:Entity)
-                WHERE $group_ids IS NULL OR n.group_id IN $group_ids
-                WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
-                WHERE score > $min_score
-                RETURN
-                    n.uuid As uuid,
-                    n.group_id AS group_id,
-                    n.name AS name, 
-                    n.name_embedding AS name_embedding,
-                    n.created_at AS created_at, 
-                    n.summary AS summary
-                ORDER BY score DESC
-                LIMIT $limit
-                """,
-            {
-                'search_vector': search_vector,
-                'group_ids': group_ids,
-                'limit': limit,
-                'min_score': min_score,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+            CYPHER runtime = parallel parallelRuntimeSupport=all
+            MATCH (n:Entity)
+            WHERE $group_ids IS NULL OR n.group_id IN $group_ids
+            WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
+            WHERE score > $min_score
+            RETURN
+                n.uuid As uuid,
+                n.group_id AS group_id,
+                n.name AS name, 
+                n.name_embedding AS name_embedding,
+                n.created_at AS created_at, 
+                n.summary AS summary
+            ORDER BY score DESC
+            LIMIT $limit
+            """,
+        search_vector=search_vector,
+        group_ids=group_ids,
+        limit=limit,
+        min_score=min_score,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+    nodes = [get_entity_node_from_record(record) for record in records]
+
+    return nodes
+
+
+async def node_bfs_search(
+    driver: AsyncDriver,
+    bfs_origin_node_uuids: list[str] | None,
+    bfs_max_depth: int,
+) -> list[EntityNode]:
+    # vector similarity search over entity names
+    if bfs_origin_node_uuids is None:
+        return []
+
+    records, _, _ = await driver.execute_query(
+        """
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+            RETURN DISTINCT
+                n.uuid As uuid,
+                n.group_id AS group_id,
+                n.name AS name, 
+                n.name_embedding AS name_embedding,
+                n.created_at AS created_at, 
+                n.summary AS summary
+            LIMIT $limit
+            """,
+        bfs_origin_node_uuids=bfs_origin_node_uuids,
+        depth=bfs_max_depth,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -333,30 +387,26 @@ async def community_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-    CALL db.index.fulltext.queryNodes("community_name", $query) 
-    YIELD node AS comm, score
-    RETURN
-        comm.uuid AS uuid,
-        comm.group_id AS group_id, 
-        comm.name AS name, 
-        comm.name_embedding AS name_embedding,
-        comm.created_at AS created_at, 
-        comm.summary AS summary
-    ORDER BY score DESC
-    LIMIT $limit
-    """,
-            {
-                'query': fuzzy_query,
-                'group_ids': group_ids,
-                'limit': limit,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+        CALL db.index.fulltext.queryNodes("community_name", $query) 
+        YIELD node AS comm, score
+        RETURN
+            comm.uuid AS uuid,
+            comm.group_id AS group_id, 
+            comm.name AS name, 
+            comm.name_embedding AS name_embedding,
+            comm.created_at AS created_at, 
+            comm.summary AS summary
+        ORDER BY score DESC
+        LIMIT $limit
+        """,
+        query=fuzzy_query,
+        group_ids=group_ids,
+        limit=limit,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities
@@ -370,34 +420,30 @@ async def community_similarity_search(
     min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
-    async with driver.session(
-        database=DEFAULT_DATABASE, default_access_mode=neo4j.READ_ACCESS
-    ) as session:
-        result = await session.run(
-            """
-                CYPHER runtime = parallel parallelRuntimeSupport=all
-                MATCH (comm:Community)
-                WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
-                WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
-                WHERE score > $min_score
-                RETURN
-                    comm.uuid As uuid,
-                    comm.group_id AS group_id,
-                    comm.name AS name, 
-                    comm.name_embedding AS name_embedding,
-                    comm.created_at AS created_at, 
-                    comm.summary AS summary
-                ORDER BY score DESC
-                LIMIT $limit
-                """,
-            {
-                'search_vector': search_vector,
-                'group_ids': group_ids,
-                'limit': limit,
-                'min_score': min_score,
-            },
-        )
-        records = [record async for record in result]
+    records, _, _ = await driver.execute_query(
+        """
+            CYPHER runtime = parallel parallelRuntimeSupport=all
+            MATCH (comm:Community)
+            WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
+            WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+            WHERE score > $min_score
+            RETURN
+                comm.uuid As uuid,
+                comm.group_id AS group_id,
+                comm.name AS name, 
+                comm.name_embedding AS name_embedding,
+                comm.created_at AS created_at, 
+                comm.summary AS summary
+            ORDER BY score DESC
+            LIMIT $limit
+            """,
+        search_vector=search_vector,
+        group_ids=group_ids,
+        limit=limit,
+        min_score=min_score,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities
