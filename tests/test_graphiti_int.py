@@ -27,7 +27,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
-    COMBINED_HYBRID_SEARCH_RRF,
+    COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
 )
 
 pytestmark = pytest.mark.integration
@@ -66,10 +66,13 @@ def setup_logging():
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
+    episodes = await graphiti.retrieve_episodes(datetime.now(), group_ids=None)
+    episode_uuids = [episode.uuid for episode in episodes]
 
     results = await graphiti._search(
-        'new house',
-        COMBINED_HYBRID_SEARCH_RRF,
+        "Emily: I can't log in",
+        COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
+        bfs_origin_node_uuids=episode_uuids,
         group_ids=None,
     )
     pretty_results = {
