@@ -26,7 +26,9 @@ from dotenv import load_dotenv
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
+from graphiti_core.search.search_config_recipes import (
+    COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -60,22 +62,19 @@ def setup_logging():
     return logger
 
 
-def format_context(facts):
-    formatted_string = ''
-    formatted_string += 'FACTS:\n'
-    for fact in facts:
-        formatted_string += f'  - {fact}\n'
-    formatted_string += '\n'
-
-    return formatted_string.strip()
-
-
 @pytest.mark.asyncio
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
+    episodes = await graphiti.retrieve_episodes(datetime.now(), group_ids=None)
+    episode_uuids = [episode.uuid for episode in episodes]
 
-    results = await graphiti._search('new house', COMBINED_HYBRID_SEARCH_RRF, group_ids=None)
+    results = await graphiti._search(
+        "Emily: I can't log in",
+        COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
+        bfs_origin_node_uuids=episode_uuids,
+        group_ids=None,
+    )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
         'nodes': [node.name for node in results.nodes],
@@ -83,6 +82,7 @@ async def test_graphiti_init():
     }
 
     logger.info(pretty_results)
+
     await graphiti.close()
 
 
