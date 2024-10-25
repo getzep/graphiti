@@ -19,10 +19,10 @@ import logging
 
 import openai
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 from pydantic import BaseModel
 
 from ..llm_client import LLMConfig, RateLimitError
+from ..prompts import Message
 from .client import CrossEncoderClient
 
 logger = logging.getLogger(__name__)
@@ -54,13 +54,13 @@ class OpenAIRerankerClient(CrossEncoderClient):
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         openai_messages_list = [
             [
-                {
-                    'role': 'system',
-                    'content': 'You are an expert tasked with determining whether the passage is relevant to the query',
-                },
-                {
-                    'role': 'user',
-                    'content': f"""
+                Message(
+                    role='system',
+                    content='You are an expert tasked with determining whether the passage is relevant to the query',
+                ),
+                Message(
+                    role='user',
+                    content=f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
                            <PASSAGE>
                            {query}
@@ -69,7 +69,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                            <QUERY>
                            </QUERY>
                            """,
-                },
+                ),
             ]
             for passage in passages
         ]
