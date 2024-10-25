@@ -19,7 +19,6 @@ import logging
 from collections import defaultdict
 from time import time
 
-import neo4j
 import numpy as np
 from neo4j import AsyncDriver, Query
 
