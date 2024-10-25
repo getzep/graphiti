@@ -16,6 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
+from typing import Any
 
 import openai
 from openai import AsyncOpenAI
@@ -52,7 +53,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
-        openai_messages_list = [
+        openai_messages_list: Any = [
             [
                 Message(
                     role='system',
