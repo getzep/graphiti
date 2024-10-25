@@ -13,17 +13,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import asyncio
-import json
 import logging
-import typing
 
 import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from .client import CrossEncoderClient
 from ..llm_client import LLMConfig, RateLimitError
+from .client import CrossEncoderClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +34,7 @@ class BooleanClassifier(BaseModel):
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
-    def __init__(
-            self, config: LLMConfig | None = None
-    ):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize the OpenAIClient with the provided configuration, cache setting, and client.
 
@@ -54,9 +51,15 @@ class OpenAIRerankerClient(CrossEncoderClient):
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
-        openai_messages_list = [[{'role': 'system',
-                                  'content': 'You are an expert tasked with determining whether the passage is relevant to the query'},
-                                 {'role': 'user', 'content': f"""
+        openai_messages_list = [
+            [
+                {
+                    'role': 'system',
+                    'content': 'You are an expert tasked with determining whether the passage is relevant to the query',
+                },
+                {
+                    'role': 'user',
+                    'content': f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
                            <PASSAGE>
                            {query}
@@ -64,19 +67,33 @@ class OpenAIRerankerClient(CrossEncoderClient):
                            {passage}
                            <QUERY>
                            </QUERY>
-                           """}] for passage in passages]
+                           """,
+                },
+            ]
+            for passage in passages
+        ]
         try:
-            responses = await asyncio.gather(*[self.client.chat.completions.create(
-                model=DEFAULT_MODEL,
-                messages=openai_messages,
-                temperature=0,
-                max_tokens=1,
-                logit_bias={"6432": 1, "7983": 1},
-                logprobs=True,
-                top_logprobs=2
-            ) for openai_messages in openai_messages_list])
+            responses = await asyncio.gather(
+                *[
+                    self.client.chat.completions.create(
+                        model=DEFAULT_MODEL,
+                        messages=openai_messages,
+                        temperature=0,
+                        max_tokens=1,
+                        logit_bias={'6432': 1, '7983': 1},
+                        logprobs=True,
+                        top_logprobs=2,
+                    )
+                    for openai_messages in openai_messages_list
+                ]
+            )
 
-            responses_top_logprobs = [response.choices[0].logprobs.content[0].top_logprobs for response in responses]
+            responses_top_logprobs = [
+                response.choices[0].logprobs.content[0].top_logprobs
+                if response.choices[0].logprobs is not None
+                else []
+                for response in responses
+            ]
             scores: list[float] = []
             for top_logprobs in responses_top_logprobs:
                 for logprob in top_logprobs:
