@@ -41,7 +41,18 @@ class VoyageAIEmbedder(EmbedderClient):
         self.client = voyageai.AsyncClient(api_key=config.api_key)
 
     async def create(
-        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
-        result = await self.client.embed(input, model=self.config.embedding_model)
+        if isinstance(input_data, str):
+            input_list = [input_data]
+        elif isinstance(input_data, List):
+            input_list = [str(i) for i in input_data if i]
+        else:
+            input_list = [str(i) for i in input_data if i is not None]
+
+        input_list = [i for i in input_list if i]
+        if len(input_list) == 0:
+            return []
+
+        result = await self.client.embed(input_list, model=self.config.embedding_model)
         return result.embeddings[0][: self.config.embedding_dim]

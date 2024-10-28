@@ -42,7 +42,9 @@ class OpenAIEmbedder(EmbedderClient):
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def create(
-        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
-        result = await self.client.embeddings.create(input=input, model=self.config.embedding_model)
+        result = await self.client.embeddings.create(
+            input=input_data, model=self.config.embedding_model
+        )
         return result.data[0].embedding[: self.config.embedding_dim]

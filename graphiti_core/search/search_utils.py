@@ -233,6 +233,7 @@ async def edge_bfs_search(
     driver: AsyncDriver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
+    limit: int,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     if bfs_origin_node_uuids is None:
@@ -256,12 +257,14 @@ async def edge_bfs_search(
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
+                LIMIT $limit
         """)
 
     records, _, _ = await driver.execute_query(
         query,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
+        limit=limit,
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
@@ -348,6 +351,7 @@ async def node_bfs_search(
     driver: AsyncDriver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
+    limit: int,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     if bfs_origin_node_uuids is None:
@@ -368,6 +372,7 @@ async def node_bfs_search(
             """,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
+        limit=limit,
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
@@ -690,4 +695,4 @@ def maximal_marginal_relevance(
 
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
 
-    return [candidate[0] for candidate in candidates_with_mmr]
+    return list(set([candidate[0] for candidate in candidates_with_mmr]))
