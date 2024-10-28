@@ -45,6 +45,7 @@ from graphiti_core.search.search_utils import (
     edge_similarity_search,
     episode_mentions_reranker,
     maximal_marginal_relevance,
+    node_bfs_search,
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
@@ -138,7 +139,7 @@ async def edge_search(
                 edge_similarity_search(
                     driver, query_vector, None, None, group_ids, 2 * limit, config.sim_min_score
                 ),
-                edge_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth),
+                edge_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth, 2 * limit),
             ]
         )
     )
@@ -160,7 +161,12 @@ async def edge_search(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda
         )
     elif config.reranker == EdgeReranker.cross_encoder:
-        fact_to_uuid_map = {edge.fact: edge.uuid for result in search_results for edge in result}
+        search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
+
+        rrf_result_uuids = rrf(search_result_uuids)
+        rrf_edges = [edge_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
+
+        fact_to_uuid_map = {edge.fact: edge.uuid for edge in rrf_edges}
         reranked_facts = await cross_encoder.rank(query, list(fact_to_uuid_map.keys()))
         reranked_uuids = [fact_to_uuid_map[fact] for fact, _ in reranked_facts]
     elif config.reranker == EdgeReranker.node_distance:
@@ -212,6 +218,7 @@ async def node_search(
                 node_similarity_search(
                     driver, query_vector, group_ids, 2 * limit, config.sim_min_score
                 ),
+                node_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth, 2 * limit),
             ]
         )
     )
@@ -232,9 +239,12 @@ async def node_search(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda
         )
     elif config.reranker == NodeReranker.cross_encoder:
-        summary_to_uuid_map = {
-            node.summary: node.uuid for result in search_results for node in result
-        }
+        # use rrf as a preliminary reranker
+        rrf_result_uuids = rrf(search_result_uuids)
+        rrf_results = [node_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
+
+        summary_to_uuid_map = {node.summary: node.uuid for node in rrf_results}
+
         reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
         reranked_uuids = [summary_to_uuid_map[fact] for fact, _ in reranked_summaries]
     elif config.reranker == NodeReranker.episode_mentions:
