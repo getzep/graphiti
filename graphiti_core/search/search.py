@@ -45,24 +45,25 @@ from graphiti_core.search.search_utils import (
     edge_similarity_search,
     episode_mentions_reranker,
     maximal_marginal_relevance,
+    node_bfs_search,
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
-    rrf, node_bfs_search,
+    rrf,
 )
 
 logger = logging.getLogger(__name__)
 
 
 async def search(
-        driver: AsyncDriver,
-        embedder: EmbedderClient,
-        cross_encoder: CrossEncoderClient,
-        query: str,
-        group_ids: list[str] | None,
-        config: SearchConfig,
-        center_node_uuid: str | None = None,
-        bfs_origin_node_uuids: list[str] | None = None,
+    driver: AsyncDriver,
+    embedder: EmbedderClient,
+    cross_encoder: CrossEncoderClient,
+    query: str,
+    group_ids: list[str] | None,
+    config: SearchConfig,
+    center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
     start = time()
     query_vector = await embedder.create(input=[query.replace('\n', ' ')])
@@ -118,15 +119,15 @@ async def search(
 
 
 async def edge_search(
-        driver: AsyncDriver,
-        cross_encoder: CrossEncoderClient,
-        query: str,
-        query_vector: list[float],
-        group_ids: list[str] | None,
-        config: EdgeSearchConfig | None,
-        center_node_uuid: str | None = None,
-        bfs_origin_node_uuids: list[str] | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
+    query: str,
+    query_vector: list[float],
+    group_ids: list[str] | None,
+    config: EdgeSearchConfig | None,
+    center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityEdge]:
     if config is None:
         return []
@@ -197,15 +198,15 @@ async def edge_search(
 
 
 async def node_search(
-        driver: AsyncDriver,
-        cross_encoder: CrossEncoderClient,
-        query: str,
-        query_vector: list[float],
-        group_ids: list[str] | None,
-        config: NodeSearchConfig | None,
-        center_node_uuid: str | None = None,
-        bfs_origin_node_uuids: list[str] | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
+    query: str,
+    query_vector: list[float],
+    group_ids: list[str] | None,
+    config: NodeSearchConfig | None,
+    center_node_uuid: str | None = None,
+    bfs_origin_node_uuids: list[str] | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[EntityNode]:
     if config is None:
         return []
@@ -242,9 +243,7 @@ async def node_search(
         rrf_result_uuids = rrf(search_result_uuids)
         rrf_results = [node_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
 
-        summary_to_uuid_map = {
-            node.summary: node.uuid for node in rrf_results
-        }
+        summary_to_uuid_map = {node.summary: node.uuid for node in rrf_results}
 
         reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
         reranked_uuids = [summary_to_uuid_map[fact] for fact, _ in reranked_summaries]
@@ -263,14 +262,14 @@ async def node_search(
 
 
 async def community_search(
-        driver: AsyncDriver,
-        cross_encoder: CrossEncoderClient,
-        query: str,
-        query_vector: list[float],
-        group_ids: list[str] | None,
-        config: CommunitySearchConfig | None,
-        bfs_origin_node_uuids: list[str] | None = None,
-        limit=DEFAULT_SEARCH_LIMIT,
+    driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
+    query: str,
+    query_vector: list[float],
+    group_ids: list[str] | None,
+    config: CommunitySearchConfig | None,
+    bfs_origin_node_uuids: list[str] | None = None,
+    limit=DEFAULT_SEARCH_LIMIT,
 ) -> list[CommunityNode]:
     if config is None:
         return []
