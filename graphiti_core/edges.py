@@ -180,7 +180,7 @@ class EntityEdge(Edge):
         start = time()
 
         text = self.fact.replace('\n', ' ')
-        self.fact_embedding = await embedder.create(input=[text])
+        self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
         logger.debug(f'embedded {text} in {end - start} ms')
