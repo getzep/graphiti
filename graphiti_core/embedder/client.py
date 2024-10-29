@@ -29,6 +29,6 @@ class EmbedderConfig(BaseModel):
 class EmbedderClient(ABC):
     @abstractmethod
     async def create(
-        self, input: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         pass
