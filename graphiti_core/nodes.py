@@ -222,7 +222,7 @@ class EntityNode(Node):
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
-        self.name_embedding = await embedder.create(input=[text])
+        self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(f'embedded {text} in {end - start} ms')
 
@@ -334,7 +334,7 @@ class CommunityNode(Node):
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
-        self.name_embedding = await embedder.create(input=[text])
+        self.name_embedding = await embedder.create(input_data=[text])
         end = time()
         logger.debug(f'embedded {text} in {end - start} ms')
 
