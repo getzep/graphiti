@@ -16,14 +16,21 @@ limitations under the License.
 
 import asyncio
 import logging
+import os
 from collections import defaultdict
 from time import time
+from typing import LiteralString
 
 import numpy as np
 from neo4j import AsyncDriver, Query
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
-from graphiti_core.helpers import DEFAULT_DATABASE, lucene_sanitize, normalize_l2
+from graphiti_core.helpers import (
+    DEFAULT_DATABASE,
+    USE_PARALLEL_RUNTIME,
+    lucene_sanitize,
+    normalize_l2,
+)
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -38,7 +45,7 @@ RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
-MAX_QUERY_LENGTH = 128
+MAX_QUERY_LENGTH = 32
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
@@ -187,7 +194,7 @@ async def edge_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
-    query = Query("""
+    query: LiteralString = """
                 CYPHER runtime = parallel parallelRuntimeSupport=all
                 MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
                 WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
@@ -210,7 +217,10 @@ async def edge_similarity_search(
                     r.invalid_at AS invalid_at
                 ORDER BY score DESC
                 LIMIT $limit
-        """)
+        """
+
+    if USE_PARALLEL_RUNTIME:
+        query: LiteralString = 'CYPHER runtime = parallel parallelRuntimeSupport=all\n' + query
 
     records, _, _ = await driver.execute_query(
         query,

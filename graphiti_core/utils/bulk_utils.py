@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, Query
 from numpy import dot, sqrt
 from pydantic import BaseModel
 
@@ -73,6 +73,18 @@ async def retrieve_previous_episodes_bulk(
     ]
 
     return episode_tuples
+
+
+async def add_nodes_and_edges_bulk(
+    driver: AsyncDriver,
+    episodic_nodes: list[EpisodicNode],
+    episodic_edges: list[EpisodicEdge],
+    entity_nodes: list[EntityNode],
+    entity_edges: list[EntityEdge],
+):
+    query = Query("""
+        UNWIND $nodes
+    """)
 
 
 async def extract_nodes_and_edges_bulk(
