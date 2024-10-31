@@ -21,12 +21,20 @@ from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
-from neo4j import AsyncDriver, Query
+from neo4j import AsyncDriver, AsyncManagedTransaction, Query
 from numpy import dot, sqrt
 from pydantic import BaseModel
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.models.edges.edge_db_queries import (
+    ENTITY_EDGE_SAVE_BULK,
+    EPISODIC_EDGE_SAVE_BULK,
+)
+from graphiti_core.models.nodes.node_db_queries import (
+    ENTITY_NODE_SAVE_BULK,
+    EPISODIC_NODE_SAVE_BULK,
+)
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
 from graphiti_core.utils import retrieve_episodes
@@ -82,9 +90,26 @@ async def add_nodes_and_edges_bulk(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
 ):
-    query = Query("""
-        UNWIND $nodes
-    """)
+    async with driver.session() as session:
+        await session.execute_write(
+            add_nodes_and_edges_bulk_tx, episodic_nodes, episodic_edges, entity_nodes, entity_edges
+        )
+
+
+async def add_nodes_and_edges_bulk_tx(
+    tx: AsyncManagedTransaction,
+    episodic_nodes: list[EpisodicNode],
+    episodic_edges: list[EpisodicEdge],
+    entity_nodes: list[EntityNode],
+    entity_edges: list[EntityEdge],
+):
+    episodes = [dict(episode) for episode in episodic_nodes]
+    for episode in episodes:
+        episode['source'] = str(episode['source'].value)
+    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=[dict(entity) for entity in entity_nodes])
+    await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[dict(edge) for edge in episodic_edges])
+    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[dict(edge) for edge in entity_edges])
 
 
 async def extract_nodes_and_edges_bulk(
