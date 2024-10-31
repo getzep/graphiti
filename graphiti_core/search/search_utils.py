@@ -445,20 +445,20 @@ async def community_similarity_search(
     records, _, _ = await driver.execute_query(
         runtime_query
         + """
-                                                   MATCH (comm:Community)
-                                                   WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
-                                                   WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
-                                                   WHERE score > $min_score
-                                                   RETURN
-                                                       comm.uuid As uuid,
-                                                       comm.group_id AS group_id,
-                                                       comm.name AS name, 
-                                                       comm.name_embedding AS name_embedding,
-                                                       comm.created_at AS created_at, 
-                                                       comm.summary AS summary
-                                                   ORDER BY score DESC
-                                                   LIMIT $limit
-                                                   """,
+           MATCH (comm:Community)
+           WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
+           WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+           WHERE score > $min_score
+           RETURN
+               comm.uuid As uuid,
+               comm.group_id AS group_id,
+               comm.name AS name, 
+               comm.name_embedding AS name_embedding,
+               comm.created_at AS created_at, 
+               comm.summary AS summary
+           ORDER BY score DESC
+           LIMIT $limit
+        """,
         search_vector=search_vector,
         group_ids=group_ids,
         limit=limit,

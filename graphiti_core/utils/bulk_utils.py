@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
-from neo4j import AsyncDriver, AsyncManagedTransaction, Query
+from neo4j import AsyncDriver, AsyncManagedTransaction
 from numpy import dot, sqrt
 from pydantic import BaseModel
 
