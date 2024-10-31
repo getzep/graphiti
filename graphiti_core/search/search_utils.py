@@ -21,9 +21,15 @@ from time import time
 
 import numpy as np
 from neo4j import AsyncDriver, Query
+from typing_extensions import LiteralString
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
-from graphiti_core.helpers import DEFAULT_DATABASE, lucene_sanitize, normalize_l2
+from graphiti_core.helpers import (
+    DEFAULT_DATABASE,
+    USE_PARALLEL_RUNTIME,
+    lucene_sanitize,
+    normalize_l2,
+)
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -38,7 +44,7 @@ RELEVANT_SCHEMA_LIMIT = 3
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
-MAX_QUERY_LENGTH = 128
+MAX_QUERY_LENGTH = 32
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
@@ -187,8 +193,11 @@ async def edge_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
-    query = Query("""
-                CYPHER runtime = parallel parallelRuntimeSupport=all
+    runtime_query: LiteralString = (
+        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+    )
+
+    query: LiteralString = """
                 MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
                 WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
                 AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
@@ -210,10 +219,10 @@ async def edge_similarity_search(
                     r.invalid_at AS invalid_at
                 ORDER BY score DESC
                 LIMIT $limit
-        """)
+        """
 
     records, _, _ = await driver.execute_query(
-        query,
+        runtime_query + query,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -318,9 +327,13 @@ async def node_similarity_search(
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
+    runtime_query: LiteralString = (
+        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+    )
+
     records, _, _ = await driver.execute_query(
-        """
-            CYPHER runtime = parallel parallelRuntimeSupport=all
+        runtime_query
+        + """
             MATCH (n:Entity)
             WHERE $group_ids IS NULL OR n.group_id IN $group_ids
             WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
@@ -425,23 +438,27 @@ async def community_similarity_search(
     min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
+    runtime_query: LiteralString = (
+        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+    )
+
     records, _, _ = await driver.execute_query(
-        """
-            CYPHER runtime = parallel parallelRuntimeSupport=all
-            MATCH (comm:Community)
-            WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
-            WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
-            WHERE score > $min_score
-            RETURN
-                comm.uuid As uuid,
-                comm.group_id AS group_id,
-                comm.name AS name, 
-                comm.name_embedding AS name_embedding,
-                comm.created_at AS created_at, 
-                comm.summary AS summary
-            ORDER BY score DESC
-            LIMIT $limit
-            """,
+        runtime_query
+        + """
+           MATCH (comm:Community)
+           WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
+           WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+           WHERE score > $min_score
+           RETURN
+               comm.uuid As uuid,
+               comm.group_id AS group_id,
+               comm.name AS name, 
+               comm.name_embedding AS name_embedding,
+               comm.created_at AS created_at, 
+               comm.summary AS summary
+           ORDER BY score DESC
+           LIMIT $limit
+        """,
         search_vector=search_vector,
         group_ids=group_ids,
         limit=limit,
