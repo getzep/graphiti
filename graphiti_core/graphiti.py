@@ -51,6 +51,7 @@ from graphiti_core.utils import (
 )
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
+    add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
     extract_edge_dates_bulk,
@@ -451,10 +452,9 @@ class Graphiti:
             if not self.store_raw_episode_content:
                 episode.content = ''
 
-            await episode.save(self.driver)
-            await asyncio.gather(*[node.save(self.driver) for node in nodes])
-            await asyncio.gather(*[edge.save(self.driver) for edge in episodic_edges])
-            await asyncio.gather(*[edge.save(self.driver) for edge in entity_edges])
+            await add_nodes_and_edges_bulk(
+                self.driver, [episode], episodic_edges, nodes, entity_edges
+            )
 
             # Update any communities
             if update_communities:

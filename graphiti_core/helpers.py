@@ -24,6 +24,7 @@ from neo4j import time as neo4j_time
 load_dotenv()
 
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
+USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 
 
 def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:
