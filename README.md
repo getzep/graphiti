@@ -173,6 +173,17 @@ The `server` directory contains an API service for interacting with the Graphiti
 
 Please see the [server README](./server/README.md) for more information.
 
+## Optional Environment Variables
+
+In addition to the Neo4j and OpenAi-compatible credentials, Graphiti also has a few optional environment variables.
+If you are using one of our supported models, such as Anthropic or Voyage models, the necessary environment variables
+must be set.
+
+`USE_PARALLEL_RUNTIME` is an optional boolean variable that can be set to true if you wish
+to enable Neo4j's parallel runtime feature for several of our search queries.
+Note that this feature is not supported for Neo4j Community edition or for smaller AuraDB instances,
+as such this feature is off by default.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
@@ -186,11 +197,11 @@ Graphiti is under active development. We aim to maintain API stability while wor
 - [x] Implementing node and edge CRUD operations
 - [ ] Improving performance and scalability
 - [ ] Achieving good performance with different LLM and embedding models
-- [ ] Creating a dedicated embedder interface
+- [x] Creating a dedicated embedder interface
 - [ ] Supporting custom graph schemas:
     - Allow developers to provide their own defined node and edge classes when ingesting episodes
     - Enable more flexible knowledge representation tailored to specific use cases
-- [ ] Enhancing retrieval capabilities with more robust and configurable options
+- [x] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
 ## Contributing
