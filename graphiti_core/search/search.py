@@ -66,6 +66,12 @@ async def search(
     bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
     start = time()
+    if query.strip() == '':
+        return SearchResults(
+            edges=[],
+            nodes=[],
+            communities=[],
+        )
     query_vector = await embedder.create(input_data=[query.replace('\n', ' ')])
 
     # if group_ids is empty, set it to None
