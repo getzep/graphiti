@@ -96,7 +96,7 @@ async def test_graphiti_init():
         group_id='test',
     )
 
-    await graphiti.add_fact(alice_node, entity_edge, bob_node)
+    await graphiti.add_triplet(alice_node, entity_edge, bob_node)
 
     episodes = await graphiti.retrieve_episodes(datetime.now(timezone.utc), group_ids=None)
     episode_uuids = [episode.uuid for episode in episodes]

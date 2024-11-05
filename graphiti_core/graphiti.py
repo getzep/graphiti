@@ -763,7 +763,7 @@ class Graphiti:
 
         return SearchResults(edges=edges, nodes=nodes, communities=communities)
 
-    async def add_fact(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
+    async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:
             await source_node.generate_name_embedding(self.embedder)
         if target_node.name_embedding is None:
