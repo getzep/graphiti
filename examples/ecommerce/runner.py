@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -78,7 +78,7 @@ async def add_messages(client: Graphiti):
             name=f'Message {i}',
             episode_body=message,
             source=EpisodeType.message,
-            reference_time=datetime.now(),
+            reference_time=datetime.now(timezone.utc),
             source_description='Shoe conversation',
         )
 
@@ -105,7 +105,7 @@ async def ingest_products_data(client: Graphiti):
             content=str(product),
             source_description='Allbirds products',
             source=EpisodeType.json,
-            reference_time=datetime.now(),
+            reference_time=datetime.now(timezone.utc),
         )
         for i, product in enumerate(products)
     ]

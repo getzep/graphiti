@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, status
 
@@ -36,7 +36,7 @@ async def get_entity_edge(uuid: str, graphiti: ZepGraphitiDep):
 @router.get('/episodes/{group_id}', status_code=status.HTTP_200_OK)
 async def get_episodes(group_id: str, last_n: int, graphiti: ZepGraphitiDep):
     episodes = await graphiti.retrieve_episodes(
-        group_ids=[group_id], last_n=last_n, reference_time=datetime.now()
+        group_ids=[group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
     )
     return episodes
 

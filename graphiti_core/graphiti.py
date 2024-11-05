@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from time import time
 
 from dotenv import load_dotenv
@@ -67,6 +67,7 @@ from graphiti_core.utils.maintenance.community_operations import (
 from graphiti_core.utils.maintenance.edge_operations import (
     dedupe_extracted_edge,
     extract_edges,
+    resolve_edge_contradictions,
     resolve_extracted_edges,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
@@ -77,6 +78,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
+from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +315,7 @@ class Graphiti:
             start = time()
 
             entity_edges: list[EntityEdge] = []
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=3, group_ids=[group_id]
@@ -511,7 +513,7 @@ class Graphiti:
         """
         try:
             start = time()
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
 
             episodes = [
                 EpisodicNode(
@@ -787,4 +789,9 @@ class Graphiti:
 
         resolved_edge = await dedupe_extracted_edge(self.llm_client, edge, related_edges)
 
-        await add_nodes_and_edges_bulk(self.driver, [], [], resolved_nodes, [resolved_edge])
+        contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges)
+        invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
+
+        await add_nodes_and_edges_bulk(
+            self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges
+        )

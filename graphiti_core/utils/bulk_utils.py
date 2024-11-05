@@ -18,7 +18,7 @@ import asyncio
 import logging
 import typing
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 
 from neo4j import AsyncDriver, AsyncManagedTransaction
@@ -385,7 +385,7 @@ async def extract_edge_dates_bulk(
         edge.valid_at = valid_at
         edge.invalid_at = invalid_at
         if edge.invalid_at:
-            edge.expired_at = datetime.now()
+            edge.expired_at = datetime.now(timezone.utc)
 
     return edges
 

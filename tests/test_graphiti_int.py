@@ -18,7 +18,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from dotenv import load_dotenv
@@ -66,7 +66,7 @@ def setup_logging():
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     alice_node = EntityNode(
         name='Alice',
@@ -93,13 +93,12 @@ async def test_graphiti_init():
         episodes=[],
         expired_at=now,
         valid_at=now,
-        invalid_at=now,
         group_id='test',
     )
 
     await graphiti.add_fact(alice_node, entity_edge, bob_node)
 
-    episodes = await graphiti.retrieve_episodes(datetime.now(), group_ids=None)
+    episodes = await graphiti.retrieve_episodes(datetime.now(timezone.utc), group_ids=None)
     episode_uuids = [episode.uuid for episode in episodes]
 
     results = await graphiti._search(
@@ -125,7 +124,7 @@ async def test_graph_integration():
     embedder = client.embedder
     driver = client.driver
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     episode = EpisodicNode(
         name='test_episode',
         labels=[],
