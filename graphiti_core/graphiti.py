@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from time import time
 
 from dotenv import load_dotenv
@@ -65,7 +65,9 @@ from graphiti_core.utils.maintenance.community_operations import (
     update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
+    dedupe_extracted_edge,
     extract_edges,
+    resolve_edge_contradictions,
     resolve_extracted_edges,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
@@ -76,6 +78,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
+from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +315,7 @@ class Graphiti:
             start = time()
 
             entity_edges: list[EntityEdge] = []
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=3, group_ids=[group_id]
@@ -448,7 +451,6 @@ class Graphiti:
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
-            # Future optimization would be using batch operations to save nodes and edges
             if not self.store_raw_episode_content:
                 episode.content = ''
 
@@ -511,7 +513,7 @@ class Graphiti:
         """
         try:
             start = time()
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
 
             episodes = [
                 EpisodicNode(
@@ -760,3 +762,36 @@ class Graphiti:
         communities = await get_communities_by_nodes(self.driver, nodes)
 
         return SearchResults(edges=edges, nodes=nodes, communities=communities)
+
+    async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
+        if source_node.name_embedding is None:
+            await source_node.generate_name_embedding(self.embedder)
+        if target_node.name_embedding is None:
+            await target_node.generate_name_embedding(self.embedder)
+        if edge.fact_embedding is None:
+            await edge.generate_embedding(self.embedder)
+
+        resolved_nodes, _ = await resolve_extracted_nodes(
+            self.llm_client,
+            [source_node, target_node],
+            [
+                await get_relevant_nodes([source_node], self.driver),
+                await get_relevant_nodes([target_node], self.driver),
+            ],
+        )
+
+        related_edges = await get_relevant_edges(
+            self.driver,
+            [edge],
+            source_node_uuid=resolved_nodes[0].uuid,
+            target_node_uuid=resolved_nodes[1].uuid,
+        )
+
+        resolved_edge = await dedupe_extracted_edge(self.llm_client, edge, related_edges)
+
+        contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges)
+        invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
+
+        await add_nodes_and_edges_bulk(
+            self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges
+        )

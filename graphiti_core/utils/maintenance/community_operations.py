@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel
@@ -178,7 +178,7 @@ async def build_community(
 
     summary = summaries[0]
     name = await generate_summary_description(llm_client, summary)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     community_node = CommunityNode(
         name=name,
         group_id=community_cluster[0].group_id,

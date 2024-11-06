@@ -18,7 +18,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
@@ -63,7 +63,7 @@ async def main():
     messages = get_wizard_of_oz_messages()
     print(messages)
     print(len(messages))
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     # episodes: list[BulkEpisode] = [
     #     BulkEpisode(
     #         name=f'Chapter {i + 1}',

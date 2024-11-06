@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
@@ -45,7 +45,7 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
                         ParsedMscMessage(
                             speaker_name=speakers[speaker_idx],
                             content=content,
-                            actual_timestamp=datetime.now(),
+                            actual_timestamp=datetime.now(timezone.utc),
                             group_id=str(i),
                         )
                     )
@@ -60,7 +60,7 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
                     ParsedMscMessage(
                         speaker_name=speakers[speaker_idx],
                         content=content,
-                        actual_timestamp=datetime.now(),
+                        actual_timestamp=datetime.now(timezone.utc),
                         group_id=str(i),
                     )
                 )

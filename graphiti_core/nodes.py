@@ -16,7 +16,7 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from time import time
 from typing import Any
@@ -78,7 +78,7 @@ class Node(BaseModel, ABC):
     name: str = Field(description='name of the node')
     group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...

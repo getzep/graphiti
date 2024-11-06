@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from time import time
 from typing import Any
 
@@ -113,7 +113,7 @@ async def extract_nodes(
             group_id=episode.group_id,
             labels=node_data['labels'],
             summary=node_data['summary'],
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
         )
         new_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')

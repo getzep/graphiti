@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from pydantic import BaseModel
@@ -61,7 +61,7 @@ def parse_conversation_file(file_path: str, speakers: List[Speaker]) -> list[Par
                     break
 
     # Calculate the start time
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     podcast_start_time = now - last_timestamp
 
     for message in messages:
