@@ -31,8 +31,8 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
     msc_messages: list[list[ParsedMscMessage]] = []
     speakers = ['Alice', 'Bob']
 
-    with open('../data/msc.json') as file:
-        data = json.load(file)['data']
+    with open('../data/msc.jsonl') as file:
+        data = [json.loads(line) for line in file]
         for i, conversation in enumerate(data):
             messages: list[ParsedMscMessage] = []
             for previous_dialog in conversation['previous_dialogs']:
@@ -73,8 +73,8 @@ def parse_msc_messages() -> list[list[ParsedMscMessage]]:
 
 
 def conversation_q_and_a() -> list[tuple[str, str]]:
-    with open('../data/msc.json') as file:
-        data = json.load(file)['data']
+    with open('../data/msc.jsonl') as file:
+        data = [json.loads(line) for line in file]
 
         qa: list[tuple[str, str]] = []
         for conversation in data:
