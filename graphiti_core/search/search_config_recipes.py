@@ -118,6 +118,19 @@ EDGE_HYBRID_SEARCH_EPISODE_MENTIONS = SearchConfig(
     )
 )
 
+# performs a hybrid search over edges with cross encoder reranking
+EDGE_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[
+            EdgeSearchMethod.bm25,
+            EdgeSearchMethod.cosine_similarity,
+            EdgeSearchMethod.bfs,
+        ],
+        reranker=EdgeReranker.cross_encoder,
+    ),
+    limit=10,
+)
+
 # performs a hybrid search over nodes with rrf reranking
 NODE_HYBRID_SEARCH_RRF = SearchConfig(
     node_config=NodeSearchConfig(
@@ -150,6 +163,19 @@ NODE_HYBRID_SEARCH_EPISODE_MENTIONS = SearchConfig(
     )
 )
 
+# performs a hybrid search over nodes with episode mentions reranking
+NODE_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
+    node_config=NodeSearchConfig(
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.bfs,
+        ],
+        reranker=NodeReranker.cross_encoder,
+    ),
+    limit=10,
+)
+
 # performs a hybrid search over communities with rrf reranking
 COMMUNITY_HYBRID_SEARCH_RRF = SearchConfig(
     community_config=CommunitySearchConfig(
@@ -164,4 +190,13 @@ COMMUNITY_HYBRID_SEARCH_MMR = SearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
         reranker=CommunityReranker.mmr,
     )
+)
+
+# performs a hybrid search over communities with mmr reranking
+COMMUNITY_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
+    community_config=CommunitySearchConfig(
+        search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
+        reranker=CommunityReranker.cross_encoder,
+    ),
+    limit=3,
 )
