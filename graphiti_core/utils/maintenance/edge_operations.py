@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from time import time
 from typing import List
 
@@ -110,7 +110,7 @@ async def extract_edges(
                 group_id=group_id,
                 fact=edge_data['fact'],
                 episodes=[episode.uuid],
-                created_at=datetime.now(),
+                created_at=datetime.now(timezone.utc),
                 valid_at=None,
                 invalid_at=None,
             )
@@ -205,39 +205,9 @@ async def resolve_extracted_edges(
     return resolved_edges, invalidated_edges
 
 
-async def resolve_extracted_edge(
-    llm_client: LLMClient,
-    extracted_edge: EntityEdge,
-    related_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
-    current_episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await asyncio.gather(
-        dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
-        extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
-        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
-    )
-
-    now = datetime.now()
-
-    resolved_edge.valid_at = valid_at if valid_at is not None else resolved_edge.valid_at
-    resolved_edge.invalid_at = invalid_at if invalid_at is not None else resolved_edge.invalid_at
-    if invalid_at is not None and resolved_edge.expired_at is None:
-        resolved_edge.expired_at = now
-
-    # Determine if the new_edge needs to be expired
-    if resolved_edge.expired_at is None:
-        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
-        for candidate in invalidation_candidates:
-            if (
-                candidate.valid_at is not None and resolved_edge.valid_at is not None
-            ) and candidate.valid_at > resolved_edge.valid_at:
-                # Expire new edge since we have information about more recent events
-                resolved_edge.invalid_at = candidate.valid_at
-                resolved_edge.expired_at = now
-                break
-
+def resolve_edge_contradictions(
+    resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
+) -> list[EntityEdge]:
     # Determine which contradictory edges need to be expired
     invalidated_edges: list[EntityEdge] = []
     for edge in invalidation_candidates:
@@ -259,8 +229,49 @@ async def resolve_extracted_edge(
             and edge.valid_at < resolved_edge.valid_at
         ):
             edge.invalid_at = resolved_edge.valid_at
-            edge.expired_at = edge.expired_at if edge.expired_at is not None else now
+            edge.expired_at = (
+                edge.expired_at if edge.expired_at is not None else datetime.now(timezone.utc)
+            )
             invalidated_edges.append(edge)
+
+    return invalidated_edges
+
+
+async def resolve_extracted_edge(
+    llm_client: LLMClient,
+    extracted_edge: EntityEdge,
+    related_edges: list[EntityEdge],
+    existing_edges: list[EntityEdge],
+    current_episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+) -> tuple[EntityEdge, list[EntityEdge]]:
+    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await asyncio.gather(
+        dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
+        extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
+        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
+    )
+
+    now = datetime.now(timezone.utc)
+
+    resolved_edge.valid_at = valid_at if valid_at is not None else resolved_edge.valid_at
+    resolved_edge.invalid_at = invalid_at if invalid_at is not None else resolved_edge.invalid_at
+    if invalid_at is not None and resolved_edge.expired_at is None:
+        resolved_edge.expired_at = now
+
+    # Determine if the new_edge needs to be expired
+    if resolved_edge.expired_at is None:
+        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
+        for candidate in invalidation_candidates:
+            if (
+                candidate.valid_at is not None and resolved_edge.valid_at is not None
+            ) and candidate.valid_at > resolved_edge.valid_at:
+                # Expire new edge since we have information about more recent events
+                resolved_edge.invalid_at = candidate.valid_at
+                resolved_edge.expired_at = now
+                break
+
+    # Determine which contradictory edges need to be expired
+    invalidated_edges = resolve_edge_contradictions(resolved_edge, invalidation_candidates)
 
     return resolved_edge, invalidated_edges
 
