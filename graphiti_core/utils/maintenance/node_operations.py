@@ -150,7 +150,7 @@ async def extract_nodes(
             llm_client, episode, previous_episodes, entity_names
         )
 
-        entities_missed = False if len(missing_entities) == 0 else True
+        entities_missed = len(missing_entities) != 0
 
         custom_prompt = 'The following entities were missed in a previous extraction: '
         for entity in missing_entities:

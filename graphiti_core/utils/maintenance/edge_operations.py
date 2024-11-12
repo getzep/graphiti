@@ -113,7 +113,7 @@ async def extract_edges(
 
         context['custom_prompt'] = custom_prompt
 
-        facts_missed = False if len(missing_facts) == 0 else True
+        facts_missed = len(missing_facts) != 0
 
     end = time()
     logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
