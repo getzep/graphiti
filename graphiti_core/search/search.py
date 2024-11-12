@@ -152,7 +152,7 @@ async def edge_search(
         )
     )
 
-    if EdgeSearchMethod.bfs in config.search_methods and len(bfs_origin_node_uuids) == 0:
+    if EdgeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
         search_results.append(
             await edge_bfs_search(driver, source_node_uuids, config.bfs_max_depth, 2 * limit)
@@ -237,7 +237,7 @@ async def node_search(
         )
     )
 
-    if NodeSearchMethod.bfs in config.search_methods and len(bfs_origin_node_uuids) == 0:
+    if NodeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         origin_node_uuids = [node.uuid for result in search_results for node in result]
         search_results.append(
             await node_bfs_search(driver, origin_node_uuids, config.bfs_max_depth, 2 * limit)
