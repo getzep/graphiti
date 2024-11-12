@@ -64,10 +64,10 @@ class OpenAIRerankerClient(CrossEncoderClient):
                     content=f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
                            <PASSAGE>
-                           {query}
-                           </PASSAGE>
                            {passage}
+                           </PASSAGE>
                            <QUERY>
+                           {query}
                            </QUERY>
                            """,
                 ),
