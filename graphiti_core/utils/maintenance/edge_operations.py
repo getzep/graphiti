@@ -91,10 +91,29 @@ async def extract_edges(
             }
             for ep in previous_episodes
         ],
+        'custom_prompt': '',
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.extract_edges.v2(context))
-    edges_data = llm_response.get('edges', [])
+    facts_missed = True
+    while facts_missed:
+        llm_response = await llm_client.generate_response(prompt_library.extract_edges.v2(context))
+        edges_data = llm_response.get('edges', [])
+
+        context['extracted_facts'] = [edge_data['fact'] for edge_data in edges_data]
+
+        reflexion_response = await llm_client.generate_response(
+            prompt_library.extract_edges.reflexion(context)
+        )
+
+        missing_facts = reflexion_response.get('missing_facts', [])
+
+        custom_prompt = 'The following facts were missed in a previous extraction: '
+        for fact in missing_facts:
+            custom_prompt += f'\n{fact},'
+
+        context['custom_prompt'] = custom_prompt
+
+        facts_missed = False if len(missing_facts) == 0 else True
 
     end = time()
     logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')

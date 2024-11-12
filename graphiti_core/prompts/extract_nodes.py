@@ -25,6 +25,7 @@ class Prompt(Protocol):
     v2: PromptVersion
     extract_json: PromptVersion
     extract_text: PromptVersion
+    reflexion: PromptVersion
 
 
 class Versions(TypedDict):
@@ -32,6 +33,7 @@ class Versions(TypedDict):
     v2: PromptFunction
     extract_json: PromptFunction
     extract_text: PromptFunction
+    reflexion: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
@@ -87,6 +89,8 @@ Conversation:
 <CURRENT MESSAGE>
 {context["episode_content"]}
 
+{context['custom_prompt']}
+
 Guidelines:
 1. ALWAYS extract the speaker/actor as the first node. The speaker is the part before the colon in each line of dialogue.
 2. Extract other significant entities, concepts, or actors mentioned in the conversation.
@@ -125,6 +129,8 @@ Source Description:
 JSON:
 {context["episode_content"]}
 
+{context['custom_prompt']}
+
 Guidelines:
 1. Always try to extract an entities that the JSON represents. This will often be something like a "name" or "user field
 2. Do NOT extract any properties that contain dates
@@ -152,17 +158,21 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
     user_prompt = f"""
 Given the following conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
 
-Conversation:
+<CONVERSATION>
 {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+</CONVERSATION>
 <CURRENT MESSAGE>
 {context["episode_content"]}
+</CURRENT MESSAGE>
+
+{context['custom_prompt']}
 
 Guidelines:
-2. Extract significant entities, concepts, or actors mentioned in the conversation.
-3. Provide concise but informative summaries for each extracted node.
-4. Avoid creating nodes for relationships or actions.
-5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
-6. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+1. Extract significant entities, concepts, or actors mentioned in the conversation.
+2. Provide concise but informative summaries for each extracted node.
+3. Avoid creating nodes for relationships or actions.
+4. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
+5. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
 
 Respond with a JSON object in the following format:
 {{
@@ -181,9 +191,38 @@ Respond with a JSON object in the following format:
     ]
 
 
+def reflexion(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context"""
+
+    user_prompt = f"""
+Given the following conversation, current message, and list of extracted entities; determine if any entities haven't been
+extracted:
+
+<CONVERSATION>:
+{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+</CONVERSATION>
+<CURRENT MESSAGE>
+{context["episode_content"]}
+</CURRENT MESSAGE>
+<EXTRACTED ENTITIES>
+{context["extracted_entities"]}
+</EXTRACTED ENTITIES>
+
+Respond with a JSON object in the following format:
+{{
+    "missed_entities": [ "name of entity that wasn't extracted", ...]
+}}
+"""
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
 versions: Versions = {
     'v1': v1,
     'v2': v2,
     'extract_json': extract_json,
     'extract_text': extract_text,
+    'reflexion': reflexion,
 }

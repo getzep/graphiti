@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_message_nodes(
-    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    custom_prompt='',
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -41,6 +44,7 @@ async def extract_message_nodes(
             }
             for ep in previous_episodes
         ],
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(prompt_library.extract_nodes.v2(context))
@@ -49,7 +53,10 @@ async def extract_message_nodes(
 
 
 async def extract_text_nodes(
-    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    custom_prompt='',
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -62,6 +69,7 @@ async def extract_text_nodes(
             }
             for ep in previous_episodes
         ],
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(
@@ -72,14 +80,14 @@ async def extract_text_nodes(
 
 
 async def extract_json_nodes(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
+    llm_client: LLMClient, episode: EpisodicNode, custom_prompt=''
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'episode_timestamp': episode.valid_at.isoformat(),
         'source_description': episode.source_description,
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(
@@ -89,6 +97,33 @@ async def extract_json_nodes(
     return extracted_node_data
 
 
+async def extract_nodes_reflexion(
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    node_names: list[str],
+) -> list[str]:
+    # Prepare context for LLM
+    context = {
+        'episode_content': episode.content,
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat(),
+            }
+            for ep in previous_episodes
+        ],
+        'extracted_entities': node_names,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.reflexion(context)
+    )
+    missed_entities = llm_response.get('missed_entities', [])
+
+    return missed_entities
+
+
 async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
@@ -96,12 +131,30 @@ async def extract_nodes(
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
-    if episode.source == EpisodeType.message:
-        extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
-    elif episode.source == EpisodeType.text:
-        extracted_node_data = await extract_text_nodes(llm_client, episode, previous_episodes)
-    elif episode.source == EpisodeType.json:
-        extracted_node_data = await extract_json_nodes(llm_client, episode)
+    custom_prompt = ''
+    entities_missed = True
+    while entities_missed:
+        if episode.source == EpisodeType.message:
+            extracted_node_data = await extract_message_nodes(
+                llm_client, episode, previous_episodes, custom_prompt
+            )
+        elif episode.source == EpisodeType.text:
+            extracted_node_data = await extract_text_nodes(
+                llm_client, episode, previous_episodes, custom_prompt
+            )
+        elif episode.source == EpisodeType.json:
+            extracted_node_data = await extract_json_nodes(llm_client, episode, custom_prompt)
+
+        entity_names = [node_data['name'] for node_data in extracted_node_data]
+        missing_entities = await extract_nodes_reflexion(
+            llm_client, episode, previous_episodes, entity_names
+        )
+
+        entities_missed = False if len(missing_entities) == 0 else True
+
+        custom_prompt = 'The following entities were missed in a previous extraction: '
+        for entity in missing_entities:
+            custom_prompt += f'\n{entity},'
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')
