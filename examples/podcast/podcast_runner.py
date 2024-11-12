@@ -58,8 +58,8 @@ def setup_logging():
 async def main(use_bulk: bool = True):
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
-    await clear_data(client.driver)
-    await client.build_indices_and_constraints()
+    # await clear_data(client.driver)
+    # await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
 
     if not use_bulk:
@@ -69,21 +69,22 @@ async def main(use_bulk: bool = True):
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
+                group_id='podcast',
             )
 
         # build communities
-        await client.build_communities()
+        # await client.build_communities()
 
         # add additional messages to update communities
-        for i, message in enumerate(messages[14:20]):
-            await client.add_episode(
-                name=f'Message {i}',
-                episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
-                reference_time=message.actual_timestamp,
-                source_description='Podcast Transcript',
-                group_id='1',
-                update_communities=True,
-            )
+        # for i, message in enumerate(messages[14:20]):
+        #     await client.add_episode(
+        #         name=f'Message {i}',
+        #         episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
+        #         reference_time=message.actual_timestamp,
+        #         source_description='Podcast Transcript',
+        #         group_id='podcast',
+        #         update_communities=True,
+        #     )
 
         return
 
@@ -94,11 +95,12 @@ async def main(use_bulk: bool = True):
             source=EpisodeType.message,
             source_description='Podcast Transcript',
             reference_time=message.actual_timestamp,
+            group_id='podcast',
         )
         for i, message in enumerate(messages[3:20])
     ]
 
-    await client.add_episode_bulk(episodes, None)
+    await client.add_episode_bulk(episodes, '')
 
 
 asyncio.run(main(False))

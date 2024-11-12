@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from time import time
 from typing import Any
 
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -133,7 +134,8 @@ async def extract_nodes(
     extracted_node_data: list[dict[str, Any]] = []
     custom_prompt = ''
     entities_missed = True
-    while entities_missed:
+    reflexion_iterations = 0
+    while entities_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
         if episode.source == EpisodeType.message:
             extracted_node_data = await extract_message_nodes(
                 llm_client, episode, previous_episodes, custom_prompt
@@ -151,6 +153,7 @@ async def extract_nodes(
         )
 
         entities_missed = len(missing_entities) != 0
+        reflexion_iterations += 1
 
         custom_prompt = 'The following entities were missed in a previous extraction: '
         for entity in missing_entities:

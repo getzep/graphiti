@@ -21,6 +21,7 @@ from time import time
 from typing import List
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -95,7 +96,8 @@ async def extract_edges(
     }
 
     facts_missed = True
-    while facts_missed:
+    reflexion_iterations = 0
+    while facts_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
         llm_response = await llm_client.generate_response(prompt_library.extract_edges.v2(context))
         edges_data = llm_response.get('edges', [])
 
@@ -114,6 +116,7 @@ async def extract_edges(
         context['custom_prompt'] = custom_prompt
 
         facts_missed = len(missing_facts) != 0
+        reflexion_iterations += 1
 
     end = time()
     logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
