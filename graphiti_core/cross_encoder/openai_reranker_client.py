@@ -64,10 +64,10 @@ class OpenAIRerankerClient(CrossEncoderClient):
                     content=f"""
                            Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
                            <PASSAGE>
-                           {query}
-                           </PASSAGE>
                            {passage}
+                           </PASSAGE>
                            <QUERY>
+                           {query}
                            </QUERY>
                            """,
                 ),
@@ -93,7 +93,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
             responses_top_logprobs = [
                 response.choices[0].logprobs.content[0].top_logprobs
                 if response.choices[0].logprobs is not None
-                and response.choices[0].logprobs.content is not None
+                   and response.choices[0].logprobs.content is not None
                 else []
                 for response in responses
             ]
