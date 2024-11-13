@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from time import time
 from typing import Any
 
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -28,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_message_nodes(
-    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    custom_prompt='',
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -41,6 +45,7 @@ async def extract_message_nodes(
             }
             for ep in previous_episodes
         ],
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(prompt_library.extract_nodes.v2(context))
@@ -49,7 +54,10 @@ async def extract_message_nodes(
 
 
 async def extract_text_nodes(
-    llm_client: LLMClient, episode: EpisodicNode, previous_episodes: list[EpisodicNode]
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    custom_prompt='',
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
@@ -62,6 +70,7 @@ async def extract_text_nodes(
             }
             for ep in previous_episodes
         ],
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(
@@ -72,14 +81,14 @@ async def extract_text_nodes(
 
 
 async def extract_json_nodes(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
+    llm_client: LLMClient, episode: EpisodicNode, custom_prompt=''
 ) -> list[dict[str, Any]]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'episode_timestamp': episode.valid_at.isoformat(),
         'source_description': episode.source_description,
+        'custom_prompt': custom_prompt,
     }
 
     llm_response = await llm_client.generate_response(
@@ -89,6 +98,33 @@ async def extract_json_nodes(
     return extracted_node_data
 
 
+async def extract_nodes_reflexion(
+    llm_client: LLMClient,
+    episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
+    node_names: list[str],
+) -> list[str]:
+    # Prepare context for LLM
+    context = {
+        'episode_content': episode.content,
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat(),
+            }
+            for ep in previous_episodes
+        ],
+        'extracted_entities': node_names,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.reflexion(context)
+    )
+    missed_entities = llm_response.get('missed_entities', [])
+
+    return missed_entities
+
+
 async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
@@ -96,12 +132,33 @@ async def extract_nodes(
 ) -> list[EntityNode]:
     start = time()
     extracted_node_data: list[dict[str, Any]] = []
-    if episode.source == EpisodeType.message:
-        extracted_node_data = await extract_message_nodes(llm_client, episode, previous_episodes)
-    elif episode.source == EpisodeType.text:
-        extracted_node_data = await extract_text_nodes(llm_client, episode, previous_episodes)
-    elif episode.source == EpisodeType.json:
-        extracted_node_data = await extract_json_nodes(llm_client, episode)
+    custom_prompt = ''
+    entities_missed = True
+    reflexion_iterations = 0
+    while entities_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
+        if episode.source == EpisodeType.message:
+            extracted_node_data = await extract_message_nodes(
+                llm_client, episode, previous_episodes, custom_prompt
+            )
+        elif episode.source == EpisodeType.text:
+            extracted_node_data = await extract_text_nodes(
+                llm_client, episode, previous_episodes, custom_prompt
+            )
+        elif episode.source == EpisodeType.json:
+            extracted_node_data = await extract_json_nodes(llm_client, episode, custom_prompt)
+
+        reflexion_iterations += 1
+        if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
+            entity_names = [node_data['name'] for node_data in extracted_node_data]
+            missing_entities = await extract_nodes_reflexion(
+                llm_client, episode, previous_episodes, entity_names
+            )
+
+            entities_missed = len(missing_entities) != 0
+
+            custom_prompt = 'The following entities were missed in a previous extraction: '
+            for entity in missing_entities:
+                custom_prompt += f'\n{entity},'
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')

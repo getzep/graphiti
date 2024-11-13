@@ -25,6 +25,7 @@ load_dotenv()
 
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
+MAX_REFLEXION_ITERATIONS = 2
 
 
 def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:

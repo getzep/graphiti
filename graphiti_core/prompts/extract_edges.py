@@ -23,11 +23,13 @@ from .models import Message, PromptFunction, PromptVersion
 class Prompt(Protocol):
     v1: PromptVersion
     v2: PromptVersion
+    reflexion: PromptVersion
 
 
 class Versions(TypedDict):
     v1: PromptFunction
     v2: PromptFunction
+    reflexion: PromptFunction
 
 
 def v1(context: dict[str, Any]) -> list[Message]:
@@ -107,6 +109,8 @@ def v2(context: dict[str, Any]) -> list[Message]:
         
 
         Extract entity edges based on the content of the current episode, the given nodes, and context from previous episodes.
+        
+        {context['custom_prompt']}
 
         Guidelines:
         1. Create edges only between the provided nodes.
@@ -137,4 +141,35 @@ def v2(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2}
+def reflexion(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that determines which facts have not been extracted from the given context"""
+
+    user_prompt = f"""
+Given the following conversation, current message, list of extracted entities, and list of extracted facts; 
+determine if any facts haven't been extracted:
+
+<CONVERSATION>:
+{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+</CONVERSATION>
+<CURRENT MESSAGE>
+{context["episode_content"]}
+</CURRENT MESSAGE>
+<EXTRACTED ENTITIES>
+{context["nodes"]}
+</EXTRACTED ENTITIES>
+<EXTRACTED FACTS>
+{context["extracted_facts"]}
+</EXTRACTED FACTS>
+
+Respond with a JSON object in the following format:
+{{
+    "missing_facts": [ "facts that weren't extracted", ...]
+}}
+"""
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
+versions: Versions = {'v1': v1, 'v2': v2, 'reflexion': reflexion}

@@ -69,6 +69,7 @@ async def main(use_bulk: bool = True):
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
+                group_id='podcast',
             )
 
         # build communities
@@ -81,7 +82,7 @@ async def main(use_bulk: bool = True):
                 episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
-                group_id='1',
+                group_id='podcast',
                 update_communities=True,
             )
 
@@ -94,11 +95,12 @@ async def main(use_bulk: bool = True):
             source=EpisodeType.message,
             source_description='Podcast Transcript',
             reference_time=message.actual_timestamp,
+            group_id='podcast',
         )
         for i, message in enumerate(messages[3:20])
     ]
 
-    await client.add_episode_bulk(episodes, None)
+    await client.add_episode_bulk(episodes, '')
 
 
 asyncio.run(main(False))
