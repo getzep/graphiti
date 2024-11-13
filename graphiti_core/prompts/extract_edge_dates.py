@@ -36,6 +36,8 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
+            
+            
             Edge:
             Fact: {context['edge_fact']}
 
@@ -60,7 +62,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             5. Do not infer dates from related events. Only use dates that are directly stated to establish or change the relationship.
 			6. For relative time mentions directly related to the relationship, calculate the actual datetime based on the reference timestamp.
             7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
-            8. If only a year is mentioned, use January 1st of that year at 00:00:00.
+            8. If only year is mentioned, use January 1st of that year at 00:00:00.
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
             Respond with a JSON object:
             {{

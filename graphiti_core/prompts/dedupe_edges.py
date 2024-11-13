@@ -21,103 +21,16 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
-    v2: PromptVersion
-    v3: PromptVersion
+    edge: PromptVersion
     edge_list: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
-    v3: PromptFunction
+    edge: PromptFunction
     edge_list: PromptFunction
 
 
-def v1(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that de-duplicates relationship from edge lists.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, deduplicate facts from a list of new facts given a list of existing edges:
-
-        Existing Edges:
-        {json.dumps(context['existing_edges'], indent=2)}
-
-        New Edges:
-        {json.dumps(context['extracted_edges'], indent=2)}
-
-        Task:
-        If any edge in New Edges is a duplicate of an edge in Existing Edges, add their uuids to the output list.
-        When finding duplicates edges, synthesize their facts into a short new fact.
-
-        Guidelines:
-        1. identical or near identical facts are duplicates
-        2. Facts are also duplicates if they are represented by similar sentences
-        3. Facts will often discuss the same or similar relation between identical entities
-
-        Respond with a JSON object in the following format:
-        {{
-            "duplicates": [
-                {{
-                    "uuid": "uuid of the new node like 5d643020624c42fa9de13f97b1b3fa39",
-                    "duplicate_of": "uuid of the existing node",
-                    "fact": "one sentence description of the fact"
-                }}
-            ]
-        }}
-        """,
-        ),
-    ]
-
-
-def v2(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that de-duplicates relationship from edge lists.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, deduplicate edges from a list of new edges given a list of existing edges:
-
-        Existing Edges:
-        {json.dumps(context['existing_edges'], indent=2)}
-
-        New Edges:
-        {json.dumps(context['extracted_edges'], indent=2)}
-
-        Task:
-        1. start with the list of edges from New Edges
-        2. If any edge in New Edges is a duplicate of an edge in Existing Edges, replace the new edge with the existing
-            edge in the list
-        3. Respond with the resulting list of edges
-
-        Guidelines:
-        1. Use both the triplet name and fact of edges to determine if they are duplicates, 
-            duplicate edges may have different names meaning the same thing and slight variations in the facts.
-        2. If you encounter facts that are semantically equivalent or very similar, keep the original edge
-
-        Respond with a JSON object in the following format:
-        {{
-            "new_edges": [
-                {{
-                    "triplet": "source_node_name-edge_name-target_node_name",
-                    "fact": "one sentence description of the fact"
-                }}
-            ]
-        }}
-        """,
-        ),
-    ]
-
-
-def v3(context: dict[str, Any]) -> list[Message]:
+def edge(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
@@ -189,4 +102,4 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2, 'v3': v3, 'edge_list': edge_list}
+versions: Versions = {'edge': edge, 'edge_list': edge_list}
