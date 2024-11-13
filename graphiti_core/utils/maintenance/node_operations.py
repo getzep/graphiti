@@ -147,17 +147,18 @@ async def extract_nodes(
         elif episode.source == EpisodeType.json:
             extracted_node_data = await extract_json_nodes(llm_client, episode, custom_prompt)
 
-        entity_names = [node_data['name'] for node_data in extracted_node_data]
-        missing_entities = await extract_nodes_reflexion(
-            llm_client, episode, previous_episodes, entity_names
-        )
-
-        entities_missed = len(missing_entities) != 0
         reflexion_iterations += 1
+        if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
+            entity_names = [node_data['name'] for node_data in extracted_node_data]
+            missing_entities = await extract_nodes_reflexion(
+                llm_client, episode, previous_episodes, entity_names
+            )
 
-        custom_prompt = 'The following entities were missed in a previous extraction: '
-        for entity in missing_entities:
-            custom_prompt += f'\n{entity},'
+            entities_missed = len(missing_entities) != 0
+
+            custom_prompt = 'The following entities were missed in a previous extraction: '
+            for entity in missing_entities:
+                custom_prompt += f'\n{entity},'
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_data} in {(end - start) * 1000} ms')
