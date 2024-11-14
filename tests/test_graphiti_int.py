@@ -98,14 +98,10 @@ async def test_graphiti_init():
 
     await graphiti.add_triplet(alice_node, entity_edge, bob_node)
 
-    episodes = await graphiti.retrieve_episodes(datetime.now(timezone.utc), group_ids=None)
-    episode_uuids = [episode.uuid for episode in episodes]
-
     results = await graphiti._search(
         "Emily: I can't log in",
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-        bfs_origin_node_uuids=episode_uuids,
-        group_ids=None,
+        group_ids=['test'],
     )
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
