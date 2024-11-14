@@ -93,14 +93,14 @@ class AddEpisodeResults(BaseModel):
 
 class Graphiti:
     def __init__(
-        self,
-        uri: str,
-        user: str,
-        password: str,
-        llm_client: LLMClient | None = None,
-        embedder: EmbedderClient | None = None,
-        cross_encoder: CrossEncoderClient | None = None,
-        store_raw_episode_content: bool = True,
+            self,
+            uri: str,
+            user: str,
+            password: str,
+            llm_client: LLMClient | None = None,
+            embedder: EmbedderClient | None = None,
+            cross_encoder: CrossEncoderClient | None = None,
+            store_raw_episode_content: bool = True,
     ):
         """
         Initialize a Graphiti instance.
@@ -222,10 +222,10 @@ class Graphiti:
         await build_indices_and_constraints(self.driver, delete_existing)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
+            group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -255,15 +255,15 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
-        uuid: str | None = None,
-        update_communities: bool = False,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            group_id: str = '',
+            uuid: str | None = None,
+            update_communities: bool = False,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -318,7 +318,7 @@ class Graphiti:
             now = datetime.now(timezone.utc)
 
             previous_episodes = await self.retrieve_episodes(
-                reference_time, last_n=3, group_ids=[group_id]
+                reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
             )
             episode = EpisodicNode(
                 name=name,
@@ -343,13 +343,14 @@ class Graphiti:
                 *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
             )
 
-            # Resolve extracted nodes with nodes already in the graph and extract facts
+            # Find relevant nodes already in the graph
             existing_nodes_lists: list[list[EntityNode]] = list(
                 await asyncio.gather(
                     *[get_relevant_nodes([node], self.driver) for node in extracted_nodes]
                 )
             )
 
+            # Resolve extracted nodes with nodes already in the graph and extract facts
             logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
@@ -618,11 +619,11 @@ class Graphiti:
         return community_nodes
 
     async def search(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str] | None = None,
-        num_results=DEFAULT_SEARCH_LIMIT,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str] | None = None,
+            num_results=DEFAULT_SEARCH_LIMIT,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -675,12 +676,12 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        config: SearchConfig,
-        group_ids: list[str] | None = None,
-        center_node_uuid: str | None = None,
-        bfs_origin_node_uuids: list[str] | None = None,
+            self,
+            query: str,
+            config: SearchConfig,
+            group_ids: list[str] | None = None,
+            center_node_uuid: str | None = None,
+            bfs_origin_node_uuids: list[str] | None = None,
     ) -> SearchResults:
         return await search(
             self.driver,
@@ -692,67 +693,6 @@ class Graphiti:
             center_node_uuid,
             bfs_origin_node_uuids,
         )
-
-    async def get_nodes_by_query(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str] | None = None,
-        limit: int = DEFAULT_SEARCH_LIMIT,
-    ) -> list[EntityNode]:
-        """
-        Retrieve nodes from the graph database based on a text query.
-
-        This method performs a hybrid search using both text-based and
-        embedding-based approaches to find relevant nodes.
-
-        Parameters
-        ----------
-        query : str
-            The text query to search for in the graph
-        center_node_uuid: str, optional
-            Facts will be reranked based on proximity to this node.
-        group_ids : list[str | None] | None, optional
-            The graph partitions to return data from.
-        limit : int | None, optional
-            The maximum number of results to return per search method.
-            If None, a default limit will be applied.
-
-        Returns
-        -------
-        list[EntityNode]
-            A list of EntityNode objects that match the search criteria.
-
-        Notes
-        -----
-        This method uses the following steps:
-        1. Generates an embedding for the input query using the LLM client's embedder.
-        2. Calls the hybrid_node_search function with both the text query and its embedding.
-        3. The hybrid search combines fulltext search and vector similarity search
-           to find the most relevant nodes.
-
-        The method leverages the LLM client's embedding capabilities to enhance
-        the search with semantic similarity matching. The 'limit' parameter is applied
-        to each individual search method before results are combined and deduplicated.
-        If not specified, a default limit (defined in the search functions) will be used.
-        """
-        search_config = (
-            NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE
-        )
-        search_config.limit = limit
-
-        nodes = (
-            await search(
-                self.driver,
-                self.embedder,
-                self.cross_encoder,
-                query,
-                group_ids,
-                search_config,
-                center_node_uuid,
-            )
-        ).nodes
-        return nodes
 
     async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)

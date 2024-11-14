@@ -29,7 +29,7 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: AsyncDriver, group_ids: list[str] | None
+        driver: AsyncDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -152,7 +152,7 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode]
+        llm_client: LLMClient, community_cluster: list[EntityNode]
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -166,7 +166,7 @@ async def build_community(
                 *[
                     summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
-                        summaries[: int(length / 2)], summaries[int(length / 2) :]
+                        summaries[: int(length / 2)], summaries[int(length / 2):]
                     )
                 ]
             )
@@ -194,7 +194,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
+        driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -228,7 +228,7 @@ async def remove_communities(driver: AsyncDriver):
 
 
 async def determine_entity_community(
-    driver: AsyncDriver, entity: EntityNode
+        driver: AsyncDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
@@ -291,7 +291,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
+        driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 
@@ -305,7 +305,7 @@ async def update_community(
     community.name = new_name
 
     if is_new:
-        community_edge = (build_community_edges([entity], community, datetime.now()))[0]
+        community_edge = (build_community_edges([entity], community, datetime.now(timezone.utc)))[0]
         await community_edge.save(driver)
 
     await community.generate_name_embedding(embedder)
