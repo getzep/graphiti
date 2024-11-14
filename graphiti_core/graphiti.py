@@ -35,8 +35,6 @@ from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT, SearchResul
 from graphiti_core.search.search_config_recipes import (
     EDGE_HYBRID_SEARCH_NODE_DISTANCE,
     EDGE_HYBRID_SEARCH_RRF,
-    NODE_HYBRID_SEARCH_NODE_DISTANCE,
-    NODE_HYBRID_SEARCH_RRF,
 )
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
@@ -318,7 +316,7 @@ class Graphiti:
             now = datetime.now(timezone.utc)
 
             previous_episodes = await self.retrieve_episodes(
-                reference_time, last_n=3, group_ids=[group_id]
+                reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
             )
             episode = EpisodicNode(
                 name=name,
@@ -343,13 +341,14 @@ class Graphiti:
                 *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
             )
 
-            # Resolve extracted nodes with nodes already in the graph and extract facts
+            # Find relevant nodes already in the graph
             existing_nodes_lists: list[list[EntityNode]] = list(
                 await asyncio.gather(
-                    *[get_relevant_nodes([node], self.driver) for node in extracted_nodes]
+                    *[get_relevant_nodes(self.driver, [node]) for node in extracted_nodes]
                 )
             )
 
+            # Resolve extracted nodes with nodes already in the graph and extract facts
             logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
@@ -693,67 +692,6 @@ class Graphiti:
             bfs_origin_node_uuids,
         )
 
-    async def get_nodes_by_query(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str] | None = None,
-        limit: int = DEFAULT_SEARCH_LIMIT,
-    ) -> list[EntityNode]:
-        """
-        Retrieve nodes from the graph database based on a text query.
-
-        This method performs a hybrid search using both text-based and
-        embedding-based approaches to find relevant nodes.
-
-        Parameters
-        ----------
-        query : str
-            The text query to search for in the graph
-        center_node_uuid: str, optional
-            Facts will be reranked based on proximity to this node.
-        group_ids : list[str | None] | None, optional
-            The graph partitions to return data from.
-        limit : int | None, optional
-            The maximum number of results to return per search method.
-            If None, a default limit will be applied.
-
-        Returns
-        -------
-        list[EntityNode]
-            A list of EntityNode objects that match the search criteria.
-
-        Notes
-        -----
-        This method uses the following steps:
-        1. Generates an embedding for the input query using the LLM client's embedder.
-        2. Calls the hybrid_node_search function with both the text query and its embedding.
-        3. The hybrid search combines fulltext search and vector similarity search
-           to find the most relevant nodes.
-
-        The method leverages the LLM client's embedding capabilities to enhance
-        the search with semantic similarity matching. The 'limit' parameter is applied
-        to each individual search method before results are combined and deduplicated.
-        If not specified, a default limit (defined in the search functions) will be used.
-        """
-        search_config = (
-            NODE_HYBRID_SEARCH_RRF if center_node_uuid is None else NODE_HYBRID_SEARCH_NODE_DISTANCE
-        )
-        search_config.limit = limit
-
-        nodes = (
-            await search(
-                self.driver,
-                self.embedder,
-                self.cross_encoder,
-                query,
-                group_ids,
-                search_config,
-                center_node_uuid,
-            )
-        ).nodes
-        return nodes
-
     async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
 
@@ -781,8 +719,8 @@ class Graphiti:
             self.llm_client,
             [source_node, target_node],
             [
-                await get_relevant_nodes([source_node], self.driver),
-                await get_relevant_nodes([target_node], self.driver),
+                await get_relevant_nodes(self.driver, [source_node]),
+                await get_relevant_nodes(self.driver, [target_node]),
             ],
         )
 

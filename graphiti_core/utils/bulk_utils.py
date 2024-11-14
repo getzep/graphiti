@@ -169,7 +169,7 @@ async def dedupe_nodes_bulk(
 
     existing_nodes_chunks: list[list[EntityNode]] = list(
         await asyncio.gather(
-            *[get_relevant_nodes(node_chunk, driver) for node_chunk in node_chunks]
+            *[get_relevant_nodes(driver, node_chunk) for node_chunk in node_chunks]
         )
     )
 

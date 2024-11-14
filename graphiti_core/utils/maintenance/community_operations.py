@@ -305,7 +305,7 @@ async def update_community(
     community.name = new_name
 
     if is_new:
-        community_edge = (build_community_edges([entity], community, datetime.now()))[0]
+        community_edge = (build_community_edges([entity], community, datetime.now(timezone.utc)))[0]
         await community_edge.save(driver)
 
     await community.generate_name_embedding(embedder)

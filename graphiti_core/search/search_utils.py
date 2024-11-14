@@ -146,7 +146,7 @@ async def edge_fulltext_search(
         return []
 
     cypher_query = Query("""
-              CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query) 
+              CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
               YIELD relationship AS rel, score
               MATCH (n:Entity)-[r {uuid: rel.uuid}]->(m:Entity)
               WHERE ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
@@ -296,7 +296,7 @@ async def node_fulltext_search(
 
     records, _, _ = await driver.execute_query(
         """
-        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query) 
+        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
         YIELD node AS n, score
         RETURN
             n.uuid AS uuid,
@@ -407,7 +407,7 @@ async def community_fulltext_search(
 
     records, _, _ = await driver.execute_query(
         """
-        CALL db.index.fulltext.queryNodes("community_name", $query) 
+        CALL db.index.fulltext.queryNodes("community_name", $query, {limit: $limit}) 
         YIELD node AS comm, score
         RETURN
             comm.uuid AS uuid,
@@ -539,8 +539,8 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    nodes: list[EntityNode],
     driver: AsyncDriver,
+    nodes: list[EntityNode],
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -573,6 +573,7 @@ async def get_relevant_nodes(
         driver,
         [node.group_id for node in nodes],
     )
+
     return relevant_nodes
 
 

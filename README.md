@@ -108,7 +108,7 @@ poetry add graphiti-core
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Initialize Graphiti
 graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
@@ -128,7 +128,7 @@ for i, episode in enumerate(episodes):
         episode_body=episode,
         source=EpisodeType.text,
         source_description="podcast",
-        reference_time=datetime.now()
+        reference_time=datetime.now(timezone.utc)
     )
 
 # Search the graph
