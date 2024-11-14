@@ -22,11 +22,13 @@ from .models import Message, PromptFunction, PromptVersion
 
 class Prompt(Protocol):
     summarize_pair: PromptVersion
+    summarize_context: PromptVersion
     summary_description: PromptVersion
 
 
 class Versions(TypedDict):
     summarize_pair: PromptFunction
+    summarize_context: PromptFunction
     summary_description: PromptFunction
 
 
@@ -47,6 +49,39 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
         Respond with a JSON object in the following format:
             {{
                 "summary": "Summary containing the important information from both summaries"
+            }}
+        """,
+        ),
+    ]
+
+
+def summarize_context(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that combines summaries with new conversation context.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+            
+        <MESSAGES>
+        {json.dumps(context['previous_episodes'], indent=2)}
+        {json.dumps(context['episode_content'], indent=2)}
+        </MESSAGES>
+        
+        Given the above MESSAGES and the following ENTITY name, create a summary for the ENTITY. Your summary must only use
+        information from the provided MESSAGES. Your summary should also only contain information relevant to the
+        provided ENTITY.
+        
+        <ENTITY>
+        {context['node_name']}
+        </ENTITY>
+        
+
+        Respond with a JSON object in the following format:
+            {{
+                "summary": "Entity summary"
             }}
         """,
         ),
@@ -76,4 +111,8 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'summarize_pair': summarize_pair, 'summary_description': summary_description}
+versions: Versions = {
+    'summarize_pair': summarize_pair,
+    'summarize_context': summarize_context,
+    'summary_description': summary_description,
+}

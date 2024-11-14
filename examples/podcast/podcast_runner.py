@@ -23,8 +23,6 @@ from dotenv import load_dotenv
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
-from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -55,52 +53,21 @@ def setup_logging():
     return logger
 
 
-async def main(use_bulk: bool = True):
+async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
 
-    if not use_bulk:
-        for i, message in enumerate(messages[3:14]):
-            await client.add_episode(
-                name=f'Message {i}',
-                episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
-                reference_time=message.actual_timestamp,
-                source_description='Podcast Transcript',
-                group_id='podcast',
-            )
-
-        # build communities
-        await client.build_communities()
-
-        # add additional messages to update communities
-        for i, message in enumerate(messages[14:20]):
-            await client.add_episode(
-                name=f'Message {i}',
-                episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
-                reference_time=message.actual_timestamp,
-                source_description='Podcast Transcript',
-                group_id='podcast',
-                update_communities=True,
-            )
-
-        return
-
-    episodes: list[RawEpisode] = [
-        RawEpisode(
+    for i, message in enumerate(messages[3:14]):
+        await client.add_episode(
             name=f'Message {i}',
-            content=f'{message.speaker_name} ({message.role}): {message.content}',
-            source=EpisodeType.message,
-            source_description='Podcast Transcript',
+            episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
             reference_time=message.actual_timestamp,
+            source_description='Podcast Transcript',
             group_id='podcast',
         )
-        for i, message in enumerate(messages[3:20])
-    ]
-
-    await client.add_episode_bulk(episodes, '')
 
 
-asyncio.run(main(False))
+asyncio.run(main())

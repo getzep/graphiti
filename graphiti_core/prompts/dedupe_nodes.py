@@ -21,20 +21,16 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
-    v2: PromptVersion
-    v3: PromptVersion
+    node: PromptVersion
     node_list: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
-    v3: PromptFunction
+    node: PromptFunction
     node_list: PromptFunction
 
 
-def v1(context: dict[str, Any]) -> list[Message]:
+def node(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
@@ -43,106 +39,28 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-        Given the following context, deduplicate nodes from a list of new nodes given a list of existing nodes:
+        <PREVIOUS MESSAGES>
+        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+        </PREVIOUS MESSAGES>
+        <CURRENT MESSAGE>
+        {context["episode_content"]}
+        </CURRENT MESSAGE>
 
-        Existing Nodes:
+        <EXISTING NODES>
         {json.dumps(context['existing_nodes'], indent=2)}
-
-        New Nodes:
-        {json.dumps(context['extracted_nodes'], indent=2)}
+        </EXISTING NODES>
         
-        Task:
-        1. start with the list of nodes from New Nodes
-        2. If any node in New Nodes is a duplicate of a node in Existing Nodes, replace the new node with the existing
-            node in the list
-        3. when deduplicating nodes, synthesize their summaries into a short new summary that contains the relevant information
-            of the summaries of the new and existing nodes
-        4. Respond with the resulting list of nodes
+        Given the above EXISTING NODES, MESSAGE, and PREVIOUS MESSAGES. Determine if the NEW NODE extracted from the conversation
+        is a duplicate entity of one of the EXISTING NODES.
 
-        Guidelines:
-        1. Use both the name and summary of nodes to determine if they are duplicates, 
-            duplicate nodes may have different names
-
-        Respond with a JSON object in the following format:
-        {{
-            "new_nodes": [
-                {{
-                    "name": "Unique identifier for the node",
-                    "summary": "Brief summary of the node's role or significance"
-                }}
-            ]
-        }}
-        """,
-        ),
-    ]
-
-
-def v2(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, deduplicate nodes from a list of new nodes given a list of existing nodes:
-
-        Existing Nodes:
-        {json.dumps(context['existing_nodes'], indent=2)}
-
-        New Nodes:
+        <NEW NODE>
         {json.dumps(context['extracted_nodes'], indent=2)}
-        Important:
-        If a node in the new nodes is describing the same entity as a node in the existing nodes, mark it as a duplicate!!!
-        Task:
-        If any node in New Nodes is a duplicate of a node in Existing Nodes, add their uuids to the output list
-        When finding duplicates nodes, synthesize their summaries into a short new summary that contains the 
-        relevant information of the summaries of the new and existing nodes.
-
-        Guidelines:
-        1. Use both the name and summary of nodes to determine if they are duplicates, 
-            duplicate nodes may have different names
-        2. In the output, uuid should always be the uuid of the New Node that is a duplicate. duplicate_of should be
-            the uuid of the Existing Node.
-
-        Respond with a JSON object in the following format:
-        {{
-            "duplicates": [
-                {{
-                    "uuid": "uuid of the new node like 5d643020624c42fa9de13f97b1b3fa39",
-                    "duplicate_of": "uuid of the existing node",
-                    "summary": "Brief summary of the node's role or significance. Takes information from the new and existing nodes"
-                }}
-            ]
-        }}
-        """,
-        ),
-    ]
-
-
-def v3(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, determine whether the New Node represents any of the entities in the list of Existing Nodes.
-
-        Existing Nodes:
-        {json.dumps(context['existing_nodes'], indent=2)}
-
-        New Node:
-        {json.dumps(context['extracted_nodes'], indent=2)}
+        </NEW NODE>
         Task:
         1. If the New Node represents the same entity as any node in Existing Nodes, return 'is_duplicate: true' in the 
             response. Otherwise, return 'is_duplicate: false'
         2. If is_duplicate is true, also return the uuid of the existing node in the response
-        3. If is_duplicate is true, return a summary that synthesizes the information in the New Node summary and the 
-        summary of the Existing Node it is a duplicate of.
+        3. If is_duplicate is true, return a name for the node that is the most complete full name.
 
         Guidelines:
         1. Use both the name and summary of nodes to determine if the entities are duplicates, 
@@ -152,7 +70,7 @@ def v3(context: dict[str, Any]) -> list[Message]:
             {{
                 "is_duplicate": true or false,
                 "uuid": "uuid of the existing node like 5d643020624c42fa9de13f97b1b3fa39 or null",
-                "summary": "Brief summary of the node's role or significance. Takes information from the new and existing node"
+                "name": "Updated name of the new node (use the best name between the new node's name, an existing duplicate name, or a combination of both)"
             }}
         """,
         ),
@@ -196,4 +114,4 @@ def node_list(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2, 'v3': v3, 'node_list': node_list}
+versions: Versions = {'node': node, 'node_list': node_list}

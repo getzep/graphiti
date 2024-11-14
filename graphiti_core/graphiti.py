@@ -353,7 +353,13 @@ class Graphiti:
             logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             (mentioned_nodes, uuid_map), extracted_edges = await asyncio.gather(
-                resolve_extracted_nodes(self.llm_client, extracted_nodes, existing_nodes_lists),
+                resolve_extracted_nodes(
+                    self.llm_client,
+                    extracted_nodes,
+                    existing_nodes_lists,
+                    episode,
+                    previous_episodes,
+                ),
                 extract_edges(
                     self.llm_client, episode, extracted_nodes, previous_episodes, group_id
                 ),
