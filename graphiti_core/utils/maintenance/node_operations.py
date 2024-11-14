@@ -119,7 +119,6 @@ async def extract_nodes(
     entities_missed = True
     reflexion_iterations = 0
     while entities_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
-        extracted_node_names: list[str] = []
         if episode.source == EpisodeType.message:
             extracted_node_names = await extract_message_nodes(
                 llm_client, episode, previous_episodes, custom_prompt
