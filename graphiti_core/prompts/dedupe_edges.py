@@ -41,11 +41,14 @@ def edge(context: dict[str, Any]) -> list[Message]:
             content=f"""
         Given the following context, determine whether the New Edge represents any of the edges in the list of Existing Edges.
 
-        Existing Edges:
+        <EXISTING EDGES>
         {json.dumps(context['related_edges'], indent=2)}
+        </EXISTING EDGES>
 
-        New Edge:
+        <NEW EDGE>
         {json.dumps(context['extracted_edges'], indent=2)}
+        </NEW EDGE>
+        
         Task:
         1. If the New Edges represents the same factual information as any edge in Existing Edges, return 'is_duplicate: true' in the 
             response. Otherwise, return 'is_duplicate: false'

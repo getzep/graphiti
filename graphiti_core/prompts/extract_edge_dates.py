@@ -36,14 +36,19 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
+            <PREVIOUS MESSAGES>
+            {context['previous_episodes']}
+            </PREVIOUS MESSAGES>
+            <CURRENT MESSAGE>
+            {context["current_episode"]}
+            </CURRENT MESSAGE>
+            <REFERENCE TIMESTAMP>
+            {context['reference_timestamp']}
+            </REFERENCE TIMESTAMP>
             
-            
-            Edge:
-            Fact: {context['edge_fact']}
-
-            Current Episode: {context['current_episode']}
-            Previous Episodes: {context['previous_episodes']}
-            Reference Timestamp: {context['reference_timestamp']}
+            <FACT>
+            {context['edge_fact']}
+            </FACT>
 
             IMPORTANT: Only extract time information if it is part of the provided fact. Otherwise ignore the time mentioned. Make sure to do your best to determine the dates if only the relative time is mentioned. (eg 10 years ago, 2 mins ago) based on the provided reference timestamp
             If the relationship is not of spanning nature, but you are still able to determine the dates, set the valid_at only.
