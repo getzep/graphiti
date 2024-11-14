@@ -346,7 +346,7 @@ class Graphiti:
             # Find relevant nodes already in the graph
             existing_nodes_lists: list[list[EntityNode]] = list(
                 await asyncio.gather(
-                    *[get_relevant_nodes([node], self.driver) for node in extracted_nodes]
+                    *[get_relevant_nodes(self.driver, [node]) for node in extracted_nodes]
                 )
             )
 
