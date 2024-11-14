@@ -21,121 +21,58 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
-    v2: PromptVersion
+    edge: PromptVersion
     reflexion: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
+    edge: PromptFunction
     reflexion: PromptFunction
 
 
-def v1(context: dict[str, Any]) -> list[Message]:
+def edge(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts graph edges from provided context.',
+            content='You are an expert fact extractor that extracts fact triples from text.',
         ),
         Message(
             role='user',
             content=f"""
-        Given the following context, extract new semantic edges (relationships) that need to be added to the knowledge graph:
-
-        Current Graph Structure:
-        {context['relevant_schema']}
-
-        New Nodes:
-        {json.dumps(context['new_nodes'], indent=2)}
-
-        New Episode:
-        Content: {context['episode_content']}
-        Timestamp: {context['episode_timestamp']}
-
-        Previous Episodes:
-        {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-
-        Extract new semantic edges based on the content of the current episode, considering the existing graph structure, new nodes, and context from previous episodes.
-
-        Guidelines:
-        1. Create edges only between semantic nodes (not episodic nodes like messages).
-        2. Each edge should represent a clear relationship between two semantic nodes.
-        3. The relation_type should be a concise, all-caps description of the relationship (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
-        4. Provide a more detailed fact describing the relationship.
-        5. If a relationship seems to update an existing one, create a new edge with the updated information.
-        6. Consider temporal aspects of relationships when relevant.
-        7. Do not create edges involving episodic nodes (like Message 1 or Message 2).
-        8. Use existing nodes from the current graph structure when appropriate.
-
-        Respond with a JSON object in the following format:
-        {{
-            "new_edges": [
-                {{
-                    "relation_type": "RELATION_TYPE_IN_CAPS",
-                    "source_node": "Name of the source semantic node",
-                    "target_node": "Name of the target semantic node",
-                    "fact": "Detailed description of the relationship",
-                    "valid_at": "YYYY-MM-DDTHH:MM:SSZ or null if not explicitly mentioned",
-                    "invalid_at": "YYYY-MM-DDTHH:MM:SSZ or null if ongoing or not explicitly mentioned"
-                }}
-            ]
-        }}
-
-        If no new edges need to be added, return an empty list for "new_edges".
-        """,
-        ),
-    ]
-
-
-def v2(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that extracts graph edges from provided context.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, extract edges (relationships) that need to be added to the knowledge graph:
-        Nodes:
-        {json.dumps(context['nodes'], indent=2)}
-
+        <PREVIOUS MESSAGES>
+        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+        </PREVIOUS MESSAGES>
+        <CURRENT MESSAGE>
+        {context["episode_content"]}
+        </CURRENT MESSAGE>
         
-
-        Episodes:
-        {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-        {context['episode_content']} <-- New Episode
-        
-
-        Extract entity edges based on the content of the current episode, the given nodes, and context from previous episodes.
+        <ENTITIES>
+        {context["nodes"]}
+        </ENTITIES>
         
         {context['custom_prompt']}
 
+        Given the above MESSAGES and ENTITIES, extract all facts pertaining to the listed ENTITIES from the CURRENT MESSAGE. 
+        
+
         Guidelines:
-        1. Create edges only between the provided nodes.
-        2. Each edge should represent a clear relationship between two DISTINCT nodes.
-        3. The relation_type should be a concise, all-caps description of the relationship (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
-        4. Provide a more detailed fact describing the relationship.
-        5. The fact should include any specific relevant information, including numeric information
-        6. Consider temporal aspects of relationships when relevant.
-        7. Avoid using the same node as the source and target of a relationship
+        1. Extract facts only between the provided entities.
+        2. Each fact should represent a clear relationship between two DISTINCT nodes.
+        3. The relation_type should be a concise, all-caps description of the fact (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
+        4. Provide a more detailed fact containing all relevant information.
+        5. Consider temporal aspects of relationships when relevant.
 
         Respond with a JSON object in the following format:
         {{
             "edges": [
                 {{
                     "relation_type": "RELATION_TYPE_IN_CAPS",
-                    "source_node_uuid": "uuid of the source entity node",
-                    "target_node_uuid": "uuid of the target entity node",
-                    "fact": "brief description of the relationship",
-                    "valid_at": "YYYY-MM-DDTHH:MM:SSZ or null if not explicitly mentioned",
-                    "invalid_at": "YYYY-MM-DDTHH:MM:SSZ or null if ongoing or not explicitly mentioned"
+                    "source_entity_name": "name of the source entity",
+                    "target_entity_name": "name of the target entity",
+                    "fact": "extracted factual information",
                 }}
             ]
         }}
-
-        If no edges need to be added, return an empty list for "edges".
         """,
         ),
     ]
@@ -145,21 +82,23 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that determines which facts have not been extracted from the given context"""
 
     user_prompt = f"""
-Given the following conversation, current message, list of extracted entities, and list of extracted facts; 
-determine if any facts haven't been extracted:
-
-<CONVERSATION>:
-{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-</CONVERSATION>
+<PREVIOUS MESSAGES>
+{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+</PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context["episode_content"]}
 </CURRENT MESSAGE>
+
 <EXTRACTED ENTITIES>
 {context["nodes"]}
 </EXTRACTED ENTITIES>
+
 <EXTRACTED FACTS>
 {context["extracted_facts"]}
 </EXTRACTED FACTS>
+
+Given the above MESSAGES, list of EXTRACTED ENTITIES entities, and list of EXTRACTED FACTS; 
+determine if any facts haven't been extracted:
 
 Respond with a JSON object in the following format:
 {{
@@ -172,4 +111,4 @@ Respond with a JSON object in the following format:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2, 'reflexion': reflexion}
+versions: Versions = {'edge': edge, 'reflexion': reflexion}

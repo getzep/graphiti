@@ -21,93 +21,45 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
-    v2: PromptVersion
+    extract_message: PromptVersion
     extract_json: PromptVersion
     extract_text: PromptVersion
     reflexion: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
-    v2: PromptFunction
+    extract_message: PromptFunction
     extract_json: PromptFunction
     extract_text: PromptFunction
     reflexion: PromptFunction
 
 
-def v1(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are a helpful assistant that extracts graph nodes from provided context.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-        Given the following context, extract new entity nodes that need to be added to the knowledge graph:
-
-        Previous Episodes:
-        {json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-
-        New Episode:
-        Content: {context["episode_content"]}
-
-        Extract new entity nodes based on the content of the current episode, while considering the context from previous episodes.
-
-        Guidelines:
-        1. Focus on entities, concepts, or actors that are central to the current episode.
-        2. Avoid creating nodes for relationships or actions (these will be handled as edges later).
-        3. Provide a brief but informative summary for each node.
-        4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
-
-        Respond with a JSON object in the following format:
-        {{
-            "new_nodes": [
-                {{
-                    "name": "Unique identifier for the node",
-                    "labels": ["Entity", "OptionalAdditionalLabel"],
-                    "summary": "Brief summary of the node's role or significance"
-                }}
-            ]
-        }}
-
-        If no new nodes need to be added, return an empty list for "new_nodes".
-        """,
-        ),
-    ]
-
-
-def v2(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
+def extract_message(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational messages. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
-Given the following conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
-
-Conversation:
-{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
+<PREVIOUS MESSAGES>
+{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+</PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context["episode_content"]}
+</CURRENT MESSAGE>
 
 {context['custom_prompt']}
 
+Given the above conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
+
 Guidelines:
 1. ALWAYS extract the speaker/actor as the first node. The speaker is the part before the colon in each line of dialogue.
-2. Extract other significant entities, concepts, or actors mentioned in the conversation.
-3. Provide concise but informative summaries for each extracted node.
-4. Avoid creating nodes for relationships or actions.
-5. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
-6. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+2. Extract other significant entities, concepts, or actors mentioned in the CURRENT MESSAGE.
+3. DO NOT create nodes for relationships or actions.
+4. DO NOT create nodes for temporal information like dates, times or years (these will be added to edges later).
+5. Be as explicit as possible in your node names, using full names.
+6. DO NOT extract entities mentioned only in PREVIOUS MESSAGES, those messages are only to provide context.
 
 Respond with a JSON object in the following format:
 {{
-    "extracted_nodes": [
-        {{
-            "name": "Unique identifier for the node (use the speaker's name for speaker nodes)",
-            "labels": ["Entity", "Speaker" for speaker nodes, "OptionalAdditionalLabel"],
-            "summary": "Brief summary of the node's role or significance"
-        }}
-    ]
+    "extracted_node_names": ["Name of the extracted entity", ...],
 }}
 """
     return [
@@ -117,19 +69,20 @@ Respond with a JSON object in the following format:
 
 
 def extract_json(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. 
+    sys_prompt = """You are an AI assistant that extracts entity nodes from JSON. 
     Your primary task is to identify and extract relevant entities from JSON files"""
 
     user_prompt = f"""
-Given the following source description, extract relevant entity nodes from the provided JSON:
-
-Source Description:
+<SOURCE DESCRIPTION>:
 {context["source_description"]}
-
-JSON:
+</SOURCE DESCRIPTION>
+<JSON>
 {context["episode_content"]}
+</JSON>
 
 {context['custom_prompt']}
+
+Given the above source description and JSON, extract relevant entity nodes from the provided JSON:
 
 Guidelines:
 1. Always try to extract an entities that the JSON represents. This will often be something like a "name" or "user field
@@ -137,13 +90,7 @@ Guidelines:
 
 Respond with a JSON object in the following format:
 {{
-    "extracted_nodes": [
-        {{
-            "name": "Unique identifier for the node (use the speaker's name for speaker nodes)",
-            "labels": ["Entity", "Speaker" for speaker nodes, "OptionalAdditionalLabel"],
-            "summary": "Brief summary of the node's role or significance"
-        }}
-    ]
+    "extracted_node_names": ["Name of the extracted entity", ...],
 }}
 """
     return [
@@ -153,36 +100,26 @@ Respond with a JSON object in the following format:
 
 
 def extract_text(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that extracts entity nodes from conversational text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the conversation."""
+    sys_prompt = """You are an AI assistant that extracts entity nodes from text. Your primary task is to identify and extract the speaker and other significant entities mentioned in the provided text."""
 
     user_prompt = f"""
-Given the following conversation, extract entity nodes from the CURRENT MESSAGE that are explicitly or implicitly mentioned:
-
-<CONVERSATION>
-{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-</CONVERSATION>
-<CURRENT MESSAGE>
+<TEXT>
 {context["episode_content"]}
-</CURRENT MESSAGE>
+</TEXT>
 
 {context['custom_prompt']}
 
+Given the following text, extract entity nodes from the TEXT that are explicitly or implicitly mentioned:
+
 Guidelines:
 1. Extract significant entities, concepts, or actors mentioned in the conversation.
-2. Provide concise but informative summaries for each extracted node.
-3. Avoid creating nodes for relationships or actions.
-4. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
-5. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+2. Avoid creating nodes for relationships or actions.
+3. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
+4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
 
 Respond with a JSON object in the following format:
 {{
-    "extracted_nodes": [
-        {{
-            "name": "Unique identifier for the node (use the speaker's name for speaker nodes)",
-            "labels": ["Entity", "OptionalAdditionalLabel"],
-            "summary": "Brief summary of the node's role or significance"
-        }}
-    ]
+    "extracted_node_names": ["Name of the extracted entity", ...],
 }}
 """
     return [
@@ -195,18 +132,19 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context"""
 
     user_prompt = f"""
-Given the following conversation, current message, and list of extracted entities; determine if any entities haven't been
-extracted:
-
-<CONVERSATION>:
-{json.dumps([ep['content'] for ep in context['previous_episodes']], indent=2)}
-</CONVERSATION>
+<PREVIOUS MESSAGES>
+{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+</PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context["episode_content"]}
 </CURRENT MESSAGE>
+
 <EXTRACTED ENTITIES>
 {context["extracted_entities"]}
 </EXTRACTED ENTITIES>
+
+Given the above previous messages, current message, and list of extracted entities; determine if any entities haven't been
+extracted:
 
 Respond with a JSON object in the following format:
 {{
@@ -220,8 +158,7 @@ Respond with a JSON object in the following format:
 
 
 versions: Versions = {
-    'v1': v1,
-    'v2': v2,
+    'extract_message': extract_message,
     'extract_json': extract_json,
     'extract_text': extract_text,
     'reflexion': reflexion,

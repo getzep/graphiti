@@ -36,12 +36,19 @@ def v1(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-            Edge:
-            Fact: {context['edge_fact']}
-
-            Current Episode: {context['current_episode']}
-            Previous Episodes: {context['previous_episodes']}
-            Reference Timestamp: {context['reference_timestamp']}
+            <PREVIOUS MESSAGES>
+            {context['previous_episodes']}
+            </PREVIOUS MESSAGES>
+            <CURRENT MESSAGE>
+            {context["current_episode"]}
+            </CURRENT MESSAGE>
+            <REFERENCE TIMESTAMP>
+            {context['reference_timestamp']}
+            </REFERENCE TIMESTAMP>
+            
+            <FACT>
+            {context['edge_fact']}
+            </FACT>
 
             IMPORTANT: Only extract time information if it is part of the provided fact. Otherwise ignore the time mentioned. Make sure to do your best to determine the dates if only the relative time is mentioned. (eg 10 years ago, 2 mins ago) based on the provided reference timestamp
             If the relationship is not of spanning nature, but you are still able to determine the dates, set the valid_at only.
@@ -60,7 +67,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             5. Do not infer dates from related events. Only use dates that are directly stated to establish or change the relationship.
 			6. For relative time mentions directly related to the relationship, calculate the actual datetime based on the reference timestamp.
             7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
-            8. If only a year is mentioned, use January 1st of that year at 00:00:00.
+            8. If only year is mentioned, use January 1st of that year at 00:00:00.
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
             Respond with a JSON object:
             {{
