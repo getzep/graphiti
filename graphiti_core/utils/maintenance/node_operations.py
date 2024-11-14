@@ -18,7 +18,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from time import time
-from typing import Any
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient

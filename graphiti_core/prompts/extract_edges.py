@@ -68,7 +68,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
                 {{
                     "relation_type": "RELATION_TYPE_IN_CAPS",
                     "source_entity_name": "name of the source entity",
-                    "target_entity_name: "name of the target entity",
+                    "target_entity_name": "name of the target entity",
                     "fact": "extracted factual information",
                 }}
             ]

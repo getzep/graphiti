@@ -23,8 +23,6 @@ from dotenv import load_dotenv
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
-from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()

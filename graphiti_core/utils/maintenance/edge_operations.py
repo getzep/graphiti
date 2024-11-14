@@ -163,7 +163,7 @@ async def dedupe_extracted_edges(
         ],
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v1(context))
+    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.edge(context))
     duplicate_data = llm_response.get('duplicates', [])
     logger.debug(f'Extracted unique edges: {duplicate_data}')
 
@@ -318,7 +318,7 @@ async def dedupe_extracted_edge(
         'extracted_edges': extracted_edge_context,
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.v3(context))
+    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.edge(context))
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
     uuid: str | None = llm_response.get('uuid', None)
