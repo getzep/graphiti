@@ -39,7 +39,7 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{json.dumps([ep + '\n' for ep in context['previous_episodes']], indent=2)}
+{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context["episode_content"]}
