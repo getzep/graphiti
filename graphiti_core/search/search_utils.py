@@ -135,8 +135,6 @@ async def get_communities_by_nodes(
 async def edge_fulltext_search(
     driver: AsyncDriver,
     query: str,
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
@@ -147,10 +145,8 @@ async def edge_fulltext_search(
 
     cypher_query = Query("""
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
-              YIELD relationship AS rel, score
-              MATCH (n:Entity)-[r {uuid: rel.uuid}]->(m:Entity)
-              WHERE ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
-              AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
+              YIELD relationship AS r, score
+              WITH r, score, startNode(r) AS n, endNode(r) AS m
               RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -170,8 +166,6 @@ async def edge_fulltext_search(
     records, _, _ = await driver.execute_query(
         cypher_query,
         query=fuzzy_query,
-        source_uuid=source_node_uuid,
-        target_uuid=target_node_uuid,
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
@@ -600,13 +594,7 @@ async def get_relevant_edges(
             )
             for edge in edges
             if edge.fact_embedding is not None
-        ],
-        *[
-            edge_fulltext_search(
-                driver, edge.fact, source_node_uuid, target_node_uuid, [edge.group_id], limit
-            )
-            for edge in edges
-        ],
+        ]
     )
 
     for result in results:

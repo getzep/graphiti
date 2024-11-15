@@ -143,7 +143,7 @@ async def edge_search(
     search_results: list[list[EntityEdge]] = list(
         await asyncio.gather(
             *[
-                edge_fulltext_search(driver, query, None, None, group_ids, 2 * limit),
+                edge_fulltext_search(driver, query, group_ids, 2 * limit),
                 edge_similarity_search(
                     driver, query_vector, None, None, group_ids, 2 * limit, config.sim_min_score
                 ),
