@@ -66,40 +66,9 @@ def setup_logging():
 async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
-    now = datetime.now(timezone.utc)
-
-    alice_node = EntityNode(
-        name='Alice',
-        labels=[],
-        created_at=now,
-        summary='Alice summary',
-        group_id='test',
-    )
-
-    bob_node = EntityNode(
-        name='Bob',
-        labels=[],
-        created_at=now,
-        summary='Bob summary',
-        group_id='test',
-    )
-
-    entity_edge = EntityEdge(
-        source_node_uuid=alice_node.uuid,
-        target_node_uuid=bob_node.uuid,
-        created_at=now,
-        name='likes',
-        fact='Alice likes Bob',
-        episodes=[],
-        expired_at=now,
-        valid_at=now,
-        group_id='test',
-    )
-
-    await graphiti.add_triplet(alice_node, entity_edge, bob_node)
 
     results = await graphiti._search(
-        "Emily: I can't log in",
+        'My name is Alice',
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
         group_ids=['test'],
     )

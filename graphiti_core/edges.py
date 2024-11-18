@@ -103,6 +103,7 @@ class EpisodicEdge(Edge):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -126,6 +127,7 @@ class EpisodicEdge(Edge):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -149,6 +151,7 @@ class EpisodicEdge(Edge):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_episodic_edge_from_record(record) for record in records]
@@ -230,6 +233,7 @@ class EntityEdge(Edge):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -260,6 +264,7 @@ class EntityEdge(Edge):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -290,6 +295,7 @@ class EntityEdge(Edge):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_entity_edge_from_record(record) for record in records]
@@ -329,6 +335,7 @@ class CommunityEdge(Edge):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
@@ -350,6 +357,7 @@ class CommunityEdge(Edge):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
@@ -371,6 +379,7 @@ class CommunityEdge(Edge):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         edges = [get_community_edge_from_record(record) for record in records]
