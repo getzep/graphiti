@@ -86,7 +86,7 @@ class Node(BaseModel, ABC):
     async def delete(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
-        MATCH (n {uuid: $uuid})
+        MATCH (n:Entity|Episodic|Community {uuid: $uuid})
         DETACH DELETE n
         """,
             uuid=self.uuid,
@@ -104,6 +104,19 @@ class Node(BaseModel, ABC):
         if isinstance(other, Node):
             return self.uuid == other.uuid
         return False
+
+    @classmethod
+    async def delete_by_group_id(cls, driver: AsyncDriver, group_id: str):
+        await driver.execute_query(
+            """
+        MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+        DETACH DELETE n
+        """,
+            group_id=group_id,
+            database_=DEFAULT_DATABASE,
+        )
+
+        return 'SUCCESS'
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
@@ -159,6 +172,7 @@ class EpisodicNode(Node):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -185,6 +199,7 @@ class EpisodicNode(Node):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -208,6 +223,7 @@ class EpisodicNode(Node):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
@@ -259,6 +275,7 @@ class EntityNode(Node):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -283,6 +300,7 @@ class EntityNode(Node):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -304,6 +322,7 @@ class EntityNode(Node):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         nodes = [get_entity_node_from_record(record) for record in records]
@@ -355,6 +374,7 @@ class CommunityNode(Node):
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         nodes = [get_community_node_from_record(record) for record in records]
@@ -379,6 +399,7 @@ class CommunityNode(Node):
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         communities = [get_community_node_from_record(record) for record in records]
@@ -400,6 +421,7 @@ class CommunityNode(Node):
         """,
             group_ids=group_ids,
             database_=DEFAULT_DATABASE,
+            routing_='r',
         )
 
         communities = [get_community_node_from_record(record) for record in records]
