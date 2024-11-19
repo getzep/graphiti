@@ -214,7 +214,7 @@ class EpisodicNode(Node):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -330,7 +330,7 @@ class EntityNode(Node):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -444,7 +444,7 @@ class CommunityNode(Node):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """

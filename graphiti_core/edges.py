@@ -144,7 +144,7 @@ class EpisodicEdge(Edge):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -296,7 +296,7 @@ class EntityEdge(Edge):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -402,7 +402,7 @@ class CommunityEdge(Edge):
         limit: int = DEFAULT_PAGE_LIMIT,
         created_at: datetime = None,
     ):
-        cursor_query: LiteralString = 'AND e.uuid < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
         records, _, _ = await driver.execute_query(
             """
