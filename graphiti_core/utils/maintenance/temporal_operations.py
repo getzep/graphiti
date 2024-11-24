@@ -17,7 +17,6 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
-from typing import List
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
@@ -31,7 +30,7 @@ async def extract_edge_dates(
     llm_client: LLMClient,
     edge: EntityEdge,
     current_episode: EpisodicNode,
-    previous_episodes: List[EpisodicNode],
+    previous_episodes: list[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None]:
     context = {
         'edge_fact': edge.fact,

@@ -18,7 +18,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from time import time
-from typing import List
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
@@ -34,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    entity_nodes: List[EntityNode],
+    entity_nodes: list[EntityNode],
     episode: EpisodicNode,
     created_at: datetime,
-) -> List[EpisodicEdge]:
-    edges: List[EpisodicEdge] = [
+) -> list[EpisodicEdge]:
+    edges: list[EpisodicEdge] = [
         EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
@@ -52,11 +51,11 @@ def build_episodic_edges(
 
 
 def build_community_edges(
-    entity_nodes: List[EntityNode],
+    entity_nodes: list[EntityNode],
     community_node: CommunityNode,
     created_at: datetime,
-) -> List[CommunityEdge]:
-    edges: List[CommunityEdge] = [
+) -> list[CommunityEdge]:
+    edges: list[CommunityEdge] = [
         CommunityEdge(
             source_node_uuid=community_node.uuid,
             target_node_uuid=node.uuid,

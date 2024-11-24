@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Literal
+from typing import Iterable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,6 @@ class EmbedderConfig(BaseModel):
 class EmbedderClient(ABC):
     @abstractmethod
     async def create(
-        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         pass
