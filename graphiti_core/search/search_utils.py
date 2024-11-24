@@ -605,28 +605,6 @@ async def get_relevant_edges(
             relevant_edge_uuids.add(edge.uuid)
             relevant_edges.append(edge)
 
-    query: LiteralString = """
-                    UNWIND $edges AS edge
-                    MATCH (n:Entity {uuid: $source_uuid})-[r:RELATES_TO {group_id: edge.group_id}]->(m:Entity {uuid: $target_uuid})
-                    WITH n, m, r, vector.similarity.cosine(r.fact_embedding, edge.fact_embedding) AS score
-                    WHERE score > $min_score
-                    RETURN
-                        r.uuid AS uuid,
-                        r.group_id AS group_id,
-                        n.uuid AS source_node_uuid,
-                        m.uuid AS target_node_uuid,
-                        r.created_at AS created_at,
-                        r.name AS name,
-                        r.fact AS fact,
-                        r.fact_embedding AS fact_embedding,
-                        r.episodes AS episodes,
-                        r.expired_at AS expired_at,
-                        r.valid_at AS valid_at,
-                        r.invalid_at AS invalid_at
-                    ORDER BY score DESC
-                    LIMIT $limit
-            """
-
     end = time()
     logger.debug(f'Found relevant edges: {relevant_edge_uuids} in {(end - start) * 1000} ms')
 

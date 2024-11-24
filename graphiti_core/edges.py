@@ -143,7 +143,7 @@ class EpisodicEdge(Edge):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
@@ -295,7 +295,7 @@ class EntityEdge(Edge):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
@@ -401,7 +401,7 @@ class CommunityEdge(Edge):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 

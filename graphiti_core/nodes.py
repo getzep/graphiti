@@ -213,7 +213,7 @@ class EpisodicNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
 
@@ -329,7 +329,7 @@ class EntityNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
 
@@ -443,7 +443,7 @@ class CommunityNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int = DEFAULT_PAGE_LIMIT,
-        created_at: datetime = None,
+        created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
 

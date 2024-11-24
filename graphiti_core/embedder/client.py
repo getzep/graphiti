@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Literal
+from collections.abc import Iterable, Literal
 
 from pydantic import BaseModel, Field
 
