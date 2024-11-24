@@ -18,11 +18,12 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from time import time
-from typing import Any, LiteralString
+from typing import Any
 from uuid import uuid4
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
+from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
