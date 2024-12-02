@@ -1,7 +1,6 @@
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 from pydantic import BaseModel
 
@@ -36,7 +35,7 @@ def parse_timestamp(timestamp: str) -> timedelta:
     return timedelta()  # Return 0 duration if parsing fails
 
 
-def parse_conversation_file(file_path: str, speakers: List[Speaker]) -> list[ParsedMessage]:
+def parse_conversation_file(file_path: str, speakers: list[Speaker]) -> list[ParsedMessage]:
     with open(file_path) as file:
         content = file.read()
 

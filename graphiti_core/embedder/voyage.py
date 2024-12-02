@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 import voyageai  # type: ignore
 from pydantic import Field
@@ -41,11 +41,11 @@ class VoyageAIEmbedder(EmbedderClient):
         self.client = voyageai.AsyncClient(api_key=config.api_key)
 
     async def create(
-        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         if isinstance(input_data, str):
             input_list = [input_data]
-        elif isinstance(input_data, List):
+        elif isinstance(input_data, list):
             input_list = [str(i) for i in input_data if i]
         else:
             input_list = [str(i) for i in input_data if i is not None]

@@ -24,10 +24,11 @@ from uuid import uuid4
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
+from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, DEFAULT_PAGE_LIMIT
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
@@ -207,10 +208,21 @@ class EpisodicNode(Node):
         return episodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
             RETURN DISTINCT
             e.content AS content,
             e.created_at AS created_at,
@@ -220,8 +232,12 @@ class EpisodicNode(Node):
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source
+        ORDER BY e.uuid DESC
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
@@ -308,10 +324,21 @@ class EntityNode(Node):
         return nodes
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -319,8 +346,12 @@ class EntityNode(Node):
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
+        ORDER BY n.uuid DESC
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
@@ -407,10 +438,21 @@ class CommunityNode(Node):
         return communities
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community) WHERE n.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -418,8 +460,12 @@ class CommunityNode(Node):
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
+        ORDER BY n.uuid DESC
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
