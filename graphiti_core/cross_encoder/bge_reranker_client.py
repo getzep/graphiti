@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import asyncio
-from typing import List, Tuple
 
 from sentence_transformers import CrossEncoder
 
@@ -26,7 +25,7 @@ class BGERerankerClient(CrossEncoderClient):
     def __init__(self):
         self.model = CrossEncoder('BAAI/bge-reranker-v2-m3')
 
-    async def rank(self, query: str, passages: List[str]) -> List[Tuple[str, float]]:
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         if not passages:
             return []
 

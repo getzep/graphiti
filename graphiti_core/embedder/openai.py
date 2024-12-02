@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from openai import AsyncOpenAI
 from openai.types import EmbeddingModel
@@ -42,7 +42,7 @@ class OpenAIEmbedder(EmbedderClient):
         self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def create(
-        self, input_data: str | List[str] | Iterable[int] | Iterable[Iterable[int]]
+        self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
         result = await self.client.embeddings.create(
             input=input_data, model=self.config.embedding_model

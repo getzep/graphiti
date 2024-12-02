@@ -23,10 +23,11 @@ from uuid import uuid4
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
+from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
+from graphiti_core.helpers import DEFAULT_DATABASE, DEFAULT_PAGE_LIMIT, parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_SAVE,
     ENTITY_EDGE_SAVE,
@@ -50,7 +51,7 @@ class Edge(BaseModel, ABC):
     async def delete(self, driver: AsyncDriver):
         result = await driver.execute_query(
             """
-        MATCH (n)-[e {uuid: $uuid}]->(m)
+        MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER {uuid: $uuid}]->(m)
         DELETE e
         """,
             uuid=self.uuid,
@@ -137,19 +138,34 @@ class EpisodicEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
         WHERE e.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
         RETURN
             e.uuid As uuid,
             e.group_id AS group_id,
             n.uuid AS source_node_uuid, 
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
+        ORDER BY e.uuid DESC 
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
@@ -274,11 +290,22 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
         WHERE e.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
         RETURN
             e.uuid AS uuid,
             n.uuid AS source_node_uuid,
@@ -292,8 +319,12 @@ class EntityEdge(Edge):
             e.expired_at AS expired_at,
             e.valid_at AS valid_at,
             e.invalid_at AS invalid_at
+        ORDER BY e.uuid DESC 
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
@@ -365,19 +396,34 @@ class CommunityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_group_ids(cls, driver: AsyncDriver, group_ids: list[str]):
+    async def get_by_group_ids(
+        cls,
+        driver: AsyncDriver,
+        group_ids: list[str],
+        limit: int = DEFAULT_PAGE_LIMIT,
+        created_at: datetime | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
         WHERE e.group_id IN $group_ids
+        """
+            + cursor_query
+            + """
         RETURN
             e.uuid As uuid,
             e.group_id AS group_id,
             n.uuid AS source_node_uuid, 
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
+        ORDER BY e.uuid DESC
+        LIMIT $limit
         """,
             group_ids=group_ids,
+            created_at=created_at,
+            limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )

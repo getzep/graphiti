@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
 
 
 class CrossEncoderClient(ABC):
@@ -26,16 +25,16 @@ class CrossEncoderClient(ABC):
     """
 
     @abstractmethod
-    async def rank(self, query: str, passages: List[str]) -> List[Tuple[str, float]]:
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         """
         Rank the given passages based on their relevance to the query.
 
         Args:
             query (str): The query string.
-            passages (List[str]): A list of passages to rank.
+            passages (list[str]): A list of passages to rank.
 
         Returns:
-            List[Tuple[str, float]]: A list of tuples containing the passage and its score,
+            List[tuple[str, float]]: A list of tuples containing the passage and its score,
                                      sorted in descending order of relevance.
         """
         pass

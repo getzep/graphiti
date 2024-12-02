@@ -40,7 +40,7 @@ from graphiti_core.nodes import (
 
 logger = logging.getLogger(__name__)
 
-RELEVANT_SCHEMA_LIMIT = 3
+RELEVANT_SCHEMA_LIMIT = 10
 DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
