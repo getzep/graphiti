@@ -318,17 +318,21 @@ class Graphiti:
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
             )
-            episode = EpisodicNode(
-                name=name,
-                group_id=group_id,
-                labels=[],
-                source=source,
-                content=episode_body,
-                source_description=source_description,
-                created_at=now,
-                valid_at=reference_time,
+
+            episode = (
+                await EpisodicNode.get_by_uuid(self.driver, uuid)
+                if uuid is not None
+                else EpisodicNode(
+                    name=name,
+                    group_id=group_id,
+                    labels=[],
+                    source=source,
+                    content=episode_body,
+                    source_description=source_description,
+                    created_at=now,
+                    valid_at=reference_time,
+                )
             )
-            episode.uuid = uuid if uuid is not None else episode.uuid
 
             # Extract entities as nodes
 
