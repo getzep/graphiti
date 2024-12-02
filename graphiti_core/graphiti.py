@@ -27,7 +27,6 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
-from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
