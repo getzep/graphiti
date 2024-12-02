@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Literal
+from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ EMBEDDING_DIM = 1024
 
 
 class EmbedderConfig(BaseModel):
-    embedding_dim: Literal[1024] = Field(default=EMBEDDING_DIM, frozen=True)
+    embedding_dim: int = Field(default=EMBEDDING_DIM, frozen=True)
 
 
 class EmbedderClient(ABC):
