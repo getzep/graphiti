@@ -74,6 +74,7 @@ from .invalidate_edges import (
     versions as invalidate_edges_versions,
 )
 from .models import Message, PromptFunction
+from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 from .summarize_nodes import Prompt as SummarizeNodesPrompt
 from .summarize_nodes import Versions as SummarizeNodesVersions
 from .summarize_nodes import versions as summarize_nodes_versions
@@ -106,7 +107,10 @@ class VersionWrapper:
         self.func = func
 
     def __call__(self, context: dict[str, Any]) -> list[Message]:
-        return self.func(context)
+        messages = self.func(context)
+        for message in messages:
+            message.content += DO_NOT_ESCAPE_UNICODE if message.role == 'system' else ''
+        return messages
 
 
 class PromptTypeWrapper:
