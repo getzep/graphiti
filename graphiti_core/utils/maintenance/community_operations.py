@@ -16,6 +16,7 @@ from graphiti_core.nodes import (
     get_community_node_from_record,
 )
 from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
@@ -131,7 +132,7 @@ async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -
     context = {'node_summaries': [{'summary': summary} for summary in summary_pair]}
 
     llm_response = await llm_client.generate_response(
-        prompt_library.summarize_nodes.summarize_pair(context)
+        prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
     )
 
     pair_summary = llm_response.get('summary', '')
@@ -143,7 +144,8 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
     context = {'summary': summary}
 
     llm_response = await llm_client.generate_response(
-        prompt_library.summarize_nodes.summary_description(context)
+        prompt_library.summarize_nodes.summary_description(context),
+        response_model=SummaryDescription,
     )
 
     description = llm_response.get('description', '')

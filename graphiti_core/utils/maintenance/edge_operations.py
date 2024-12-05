@@ -24,6 +24,8 @@ from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
+from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
     get_edge_contradictions,
@@ -91,7 +93,7 @@ async def extract_edges(
     reflexion_iterations = 0
     while facts_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
         llm_response = await llm_client.generate_response(
-            prompt_library.extract_edges.edge(context)
+            prompt_library.extract_edges.edge(context), response_model=ExtractedEdges
         )
         edges_data = llm_response.get('edges', [])
 
@@ -100,7 +102,7 @@ async def extract_edges(
         reflexion_iterations += 1
         if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
             reflexion_response = await llm_client.generate_response(
-                prompt_library.extract_edges.reflexion(context)
+                prompt_library.extract_edges.reflexion(context), response_model=MissingFacts
             )
 
             missing_facts = reflexion_response.get('missing_facts', [])
@@ -317,7 +319,9 @@ async def dedupe_extracted_edge(
         'extracted_edges': extracted_edge_context,
     }
 
-    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.edge(context))
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.edge(context), response_model=EdgeDuplicate
+    )
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
     uuid: str | None = llm_response.get('uuid', None)
@@ -352,7 +356,7 @@ async def dedupe_edge_list(
     context = {'edges': [{'uuid': edge.uuid, 'fact': edge.fact} for edge in edges]}
 
     llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_edges.edge_list(context)
+        prompt_library.dedupe_edges.edge_list(context), response_model=UniqueFacts
     )
     unique_edges_data = llm_response.get('unique_facts', [])
 

@@ -15,9 +15,15 @@ limitations under the License.
 """
 
 import json
-from typing import Any, Protocol, TypedDict
+from typing import Any, List, Protocol, TypedDict
+
+from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+
+
+class ExtractedNodes(BaseModel):
+    extracted_node_names: List[str] = Field(..., description='Name of the extracted entity')
 
 
 class Prompt(Protocol):
