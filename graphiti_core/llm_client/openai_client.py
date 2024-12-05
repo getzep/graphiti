@@ -18,7 +18,7 @@ import logging
 import typing
 
 import openai
-from openai import AsyncOpenAI, NotGiven
+from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
@@ -82,7 +82,6 @@ class OpenAIClient(LLMClient):
     async def _generate_response(
         self, messages: list[Message], response_model: type[BaseModel] | None = None
     ) -> dict[str, typing.Any]:
-        response_format = response_model if response_model else NotGiven
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
             if m.role == 'user':
@@ -95,7 +94,7 @@ class OpenAIClient(LLMClient):
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format=response_format,
+                response_format=response_model,  # type: ignore
             )
 
             response_object = response.choices[0].message
