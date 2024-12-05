@@ -90,6 +90,14 @@ class LLMClient(ABC):
     async def generate_response(
         self, messages: list[Message], response_model: type[BaseModel] | None = None
     ) -> dict[str, typing.Any]:
+        if response_model is not None:
+            serialized_model = json.dumps(response_model.model_json_schema())
+            messages[
+                -1
+            ].content += (
+                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+            )
+
         if self.cache_enabled:
             cache_key = self._get_cache_key(messages)
 
