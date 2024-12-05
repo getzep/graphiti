@@ -24,7 +24,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
-from graphiti_core.prompts.extract_nodes import ExtractedNodes
+from graphiti_core.prompts.extract_nodes import ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def extract_text_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_text(context)
+        prompt_library.extract_nodes.extract_text(context), ExtractedNodes
     )
     extracted_node_names = llm_response.get('extracted_node_names', [])
     return extracted_node_names
@@ -84,7 +84,7 @@ async def extract_json_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_json(context)
+        prompt_library.extract_nodes.extract_json(context), ExtractedNodes
     )
     extracted_node_names = llm_response.get('extracted_node_names', [])
     return extracted_node_names
@@ -104,7 +104,7 @@ async def extract_nodes_reflexion(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.reflexion(context)
+        prompt_library.extract_nodes.reflexion(context), MissedEntities
     )
     missed_entities = llm_response.get('missed_entities', [])
 
