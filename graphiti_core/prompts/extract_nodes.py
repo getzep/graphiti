@@ -17,7 +17,17 @@ limitations under the License.
 import json
 from typing import Any, Protocol, TypedDict
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PromptFunction, PromptVersion
+
+
+class ExtractedNodes(BaseModel):
+    extracted_node_names: list[str] = Field(..., description='Name of the extracted entity')
+
+
+class MissedEntities(BaseModel):
+    missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
 
 
 class Prompt(Protocol):
@@ -56,11 +66,6 @@ Guidelines:
 4. DO NOT create nodes for temporal information like dates, times or years (these will be added to edges later).
 5. Be as explicit as possible in your node names, using full names.
 6. DO NOT extract entities mentioned only in PREVIOUS MESSAGES, those messages are only to provide context.
-
-Respond with a JSON object in the following format:
-{{
-    "extracted_node_names": ["Name of the extracted entity", ...],
-}}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -87,11 +92,6 @@ Given the above source description and JSON, extract relevant entity nodes from 
 Guidelines:
 1. Always try to extract an entities that the JSON represents. This will often be something like a "name" or "user field
 2. Do NOT extract any properties that contain dates
-
-Respond with a JSON object in the following format:
-{{
-    "extracted_node_names": ["Name of the extracted entity", ...],
-}}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -116,11 +116,6 @@ Guidelines:
 2. Avoid creating nodes for relationships or actions.
 3. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
 4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
-
-Respond with a JSON object in the following format:
-{{
-    "extracted_node_names": ["Name of the extracted entity", ...],
-}}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -144,12 +139,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 </EXTRACTED ENTITIES>
 
 Given the above previous messages, current message, and list of extracted entities; determine if any entities haven't been
-extracted:
-
-Respond with a JSON object in the following format:
-{{
-    "missed_entities": [ "name of entity that wasn't extracted", ...]
-}}
+extracted.
 """
     return [
         Message(role='system', content=sys_prompt),

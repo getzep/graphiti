@@ -23,6 +23,9 @@ from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
+from graphiti_core.prompts.extract_nodes import ExtractedNodes, MissedEntities
+from graphiti_core.prompts.summarize_nodes import Summary
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ async def extract_message_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_message(context)
+        prompt_library.extract_nodes.extract_message(context), response_model=ExtractedNodes
     )
     extracted_node_names = llm_response.get('extracted_node_names', [])
     return extracted_node_names
@@ -63,7 +66,7 @@ async def extract_text_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_text(context)
+        prompt_library.extract_nodes.extract_text(context), ExtractedNodes
     )
     extracted_node_names = llm_response.get('extracted_node_names', [])
     return extracted_node_names
@@ -81,7 +84,7 @@ async def extract_json_nodes(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_json(context)
+        prompt_library.extract_nodes.extract_json(context), ExtractedNodes
     )
     extracted_node_names = llm_response.get('extracted_node_names', [])
     return extracted_node_names
@@ -101,7 +104,7 @@ async def extract_nodes_reflexion(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.reflexion(context)
+        prompt_library.extract_nodes.reflexion(context), MissedEntities
     )
     missed_entities = llm_response.get('missed_entities', [])
 
@@ -273,9 +276,12 @@ async def resolve_extracted_node(
     }
 
     llm_response, node_summary_response = await asyncio.gather(
-        llm_client.generate_response(prompt_library.dedupe_nodes.node(context)),
         llm_client.generate_response(
-            prompt_library.summarize_nodes.summarize_context(summary_context)
+            prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
+        ),
+        llm_client.generate_response(
+            prompt_library.summarize_nodes.summarize_context(summary_context),
+            response_model=Summary,
         ),
     )
 
@@ -294,7 +300,8 @@ async def resolve_extracted_node(
             summary_response = await llm_client.generate_response(
                 prompt_library.summarize_nodes.summarize_pair(
                     {'node_summaries': [extracted_node.summary, existing_node.summary]}
-                )
+                ),
+                response_model=Summary,
             )
             node = existing_node
             node.name = name

@@ -15,9 +15,28 @@ limitations under the License.
 """
 
 import json
-from typing import Any, Protocol, TypedDict
+from typing import Any, Optional, Protocol, TypedDict
+
+from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+
+
+class EdgeDuplicate(BaseModel):
+    is_duplicate: bool = Field(..., description='true or false')
+    uuid: Optional[str] = Field(
+        None,
+        description="uuid of the existing edge like '5d643020624c42fa9de13f97b1b3fa39' or null",
+    )
+
+
+class UniqueFact(BaseModel):
+    uuid: str = Field(..., description='unique identifier of the fact')
+    fact: str = Field(..., description='fact of a unique edge')
+
+
+class UniqueFacts(BaseModel):
+    unique_facts: list[UniqueFact]
 
 
 class Prompt(Protocol):
@@ -56,12 +75,6 @@ def edge(context: dict[str, Any]) -> list[Message]:
 
         Guidelines:
         1. The facts do not need to be completely identical to be duplicates, they just need to express the same information.
-
-        Respond with a JSON object in the following format:
-            {{
-                "is_duplicate": true or false,
-                "uuid": uuid of the existing edge like "5d643020624c42fa9de13f97b1b3fa39" or null,
-            }}
         """,
         ),
     ]
@@ -90,16 +103,6 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
         3. Facts will often discuss the same or similar relation between identical entities
         4. The final list should have only unique facts. If 3 facts are all duplicates of each other, only one of their
             facts should be in the response
-
-        Respond with a JSON object in the following format:
-        {{
-            "unique_facts": [
-                {{
-                    "uuid": "unique identifier of the fact",
-                    "fact": "fact of a unique edge"
-                }}
-            ]
-        }}
         """,
         ),
     ]

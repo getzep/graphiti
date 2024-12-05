@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 
 import httpx
 from diskcache import Cache
+from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
@@ -66,14 +67,18 @@ class LLMClient(ABC):
         else None,
         reraise=True,
     )
-    async def _generate_response_with_retry(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response_with_retry(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages)
+            return await self._generate_response(messages, response_model)
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
     @abstractmethod
-    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
         pass
 
     def _get_cache_key(self, messages: list[Message]) -> str:
@@ -82,7 +87,17 @@ class LLMClient(ABC):
         key_str = f'{self.model}:{message_str}'
         return hashlib.md5(key_str.encode()).hexdigest()
 
-    async def generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
+        if response_model is not None:
+            serialized_model = json.dumps(response_model.model_json_schema())
+            messages[
+                -1
+            ].content += (
+                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+            )
+
         if self.cache_enabled:
             cache_key = self._get_cache_key(messages)
 
@@ -91,7 +106,7 @@ class LLMClient(ABC):
                 logger.debug(f'Cache hit for {cache_key}')
                 return cached_response
 
-        response = await self._generate_response_with_retry(messages)
+        response = await self._generate_response_with_retry(messages, response_model)
 
         if self.cache_enabled:
             self.cache_dir.set(cache_key, response)

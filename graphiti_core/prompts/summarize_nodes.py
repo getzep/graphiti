@@ -17,7 +17,19 @@ limitations under the License.
 import json
 from typing import Any, Protocol, TypedDict
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PromptFunction, PromptVersion
+
+
+class Summary(BaseModel):
+    summary: str = Field(
+        ..., description='Summary containing the important information from both summaries'
+    )
+
+
+class SummaryDescription(BaseModel):
+    description: str = Field(..., description='One sentence description of the provided summary')
 
 
 class Prompt(Protocol):
@@ -45,11 +57,6 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
 
         Summaries:
         {json.dumps(context['node_summaries'], indent=2)}
-
-        Respond with a JSON object in the following format:
-            {{
-                "summary": "Summary containing the important information from both summaries"
-            }}
         """,
         ),
     ]
@@ -77,12 +84,6 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         <ENTITY>
         {context['node_name']}
         </ENTITY>
-        
-
-        Respond with a JSON object in the following format:
-            {{
-                "summary": "Entity summary"
-            }}
         """,
         ),
     ]
@@ -101,11 +102,6 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
 
         Summary:
         {json.dumps(context['summary'], indent=2)}
-
-        Respond with a JSON object in the following format:
-            {{
-                "description": "One sentence description of the provided summary"
-            }}
         """,
         ),
     ]
