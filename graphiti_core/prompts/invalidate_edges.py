@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, List, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,7 @@ class InvalidatedEdge(BaseModel):
 
 
 class InvalidatedEdges(BaseModel):
-    invalidated_edges: List[InvalidatedEdge] = Field(
+    invalidated_edges: list[InvalidatedEdge] = Field(
         ..., description='List of edges that should be invalidated'
     )
 

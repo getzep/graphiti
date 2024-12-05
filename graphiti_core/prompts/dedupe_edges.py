@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import json
-from typing import Any, List, Optional, Protocol, TypedDict
+from typing import Any, Optional, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +36,7 @@ class UniqueFact(BaseModel):
 
 
 class UniqueFacts(BaseModel):
-    unique_facts: List[UniqueFact]
+    unique_facts: list[UniqueFact]
 
 
 class Prompt(Protocol):

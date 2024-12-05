@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import json
-from typing import Any, List, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -30,11 +30,11 @@ class Edge(BaseModel):
 
 
 class ExtractedEdges(BaseModel):
-    edges: List[Edge]
+    edges: list[Edge]
 
 
 class MissingFacts(BaseModel):
-    missing_facts: List[str] = Field(..., description="facts that weren't extracted")
+    missing_facts: list[str] = Field(..., description="facts that weren't extracted")
 
 
 class Prompt(Protocol):
