@@ -54,6 +54,8 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Synthesize the information from the following two summaries into a single succinct summary.
+        
+        Summaries must be under 500 words.
 
         Summaries:
         {json.dumps(context['node_summaries'], indent=2)}
@@ -81,6 +83,8 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         information from the provided MESSAGES. Your summary should also only contain information relevant to the
         provided ENTITY.
         
+        Summaries must be under 500 words.
+        
         <ENTITY>
         {context['node_name']}
         </ENTITY>
@@ -99,6 +103,7 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Create a short one sentence description of the summary that explains what kind of information is summarized.
+        Summaries must be under 500 words.
 
         Summary:
         {json.dumps(context['summary'], indent=2)}
