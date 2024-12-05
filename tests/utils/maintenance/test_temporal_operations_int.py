@@ -321,8 +321,7 @@ async def test_extract_edge_dates():
         setup_llm_client(), new_edge, episode, previous_episodes
     )
 
-    # the prompt specifies the format of the datetime to be YYYY-MM-DDTHH:MM:SS, without microseconds
-    assert valid_at.replace(microsecond=0) == episode.valid_at.replace(microsecond=0)
+    assert valid_at == episode.valid_at
     assert invalid_at is None
 
 
