@@ -21,6 +21,7 @@ import typing
 import groq
 from groq import AsyncGroq
 from groq.types.chat import ChatCompletionMessageParam
+from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -43,7 +44,9 @@ class GroqClient(LLMClient):
 
         self.client = AsyncGroq(api_key=config.api_key)
 
-    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
         msgs: list[ChatCompletionMessageParam] = []
         for m in messages:
             if m.role == 'user':

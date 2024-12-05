@@ -20,6 +20,7 @@ import typing
 
 import anthropic
 from anthropic import AsyncAnthropic
+from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
@@ -46,7 +47,9 @@ class AnthropicClient(LLMClient):
             max_retries=1,
         )
 
-    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
         system_message = messages[0]
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]] + [
             {'role': 'assistant', 'content': '{'}

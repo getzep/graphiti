@@ -17,7 +17,24 @@ limitations under the License.
 import json
 from typing import Any, Protocol, TypedDict
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PromptFunction, PromptVersion
+
+
+class Edge(BaseModel):
+    relation_type: str = Field(..., description='RELATION_TYPE_IN_CAPS')
+    source_entity_name: str = Field(..., description='name of the source entity')
+    target_entity_name: str = Field(..., description='name of the target entity')
+    fact: str = Field(..., description='extracted factual information')
+
+
+class ExtractedEdges(BaseModel):
+    edges: list[Edge]
+
+
+class MissingFacts(BaseModel):
+    missing_facts: list[str] = Field(..., description="facts that weren't extracted")
 
 
 class Prompt(Protocol):
@@ -54,25 +71,12 @@ def edge(context: dict[str, Any]) -> list[Message]:
 
         Given the above MESSAGES and ENTITIES, extract all facts pertaining to the listed ENTITIES from the CURRENT MESSAGE. 
         
-
         Guidelines:
         1. Extract facts only between the provided entities.
         2. Each fact should represent a clear relationship between two DISTINCT nodes.
         3. The relation_type should be a concise, all-caps description of the fact (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
         4. Provide a more detailed fact containing all relevant information.
         5. Consider temporal aspects of relationships when relevant.
-
-        Respond with a JSON object in the following format:
-        {{
-            "edges": [
-                {{
-                    "relation_type": "RELATION_TYPE_IN_CAPS",
-                    "source_entity_name": "name of the source entity",
-                    "target_entity_name": "name of the target entity",
-                    "fact": "extracted factual information",
-                }}
-            ]
-        }}
         """,
         ),
     ]
@@ -98,12 +102,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 </EXTRACTED FACTS>
 
 Given the above MESSAGES, list of EXTRACTED ENTITIES entities, and list of EXTRACTED FACTS; 
-determine if any facts haven't been extracted:
-
-Respond with a JSON object in the following format:
-{{
-    "missing_facts": [ "facts that weren't extracted", ...]
-}}
+determine if any facts haven't been extracted.
 """
     return [
         Message(role='system', content=sys_prompt),

@@ -22,6 +22,8 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EpisodicNode
 from graphiti_core.prompts import prompt_library
+from graphiti_core.prompts.extract_edge_dates import EdgeDates
+from graphiti_core.prompts.invalidate_edges import InvalidatedEdges
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,9 @@ async def extract_edge_dates(
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_timestamp': current_episode.valid_at.isoformat(),
     }
-    llm_response = await llm_client.generate_response(prompt_library.extract_edge_dates.v1(context))
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_edge_dates.v1(context), response_model=EdgeDates
+    )
 
     valid_at = llm_response.get('valid_at')
     invalid_at = llm_response.get('invalid_at')
@@ -75,7 +79,9 @@ async def get_edge_contradictions(
 
     context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
 
-    llm_response = await llm_client.generate_response(prompt_library.invalidate_edges.v2(context))
+    llm_response = await llm_client.generate_response(
+        prompt_library.invalidate_edges.v2(context), response_model=InvalidatedEdges
+    )
 
     contradicted_edge_data = llm_response.get('invalidated_edges', [])
 

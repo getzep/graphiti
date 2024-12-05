@@ -34,7 +34,7 @@ class CrossEncoderClient(ABC):
             passages (list[str]): A list of passages to rank.
 
         Returns:
-            List[tuple[str, float]]: A list of tuples containing the passage and its score,
+            list[tuple[str, float]]: A list of tuples containing the passage and its score,
                                      sorted in descending order of relevance.
         """
         pass

@@ -16,7 +16,20 @@ limitations under the License.
 
 from typing import Any, Protocol, TypedDict
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PromptFunction, PromptVersion
+
+
+class InvalidatedEdge(BaseModel):
+    uuid: str = Field(..., description='The UUID of the edge to be invalidated')
+    fact: str = Field(..., description='Updated fact of the edge')
+
+
+class InvalidatedEdges(BaseModel):
+    invalidated_edges: list[InvalidatedEdge] = Field(
+        ..., description='List of edges that should be invalidated'
+    )
 
 
 class Prompt(Protocol):
@@ -56,18 +69,6 @@ def v1(context: dict[str, Any]) -> list[Message]:
                 {context['new_edges']}
 
                 Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (fact: EDGE_FACT), START_DATE (END_DATE, optional))"
-
-                For each existing edge that should be invalidated, respond with a JSON object in the following format:
-                {{
-                    "invalidated_edges": [
-                        {{
-                            "edge_uuid": "The UUID of the edge to be invalidated (the part before the | character)",
-                            "fact": "Updated fact of the edge"
-                        }}
-                    ]
-                }}
-
-                If no relationships need to be invalidated based on these strict criteria, return an empty list for "invalidated_edges".
             """,
         ),
     ]
@@ -89,19 +90,6 @@ def v2(context: dict[str, Any]) -> list[Message]:
 
                 New Edge:
                 {context['new_edge']}
-
-
-                For each existing edge that should be invalidated, respond with a JSON object in the following format:
-                {{
-                    "invalidated_edges": [
-                        {{
-                            "uuid": "The UUID of the edge to be invalidated",
-                            "fact": "Updated fact of the edge"
-                        }}
-                    ]
-                }}
-
-                If no relationships need to be invalidated based on these strict criteria, return an empty list for "invalidated_edges".
             """,
         ),
     ]

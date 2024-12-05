@@ -14,9 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Protocol, TypedDict
+from typing import Any, Optional, Protocol, TypedDict
+
+from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+
+
+class EdgeDates(BaseModel):
+    valid_at: Optional[str] = Field(
+        None,
+        description='The date and time when the relationship described by the edge fact became true or was established. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
+    )
+    invalid_at: Optional[str] = Field(
+        None,
+        description='The date and time when the relationship described by the edge fact stopped being true or ended. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
+    )
 
 
 class Prompt(Protocol):
@@ -60,7 +73,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             Analyze the conversation and determine if there are dates that are part of the edge fact. Only set dates if they explicitly relate to the formation or alteration of the relationship itself.
 
             Guidelines:
-            1. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) for datetimes.
+            1. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ) for datetimes.
             2. Use the reference timestamp as the current time when determining the valid_at and invalid_at dates.
             3. If the fact is written in the present tense, use the Reference Timestamp for the valid_at date
             4. If no temporal information is found that establishes or changes the relationship, leave the fields as null.
@@ -69,11 +82,6 @@ def v1(context: dict[str, Any]) -> list[Message]:
             7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
             8. If only year is mentioned, use January 1st of that year at 00:00:00.
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
-            Respond with a JSON object:
-            {{
-                "valid_at": "YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null",
-                "invalid_at": "YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null",
-            }}
             """,
         ),
     ]

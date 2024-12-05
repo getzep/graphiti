@@ -14,18 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import typing
 
 import openai
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
+from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig
-from .errors import RateLimitError
+from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,10 @@ class OpenAIClient(LLMClient):
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
 
         """
+        # removed caching to simplify the `generate_response` override
+        if cache:
+            raise NotImplementedError('Caching is not implemented for OpenAI')
+
         if config is None:
             config = LLMConfig()
 
@@ -75,7 +79,9 @@ class OpenAIClient(LLMClient):
         else:
             self.client = client
 
-    async def _generate_response(self, messages: list[Message]) -> dict[str, typing.Any]:
+    async def _generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
             if m.role == 'user':
@@ -83,17 +89,33 @@ class OpenAIClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            response = await self.client.chat.completions.create(
+            response = await self.client.beta.chat.completions.parse(
                 model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format={'type': 'json_object'},
+                response_format=response_model,  # type: ignore
             )
-            result = response.choices[0].message.content or ''
-            return json.loads(result)
+
+            response_object = response.choices[0].message
+
+            if response_object.parsed:
+                return response_object.parsed.model_dump()
+            elif response_object.refusal:
+                raise RefusalError(response_object.refusal)
+            else:
+                raise Exception('No response from LLM')
+        except openai.LengthFinishReasonError as e:
+            raise Exception(f'Output length exceeded max tokens {self.max_tokens}: {e}') from e
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
             logger.error(f'Error in generating LLM response: {e}')
             raise
+
+    async def generate_response(
+        self, messages: list[Message], response_model: type[BaseModel] | None = None
+    ) -> dict[str, typing.Any]:
+        response = await self._generate_response(messages, response_model)
+
+        return response

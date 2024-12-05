@@ -17,7 +17,24 @@ limitations under the License.
 import json
 from typing import Any, Protocol, TypedDict
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PromptFunction, PromptVersion
+
+
+class QueryExpansion(BaseModel):
+    query: str = Field(..., description='query optimized for database search')
+
+
+class QAResponse(BaseModel):
+    ANSWER: str = Field(..., description='how Alice would answer the question')
+
+
+class EvalResponse(BaseModel):
+    is_correct: bool = Field(..., description='boolean if the answer is correct or incorrect')
+    reasoning: str = Field(
+        ..., description='why you determined the response was correct or incorrect'
+    )
 
 
 class Prompt(Protocol):
@@ -41,10 +58,6 @@ def query_expansion(context: dict[str, Any]) -> list[Message]:
     <QUESTION>
     {json.dumps(context['query'])}
     </QUESTION>
-    respond with a JSON object in the following format:
-    {{
-        "query": "query optimized for database search"
-    }}
     """
     return [
         Message(role='system', content=sys_prompt),
@@ -67,10 +80,6 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
     <QUESTION>
     {context['query']}
     </QUESTION>
-    respond with a JSON object in the following format:
-    {{
-        "ANSWER": "how Alice would answer the question"
-    }}
     """
     return [
         Message(role='system', content=sys_prompt),
@@ -96,12 +105,6 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     <RESPONSE>
     {context['response']}
     </RESPONSE>
-    
-    respond with a JSON object in the following format:
-    {{
-        "is_correct": "boolean if the answer is correct or incorrect"
-        "reasoning": "why you determined the response was correct or incorrect"
-    }}
     """
     return [
         Message(role='system', content=sys_prompt),
