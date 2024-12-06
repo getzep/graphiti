@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, DEFAULT_PAGE_LIMIT
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
@@ -212,10 +212,11 @@ class EpisodicNode(Node):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -233,8 +234,8 @@ class EpisodicNode(Node):
             e.source_description AS source_description,
             e.source AS source
         ORDER BY e.uuid DESC
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
@@ -328,10 +329,11 @@ class EntityNode(Node):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -347,8 +349,8 @@ class EntityNode(Node):
             n.created_at AS created_at, 
             n.summary AS summary
         ORDER BY n.uuid DESC
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
@@ -442,10 +444,11 @@ class CommunityNode(Node):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -461,8 +464,8 @@ class CommunityNode(Node):
             n.created_at AS created_at, 
             n.summary AS summary
         ORDER BY n.uuid DESC
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
