@@ -631,7 +631,7 @@ async def node_distance_reranker(
 ) -> list[str]:
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
-    scores: dict[str, float] = {}
+    scores: dict[str, float] = {center_node_uuid: 0.0}
 
     # Find the shortest path to center node
     query = Query("""
@@ -649,8 +649,12 @@ async def node_distance_reranker(
 
     for result in path_results:
         uuid = result['uuid']
-        score = result['score'] if 'score' in result else float('inf')
+        score = result['score']
         scores[uuid] = score
+
+    for uuid in filtered_uuids:
+        if uuid not in scores:
+            scores[uuid] = float('inf')
 
     # rerank on shortest distance
     filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
