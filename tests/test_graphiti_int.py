@@ -72,6 +72,7 @@ async def test_graphiti_init():
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
         group_ids=['test'],
     )
+
     pretty_results = {
         'edges': [edge.fact for edge in results.edges],
         'nodes': [node.name for node in results.nodes],
