@@ -142,10 +142,11 @@ class EpisodicEdge(Edge):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -161,8 +162,8 @@ class EpisodicEdge(Edge):
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
         ORDER BY e.uuid DESC 
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
@@ -294,10 +295,11 @@ class EntityEdge(Edge):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -320,8 +322,8 @@ class EntityEdge(Edge):
             e.valid_at AS valid_at,
             e.invalid_at AS invalid_at
         ORDER BY e.uuid DESC 
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
@@ -400,10 +402,11 @@ class CommunityEdge(Edge):
         cls,
         driver: AsyncDriver,
         group_ids: list[str],
-        limit: int = DEFAULT_PAGE_LIMIT,
+        limit: int | None = None,
         created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
@@ -419,8 +422,8 @@ class CommunityEdge(Edge):
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
         ORDER BY e.uuid DESC
-        LIMIT $limit
-        """,
+        """
+            + limit_query,
             group_ids=group_ids,
             created_at=created_at,
             limit=limit,
