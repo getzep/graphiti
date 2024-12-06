@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, DEFAULT_PAGE_LIMIT
+from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
