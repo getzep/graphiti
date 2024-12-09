@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
@@ -43,10 +43,6 @@ from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
 )
-from graphiti_core.utils import (
-    build_episodic_edges,
-    retrieve_episodes,
-)
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
     add_nodes_and_edges_bulk,
@@ -57,12 +53,14 @@ from graphiti_core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
     update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
+    build_episodic_edges,
     dedupe_extracted_edge,
     extract_edges,
     resolve_edge_contradictions,
@@ -71,6 +69,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     build_indices_and_constraints,
+    retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
@@ -313,7 +312,7 @@ class Graphiti:
             start = time()
 
             entity_edges: list[EntityEdge] = []
-            now = datetime.now(timezone.utc)
+            now = utc_now()
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
@@ -522,7 +521,7 @@ class Graphiti:
         """
         try:
             start = time()
-            now = datetime.now(timezone.utc)
+            now = utc_now()
 
             episodes = [
                 EpisodicNode(

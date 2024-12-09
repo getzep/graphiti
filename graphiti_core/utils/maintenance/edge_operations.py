@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from time import time
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
@@ -26,6 +26,7 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
     get_edge_contradictions,
@@ -132,7 +133,7 @@ async def extract_edges(
             group_id=group_id,
             fact=edge_data.get('fact', ''),
             episodes=[episode.uuid],
-            created_at=datetime.now(timezone.utc),
+            created_at=utc_now(),
             valid_at=None,
             invalid_at=None,
         )
@@ -251,9 +252,7 @@ def resolve_edge_contradictions(
             and edge.valid_at < resolved_edge.valid_at
         ):
             edge.invalid_at = resolved_edge.valid_at
-            edge.expired_at = (
-                edge.expired_at if edge.expired_at is not None else datetime.now(timezone.utc)
-            )
+            edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
             invalidated_edges.append(edge)
 
     return invalidated_edges
@@ -273,11 +272,12 @@ async def resolve_extracted_edge(
         get_edge_contradictions(llm_client, extracted_edge, existing_edges),
     )
 
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
-    resolved_edge.valid_at = valid_at if valid_at is not None else resolved_edge.valid_at
-    resolved_edge.invalid_at = invalid_at if invalid_at is not None else resolved_edge.invalid_at
-    if invalid_at is not None and resolved_edge.expired_at is None:
+    resolved_edge.valid_at = valid_at if valid_at else resolved_edge.valid_at
+    resolved_edge.invalid_at = invalid_at if invalid_at else resolved_edge.invalid_at
+
+    if invalid_at and not resolved_edge.expired_at:
         resolved_edge.expired_at = now
 
     # Determine if the new_edge needs to be expired
@@ -285,8 +285,12 @@ async def resolve_extracted_edge(
         invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
         for candidate in invalidation_candidates:
             if (
-                candidate.valid_at is not None and resolved_edge.valid_at is not None
-            ) and candidate.valid_at > resolved_edge.valid_at:
+                candidate.valid_at
+                and resolved_edge.valid_at
+                and candidate.valid_at.tzinfo
+                and resolved_edge.valid_at.tzinfo
+                and candidate.valid_at > resolved_edge.valid_at
+            ):
                 # Expire new edge since we have information about more recent events
                 resolved_edge.invalid_at = candidate.valid_at
                 resolved_edge.expired_at = now

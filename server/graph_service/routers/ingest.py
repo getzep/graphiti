@@ -4,7 +4,7 @@ from functools import partial
 
 from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
-from graphiti_core.utils import clear_data  # type: ignore
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
