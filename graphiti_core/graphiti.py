@@ -43,10 +43,6 @@ from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
 )
-from graphiti_core.utils import (
-    build_episodic_edges,
-    retrieve_episodes,
-)
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
     add_nodes_and_edges_bulk,
@@ -64,6 +60,7 @@ from graphiti_core.utils.maintenance.community_operations import (
     update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
+    build_episodic_edges,
     dedupe_extracted_edge,
     extract_edges,
     resolve_edge_contradictions,
@@ -72,6 +69,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     build_indices_and_constraints,
+    retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
