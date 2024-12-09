@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from dotenv import load_dotenv
@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
     get_edge_contradictions,
@@ -42,7 +43,7 @@ def setup_llm_client():
 
 
 def create_test_data():
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     # Create edges
     existing_edge = EntityEdge(
@@ -131,7 +132,7 @@ async def test_get_edge_contradictions_multiple_existing():
 
 # Helper function to create more complex test data
 def create_complex_test_data():
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     # Create nodes
     node1 = EntityNode(uuid='1', name='Alice', labels=['Person'], created_at=now, group_id='1')
@@ -191,7 +192,7 @@ async def test_invalidate_edges_complex():
         name='DISLIKES',
         fact='Alice dislikes Bob',
         group_id='1',
-        created_at=datetime.now(timezone.utc),
+        created_at=utc_now(),
     )
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, existing_edges)
@@ -213,7 +214,7 @@ async def test_get_edge_contradictions_temporal_update():
         name='LEFT_JOB',
         fact='Bob no longer works at at Company XYZ',
         group_id='1',
-        created_at=datetime.now(timezone.utc),
+        created_at=utc_now(),
     )
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, existing_edges)
@@ -235,7 +236,7 @@ async def test_get_edge_contradictions_no_effect():
         name='APPLIED_TO',
         fact='Charlie applied to Company XYZ',
         group_id='1',
-        created_at=datetime.now(timezone.utc),
+        created_at=utc_now(),
     )
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, existing_edges)
@@ -256,7 +257,7 @@ async def test_invalidate_edges_partial_update():
         name='CHANGED_POSITION',
         fact='Bob changed his position at Company XYZ',
         group_id='1',
-        created_at=datetime.now(timezone.utc),
+        created_at=utc_now(),
     )
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, existing_edges)
@@ -265,7 +266,7 @@ async def test_invalidate_edges_partial_update():
 
 
 def create_data_for_temporal_extraction() -> tuple[EpisodicNode, list[EpisodicNode]]:
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     previous_episodes = [
         EpisodicNode(
@@ -314,7 +315,7 @@ async def test_extract_edge_dates():
         name='LEFT_JOB',
         fact='Bob no longer works at Company XYZ',
         group_id='1',
-        created_at=datetime.now(timezone.utc),
+        created_at=utc_now(),
     )
 
     valid_at, invalid_at = await extract_edge_dates(

@@ -9,7 +9,7 @@ You may obtain a copy of the License at
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
@@ -24,6 +24,7 @@ from graphiti_core.nodes import EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edge_dates import EdgeDates
 from graphiti_core.prompts.invalidate_edges import InvalidatedEdges
+from graphiti_core.utils.datetime_utils import ensure_utc
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +53,15 @@ async def extract_edge_dates(
 
     if valid_at:
         try:
-            valid_at_datetime = datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
+            valid_at_datetime = ensure_utc(datetime.fromisoformat(valid_at.replace('Z', '+00:00')))
         except ValueError as e:
             logger.error(f'Error parsing valid_at date: {e}. Input: {valid_at}')
 
     if invalid_at:
         try:
-            invalid_at_datetime = datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
+            invalid_at_datetime = ensure_utc(
+                datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
+            )
         except ValueError as e:
             logger.error(f'Error parsing invalid_at date: {e}. Input: {invalid_at}')
 

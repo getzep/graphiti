@@ -18,7 +18,7 @@ import asyncio
 import logging
 import typing
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from math import ceil
 
 from neo4j import AsyncDriver, AsyncManagedTransaction
@@ -37,14 +37,17 @@ from graphiti_core.models.nodes.node_db_queries import (
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
-from graphiti_core.utils import retrieve_episodes
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
     dedupe_edge_list,
     dedupe_extracted_edges,
     extract_edges,
 )
-from graphiti_core.utils.maintenance.graph_data_operations import EPISODE_WINDOW_LEN
+from graphiti_core.utils.maintenance.graph_data_operations import (
+    EPISODE_WINDOW_LEN,
+    retrieve_episodes,
+)
 from graphiti_core.utils.maintenance.node_operations import (
     dedupe_extracted_nodes,
     dedupe_node_list,
@@ -385,7 +388,7 @@ async def extract_edge_dates_bulk(
         edge.valid_at = valid_at
         edge.invalid_at = invalid_at
         if edge.invalid_at:
-            edge.expired_at = datetime.now(timezone.utc)
+            edge.expired_at = utc_now()
 
     return edges
 

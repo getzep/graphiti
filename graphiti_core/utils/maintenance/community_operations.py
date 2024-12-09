@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel
@@ -17,6 +16,7 @@ from graphiti_core.nodes import (
 )
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import build_community_edges
 
 MAX_COMMUNITY_BUILD_CONCURRENCY = 10
@@ -180,7 +180,7 @@ async def build_community(
 
     summary = summaries[0]
     name = await generate_summary_description(llm_client, summary)
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     community_node = CommunityNode(
         name=name,
         group_id=community_cluster[0].group_id,
@@ -307,7 +307,7 @@ async def update_community(
     community.name = new_name
 
     if is_new:
-        community_edge = (build_community_edges([entity], community, datetime.now(timezone.utc)))[0]
+        community_edge = (build_community_edges([entity], community, utc_now()))[0]
         await community_edge.save(driver)
 
     await community.generate_name_embedding(embedder)
