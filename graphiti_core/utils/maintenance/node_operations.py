@@ -16,7 +16,6 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from time import time
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
@@ -26,6 +25,7 @@ from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
+from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ async def extract_nodes(
             group_id=episode.group_id,
             labels=['Entity'],
             summary='',
-            created_at=datetime.now(timezone.utc),
+            created_at=utc_now(),
         )
         new_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')

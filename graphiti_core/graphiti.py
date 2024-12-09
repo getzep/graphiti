@@ -16,7 +16,7 @@ limitations under the License.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
@@ -57,6 +57,7 @@ from graphiti_core.utils.bulk_utils import (
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
 )
+from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
@@ -313,7 +314,7 @@ class Graphiti:
             start = time()
 
             entity_edges: list[EntityEdge] = []
-            now = datetime.now(timezone.utc)
+            now = utc_now()
 
             previous_episodes = await self.retrieve_episodes(
                 reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
@@ -522,7 +523,7 @@ class Graphiti:
         """
         try:
             start = time()
-            now = datetime.now(timezone.utc)
+            now = utc_now()
 
             episodes = [
                 EpisodicNode(

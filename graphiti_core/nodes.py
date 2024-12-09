@@ -16,7 +16,7 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from time import time
 from typing import Any
@@ -34,6 +34,7 @@ from graphiti_core.models.nodes.node_db_queries import (
     ENTITY_NODE_SAVE,
     EPISODIC_NODE_SAVE,
 )
+from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class Node(BaseModel, ABC):
     name: str = Field(description='name of the node')
     group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: utc_now())
 
     @abstractmethod
     async def save(self, driver: AsyncDriver): ...
