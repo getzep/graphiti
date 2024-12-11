@@ -56,6 +56,29 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = Cache(DEFAULT_CACHE_DIR)  # Create a cache directory
 
+    
+    def _clean_input(self, input: str) -> str:
+        """Clean input string of invalid unicode and control characters.
+
+        Args:
+            input: Raw input string to be cleaned
+
+        Returns:
+            Cleaned string safe for LLM processing
+        """
+        # Clean any invalid Unicode
+        cleaned = input.encode('utf-8', errors='ignore').decode('utf-8')
+
+        # Remove zero-width characters and other invisible unicode
+        zero_width = '\u200b\u200c\u200d\ufeff\u2060'
+        for char in zero_width:
+            cleaned = cleaned.replace(char, '')
+
+        # Remove control characters except newlines, returns, and tabs
+        cleaned = ''.join(char for char in cleaned if ord(char) >= 32 or char in '\n\r\t')
+
+        return cleaned
+
     @retry(
         stop=stop_after_attempt(4),
         wait=wait_random_exponential(multiplier=10, min=5, max=120),
@@ -105,6 +128,9 @@ class LLMClient(ABC):
             if cached_response is not None:
                 logger.debug(f'Cache hit for {cache_key}')
                 return cached_response
+
+        for message in messages:
+            message.content = self._clean_input(message.content)
 
         response = await self._generate_response_with_retry(messages, response_model)
 
