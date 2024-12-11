@@ -56,7 +56,6 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = Cache(DEFAULT_CACHE_DIR)  # Create a cache directory
 
-    
     def _clean_input(self, input: str) -> str:
         """Clean input string of invalid unicode and control characters.
 

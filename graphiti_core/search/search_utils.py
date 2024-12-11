@@ -37,6 +37,7 @@ from graphiti_core.nodes import (
     get_community_node_from_record,
     get_entity_node_from_record,
 )
+from graphiti_core.search.search_filters import SearchFilters, search_filter_query_constructor
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,7 @@ async def get_communities_by_nodes(
 async def edge_fulltext_search(
     driver: AsyncDriver,
     query: str,
+    filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
@@ -142,6 +144,8 @@ async def edge_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
+
+    filter_query, filter_params = search_filter_query_constructor(filter)
 
     cypher_query = Query("""
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
@@ -165,6 +169,7 @@ async def edge_fulltext_search(
 
     records, _, _ = await driver.execute_query(
         cypher_query,
+        filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
@@ -182,6 +187,7 @@ async def edge_similarity_search(
     search_vector: list[float],
     source_node_uuid: str | None,
     target_node_uuid: str | None,
+    filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -191,13 +197,19 @@ async def edge_similarity_search(
         'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
     )
 
-    query: LiteralString = """
-                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
-                AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
-                AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
-                WITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
-                WHERE score > $min_score
+    filter_query, filter_params = search_filter_query_constructor(filter)
+
+    query: LiteralString = (
+        """
+                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                    WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
+                    AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
+                    AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
+                    WITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+                    WHERE score > $min_score
+                    """
+        + filter_query
+        + """
                 RETURN
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -214,9 +226,11 @@ async def edge_similarity_search(
                 ORDER BY score DESC
                 LIMIT $limit
         """
+    )
 
     records, _, _ = await driver.execute_query(
         runtime_query + query,
+        filter_params,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -236,17 +250,25 @@ async def edge_bfs_search(
     driver: AsyncDriver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
+    filter: SearchFilters,
     limit: int,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     if bfs_origin_node_uuids is None:
         return []
 
-    query = Query("""
+    filter_query, filter_params = search_filter_query_constructor(filter)
+
+    query = Query(
+        """
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
                 UNWIND relationships(path) AS rel
-                MATCH ()-[r:RELATES_TO {uuid: rel.uuid}]-()
+                MATCH ()-[r:RELATES_TO]-()
+                WHERE r.uuid = rel.uuid
+                """
+        + filter_query
+        + """  
                 RETURN DISTINCT
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -261,10 +283,12 @@ async def edge_bfs_search(
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
                 LIMIT $limit
-        """)
+        """
+    )
 
     records, _, _ = await driver.execute_query(
         query,
+        filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
@@ -589,6 +613,7 @@ async def get_relevant_edges(
                 edge.fact_embedding,
                 source_node_uuid,
                 target_node_uuid,
+                SearchFilters(),
                 [edge.group_id],
                 limit,
             )
