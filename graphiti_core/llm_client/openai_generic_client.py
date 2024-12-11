@@ -89,6 +89,7 @@ class OpenAIGenericClient(LLMClient):
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
+            m.content = self._clean_input(m.content)
             if m.role == 'user':
                 openai_messages.append({'role': 'user', 'content': m.content})
             elif m.role == 'system':
