@@ -65,7 +65,7 @@ async def search(
     query: str,
     group_ids: list[str] | None,
     config: SearchConfig,
-    filter: SearchFilters,
+    search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
@@ -88,7 +88,7 @@ async def search(
             query_vector,
             group_ids,
             config.edge_config,
-            filter,
+            search_filter,
             center_node_uuid,
             bfs_origin_node_uuids,
             config.limit,
@@ -136,7 +136,7 @@ async def edge_search(
     query_vector: list[float],
     group_ids: list[str] | None,
     config: EdgeSearchConfig | None,
-    filter: SearchFilters,
+    search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
@@ -144,12 +144,10 @@ async def edge_search(
     if config is None:
         return []
 
-    search_filter = filter if filter is not None else SearchFilters()
-
     search_results: list[list[EntityEdge]] = list(
         await semaphore_gather(
             *[
-                edge_fulltext_search(driver, query, filter, group_ids, 2 * limit),
+                edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
                 edge_similarity_search(
                     driver,
                     query_vector,

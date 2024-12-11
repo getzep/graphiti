@@ -626,7 +626,7 @@ class Graphiti:
         center_node_uuid: str | None = None,
         group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
-        filter: SearchFilters | None = None,
+        search_filter: SearchFilters | None = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -672,7 +672,7 @@ class Graphiti:
                 query,
                 group_ids,
                 search_config,
-                filter,
+                search_filter if search_filter is not None else SearchFilters(),
                 center_node_uuid,
             )
         ).edges
@@ -686,7 +686,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
         bfs_origin_node_uuids: list[str] | None = None,
-        filter: SearchFilters | None = None,
+        search_filter: SearchFilters | None = None,
     ) -> SearchResults:
         return await search(
             self.driver,
@@ -695,7 +695,7 @@ class Graphiti:
             query,
             group_ids,
             config,
-            filter,
+            search_filter if search_filter is not None else SearchFilters(),
             center_node_uuid,
             bfs_origin_node_uuids,
         )
