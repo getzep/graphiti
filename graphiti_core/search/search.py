@@ -144,6 +144,8 @@ async def edge_search(
     if config is None:
         return []
 
+    search_filter = filter if filter is not None else SearchFilters()
+
     search_results: list[list[EntityEdge]] = list(
         await semaphore_gather(
             *[
@@ -153,13 +155,13 @@ async def edge_search(
                     query_vector,
                     None,
                     None,
-                    filter,
+                    search_filter,
                     group_ids,
                     2 * limit,
                     config.sim_min_score,
                 ),
                 edge_bfs_search(
-                    driver, bfs_origin_node_uuids, config.bfs_max_depth, filter, 2 * limit
+                    driver, bfs_origin_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
                 ),
             ]
         )
@@ -169,7 +171,7 @@ async def edge_search(
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
         search_results.append(
             await edge_bfs_search(
-                driver, source_node_uuids, config.bfs_max_depth, filter, 2 * limit
+                driver, source_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
             )
         )
 

@@ -15,9 +15,10 @@ limitations under the License.
 """
 
 from datetime import datetime
-from typing import Any, LiteralString
+from typing import Any
 
 from pydantic import BaseModel, Field
+from typing_extensions import LiteralString
 
 
 class DateFilter(BaseModel):
