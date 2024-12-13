@@ -19,24 +19,28 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
+from enum import Enum
+
+
+class ComparisonOperators(Enum):
+    equals = '='
+    not_equals = '<>'
+    greater_than = '>'
+    less_than = '<'
+    greater_than_equal = '>='
+    less_than_equal = '<='
 
 
 class DateFilter(BaseModel):
-    date_match: datetime | None = Field(default=None, description='An exact datetime to filter on')
-    date_range: tuple[datetime, datetime] | None = Field(
-        default=None, description='A date range to filter on'
-    )
-    invert_filter: bool = Field(
-        default=False,
-        description='Invert the filter. This will add a NOT to the conditions if true',
-    )
+    filter_date: datetime = Field(description='A datetime to filter on')
+    comparison_operator: ComparisonOperators = Field(description='Comparison operator for date filter')
 
 
 class SearchFilters(BaseModel):
-    valid_at: DateFilter | None = Field(default=None)
-    invalid_at: DateFilter | None = Field(default=None)
-    created_at: DateFilter | None = Field(default=None)
-    expired_at: DateFilter | None = Field(default=None)
+    valid_at: list[list[DateFilter]] | None = Field(default=None)
+    invalid_at: list[list[DateFilter]] | None = Field(default=None)
+    created_at: list[list[DateFilter]] | None = Field(default=None)
+    expired_at: list[list[DateFilter]] | None = Field(default=None)
 
 
 def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralString, dict[str, Any]]:
@@ -44,6 +48,12 @@ def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralStri
     filter_params: dict[str, Any] = {}
 
     if filters.valid_at is not None:
+        valid_at_filter = 'AND ('
+        for and_list in filters.valid_at:
+            and_filter = '('
+            for j, date_filter in enumerate(and_list):
+                single_filter = f''
+
         if filters.valid_at.date_match is not None and not filters.valid_at.invert_filter:
             filter_query += 'AND r.valid_at = $valid_at'
             filter_params['valid_at'] = filters.valid_at.date_match
