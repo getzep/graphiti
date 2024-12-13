@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import warnings
 from datetime import datetime
 from time import time
 
@@ -31,10 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_edge_dates(
-        llm_client: LLMClient,
-        edge: EntityEdge,
-        current_episode: EpisodicNode,
-        previous_episodes: list[EpisodicNode],
+    llm_client: LLMClient,
+    edge: EntityEdge,
+    current_episode: EpisodicNode,
+    previous_episodes: list[EpisodicNode],
 ) -> tuple[datetime | None, datetime | None]:
     context = {
         'edge_fact': edge.fact,
@@ -56,8 +55,7 @@ async def extract_edge_dates(
         try:
             valid_at_datetime = ensure_utc(datetime.fromisoformat(valid_at.replace('Z', '+00:00')))
         except ValueError as e:
-            logger.error(f'Error parsing valid_at date: {e}. Input: {valid_at}')
-            warnings.warn(f'Error parsing valid_at date: {e}. Input: {valid_at}')
+            logger.warning(f'WARNING: Error parsing valid_at date: {e}. Input: {valid_at}')
 
     if invalid_at:
         try:
@@ -65,14 +63,13 @@ async def extract_edge_dates(
                 datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
             )
         except ValueError as e:
-            logger.error(f'Error parsing invalid_at date: {e}. Input: {invalid_at}')
-            warnings.warn(f'Error parsing valid_at date: {e}. Input: {valid_at}')
+            logger.warning(f'WARNING: Error parsing valid_at date: {e}. Input: {valid_at}')
 
     return valid_at_datetime, invalid_at_datetime
 
 
 async def get_edge_contradictions(
-        llm_client: LLMClient, new_edge: EntityEdge, existing_edges: list[EntityEdge]
+    llm_client: LLMClient, new_edge: EntityEdge, existing_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     start = time()
     existing_edge_map = {edge.uuid: edge for edge in existing_edges}
