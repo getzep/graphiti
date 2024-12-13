@@ -63,7 +63,7 @@ async def extract_edge_dates(
                 datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
             )
         except ValueError as e:
-            logger.warning(f'WARNING: Error parsing valid_at date: {e}. Input: {valid_at}')
+            logger.warning(f'WARNING: Error parsing invalid_at date: {e}. Input: {invalid_at}')
 
     return valid_at_datetime, invalid_at_datetime
 
