@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import os
 from datetime import datetime
 
@@ -80,3 +81,16 @@ def normalize_l2(embedding: list[float]) -> list[float]:
     else:
         norm = np.linalg.norm(embedding_array, 2, axis=1, keepdims=True)
         return (np.where(norm == 0, embedding_array, embedding_array / norm)).tolist()
+
+
+# Use this instead of asyncio.gather() to bound coroutines
+async def semaphore_gather(max_coroutines: int, coroutines, return_exceptions=False):
+    semaphore = asyncio.Semaphore(max_coroutines)
+
+    async def _wrap_coroutine(coroutine):
+        async with semaphore:
+            return await coroutine
+
+    return await asyncio.gather(
+        *(_wrap_coroutine(coro) for coro in coroutines), return_exceptions=return_exceptions
+    )
