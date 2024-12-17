@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 
 from examples.multi_session_conversation_memory.parse_msc_messages import conversation_q_and_a
 from graphiti_core import Graphiti
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.prompts import prompt_library
 from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
 
@@ -122,7 +123,7 @@ async def main():
         qa_chunk = qa[i : i + 20]
         group_ids = range(len(qa))[i : i + 20]
         results = list(
-            await asyncio.gather(
+            await semaphore_gather(
                 *[
                     evaluate_qa(graphiti, str(group_id), query, answer)
                     for group_id, (query, answer) in zip(group_ids, qa_chunk)

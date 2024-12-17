@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import (
     CommunityNode,
@@ -71,7 +71,7 @@ async def get_community_clusters(
 
         community_clusters.extend(
             list(
-                await asyncio.gather(
+                await semaphore_gather(
                     *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
                 )
             )
@@ -164,7 +164,7 @@ async def build_community(
             odd_one_out = summaries.pop()
             length -= 1
         new_summaries: list[str] = list(
-            await asyncio.gather(
+            await semaphore_gather(
                 *[
                     summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
@@ -207,7 +207,9 @@ async def build_communities(
             return await build_community(llm_client, cluster)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
-        await asyncio.gather(*[limited_build_community(cluster) for cluster in community_clusters])
+        await semaphore_gather(
+            *[limited_build_community(cluster) for cluster in community_clusters]
+        )
     )
 
     community_nodes: list[CommunityNode] = []

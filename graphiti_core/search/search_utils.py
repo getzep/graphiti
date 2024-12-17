@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from collections import defaultdict
 from time import time
@@ -30,6 +29,7 @@ from graphiti_core.helpers import (
     USE_PARALLEL_RUNTIME,
     lucene_sanitize,
     normalize_l2,
+    semaphore_gather,
 )
 from graphiti_core.nodes import (
     CommunityNode,
@@ -549,7 +549,7 @@ async def hybrid_node_search(
 
     start = time()
     results: list[list[EntityNode]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
             *[node_similarity_search(driver, e, group_ids, 2 * limit) for e in embeddings],
         )
@@ -619,7 +619,7 @@ async def get_relevant_edges(
     relevant_edges: list[EntityEdge] = []
     relevant_edge_uuids = set()
 
-    results = await asyncio.gather(
+    results = await semaphore_gather(
         *[
             edge_similarity_search(
                 driver,

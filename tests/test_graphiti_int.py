@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 import os
 import sys
@@ -25,6 +24,7 @@ from dotenv import load_dotenv
 
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
@@ -137,8 +137,8 @@ async def test_graph_integration():
     edges = [episodic_edge_1, episodic_edge_2, entity_edge]
 
     # test save
-    await asyncio.gather(*[node.save(driver) for node in nodes])
-    await asyncio.gather(*[edge.save(driver) for edge in edges])
+    await semaphore_gather(*[node.save(driver) for node in nodes])
+    await semaphore_gather(*[edge.save(driver) for edge in edges])
 
     # test get
     assert await EpisodicNode.get_by_uuid(driver, episode.uuid) is not None
@@ -147,5 +147,5 @@ async def test_graph_integration():
     assert await EntityEdge.get_by_uuid(driver, entity_edge.uuid) is not None
 
     # test delete
-    await asyncio.gather(*[node.delete(driver) for node in nodes])
-    await asyncio.gather(*[edge.delete(driver) for edge in edges])
+    await semaphore_gather(*[node.delete(driver) for node in nodes])
+    await semaphore_gather(*[edge.delete(driver) for edge in edges])

@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from collections import defaultdict
 from time import time
@@ -25,6 +24,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
@@ -78,7 +78,7 @@ async def search(
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids else None
-    edges, nodes, communities = await asyncio.gather(
+    edges, nodes, communities = await semaphore_gather(
         edge_search(
             driver,
             cross_encoder,
@@ -141,7 +141,7 @@ async def edge_search(
         return []
 
     search_results: list[list[EntityEdge]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 edge_fulltext_search(driver, query, group_ids, 2 * limit),
                 edge_similarity_search(
@@ -226,7 +226,7 @@ async def node_search(
         return []
 
     search_results: list[list[EntityNode]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 node_fulltext_search(driver, query, group_ids, 2 * limit),
                 node_similarity_search(
@@ -295,7 +295,7 @@ async def community_search(
         return []
 
     search_results: list[list[CommunityNode]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 community_fulltext_search(driver, query, group_ids, 2 * limit),
                 community_similarity_search(

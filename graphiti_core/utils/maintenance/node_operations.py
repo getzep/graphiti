@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from time import time
 
-from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -223,7 +222,7 @@ async def resolve_extracted_nodes(
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
     results: list[tuple[EntityNode, dict[str, str]]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 resolve_extracted_node(
                     llm_client, extracted_node, existing_nodes, episode, previous_episodes
@@ -275,7 +274,7 @@ async def resolve_extracted_node(
         else [],
     }
 
-    llm_response, node_summary_response = await asyncio.gather(
+    llm_response, node_summary_response = await semaphore_gather(
         llm_client.generate_response(
             prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
         ),

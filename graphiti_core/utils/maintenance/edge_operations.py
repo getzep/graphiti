@@ -14,13 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from datetime import datetime
 from time import time
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
-from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
@@ -199,7 +198,7 @@ async def resolve_extracted_edges(
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     # resolve edges with related edges in the graph, extract temporal information, and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 resolve_extracted_edge(
                     llm_client,
@@ -266,7 +265,7 @@ async def resolve_extracted_edge(
     current_episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
 ) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await asyncio.gather(
+    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await semaphore_gather(
         dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
         extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
         get_edge_contradictions(llm_client, extracted_edge, existing_edges),
