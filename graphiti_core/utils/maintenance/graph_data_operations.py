@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -38,7 +38,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
             database_=DEFAULT_DATABASE,
         )
         index_names = [record['name'] for record in records]
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 driver.execute_query(
                     """DROP INDEX $name""",
@@ -82,7 +82,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-    await asyncio.gather(
+    await semaphore_gather(
         *[
             driver.execute_query(
                 query,

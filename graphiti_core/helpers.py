@@ -16,6 +16,7 @@ limitations under the License.
 
 import asyncio
 import os
+from collections.abc import Coroutine
 from datetime import datetime
 
 import numpy as np
@@ -26,6 +27,7 @@ load_dotenv()
 
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
+SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 50))
 MAX_REFLEXION_ITERATIONS = 2
 DEFAULT_PAGE_LIMIT = 20
 
@@ -84,7 +86,9 @@ def normalize_l2(embedding: list[float]) -> list[float]:
 
 
 # Use this instead of asyncio.gather() to bound coroutines
-async def semaphore_gather(max_coroutines: int, coroutines, return_exceptions=False):
+async def semaphore_gather(
+    *coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT, return_exceptions=True
+):
     semaphore = asyncio.Semaphore(max_coroutines)
 
     async def _wrap_coroutine(coroutine):
@@ -92,5 +96,6 @@ async def semaphore_gather(max_coroutines: int, coroutines, return_exceptions=Fa
             return await coroutine
 
     return await asyncio.gather(
-        *(_wrap_coroutine(coro) for coro in coroutines), return_exceptions=return_exceptions
+        *(_wrap_coroutine(coroutine) for coroutine in coroutines),
+        return_exceptions=return_exceptions,
     )

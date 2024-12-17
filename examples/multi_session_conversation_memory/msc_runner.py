@@ -26,6 +26,7 @@ from examples.multi_session_conversation_memory.parse_msc_messages import (
     parse_msc_messages,
 )
 from graphiti_core import Graphiti
+from graphiti_core.helpers import semaphore_gather
 
 load_dotenv()
 
@@ -75,7 +76,7 @@ async def main():
         msc_message_slice = msc_messages[i : i + 10]
         group_ids = range(len(msc_messages))[i : i + 10]
 
-        await asyncio.gather(
+        await semaphore_gather(
             *[
                 add_conversation(graphiti, str(group_id), messages)
                 for group_id, messages in zip(group_ids, msc_message_slice)

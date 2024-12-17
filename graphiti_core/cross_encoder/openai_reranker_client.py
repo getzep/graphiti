@@ -22,6 +22,7 @@ import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
 from ..prompts import Message
 from .client import CrossEncoderClient
@@ -75,7 +76,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
             for passage in passages
         ]
         try:
-            responses = await asyncio.gather(
+            responses = await semaphore_gather(
                 *[
                     self.client.chat.completions.create(
                         model=DEFAULT_MODEL,
