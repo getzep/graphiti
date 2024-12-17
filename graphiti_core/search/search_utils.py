@@ -198,21 +198,19 @@ async def edge_similarity_search(
     if group_ids is not None:
         group_filter_query += 'WHERE r.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
+        query_params['source_node_uuid'] = source_node_uuid
+        query_params['target_node_uuid'] = target_node_uuid
 
         if source_node_uuid is not None:
             group_filter_query += '\nAND (n.uuid IN [$source_uuid, $target_uuid])'
-            query_params['source_node_uuid'] = source_node_uuid
-            query_params['target_node_uuid'] = target_node_uuid
 
         if target_node_uuid is not None:
             group_filter_query += '\nAND (m.uuid IN [$source_uuid, $target_uuid])'
-            query_params['source_node_uuid'] = source_node_uuid
-            query_params['target_node_uuid'] = target_node_uuid
 
     query: LiteralString = (
         """
-                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                    """
+                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                        """
         + group_filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
                 WHERE score > $min_score
