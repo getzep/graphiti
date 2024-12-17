@@ -18,6 +18,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from time import time
+from typing import Any
 
 import numpy as np
 from neo4j import AsyncDriver, Query
@@ -191,12 +192,27 @@ async def edge_similarity_search(
         'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
     )
 
-    query: LiteralString = """
-                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                WHERE ($group_ids IS NULL OR r.group_id IN $group_ids)
-                AND ($source_uuid IS NULL OR n.uuid IN [$source_uuid, $target_uuid])
-                AND ($target_uuid IS NULL OR m.uuid IN [$source_uuid, $target_uuid])
-                WITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+    query_params: dict[str, Any] = {}
+
+    group_filter_query: LiteralString = ''
+    if group_ids is not None:
+        group_filter_query += 'WHERE r.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
+        query_params['source_node_uuid'] = source_node_uuid
+        query_params['target_node_uuid'] = target_node_uuid
+
+        if source_node_uuid is not None:
+            group_filter_query += '\nAND (n.uuid IN [$source_uuid, $target_uuid])'
+
+        if target_node_uuid is not None:
+            group_filter_query += '\nAND (m.uuid IN [$source_uuid, $target_uuid])'
+
+    query: LiteralString = (
+        """
+                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                        """
+        + group_filter_query
+        + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
                 WHERE score > $min_score
                 RETURN
                     r.uuid AS uuid,
@@ -214,9 +230,11 @@ async def edge_similarity_search(
                 ORDER BY score DESC
                 LIMIT $limit
         """
+    )
 
     records, _, _ = await driver.execute_query(
         runtime_query + query,
+        query_params,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -325,11 +343,20 @@ async def node_similarity_search(
         'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
     )
 
+    query_params: dict[str, Any] = {}
+
+    group_filter_query: LiteralString = ''
+    if group_ids is not None:
+        group_filter_query += 'WHERE n.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
+
     records, _, _ = await driver.execute_query(
         runtime_query
         + """
             MATCH (n:Entity)
-            WHERE $group_ids IS NULL OR n.group_id IN $group_ids
+            """
+        + group_filter_query
+        + """
             WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
             WHERE score > $min_score
             RETURN
@@ -342,6 +369,7 @@ async def node_similarity_search(
             ORDER BY score DESC
             LIMIT $limit
             """,
+        query_params,
         search_vector=search_vector,
         group_ids=group_ids,
         limit=limit,
@@ -436,11 +464,20 @@ async def community_similarity_search(
         'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
     )
 
+    query_params: dict[str, Any] = {}
+
+    group_filter_query: LiteralString = ''
+    if group_ids is not None:
+        group_filter_query += 'WHERE comm.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
+
     records, _, _ = await driver.execute_query(
         runtime_query
         + """
            MATCH (comm:Community)
-           WHERE ($group_ids IS NULL OR comm.group_id IN $group_ids)
+           """
+        + group_filter_query
+        + """
            WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
            WHERE score > $min_score
            RETURN
