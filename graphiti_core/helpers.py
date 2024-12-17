@@ -86,16 +86,11 @@ def normalize_l2(embedding: list[float]) -> list[float]:
 
 
 # Use this instead of asyncio.gather() to bound coroutines
-async def semaphore_gather(
-    *coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT, return_exceptions=True
-):
+async def semaphore_gather(*coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT):
     semaphore = asyncio.Semaphore(max_coroutines)
 
     async def _wrap_coroutine(coroutine):
         async with semaphore:
             return await coroutine
 
-    return await asyncio.gather(
-        *(_wrap_coroutine(coroutine) for coroutine in coroutines),
-        return_exceptions=return_exceptions,
-    )
+    return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
