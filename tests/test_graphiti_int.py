@@ -100,6 +100,7 @@ async def test_graph_integration():
         source_description='conversation message',
         content='Alice likes Bob',
         entity_edges=[],
+        group_id='test_graphiti_group',
     )
 
     alice_node = EntityNode(
@@ -107,16 +108,27 @@ async def test_graph_integration():
         labels=[],
         created_at=now,
         summary='Alice summary',
+        group_id='test_graphiti_group',
     )
+    await alice_node.generate_name_embedding(embedder)
 
-    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary')
+    bob_node = EntityNode(
+        name='Bob', labels=[], created_at=now, summary='Bob summary', group_id='test_graphiti_group'
+    )
+    await bob_node.generate_name_embedding(embedder)
 
     episodic_edge_1 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now
+        source_node_uuid=episode.uuid,
+        target_node_uuid=alice_node.uuid,
+        created_at=now,
+        group_id='test_graphiti_group',
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now
+        source_node_uuid=episode.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        group_id='test_graphiti_group',
     )
 
     entity_edge = EntityEdge(
@@ -129,6 +141,7 @@ async def test_graph_integration():
         expired_at=now,
         valid_at=now,
         invalid_at=now,
+        group_id='test_graphiti_group',
     )
 
     await entity_edge.generate_embedding(embedder)
