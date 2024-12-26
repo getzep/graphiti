@@ -164,3 +164,7 @@ cython_debug/
 ## Other
 # Cache files
 cache.db*
+
+
+# LongMemEval data
+longmemeval_data/
