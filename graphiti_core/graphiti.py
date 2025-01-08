@@ -308,9 +308,6 @@ class Graphiti:
                 return {"message": "Episode processing started"}
         """
         try:
-            start = time()
-
-            entity_edges: list[EntityEdge] = []
             now = utc_now()
 
             previous_episodes = await self.retrieve_episodes(
@@ -331,155 +328,168 @@ class Graphiti:
                     valid_at=reference_time,
                 )
             )
-
-            # Extract entities as nodes
-
-            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
-            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-
-            # Calculate Embeddings
-
-            await semaphore_gather(
-                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
+            episode, nodes, entity_edges = await self.process_episode(
+                group_id=group_id,
+                episode=episode,
+                previous_episodes=previous_episodes,
+                update_communities=update_communities,
             )
-
-            # Find relevant nodes already in the graph
-            existing_nodes_lists: list[list[EntityNode]] = list(
-                await semaphore_gather(
-                    *[get_relevant_nodes(self.driver, [node]) for node in extracted_nodes]
-                )
-            )
-
-            # Resolve extracted nodes with nodes already in the graph and extract facts
-            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-
-            (mentioned_nodes, uuid_map), extracted_edges = await semaphore_gather(
-                resolve_extracted_nodes(
-                    self.llm_client,
-                    extracted_nodes,
-                    existing_nodes_lists,
-                    episode,
-                    previous_episodes,
-                ),
-                extract_edges(
-                    self.llm_client, episode, extracted_nodes, previous_episodes, group_id
-                ),
-            )
-            logger.debug(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
-            nodes = mentioned_nodes
-
-            extracted_edges_with_resolved_pointers = resolve_edge_pointers(
-                extracted_edges, uuid_map
-            )
-
-            # calculate embeddings
-            await semaphore_gather(
-                *[
-                    edge.generate_embedding(self.embedder)
-                    for edge in extracted_edges_with_resolved_pointers
-                ]
-            )
-
-            # Resolve extracted edges with related edges already in the graph
-            related_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            edge.source_node_uuid,
-                            edge.target_node_uuid,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-            logger.debug(
-                f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
-            )
-            logger.debug(
-                f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges_with_resolved_pointers]}'
-            )
-
-            existing_source_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            edge.source_node_uuid,
-                            None,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-
-            existing_target_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            None,
-                            edge.target_node_uuid,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-
-            existing_edges_list: list[list[EntityEdge]] = [
-                source_lst + target_lst
-                for source_lst, target_lst in zip(
-                    existing_source_edges_list, existing_target_edges_list
-                )
-            ]
-
-            resolved_edges, invalidated_edges = await resolve_extracted_edges(
-                self.llm_client,
-                extracted_edges_with_resolved_pointers,
-                related_edges_list,
-                existing_edges_list,
-                episode,
-                previous_episodes,
-            )
-
-            entity_edges.extend(resolved_edges + invalidated_edges)
-
-            logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
-
-            episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
-
-            logger.debug(f'Built episodic edges: {episodic_edges}')
-
-            episode.entity_edges = [edge.uuid for edge in entity_edges]
-
-            if not self.store_raw_episode_content:
-                episode.content = ''
-
-            await add_nodes_and_edges_bulk(
-                self.driver, [episode], episodic_edges, nodes, entity_edges
-            )
-
-            # Update any communities
-            if update_communities:
-                await semaphore_gather(
-                    *[
-                        update_community(self.driver, self.llm_client, self.embedder, node)
-                        for node in nodes
-                    ]
-                )
-            end = time()
-            logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
-
             return AddEpisodeResults(episode=episode, nodes=nodes, edges=entity_edges)
 
         except Exception as e:
             raise e
+
+    async def process_episode(
+        self,
+        group_id: str,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        update_communities: bool,
+    ):
+        start = time()
+
+        entity_edges: list[EntityEdge] = []
+        now = utc_now()
+
+        # Extract entities as nodes
+
+        extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
+        logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+
+        # Calculate Embeddings
+
+        await semaphore_gather(
+            *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
+        )
+
+        # Find relevant nodes already in the graph
+        existing_nodes_lists: list[list[EntityNode]] = list(
+            await semaphore_gather(
+                *[get_relevant_nodes(self.driver, [node]) for node in extracted_nodes]
+            )
+        )
+
+        # Resolve extracted nodes with nodes already in the graph and extract facts
+        logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+
+        (mentioned_nodes, uuid_map), extracted_edges = await semaphore_gather(
+            resolve_extracted_nodes(
+                self.llm_client,
+                extracted_nodes,
+                existing_nodes_lists,
+                episode,
+                previous_episodes,
+            ),
+            extract_edges(self.llm_client, episode, extracted_nodes, previous_episodes, group_id),
+        )
+        logger.debug(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
+        nodes = mentioned_nodes
+
+        extracted_edges_with_resolved_pointers = resolve_edge_pointers(extracted_edges, uuid_map)
+
+        # calculate embeddings
+        await semaphore_gather(
+            *[
+                edge.generate_embedding(self.embedder)
+                for edge in extracted_edges_with_resolved_pointers
+            ]
+        )
+
+        # Resolve extracted edges with related edges already in the graph
+        related_edges_list: list[list[EntityEdge]] = list(
+            await semaphore_gather(
+                *[
+                    get_relevant_edges(
+                        self.driver,
+                        [edge],
+                        edge.source_node_uuid,
+                        edge.target_node_uuid,
+                        RELEVANT_SCHEMA_LIMIT,
+                    )
+                    for edge in extracted_edges_with_resolved_pointers
+                ]
+            )
+        )
+        logger.debug(
+            f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
+        )
+        logger.debug(
+            f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges_with_resolved_pointers]}'
+        )
+
+        existing_source_edges_list: list[list[EntityEdge]] = list(
+            await semaphore_gather(
+                *[
+                    get_relevant_edges(
+                        self.driver,
+                        [edge],
+                        edge.source_node_uuid,
+                        None,
+                        RELEVANT_SCHEMA_LIMIT,
+                    )
+                    for edge in extracted_edges_with_resolved_pointers
+                ]
+            )
+        )
+
+        existing_target_edges_list: list[list[EntityEdge]] = list(
+            await semaphore_gather(
+                *[
+                    get_relevant_edges(
+                        self.driver,
+                        [edge],
+                        None,
+                        edge.target_node_uuid,
+                        RELEVANT_SCHEMA_LIMIT,
+                    )
+                    for edge in extracted_edges_with_resolved_pointers
+                ]
+            )
+        )
+
+        existing_edges_list: list[list[EntityEdge]] = [
+            source_lst + target_lst
+            for source_lst, target_lst in zip(
+                existing_source_edges_list, existing_target_edges_list
+            )
+        ]
+
+        resolved_edges, invalidated_edges = await resolve_extracted_edges(
+            self.llm_client,
+            extracted_edges_with_resolved_pointers,
+            related_edges_list,
+            existing_edges_list,
+            episode,
+            previous_episodes,
+        )
+
+        entity_edges.extend(resolved_edges + invalidated_edges)
+
+        logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
+
+        episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
+
+        logger.debug(f'Built episodic edges: {episodic_edges}')
+
+        episode.entity_edges = [edge.uuid for edge in entity_edges]
+
+        if not self.store_raw_episode_content:
+            episode.content = ''
+
+        await add_nodes_and_edges_bulk(self.driver, [episode], episodic_edges, nodes, entity_edges)
+
+        # Update any communities
+        if update_communities:
+            await semaphore_gather(
+                *[
+                    update_community(self.driver, self.llm_client, self.embedder, node)
+                    for node in nodes
+                ]
+            )
+        end = time()
+        logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
+
+        return episode, nodes, entity_edges
 
     async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str = ''):
         """
