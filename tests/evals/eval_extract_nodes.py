@@ -36,277 +36,117 @@ import csv  # Add this import at the top of the file
 
 
 
-############# ARCHIVED CODE
+############# OUTDATED CODE
 
-# # Setup
-# load_dotenv()
-# pytestmark = pytest.mark.integration
-# pytest_plugins = ('pytest_asyncio',)
-# logger = setup_logging()
+# Setup
+load_dotenv()
+pytestmark = pytest.mark.integration
+pytest_plugins = ('pytest_asyncio',)
+logger = setup_logging()
 
 
-# async def general_extract_nodes_test(llm_client, data_sample):
-#     episode = data_sample['episode']
-#     previous_episodes = data_sample['previous_episodes']
-#     gold_answer_names = data_sample['gold_answer_names']
+async def general_extract_nodes_test(llm_client, data_sample):
+    episode = data_sample['episode']
+    previous_episodes = data_sample['previous_episodes']
+    gold_answer_names = data_sample['gold_answer_names']
 
-#     hypothesis_nodes = await extract_nodes(llm_client, episode, previous_episodes)
-#     hypothesis_node_names = [node.name for node in hypothesis_nodes]
+    hypothesis_nodes = await extract_nodes(llm_client, episode, previous_episodes)
+    hypothesis_node_names = [node.name for node in hypothesis_nodes]
 
-#     # Sort both lists by node name
-#     hypothesis_node_names.sort()
-#     gold_answer_names.sort()
+    # Sort both lists by node name
+    hypothesis_node_names.sort()
+    gold_answer_names.sort()
 
-#     # assert hypothesis_node_names == gold_answer_names, \
-#     #     f"""Test Failed. Expected nodes: {gold_answer_names}. Got: {hypothesis_node_names}"""
+    # assert hypothesis_node_names == gold_answer_names, \
+    #     f"""Test Failed. Expected nodes: {gold_answer_names}. Got: {hypothesis_node_names}"""
 
-#     return hypothesis_node_names
+    return hypothesis_node_names
     
 
 
 
 
-# def prepare_data_from_csv(data_file_name, question_id, session_idx, message_idx):
+def prepare_data_from_csv(data_file_name, question_id, session_idx, message_idx):
 
-#     samples_csv_path = "tests/evals/data/" + data_file_name + ".csv"
+    samples_csv_path = "tests/evals/data/" + data_file_name + ".csv"
 
-#     # From CSV path, load everything
-#     with open(samples_csv_path, 'r') as file:
-#         csv_reader = csv.DictReader(file)
-#         lme_samples = list(csv_reader)
-
-
-#     data_samples = []
-
-#     # Loop through each row
-#     for row in lme_samples:
-
-#         ### Prepare episode
-#         current_time = datetime.now()
-#         message = json.loads(row["message"])
-#         role = message["role"]
-#         content = message["content"]
-#         message_content = role + ": " + content
-#         episode = EpisodicNode(
-#             name="",
-#             group_id="",
-#             source=EpisodeType.message,
-#             type=EpisodeType.message,
-#             source_description="",
-#             content=message_content,
-#             valid_at=current_time, 
-#         )
-
-#         ### Prepare previous episodes
-#         previous_messages = json.loads(row["previous_messages"])
-#         num_previous_messages = len(previous_messages)
-#         previous_times = [current_time - timedelta(minutes=num_previous_messages-i) for i in range(num_previous_messages)]
-#         previous_episodes = [EpisodicNode(
-#             name="",
-#             group_id="",
-#             source=EpisodeType.message,
-#             source_description="",
-#             content=message["role"] + ": " + message["content"],
-#             valid_at=previous_time,
-#         ) for message, previous_time in zip(previous_messages, previous_times)]
-
-#         ### TODO: Prepare gold answer names
-
-#         ### Add to data samples list
-#         data_samples.append({
-#             "episode": episode,
-#             "previous_episodes": previous_episodes,
-#             "gold_answer_names": [],
-#         })
-
-#     return data_samples
+    # From CSV path, load everything
+    with open(samples_csv_path, 'r') as file:
+        csv_reader = csv.DictReader(file)
+        lme_samples = list(csv_reader)
 
 
+    data_samples = []
 
+    # Loop through each row
+    for row in lme_samples:
 
+        ### Prepare episode
+        current_time = datetime.now()
+        message = json.loads(row["message"])
+        role = message["role"]
+        content = message["content"]
+        message_content = role + ": " + content
+        episode = EpisodicNode(
+            name="",
+            group_id="",
+            source=EpisodeType.message,
+            type=EpisodeType.message,
+            source_description="",
+            content=message_content,
+            valid_at=current_time, 
+        )
 
-# @pytest.mark.asyncio
-# async def test_extract_nodes():
-#     model_name = 'gpt-4o-mini'
-#     llm_config = LLMConfig(
-#         api_key=os.getenv('OPENAI_API_KEY'),
-#         model=model_name,
-#     )
-#     llm_client = OpenAIClient(config=llm_config)
+        ### Prepare previous episodes
+        previous_messages = json.loads(row["previous_messages"])
+        num_previous_messages = len(previous_messages)
+        previous_times = [current_time - timedelta(minutes=num_previous_messages-i) for i in range(num_previous_messages)]
+        previous_episodes = [EpisodicNode(
+            name="",
+            group_id="",
+            source=EpisodeType.message,
+            source_description="",
+            content=message["role"] + ": " + message["content"],
+            valid_at=previous_time,
+        ) for message, previous_time in zip(previous_messages, previous_times)]
 
-#     data_file_name = 'output_short'
-#     question_id = "gpt4_2655b836"
-#     session_idx = 0
-#     message_idx = 0
+        ### TODO: Prepare gold answer names
+
+        ### Add to data samples list
+        data_samples.append({
+            "episode": episode,
+            "previous_episodes": previous_episodes,
+            "gold_answer_names": [],
+        })
+
+    return data_samples
 
 
 
 
 
+@pytest.mark.asyncio
+async def test_extract_nodes():
+    model_name = 'gpt-4o-mini'
+    llm_config = LLMConfig(
+        api_key=os.getenv('OPENAI_API_KEY'),
+        model=model_name,
+    )
+    llm_client = OpenAIClient(config=llm_config)
+
+    data_file_name = 'output_short'
+    question_id = "gpt4_2655b836"
+    session_idx = 0
+    message_idx = 0
     
-#     data_samples = prepare_data_from_csv(data_file_name, question_id, session_idx, message_idx)
+    data_samples = prepare_data_from_csv(data_file_name, question_id, session_idx, message_idx)
 
-#     for data_sample in data_samples:
-#         print(f"\n\nEpisode: {data_sample['episode']}")
-#         print("*"*50)
-#         print(f"Previous Episodes: {data_sample['previous_episodes']}")
-#         print("*"*50)
-#         # print(f"Gold Answer Names: {gold_answer_names}")
+    for data_sample in data_samples:
+        print(f"\n\nEpisode: {data_sample['episode']}")
+        print("*"*50)
+        print(f"Previous Episodes: {data_sample['previous_episodes']}")
+        print("*"*50)
+        # print(f"Gold Answer Names: {gold_answer_names}")
 
-#         await general_extract_nodes_test(llm_client, data_sample)
-
-
-
-
-# @pytest.mark.asyncio
-# async def test_extract_nodes_single_message():
-#     model_name = 'gpt-4o-mini'
-#     llm_config = LLMConfig(
-#         api_key=os.getenv('OPENAI_API_KEY'),
-#         model=model_name,
-#     )
-#     llm_client = OpenAIClient(config=llm_config)
-
-#     current_time = datetime.now()
-#     message_content = "assistant" + ": " + """"
-
-# Packing for a 3-day business trip can be a breeze with a little planning. Here's a list of essentials to get you started:
-
-# **Clothing:**
-
-# * 2-3 business shirts or blouses (quick-drying and wrinkle-resistant)
-# * 2-3 pairs of pants or a skirt (choose versatile, comfortable options)
-# * 1 blazer or jacket (optional, but adds a professional touch)
-# * Undergarments and socks
-# * A change of clothes in case of unexpected delays or spills
-# * Comfortable walking shoes or dress shoes
-# * Slippers or sandals for downtime (if applicable)
-# * Dressy outfit for evening events or dinners (if scheduled)
-
-# **Toiletries:**
-
-# * Toothbrush, toothpaste, and dental floss
-# * Deodorant, shampoo, conditioner, and body wash
-# * Razor and shaving cream (if applicable)
-# * Makeup and makeup remover (if applicable)
-# * Hairbrush or comb
-# * Contact lenses and solution (if applicable)
-# * Prescription medication and any necessary documentation
-
-# **Electronics:**
-
-# * Laptop and charger
-# * Phone and charger
-# * Tablet or e-reader (optional)
-# * Portable charger (recommended)
-# * Headphones or earbuds
-# * Power adapter (if traveling internationally)
-
-# **Business Essentials:**
-
-# * Briefcase or backpack with laptop sleeve
-# * Business cards and any necessary documents (e.g., contracts, presentations)
-# * Notebook and pen
-# * Calculator
-# * Travel-sized essentials like paper clips, stapler, and tape
-
-# **Miscellaneous:**
-
-# * Snacks (e.g., energy bars, nuts, or dried fruit)
-# * Water bottle
-# * Umbrella or raincoat (if rain is forecasted)
-# * Sunglasses
-# * Travel-sized essentials like eye mask, earplugs, or a neck pillow
-# * Cash, credit cards, and ID
-# * Travel itinerary and hotel reservation
-
-# **Additional Tips:**
-
-# * Pack clothes that can be easily mixed and matched to create multiple outfits.
-# * Consider packing clothing items that can be easily ironed or steamed to save time.
-# * Roll your clothes to save space in your luggage and reduce wrinkles.
-# * Wear your heaviest or bulkiest items (e.g., coat, boots) on the plane to save space in your luggage.
-# * Check the weather forecast for your destination and pack accordingly.
-# * Leave some extra space in your luggage for any items you might purchase during your trip.
-
-# Remember to check with your airline for any specific luggage restrictions or requirements before your trip. Safe travels!"
-# """
-#     episode = EpisodicNode(
-#         name="",
-#         group_id="",
-#         source=EpisodeType.message,
-#         type=EpisodeType.message,
-#         source_description="",
-#         content=message_content,
-#         valid_at=current_time, 
-#     )
-
-
-#     data_sample = {
-#         "episode": episode,
-#         "previous_episodes": [],
-#         "gold_answer_names": [],
-#     }
-
-#     hypothesis_node_names = await general_extract_nodes_test(llm_client, data_sample)
-#     print(f"Hypothesis Node Names: {hypothesis_node_names}")
-
-
-
-
-
-# def prepare_data_from_json(data_file_name, question_id, session_idx, message_idx):
-
-#     MAX_NUM_PREVIOUS_MESSAGES = 5
-
-#     samples_csv_path = "tests/evals/data/" + data_file_name + ".csv"
-#     gold_answers_json_path = "tests/evals/data/" + data_file_name + "_gold_answers.json"
-
-    
-
-#     # From convo json path, load everything
-#     with open(samples_csv_path, 'r') as file:
-#         lme_samples = json.load(file)
-
-#     multi_session = lme_samples[question_id]
-#     current_session = multi_session[session_idx]
-#     current_message = current_session["session"][message_idx]
-
-#     # Create the current episode
-#     current_time = datetime.now()
-#     episode = EpisodicNode(
-#         name="",
-#         group_id="",
-#         source=EpisodeType.message,
-#         type=EpisodeType.message,
-#         source_description="",
-#         content=current_message["content"],
-#         valid_at=current_time, 
-#     )
-
-#     # Now create a single list of messages, that is temporally ordered
-#     all_messages_list = [message for session_data in multi_session for message in session_data["session"]]
-
-#     session_lengths = [len(session_data["session"]) for session_data in multi_session]
-
-#     # Determine the index in all_messages_list of the current message using the session_lengths, session_idx, and message_idx
-#     current_message_index = sum(session_lengths[:session_idx]) + message_idx
-
-#     # Get the previous message
-#     num_previous_messages = min(MAX_NUM_PREVIOUS_MESSAGES, current_message_index)
-#     previous_messages = all_messages_list[current_message_index - num_previous_messages:current_message_index]
-
-#     # Create the previous episodes
-#     previous_times = [current_time - timedelta(minutes=num_previous_messages-i) for i in range(num_previous_messages)]
-#     previous_episodes = [EpisodicNode(
-#         name="",
-#         group_id="",
-#         source=EpisodeType.message,
-#         source_description="",
-#         content=prev_message["content"],
-#         valid_at=prev_time,
-#     ) for prev_message, prev_time in zip(previous_messages, previous_times)]
-
-
-#     return episode, previous_episodes, []
+        await general_extract_nodes_test(llm_client, data_sample)
 

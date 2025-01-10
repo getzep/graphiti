@@ -165,6 +165,8 @@ cython_debug/
 # Cache files
 cache.db*
 
-
 # LongMemEval data
 longmemeval_data/
+
+# All DS_Store files
+.DS_Store
