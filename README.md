@@ -114,7 +114,7 @@ from datetime import datetime, timezone
 graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
 # Initialize the graph database with Graphiti's indices. This only needs to be done once.
-graphiti.build_indices_and_constraints()
+await graphiti.build_indices_and_constraints()
 
 # Add episodes
 episodes = [
