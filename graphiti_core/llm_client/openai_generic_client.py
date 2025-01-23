@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import LLMConfig
+from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,10 @@ class OpenAIGenericClient(LLMClient):
             self.client = client
 
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -111,7 +114,10 @@ class OpenAIGenericClient(LLMClient):
             raise
 
     async def generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         retry_count = 0
         last_error = None
@@ -126,7 +132,9 @@ class OpenAIGenericClient(LLMClient):
 
         while retry_count <= self.MAX_RETRIES:
             try:
-                response = await self._generate_response(messages, response_model)
+                response = await self._generate_response(
+                    messages, response_model, max_tokens=max_tokens
+                )
                 return response
             except (RateLimitError, RefusalError):
                 # These errors should not trigger retries
