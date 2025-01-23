@@ -79,6 +79,8 @@ async def extract_edges(
 ) -> list[EntityEdge]:
     start = time()
 
+    EXTRACT_EDGES_MAX_TOKENS = 16384
+
     node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
 
     # Prepare context for LLM
@@ -93,7 +95,9 @@ async def extract_edges(
     reflexion_iterations = 0
     while facts_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
         llm_response = await llm_client.generate_response(
-            prompt_library.extract_edges.edge(context), response_model=ExtractedEdges
+            prompt_library.extract_edges.edge(context),
+            response_model=ExtractedEdges,
+            max_tokens=EXTRACT_EDGES_MAX_TOKENS,
         )
         edges_data = llm_response.get('edges', [])
 
