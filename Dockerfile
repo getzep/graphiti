@@ -23,7 +23,7 @@ RUN poetry build && pip install dist/*.whl
 
 # Install server dependencies
 WORKDIR /app/server
-RUN poetry install --no-interaction --no-ansi --no-dev
+RUN poetry install --no-interaction --no-ansi --only main --no-root
 
 FROM python:3.12-slim
 

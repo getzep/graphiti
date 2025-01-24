@@ -48,7 +48,10 @@ class AnthropicClient(LLMClient):
         )
 
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         system_message = messages[0]
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]] + [
@@ -59,7 +62,7 @@ class AnthropicClient(LLMClient):
             result = await self.client.messages.create(
                 system='Only include JSON in the response. Do not include any additional text or explanation of the content.\n'
                 + system_message.content,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens or self.max_tokens,
                 temperature=self.temperature,
                 messages=user_messages,  # type: ignore
                 model=self.model or DEFAULT_MODEL,

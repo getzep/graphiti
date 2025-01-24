@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
-from .config import LLMConfig
+from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .errors import RateLimitError
 
 DEFAULT_TEMPERATURE = 0
@@ -90,16 +90,22 @@ class LLMClient(ABC):
         reraise=True,
     )
     async def _generate_response_with_retry(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages, response_model)
+            return await self._generate_response(messages, response_model, max_tokens)
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
     @abstractmethod
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         pass
 
@@ -110,7 +116,10 @@ class LLMClient(ABC):
         return hashlib.md5(key_str.encode()).hexdigest()
 
     async def generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> dict[str, typing.Any]:
         if response_model is not None:
             serialized_model = json.dumps(response_model.model_json_schema())
@@ -131,7 +140,7 @@ class LLMClient(ABC):
         for message in messages:
             message.content = self._clean_input(message.content)
 
-        response = await self._generate_response_with_retry(messages, response_model)
+        response = await self._generate_response_with_retry(messages, response_model, max_tokens)
 
         if self.cache_enabled:
             self.cache_dir.set(cache_key, response)
