@@ -148,25 +148,30 @@ async def edge_fulltext_search(
 
     filter_query, filter_params = search_filter_query_constructor(search_filter)
 
-    cypher_query = Query("""
+    cypher_query = Query(
+        """
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
-              YIELD relationship AS r, score
-              WITH r, score, startNode(r) AS n, endNode(r) AS m
-              RETURN
-                    r.uuid AS uuid,
-                    r.group_id AS group_id,
-                    n.uuid AS source_node_uuid,
-                    m.uuid AS target_node_uuid,
-                    r.created_at AS created_at,
-                    r.name AS name,
-                    r.fact AS fact,
-                    r.fact_embedding AS fact_embedding,
-                    r.episodes AS episodes,
-                    r.expired_at AS expired_at,
-                    r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at
-                ORDER BY score DESC LIMIT $limit
-                """)
+              YIELD relationship AS rel, score
+              MATCH (:ENTITY)-[r:RELATES_TO]->(:ENTITY)
+              WHERE r.group_id IN $group_ids"""
+        + filter_query
+        + """\nWITH r, score, startNode(r) AS n, endNode(r) AS m
+               RETURN
+                     r.uuid AS uuid,
+                     r.group_id AS group_id,
+                     n.uuid AS source_node_uuid,
+                     m.uuid AS target_node_uuid,
+                     r.created_at AS created_at,
+                     r.name AS name,
+                     r.fact AS fact,
+                     r.fact_embedding AS fact_embedding,
+                     r.episodes AS episodes,
+                     r.expired_at AS expired_at,
+                     r.valid_at AS valid_at,
+                     r.invalid_at AS invalid_at
+                 ORDER BY score DESC LIMIT $limit
+                 """
+    )
 
     records, _, _ = await driver.execute_query(
         cypher_query,
@@ -200,6 +205,9 @@ async def edge_similarity_search(
 
     query_params: dict[str, Any] = {}
 
+    filter_query, filter_params = search_filter_query_constructor(search_filter)
+    query_params += filter_params
+
     group_filter_query: LiteralString = ''
     if group_ids is not None:
         group_filter_query += 'WHERE r.group_id IN $group_ids'
@@ -215,11 +223,11 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                            """
+                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                """
         + group_filter_query
         + filter_query
-        + +"""\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+        + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
                 WHERE score > $min_score
                 RETURN
                     r.uuid AS uuid,
@@ -242,7 +250,6 @@ async def edge_similarity_search(
     records, _, _ = await driver.execute_query(
         runtime_query + query,
         query_params,
-        filter_params,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -269,7 +276,7 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
-    filter_query, filter_params = search_filter_query_constructor(filter)
+    filter_query, filter_params = search_filter_query_constructor(search_filter)
 
     query = Query(
         """
