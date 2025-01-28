@@ -35,6 +35,7 @@ from graphiti_core.search.search_config_recipes import (
     EDGE_HYBRID_SEARCH_NODE_DISTANCE,
     EDGE_HYBRID_SEARCH_RRF,
 )
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
     get_communities_by_nodes,
@@ -625,6 +626,7 @@ class Graphiti:
         center_node_uuid: str | None = None,
         group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
+        search_filter: SearchFilters | None = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -670,6 +672,7 @@ class Graphiti:
                 query,
                 group_ids,
                 search_config,
+                search_filter if search_filter is not None else SearchFilters(),
                 center_node_uuid,
             )
         ).edges
@@ -683,6 +686,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         center_node_uuid: str | None = None,
         bfs_origin_node_uuids: list[str] | None = None,
+        search_filter: SearchFilters | None = None,
     ) -> SearchResults:
         return await search(
             self.driver,
@@ -691,6 +695,7 @@ class Graphiti:
             query,
             group_ids,
             config,
+            search_filter if search_filter is not None else SearchFilters(),
             center_node_uuid,
             bfs_origin_node_uuids,
         )

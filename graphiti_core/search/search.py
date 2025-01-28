@@ -39,6 +39,7 @@ from graphiti_core.search.search_config import (
     SearchConfig,
     SearchResults,
 )
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     community_fulltext_search,
     community_similarity_search,
@@ -64,6 +65,7 @@ async def search(
     query: str,
     group_ids: list[str] | None,
     config: SearchConfig,
+    search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
@@ -86,6 +88,7 @@ async def search(
             query_vector,
             group_ids,
             config.edge_config,
+            search_filter,
             center_node_uuid,
             bfs_origin_node_uuids,
             config.limit,
@@ -133,6 +136,7 @@ async def edge_search(
     query_vector: list[float],
     group_ids: list[str] | None,
     config: EdgeSearchConfig | None,
+    search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
@@ -143,11 +147,20 @@ async def edge_search(
     search_results: list[list[EntityEdge]] = list(
         await semaphore_gather(
             *[
-                edge_fulltext_search(driver, query, group_ids, 2 * limit),
+                edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
                 edge_similarity_search(
-                    driver, query_vector, None, None, group_ids, 2 * limit, config.sim_min_score
+                    driver,
+                    query_vector,
+                    None,
+                    None,
+                    search_filter,
+                    group_ids,
+                    2 * limit,
+                    config.sim_min_score,
                 ),
-                edge_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth, 2 * limit),
+                edge_bfs_search(
+                    driver, bfs_origin_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
+                ),
             ]
         )
     )
@@ -155,7 +168,9 @@ async def edge_search(
     if EdgeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
         search_results.append(
-            await edge_bfs_search(driver, source_node_uuids, config.bfs_max_depth, 2 * limit)
+            await edge_bfs_search(
+                driver, source_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
+            )
         )
 
     edge_uuid_map = {edge.uuid: edge for result in search_results for edge in result}
