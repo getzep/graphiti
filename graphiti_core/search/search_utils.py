@@ -206,7 +206,7 @@ async def edge_similarity_search(
     query_params: dict[str, Any] = {}
 
     filter_query, filter_params = search_filter_query_constructor(search_filter)
-    query_params += filter_params
+    query_params.update(filter_params)
 
     group_filter_query: LiteralString = ''
     if group_ids is not None:
@@ -223,8 +223,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                """
+                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                    """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score

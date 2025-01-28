@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from typing_extensions import Literal, LiteralString
+from typing_extensions import LiteralString
 
 
 class ComparisonOperator(Enum):
