@@ -1,8 +1,9 @@
+# Graphiti
+
 <div align="center">
 
 <img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
 
-## Temporal Knowledge Graphs for Agentic Applications
 
 <br />
 
@@ -13,98 +14,74 @@
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/Graphiti)
 
 <br />
-
 </div>
 
-Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between
-entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using
-a fusion of time, full-text, semantic, and graph algorithm approaches.
-
-<br />
-
-<p align="center">
-    <img src="/images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
-</p>
-
-<br />
-
-Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of
-interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or
-nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored
-extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
-while handling changing relationships and maintaining historical context.
-
-With Graphiti, you can build LLM applications such as:
-
-- Assistants that learn from user interactions, fusing personal knowledge with dynamic data from business systems like
-  CRMs and billing platforms.
-- Agents that autonomously execute complex tasks, reasoning with state changes from multiple dynamic sources.
-
-Graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term
-recall and state-based reasoning for both assistants and agents.
+Graphiti is an open-source framework for building dynamic, temporally-aware Knowledge Graphs that evolve over time. Designed for AI-driven applications, Graphiti enables the ingestion of both structured and unstructured data while supporting hybrid search approaches that combine semantic, full-text, and graph-based techniques.
 
 ## Why Graphiti?
 
-We were intrigued by Microsoft’s GraphRAG, which expanded on RAG text chunking by using a graph to better model a
-document corpus and making this representation available via semantic and graph search techniques. However, GraphRAG did
-not address our core problem: It's primarily designed for static documents and doesn't inherently handle temporal
-aspects of data.
+- **Temporal Awareness**: Tracks relationships over time, allowing point-in-time queries.
+- **Hybrid Search**: Combines semantic, BM25 full-text, and graph-based search to enhance retrieval.
+- **Scalable Architecture**: Supports large-scale knowledge extraction and efficient query execution.
+- **AI-Enhanced Reasoning**: Designed to power LLM applications with evolving knowledge states.
+- **Flexible Data Ingestion**: Works with both unstructured text and structured JSON data.
 
-Graphiti is designed from the ground up to handle constantly changing information, hybrid semantic and graph search, and
-scale:
+## Knowledge Graph-Powered Memory
 
-- **Temporal Awareness:** Tracks changes in facts and relationships over time, enabling point-in-time queries. Graph
-  edges include temporal metadata to record relationship lifecycles.
-- **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental
-  entity and relationship extraction.
-- **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a
-  central node e.g. “Kendra”.
-- **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while
-  preserving the chronology of events.
-- **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data.
+Graphiti serves as the core engine behind Zep, a novel memory layer service for AI agents. Unlike traditional retrieval-augmented generation (RAG) approaches that rely on static document retrieval, Graphiti dynamically integrates unstructured conversational data and structured business data while maintaining historical relationships This enables AI agents to:
+
+- Maintain long-term recall and context across sessions.
+- Reason with evolving data and temporal relationships.
+- Improve response accuracy and reduce hallucinations in enterprise AI applications.
+
+Graphiti has been rigorously evaluated against state-of-the-art AI memory systems, outperforming MemGPT in Deep Memory Retrieval (DMR) benchmarks and excelling in more complex evaluations such as LongMemEval[<sup>‡</sup>](https://arxiv.org/abs/2501.13956).
+
+## Real-World Applications
+<p align="center">
+    <img src="/images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
+</p>
+Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of interconnected facts, such as "Kendra loves Adidas shoes." Each fact is a "triplet" represented by two entities, or nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Knowledge Graphs have been explored extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph while handling changing relationships and maintaining historical context.
+
+&nbsp;
 
 <p align="center">
     <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
 </p>
+<br />
 
-## Graphiti and Zep Memory
+With Graphiti, you can build LLM applications such as:
 
-Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
+- **Assistants** that learn from user interactions, fusing personal knowledge with dynamic data from business systems like CRMs and billing platforms.
+- **Agents** that autonomously execute complex tasks, reasoning with state changes from multiple dynamic sources.
 
-We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
+Graphiti supports a wide range of applications in **sales, customer service, health, finance, and more**, enabling long-term recall and state-based reasoning for both assistants and agents.
 
-## Installation
+## Getting Started
 
-Requirements:
+### Requirements:
+
+Ensure you have the following installed:
 
 - Python 3.10 or higher
 - Neo4j 5.21 or higher
-- OpenAI API key (for LLM inference and embedding)
+- OpenAI API key (or Anthropic/Groq API key for alternative LLM providers)
 
-Optional:
 
-- Anthropic or Groq API key (for alternative LLM providers)
+ 💡 **[Neo4j Desktop](https://neo4j.com/download/)** provides a user-friendly interface to manage Neo4j instances and databases.
 
-> [!TIP]
-> The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
-> interface to manage Neo4j instances and databases.
+### Installation:
 
+To install Graphiti, use:
 ```bash
 pip install graphiti-core
 ```
 
-or
+Or with Poetry:
 
 ```bash
 poetry add graphiti-core
 ```
-
-## Quick Start
-
-> [!IMPORTANT]
-> Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
-> Support for Anthropic and Groq LLM inferences is available, too.
-
+### Quick Start:
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType
@@ -113,103 +90,80 @@ from datetime import datetime, timezone
 # Initialize Graphiti
 graphiti = Graphiti("bolt://localhost:7687", "neo4j", "password")
 
-# Initialize the graph database with Graphiti's indices. This only needs to be done once.
+# Build indices (run once)
 graphiti.build_indices_and_constraints()
 
-# Add episodes
+# Add knowledge episodes
 episodes = [
-    "Kamala Harris is the Attorney General of California. She was previously "
-    "the district attorney for San Francisco.",
+    "Kamala Harris is the Attorney General of California. She was previously the district attorney for San Francisco.",
     "As AG, Harris was in office from January 3, 2011 – January 3, 2017",
 ]
 for i, episode in enumerate(episodes):
     await graphiti.add_episode(
-        name=f"Freakonomics Radio {i}",
+        name=f"Episode {i}",
         episode_body=episode,
         source=EpisodeType.text,
-        source_description="podcast",
+        source_description="historical record",
         reference_time=datetime.now(timezone.utc)
     )
 
-# Search the graph
-# Execute a hybrid search combining semantic similarity and BM25 retrieval
-# Results are combined and reranked using Reciprocal Rank Fusion
+# Perform a hybrid search
 results = await graphiti.search('Who was the California Attorney General?')
-[
-    EntityEdge(
-│   uuid = '3133258f738e487383f07b04e15d4ac0',
-│   source_node_uuid = '2a85789b318d4e418050506879906e62',
-│   target_node_uuid = 'baf7781f445945989d6e4f927f881556',
-│   created_at = datetime.datetime(2024, 8, 26, 13, 13, 24, 861097),
-│   name = 'HELD_POSITION',
-# the fact reflects the updated state that Harris is
-# no longer the AG of California
-│   fact = 'Kamala Harris was the Attorney General of California',
-│   fact_embedding = [
-│   │   -0.009955154731869698,
-│       ...
-│   │   0.00784289836883545
-│],
-│   episodes = ['b43e98ad0a904088a76c67985caecc22'],
-│   expired_at = datetime.datetime(2024, 8, 26, 20, 18, 1, 53812),
-# These dates represent the date this edge was true.
-│   valid_at = datetime.datetime(2011, 1, 3, 0, 0, tzinfo= < UTC >),
-│   invalid_at = datetime.datetime(2017, 1, 3, 0, 0, tzinfo= < UTC >)
-)
-]
-
-# Rerank search results based on graph distance
-# Provide a node UUID to prioritize results closer to that node in the graph.
-# Results are weighted by their proximity, with distant edges receiving lower scores.
-await graphiti.search('Who was the California Attorney General?', center_node_uuid)
-
-# Close the connection
-graphiti.close()
 ```
 
-## Graph Service
+## Graphiti and Zep Memory
 
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+Graphiti powers the core of **[Zep's memory layer](https://www.getzep.com)** for LLM-powered Assistants and Agents.
 
-Please see the [server README](./server/README.md) for more information.
-
-## Optional Environment Variables
-
-In addition to the Neo4j and OpenAi-compatible credentials, Graphiti also has a few optional environment variables.
-If you are using one of our supported models, such as Anthropic or Voyage models, the necessary environment variables
-must be set.
-
-`USE_PARALLEL_RUNTIME` is an optional boolean variable that can be set to true if you wish
-to enable Neo4j's parallel runtime feature for several of our search queries.
-Note that this feature is not supported for Neo4j Community edition or for smaller AuraDB instances,
-as such this feature is off by default.
+We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
 
 ## Documentation
 
-- [Guides and API documentation](https://help.getzep.com/graphiti).
-- [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
-- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+Explore our full **[Guides and API Documentation](https://help.getzep.com/graphiti)** for detailed setup instructions and best practices.
 
-## Status and Roadmap
+📖 **[Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)**\
+🚀 **[Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)**
 
-Graphiti is under active development. We aim to maintain API stability while working on:
+## Optional Environment Variables
 
-- [x] Implementing node and edge CRUD operations
-- [ ] Improving performance and scalability
-- [ ] Achieving good performance with different LLM and embedding models
-- [x] Creating a dedicated embedder interface
-- [ ] Supporting custom graph schemas:
-    - Allow developers to provide their own defined node and edge classes when ingesting episodes
-    - Enable more flexible knowledge representation tailored to specific use cases
-- [x] Enhancing retrieval capabilities with more robust and configurable options
-- [ ] Expanding test coverage to ensure reliability and catch edge cases
+In addition to the Neo4j and OpenAI-compatible credentials, Graphiti also has optional environment variables for enhanced functionality:
+
+- `USE_PARALLEL_RUNTIME`: (Boolean) Enables Neo4j's parallel runtime feature for search queries. Note that this is not supported for Neo4j Community Edition or smaller AuraDB instances, so it is off by default.
+- Additional model-related environment variables may be required for using supported models such as Anthropic or Voyage.
+
+## Graph Service
+
+The server directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+
+Please see the [server README](./server/README.md) for more information.
 
 ## Contributing
 
-We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
-answering questions in the Graphiti Discord channel. For detailed guidelines on code contributions, please refer
-to [CONTRIBUTING](CONTRIBUTING.md).
+We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or answering questions in the Graphiti Discord channel. Check out our **[Contributing Guide](CONTRIBUTING.md)** for detailed instructions.
 
-## Support
+## Community & Support
 
-Join the [Zep Discord server](https://discord.com/invite/W8Kw6bsgXQ) and make your way to the **#Graphiti** channel!
+💬 **[Join us on Discord](https://discord.com/invite/W8Kw6bsgXQ)**
+
+If you find Graphiti useful, consider giving us a **⭐ on GitHub**. It helps us grow the community and improve the project!
+
+## License
+
+Graphiti is licensed under the [Apache 2.0 License](LICENSE).
+
+## Roadmap
+
+Graphiti is actively being developed. Upcoming features include:
+
+- Enhanced scalability and performance optimizations
+- **Supporting Custom Graph Schemas**:
+  - Allow developers to define their own node and edge classes when ingesting episodes.
+  - Enable more flexible knowledge representation tailored to specific use cases, ensuring adaptability to different domain-specific requirements.
+- Expanded test coverage
+
+## Learn More
+
+For an in-depth look at Graphiti's architecture and performance benchmarks, check out our research paper:
+
+📄 **[Using Knowledge Graphs to Power LLM-Agent Memory](https://arxiv.org/abs/2501.13956)**
+
