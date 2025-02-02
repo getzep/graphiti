@@ -54,7 +54,7 @@ Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](
 We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
 
 <p align="center">
-    <img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px">
+    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
 </p>
 
 ## Why Graphiti?
