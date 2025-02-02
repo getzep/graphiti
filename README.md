@@ -1,6 +1,6 @@
 <div align="center">
 
-<img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
+# Graphiti
 
 ## Temporal Knowledge Graphs for Agentic Applications
 
@@ -23,7 +23,7 @@ a fusion of time, full-text, semantic, and graph algorithm approaches.
 <br />
 
 <p align="center">
-    <img src="/images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
+    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
 </p>
 
 <br />
@@ -42,6 +42,20 @@ With Graphiti, you can build LLM applications such as:
 
 Graphiti supports a wide range of applications in sales, customer service, health, finance, and more, enabling long-term
 recall and state-based reasoning for both assistants and agents.
+
+## Graphiti and Zep Memory
+
+Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
+
+Using Graphiti, we've demonstrated Zep is the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
+
+Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
+
+We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
+
+<p align="center">
+    <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
+</p>
 
 ## Why Graphiti?
 
@@ -66,12 +80,6 @@ scale:
 <p align="center">
     <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
 </p>
-
-## Graphiti and Zep Memory
-
-Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
-
-We're excited to open-source Graphiti, believing its potential reaches far beyond memory applications.
 
 ## Installation
 
@@ -103,7 +111,7 @@ poetry add graphiti-core
 
 > [!IMPORTANT]
 > Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
-> Support for Anthropic and Groq LLM inferences is available, too.
+> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI compatible APIs.
 
 ```python
 from graphiti_core import Graphiti
@@ -194,13 +202,9 @@ as such this feature is off by default.
 
 Graphiti is under active development. We aim to maintain API stability while working on:
 
-- [x] Implementing node and edge CRUD operations
-- [ ] Improving performance and scalability
-- [ ] Achieving good performance with different LLM and embedding models
-- [x] Creating a dedicated embedder interface
 - [ ] Supporting custom graph schemas:
-    - Allow developers to provide their own defined node and edge classes when ingesting episodes
-    - Enable more flexible knowledge representation tailored to specific use cases
+  - Allow developers to provide their own defined node and edge classes when ingesting episodes
+  - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
