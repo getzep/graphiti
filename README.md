@@ -47,7 +47,7 @@ recall and state-based reasoning for both assistants and agents.
 
 Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
 
-Using Graphiti, we've demonstrated Zep is the State of [the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
+Using Graphiti, we've demonstrated Zep is the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
 Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
 
