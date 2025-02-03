@@ -30,11 +30,19 @@ class MissedEntities(BaseModel):
     missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
 
 
+class EntityClassification(BaseModel):
+    entity_classification: dict[str, str | None] = Field(
+        ...,
+        description='Dictionary of entity classifications. Key is the entity name and value is the entity type',
+    )
+
+
 class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion
     extract_text: PromptVersion
     reflexion: PromptVersion
+    classify_nodes: PromptVersion
 
 
 class Versions(TypedDict):
@@ -42,6 +50,7 @@ class Versions(TypedDict):
     extract_json: PromptFunction
     extract_text: PromptFunction
     reflexion: PromptFunction
+    classify_nodes: PromptFunction
 
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
@@ -109,7 +118,7 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
 
 {context['custom_prompt']}
 
-Given the following text, extract entity nodes from the TEXT that are explicitly or implicitly mentioned:
+Given the above text, extract entity nodes from the TEXT that are explicitly or implicitly mentioned:
 
 Guidelines:
 1. Extract significant entities, concepts, or actors mentioned in the conversation.
@@ -147,9 +156,41 @@ extracted.
     ]
 
 
+def classify_nodes(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are an AI assistant that classifies entity nodes given the context from which they were extracted"""
+
+    user_prompt = f"""
+    <PREVIOUS MESSAGES>
+    {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+    </PREVIOUS MESSAGES>
+    <CURRENT MESSAGE>
+    {context["episode_content"]}
+    </CURRENT MESSAGE>
+    
+    <EXTRACTED ENTITIES>
+    {context['extracted_entities']}
+    </EXTRACTED ENTITIES>
+    
+    <ENTITY TYPES>
+    {context['entity_types']}
+    </ENTITY TYPES>
+    
+    Given the above conversation, extracted entities, and provided entity types, classify the extracted entities.
+    
+    Guidelines:
+    1. Each entity must have exactly one type
+    2. If none of the provided entity types accurately classify an extracted node, the type should be set to None
+"""
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
 versions: Versions = {
     'extract_message': extract_message,
     'extract_json': extract_json,
     'extract_text': extract_text,
     'reflexion': reflexion,
+    'classify_nodes': classify_nodes,
 }
