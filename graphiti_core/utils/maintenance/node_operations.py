@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from time import time
 
+import pydantic
 from pydantic import BaseModel
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
@@ -267,6 +268,7 @@ async def resolve_extracted_node(
     existing_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityNode, dict[str, str]]:
     start = time()
 
@@ -297,13 +299,22 @@ async def resolve_extracted_node(
         else [],
     }
 
+    entity_type_classes = tuple(
+        filter(
+            lambda x: x is not None,
+            [entity_types.get(entity_type) for entity_type in extracted_node.labels],
+        )
+    )
+
     llm_response, node_summary_response = await semaphore_gather(
         llm_client.generate_response(
             prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
         ),
         llm_client.generate_response(
             prompt_library.summarize_nodes.summarize_context(summary_context),
-            response_model=Summary,
+            response_model=pydantic.create_model(
+                'EntityProperties', __base__=entity_type_classes + (Summary,)
+            ),
         ),
     )
 

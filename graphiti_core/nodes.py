@@ -269,16 +269,20 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def save(self, driver: AsyncDriver):
+        entity_data: dict[str, Any] = {
+            'uuid': self.uuid,
+            'name': self.name,
+            'group_id': self.group_id,
+            'summary': self.summary,
+            'created_at': self.created_at,
+        }
+
+        entity_data.update(self.properties)
+
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
-            uuid=self.uuid,
             labels=self.labels + ['Entity'],
-            name=self.name,
-            group_id=self.group_id,
-            summary=self.summary,
-            name_embedding=self.name_embedding,
-            properties=self.properties,
-            created_at=self.created_at,
+            entity_data=entity_data,
             database_=DEFAULT_DATABASE,
         )
 
