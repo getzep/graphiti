@@ -17,12 +17,14 @@ limitations under the License.
 import logging
 from time import time
 
+from pydantic import BaseModel
+
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
-from graphiti_core.prompts.extract_nodes import ExtractedNodes, MissedEntities
+from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -114,6 +116,7 @@ async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
     extracted_node_names: list[str] = []
@@ -144,15 +147,34 @@ async def extract_nodes(
             for entity in missing_entities:
                 custom_prompt += f'\n{entity},'
 
+    node_classification_context = {
+        'episode_content': episode.content,
+        'previous_episodes': [ep.content for ep in previous_episodes],
+        'extracted_entities': extracted_node_names,
+        'entity_types': entity_types.keys(),
+    }
+
+    node_classifications: dict[str, str | None] = {}
+
+    if entity_types is not None:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_nodes.classify_nodes(node_classification_context),
+            response_model=EntityClassification,
+        )
+        node_classifications.update(llm_response.get('entity_classification', {}))
+
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
     new_nodes = []
     for name in extracted_node_names:
+        entity_type = node_classifications.get(name, None)
+        labels = ['Entity'] if entity_type is None else ['Entity', entity_type]
+
         new_node = EntityNode(
             name=name,
             group_id=episode.group_id,
-            labels=['Entity'],
+            labels=labels,
             summary='',
             created_at=utc_now(),
         )

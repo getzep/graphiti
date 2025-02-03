@@ -109,8 +109,11 @@ async def add_nodes_and_edges_bulk_tx(
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
+    nodes = [dict(entity) for entity in entity_nodes]
+    for node in nodes:
+        node['labels'] = list(set(node['labels'] + ['Entity']))
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=[dict(entity) for entity in entity_nodes])
+    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
     await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[dict(edge) for edge in episodic_edges])
     await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[dict(edge) for edge in entity_edges])
 

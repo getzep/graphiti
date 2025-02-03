@@ -255,6 +255,9 @@ class EpisodicNode(Node):
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
+    properties: dict[str, Any] | None = Field(
+        default=None, description='Additional properties of the node. Dependent on node labels'
+    )
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
@@ -269,10 +272,12 @@ class EntityNode(Node):
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
             uuid=self.uuid,
+            labels=self.labels + ['Entity'],
             name=self.name,
             group_id=self.group_id,
             summary=self.summary,
             name_embedding=self.name_embedding,
+            properties=self.properties,
             created_at=self.created_at,
             database_=DEFAULT_DATABASE,
         )
@@ -292,7 +297,8 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
@@ -317,7 +323,8 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
@@ -351,7 +358,8 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
         ORDER BY n.uuid DESC
         """
             + limit_query,
@@ -503,7 +511,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        labels=['Entity'],
+        labels=record['labels'],
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
     )
