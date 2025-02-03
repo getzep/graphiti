@@ -24,7 +24,8 @@ from .models import Message, PromptFunction, PromptVersion
 
 class Summary(BaseModel):
     summary: str = Field(
-        ..., description='Summary containing the important information from both summaries'
+        ...,
+        description='Summary containing the important information about the entity. Under 500 words',
     )
 
 
@@ -54,8 +55,6 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Synthesize the information from the following two summaries into a single succinct summary.
-        
-        Summaries must be under 500 words.
 
         Summaries:
         {json.dumps(context['node_summaries'], indent=2)}
@@ -68,7 +67,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that combines summaries with new conversation context.',
+            content='You are a helpful assistant that extracts entity properties from the provided text.',
         ),
         Message(
             role='user',
@@ -81,13 +80,17 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         
         Given the above MESSAGES and the following ENTITY name, create a summary for the ENTITY. Your summary must only use
         information from the provided MESSAGES. Your summary should also only contain information relevant to the
-        provided ENTITY.
+        provided ENTITY. Summaries must be under 500 words.
         
-        Summaries must be under 500 words.
+        In addition, extract any values for the provided entity properties based on their descriptions.
         
         <ENTITY>
         {context['node_name']}
         </ENTITY>
+        
+        <PROPERTIES>
+        {json.dumps(context['properties'], indent=2)}
+        </PROPERTIES>
         """,
         ),
     ]
