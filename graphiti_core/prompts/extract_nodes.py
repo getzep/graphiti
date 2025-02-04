@@ -31,7 +31,7 @@ class MissedEntities(BaseModel):
 
 
 class EntityClassification(BaseModel):
-    entity_classification: dict[str, str | None] = Field(
+    entity_classification: str = Field(
         ...,
         description='Dictionary of entity classifications. Key is the entity name and value is the entity type',
     )
