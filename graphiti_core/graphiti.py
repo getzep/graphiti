@@ -365,6 +365,7 @@ class Graphiti:
                     existing_nodes_lists,
                     episode,
                     previous_episodes,
+                    entity_types,
                 ),
                 extract_edges(
                     self.llm_client, episode, extracted_nodes, previous_episodes, group_id
