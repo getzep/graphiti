@@ -747,3 +747,15 @@ class Graphiti:
         await add_nodes_and_edges_bulk(
             self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges
         )
+
+    async def remove_episode(self, episode_uuid: str):
+        # find the episode to be deleted
+        episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
+
+        # find the edges mentioned by the episode
+        edges = await EntityEdge.get_by_uuids(self.driver, episode.edge_uuids)
+
+        edges_to_delete: list[EntityEdge] = []
+        for edge in edges:
+            if edge.episodes[0] == episode.uuid:
+                edges_to_delete.append(edge)
