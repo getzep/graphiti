@@ -170,7 +170,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
@@ -197,7 +198,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
@@ -233,7 +235,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         ORDER BY e.uuid DESC
         """
             + limit_query,
@@ -490,6 +493,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         source=EpisodeType.from_str(record['source']),
         name=record['name'],
         source_description=record['source_description'],
+        entity_edges=record['entity_edges'],
     )
 
 
