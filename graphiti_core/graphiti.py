@@ -17,11 +17,11 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
-from typing import LiteralString
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
+from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
@@ -764,7 +764,7 @@ class Graphiti:
 
         # Find nodes mentioned by the episode
         nodes = await get_mentioned_nodes(self.driver, episode)
-        # We should delete all node that are only mentioned in the deleted episode
+        # We should delete all nodes that are only mentioned in the deleted episode
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
             query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
