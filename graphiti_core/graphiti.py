@@ -754,7 +754,7 @@ class Graphiti:
         episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
 
         # Find edges mentioned by the episode
-        edges = await EntityEdge.get_by_uuids(self.driver, episode.edge_uuids)
+        edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
 
         # We should only delete edges created by the episode
         edges_to_delete: list[EntityEdge] = []
@@ -763,7 +763,7 @@ class Graphiti:
                 edges_to_delete.append(edge)
 
         # Find nodes mentioned by the episode
-        nodes = await get_mentioned_nodes(self.driver, episode)
+        nodes = await get_mentioned_nodes(self.driver, [episode])
         # We should delete all nodes that are only mentioned in the deleted episode
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
