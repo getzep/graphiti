@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import LiteralString
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
@@ -749,13 +750,32 @@ class Graphiti:
         )
 
     async def remove_episode(self, episode_uuid: str):
-        # find the episode to be deleted
+        # Find the episode to be deleted
         episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
 
-        # find the edges mentioned by the episode
+        # Find edges mentioned by the episode
         edges = await EntityEdge.get_by_uuids(self.driver, episode.edge_uuids)
 
+        # We should only delete edges created by the episode
         edges_to_delete: list[EntityEdge] = []
         for edge in edges:
             if edge.episodes[0] == episode.uuid:
                 edges_to_delete.append(edge)
+
+        # Find nodes mentioned by the episode
+        nodes = await get_mentioned_nodes(self.driver, episode)
+        # We should delete all node that are only mentioned in the deleted episode
+        nodes_to_delete: list[EntityNode] = []
+        for node in nodes:
+            query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
+            records, _, _ = await self.driver.execute_query(
+                query, uuid=node.uuid, database_=DEFAULT_DATABASE, routing_='r'
+            )
+
+            for record in records:
+                if record['episode_count'] == 1:
+                    nodes_to_delete.append(node)
+
+        await semaphore_gather(*[node.delete(self.driver) for node in nodes_to_delete])
+        await semaphore_gather(*[edge.delete(self.driver) for edge in edges_to_delete])
+        await episode.delete(self.driver)
