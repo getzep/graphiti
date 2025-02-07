@@ -262,6 +262,7 @@ class Graphiti:
         group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
+        entity_types: dict[str, BaseModel] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -336,7 +337,9 @@ class Graphiti:
 
             # Extract entities as nodes
 
-            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
+            extracted_nodes = await extract_nodes(
+                self.llm_client, episode, previous_episodes, entity_types
+            )
             logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
@@ -362,6 +365,7 @@ class Graphiti:
                     existing_nodes_lists,
                     episode,
                     previous_episodes,
+                    entity_types,
                 ),
                 extract_edges(
                     self.llm_client, episode, extracted_nodes, previous_episodes, group_id
