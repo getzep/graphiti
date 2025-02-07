@@ -75,6 +75,7 @@ Guidelines:
 4. DO NOT create nodes for temporal information like dates, times or years (these will be added to edges later).
 5. Be as explicit as possible in your node names, using full names.
 6. DO NOT extract entities mentioned only in PREVIOUS MESSAGES, those messages are only to provide context.
+7. Extract preferences as their own nodes
 """
     return [
         Message(role='system', content=sys_prompt),

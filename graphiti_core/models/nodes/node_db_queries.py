@@ -39,7 +39,7 @@ ENTITY_NODE_SAVE = """
 ENTITY_NODE_SAVE_BULK = """
     UNWIND $nodes AS node
     MERGE (n:Entity {uuid: node.uuid})
-    SET n:$(n.labels)
+    SET n:$(node.labels)
     SET n = node
     WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)
     RETURN n.uuid AS uuid

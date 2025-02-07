@@ -67,7 +67,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts entity properties from the provided text.',
+            content='You are a helpful assistant that extracts entity attributes from the provided text.',
         ),
         Message(
             role='user',
@@ -82,15 +82,15 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         information from the provided MESSAGES. Your summary should also only contain information relevant to the
         provided ENTITY. Summaries must be under 500 words.
         
-        In addition, extract any values for the provided entity properties based on their descriptions.
+        In addition, extract any values for the provided entity attributes based on their descriptions.
         
         <ENTITY>
         {context['node_name']}
         </ENTITY>
         
-        <PROPERTIES>
-        {json.dumps(context['properties'], indent=2)}
-        </PROPERTIES>
+        <ATTRIBUTES>
+        {json.dumps(context['attributes'], indent=2)}
+        </ATTRIBUTES>
         """,
         ),
     ]
