@@ -308,12 +308,18 @@ async def resolve_extracted_node(
         'attributes': [],
     }
 
-    entity_type_classes = tuple(
-        filter(
-            lambda x: x is not None,
-            [entity_types.get(entity_type) for entity_type in extracted_node.labels],
+    entity_type_classes: tuple[BaseModel] = tuple()
+    if entity_types is not None:
+        entity_type_classes: tuple[BaseModel] = tuple(
+            filter(
+                lambda x: x is not None,
+                [
+                    entity_types.get(entity_type, BaseModel())
+                    for entity_type in extracted_node.labels
+                ],
+            )
         )
-    )
+
     for entity_type in entity_type_classes:
         for field_name in entity_type.__fields__.keys():
             summary_context['attributes'].append(field_name)
