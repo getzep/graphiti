@@ -153,7 +153,7 @@ async def extract_nodes(
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': extracted_node_names,
-        'entity_types': entity_types.keys(),
+        'entity_types': entity_types.keys() if entity_types is not None else [],
     }
 
     node_classifications: dict[str, str | None] = {}
@@ -171,7 +171,7 @@ async def extract_nodes(
     # Convert the extracted data into EntityNode objects
     new_nodes = []
     for name in extracted_node_names:
-        entity_type = node_classifications.get(name, None)
+        entity_type = node_classifications.get(name)
         labels = ['Entity'] if entity_type is None else ['Entity', entity_type]
 
         new_node = EntityNode(
@@ -243,7 +243,7 @@ async def resolve_extracted_nodes(
     existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, str] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []

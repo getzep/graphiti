@@ -255,8 +255,8 @@ class EpisodicNode(Node):
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
-    attributes: dict[str, Any] | None = Field(
-        default=None, description='Additional attributes of the node. Dependent on node labels'
+    attributes: dict[str, Any] = Field(
+        default={}, description='Additional attributes of the node. Dependent on node labels'
     )
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
@@ -277,7 +277,7 @@ class EntityNode(Node):
             'created_at': self.created_at,
         }
 
-        entity_data.update(self.attributes)
+        entity_data.update(self.attributes or {})
 
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
