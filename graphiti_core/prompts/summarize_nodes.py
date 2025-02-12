@@ -80,7 +80,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         </MESSAGES>
         
         Given the above MESSAGES and the following ENTITY name and ENTITY CONTEXT, create a summary for the ENTITY. Your summary must only use
-        information from the provided MESSAGES. Your summary should also only contain information relevant to the
+        information from the provided MESSAGES and from the ENTITY CONTEXT. Your summary should also only contain information relevant to the
         provided ENTITY.
         
         Summaries must be under 500 words.
