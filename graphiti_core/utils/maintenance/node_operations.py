@@ -268,6 +268,7 @@ async def resolve_extracted_node(
 
     summary_context = {
         'node_name': extracted_node.name,
+        'node_summary': extracted_node.summary,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None

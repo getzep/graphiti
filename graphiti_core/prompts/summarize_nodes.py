@@ -79,7 +79,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         {json.dumps(context['episode_content'], indent=2)}
         </MESSAGES>
         
-        Given the above MESSAGES and the following ENTITY name, create a summary for the ENTITY. Your summary must only use
+        Given the above MESSAGES and the following ENTITY name and ENTITY CONTEXT, create a summary for the ENTITY. Your summary must only use
         information from the provided MESSAGES. Your summary should also only contain information relevant to the
         provided ENTITY.
         
@@ -88,6 +88,9 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         <ENTITY>
         {context['node_name']}
         </ENTITY>
+        <ENTITY CONTEXT>
+        {context['node_summary']}
+        </ENTITY CONTEXT>
         """,
         ),
     ]

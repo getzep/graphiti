@@ -724,7 +724,7 @@ class Graphiti:
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
 
-        resolved_nodes, _ = await resolve_extracted_nodes(
+        resolved_nodes, uuid_map = await resolve_extracted_nodes(
             self.llm_client,
             [source_node, target_node],
             [
