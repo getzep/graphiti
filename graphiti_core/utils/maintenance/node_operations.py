@@ -308,7 +308,7 @@ async def resolve_extracted_node(
         'attributes': [],
     }
 
-    entity_type_classes: tuple[BaseModel] = tuple()
+    entity_type_classes: tuple[BaseModel, ...] = tuple()
     if entity_types is not None:
         entity_type_classes = entity_type_classes + tuple(
             filter(
