@@ -724,7 +724,7 @@ class Graphiti:
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
 
-        resolved_nodes, _ = await resolve_extracted_nodes(
+        resolved_nodes, uuid_map = await resolve_extracted_nodes(
             self.llm_client,
             [source_node, target_node],
             [
@@ -733,14 +733,16 @@ class Graphiti:
             ],
         )
 
+        updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
+
         related_edges = await get_relevant_edges(
             self.driver,
-            [edge],
+            [updated_edge],
             source_node_uuid=resolved_nodes[0].uuid,
             target_node_uuid=resolved_nodes[1].uuid,
         )
 
-        resolved_edge = await dedupe_extracted_edge(self.llm_client, edge, related_edges)
+        resolved_edge = await dedupe_extracted_edge(self.llm_client, updated_edge, related_edges)
 
         contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges)
         invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
