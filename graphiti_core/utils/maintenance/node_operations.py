@@ -14,15 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import ast
 import logging
 from time import time
+
+import pydantic
+from pydantic import BaseModel
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
-from graphiti_core.prompts.extract_nodes import ExtractedNodes, MissedEntities
+from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -114,6 +118,7 @@ async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
     extracted_node_names: list[str] = []
@@ -144,15 +149,35 @@ async def extract_nodes(
             for entity in missing_entities:
                 custom_prompt += f'\n{entity},'
 
+    node_classification_context = {
+        'episode_content': episode.content,
+        'previous_episodes': [ep.content for ep in previous_episodes],
+        'extracted_entities': extracted_node_names,
+        'entity_types': entity_types.keys() if entity_types is not None else [],
+    }
+
+    node_classifications: dict[str, str | None] = {}
+
+    if entity_types is not None:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_nodes.classify_nodes(node_classification_context),
+            response_model=EntityClassification,
+        )
+        response_string = llm_response.get('entity_classification', '{}')
+        node_classifications.update(ast.literal_eval(response_string))
+
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
     new_nodes = []
     for name in extracted_node_names:
+        entity_type = node_classifications.get(name)
+        labels = ['Entity'] if entity_type is None else ['Entity', entity_type]
+
         new_node = EntityNode(
             name=name,
             group_id=episode.group_id,
-            labels=['Entity'],
+            labels=labels,
             summary='',
             created_at=utc_now(),
         )
@@ -218,6 +243,7 @@ async def resolve_extracted_nodes(
     existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
@@ -225,7 +251,12 @@ async def resolve_extracted_nodes(
         await semaphore_gather(
             *[
                 resolve_extracted_node(
-                    llm_client, extracted_node, existing_nodes, episode, previous_episodes
+                    llm_client,
+                    extracted_node,
+                    existing_nodes,
+                    episode,
+                    previous_episodes,
+                    entity_types,
                 )
                 for extracted_node, existing_nodes in zip(extracted_nodes, existing_nodes_lists)
             ]
@@ -245,6 +276,7 @@ async def resolve_extracted_node(
     existing_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityNode, dict[str, str]]:
     start = time()
 
@@ -273,19 +305,39 @@ async def resolve_extracted_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
+        'attributes': [],
     }
 
-    llm_response, node_summary_response = await semaphore_gather(
+    entity_type_classes: tuple[BaseModel, ...] = tuple()
+    if entity_types is not None:  # type: ignore
+        entity_type_classes = entity_type_classes + tuple(
+            filter(
+                lambda x: x is not None,  # type: ignore
+                [entity_types.get(entity_type) for entity_type in extracted_node.labels],  # type: ignore
+            )
+        )
+
+    for entity_type in entity_type_classes:
+        for field_name in entity_type.model_fields:
+            summary_context.get('attributes', []).append(field_name)  # type: ignore
+
+    entity_attributes_model = pydantic.create_model(  # type: ignore
+        'EntityAttributes',
+        __base__=entity_type_classes + (Summary,),  # type: ignore
+    )
+
+    llm_response, node_attributes_response = await semaphore_gather(
         llm_client.generate_response(
             prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
         ),
         llm_client.generate_response(
             prompt_library.summarize_nodes.summarize_context(summary_context),
-            response_model=Summary,
+            response_model=entity_attributes_model,
         ),
     )
 
-    extracted_node.summary = node_summary_response.get('summary', '')
+    extracted_node.summary = node_attributes_response.get('summary', '')
+    extracted_node.attributes.update(node_attributes_response)
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
     uuid: str | None = llm_response.get('uuid', None)

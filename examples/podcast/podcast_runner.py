@@ -20,6 +20,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
@@ -53,6 +54,12 @@ def setup_logging():
     return logger
 
 
+class Person(BaseModel):
+    first_name: str | None = Field(..., description='First name')
+    last_name: str | None = Field(..., description='Last name')
+    occupation: str | None = Field(..., description="The person's work occupation")
+
+
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
@@ -67,6 +74,7 @@ async def main():
             reference_time=message.actual_timestamp,
             source_description='Podcast Transcript',
             group_id='podcast',
+            entity_types={'Person': Person},
         )
 
 
