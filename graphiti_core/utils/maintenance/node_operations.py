@@ -309,11 +309,12 @@ async def resolve_extracted_node(
     }
 
     entity_type_classes: tuple[BaseModel, ...] = tuple()
+    # type: ignore
     if entity_types is not None:
         entity_type_classes = entity_type_classes + tuple(
             filter(
                 lambda x: x is not None,
-                [entity_types.get(entity_type, BaseModel) for entity_type in extracted_node.labels],
+                [entity_types.get(entity_type) for entity_type in extracted_node.labels],
             )
         )
 
@@ -321,8 +322,8 @@ async def resolve_extracted_node(
         for field_name in entity_type.model_fields:
             summary_context.get('attributes', []).append(field_name)
 
-    # type: ignore[arg-type]
-    entity_attributes_model: BaseModel = pydantic.create_model(
+    # type: ignore
+    entity_attributes_model = pydantic.create_model(
         'EntityAttributes', __base__=entity_type_classes + (Summary,)
     )
 

@@ -23,6 +23,7 @@ from math import ceil
 from neo4j import AsyncDriver, AsyncManagedTransaction
 from numpy import dot, sqrt
 from pydantic import BaseModel
+from typing_extensions import Any
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.helpers import semaphore_gather
@@ -109,9 +110,20 @@ async def add_nodes_and_edges_bulk_tx(
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
-    nodes = [dict(entity) for entity in entity_nodes]
-    for node in nodes:
-        node['labels'] = list(set(node['labels'] + ['Entity']))
+    nodes: list[dict[str, Any]] = []
+    for node in entity_nodes:
+        entity_data: dict[str, Any] = {
+            'uuid': node.uuid,
+            'name': node.name,
+            'name_embedding': node.name_embedding,
+            'group_id': node.group_id,
+            'summary': node.summary,
+            'created_at': node.created_at,
+        }
+
+        entity_data.update(node.attributes or {})
+        entity_data['labels'] = list(set(node.labels + ['Entity']))
+        nodes.append(entity_data)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
