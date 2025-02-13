@@ -318,10 +318,11 @@ async def resolve_extracted_node(
         )
 
     for entity_type in entity_type_classes:
-        for field_name in entity_type.model_fields.keys():
+        for field_name in entity_type.model_fields:
             summary_context.get('attributes', []).append(field_name)
 
-    entity_attributes_model = pydantic.create_model(
+    # type: ignore[arg-type]
+    entity_attributes_model: BaseModel = pydantic.create_model(
         'EntityAttributes', __base__=entity_type_classes + (Summary,)
     )
 
