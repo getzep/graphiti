@@ -39,13 +39,32 @@ class DateFilter(BaseModel):
 
 
 class SearchFilters(BaseModel):
+    node_labels: list[str] | None = Field(
+        default=None, description='List of node labels to filter on'
+    )
     valid_at: list[list[DateFilter]] | None = Field(default=None)
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
 
 
-def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralString, dict[str, Any]]:
+def node_search_filter_query_constructor(
+    filters: SearchFilters,
+) -> tuple[LiteralString, dict[str, Any]]:
+    filter_query: LiteralString = ''
+    filter_params: dict[str, Any] = {}
+
+    if filters.node_labels is not None:
+        node_labels = ':'.join(filters.node_labels)
+        node_label_filter = 'AND n:' + node_labels
+        filter_query += node_label_filter
+
+    return filter_query, filter_params
+
+
+def edge_search_filter_query_constructor(
+    filters: SearchFilters,
+) -> tuple[LiteralString, dict[str, Any]]:
     filter_query: LiteralString = ''
     filter_params: dict[str, Any] = {}
 
