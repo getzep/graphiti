@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://www.getzep.com/">
+    <img src="https://github.com/user-attachments/assets/119c5682-9654-4257-8922-56b7cb8ffd73" width="150" alt="Zep Logo">
+  </a>
+</p>
+
 <div align="center">
 
 <img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
@@ -5,6 +11,8 @@
 ## Temporal Knowledge Graphs for Agentic Applications
 
 <br />
+
+Build AI agents that continually learn. Power personalized experiences.</h2>
 
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
 [![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
