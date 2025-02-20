@@ -21,6 +21,7 @@ from time import time
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
+from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
@@ -261,6 +262,7 @@ class Graphiti:
         group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
+        entity_types: dict[str, BaseModel] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -335,7 +337,9 @@ class Graphiti:
 
             # Extract entities as nodes
 
-            extracted_nodes = await extract_nodes(self.llm_client, episode, previous_episodes)
+            extracted_nodes = await extract_nodes(
+                self.llm_client, episode, previous_episodes, entity_types
+            )
             logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
 
             # Calculate Embeddings
@@ -361,6 +365,7 @@ class Graphiti:
                     existing_nodes_lists,
                     episode,
                     previous_episodes,
+                    entity_types,
                 ),
                 extract_edges(
                     self.llm_client, episode, extracted_nodes, previous_episodes, group_id
@@ -723,7 +728,7 @@ class Graphiti:
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
 
-        resolved_nodes, _ = await resolve_extracted_nodes(
+        resolved_nodes, uuid_map = await resolve_extracted_nodes(
             self.llm_client,
             [source_node, target_node],
             [
@@ -732,14 +737,16 @@ class Graphiti:
             ],
         )
 
+        updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
+
         related_edges = await get_relevant_edges(
             self.driver,
-            [edge],
+            [updated_edge],
             source_node_uuid=resolved_nodes[0].uuid,
             target_node_uuid=resolved_nodes[1].uuid,
         )
 
-        resolved_edge = await dedupe_extracted_edge(self.llm_client, edge, related_edges)
+        resolved_edge = await dedupe_extracted_edge(self.llm_client, updated_edge, related_edges)
 
         contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges)
         invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
@@ -747,3 +754,34 @@ class Graphiti:
         await add_nodes_and_edges_bulk(
             self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges
         )
+
+    async def remove_episode(self, episode_uuid: str):
+        # Find the episode to be deleted
+        episode = await EpisodicNode.get_by_uuid(self.driver, episode_uuid)
+
+        # Find edges mentioned by the episode
+        edges = await EntityEdge.get_by_uuids(self.driver, episode.entity_edges)
+
+        # We should only delete edges created by the episode
+        edges_to_delete: list[EntityEdge] = []
+        for edge in edges:
+            if edge.episodes[0] == episode.uuid:
+                edges_to_delete.append(edge)
+
+        # Find nodes mentioned by the episode
+        nodes = await get_mentioned_nodes(self.driver, [episode])
+        # We should delete all nodes that are only mentioned in the deleted episode
+        nodes_to_delete: list[EntityNode] = []
+        for node in nodes:
+            query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
+            records, _, _ = await self.driver.execute_query(
+                query, uuid=node.uuid, database_=DEFAULT_DATABASE, routing_='r'
+            )
+
+            for record in records:
+                if record['episode_count'] == 1:
+                    nodes_to_delete.append(node)
+
+        await semaphore_gather(*[node.delete(self.driver) for node in nodes_to_delete])
+        await semaphore_gather(*[edge.delete(self.driver) for edge in edges_to_delete])
+        await episode.delete(self.driver)

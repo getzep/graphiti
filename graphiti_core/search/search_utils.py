@@ -97,7 +97,9 @@ async def get_mentioned_nodes(
             n.name AS name,
             n.name_embedding AS name_embedding,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
         """,
         uuids=episode_uuids,
         database_=DEFAULT_DATABASE,
@@ -223,8 +225,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                    """
+                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                    """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -341,7 +343,9 @@ async def node_fulltext_search(
             n.name AS name, 
             n.name_embedding AS name_embedding,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
         ORDER BY score DESC
         LIMIT $limit
         """,
@@ -390,7 +394,9 @@ async def node_similarity_search(
                 n.name AS name, 
                 n.name_embedding AS name_embedding,
                 n.created_at AS created_at, 
-                n.summary AS summary
+                n.summary AS summary,
+                labels(n) AS labels,
+                properties(n) AS attributes
             ORDER BY score DESC
             LIMIT $limit
             """,
@@ -427,7 +433,9 @@ async def node_bfs_search(
                 n.name AS name, 
                 n.name_embedding AS name_embedding,
                 n.created_at AS created_at, 
-                n.summary AS summary
+                n.summary AS summary,
+                labels(n) AS labels,
+                properties(n) AS attributes
             LIMIT $limit
             """,
         bfs_origin_node_uuids=bfs_origin_node_uuids,

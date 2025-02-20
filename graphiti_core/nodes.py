@@ -170,7 +170,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
@@ -197,7 +198,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
@@ -233,7 +235,8 @@ class EpisodicNode(Node):
             e.name AS name,
             e.group_id AS group_id,
             e.source_description AS source_description,
-            e.source AS source
+            e.source AS source,
+            e.entity_edges AS entity_edges
         ORDER BY e.uuid DESC
         """
             + limit_query,
@@ -252,6 +255,9 @@ class EpisodicNode(Node):
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
+    attributes: dict[str, Any] = Field(
+        default={}, description='Additional attributes of the node. Dependent on node labels'
+    )
 
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
@@ -263,14 +269,21 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def save(self, driver: AsyncDriver):
+        entity_data: dict[str, Any] = {
+            'uuid': self.uuid,
+            'name': self.name,
+            'name_embedding': self.name_embedding,
+            'group_id': self.group_id,
+            'summary': self.summary,
+            'created_at': self.created_at,
+        }
+
+        entity_data.update(self.attributes or {})
+
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            summary=self.summary,
-            name_embedding=self.name_embedding,
-            created_at=self.created_at,
+            labels=self.labels + ['Entity'],
+            entity_data=entity_data,
             database_=DEFAULT_DATABASE,
         )
 
@@ -289,7 +302,9 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
@@ -314,7 +329,9 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
@@ -348,7 +365,9 @@ class EntityNode(Node):
             n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
         ORDER BY n.uuid DESC
         """
             + limit_query,
@@ -490,6 +509,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         source=EpisodeType.from_str(record['source']),
         name=record['name'],
         source_description=record['source_description'],
+        entity_edges=record['entity_edges'],
     )
 
 
@@ -499,9 +519,10 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        labels=['Entity'],
+        labels=record['labels'],
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
+        attributes=record['attributes'],
     )
 
 
