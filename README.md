@@ -1,6 +1,6 @@
 <div align="center">
 
-# Graphiti
+# Graphiti 
 
 ## Temporal Knowledge Graphs for Agentic Applications
 
