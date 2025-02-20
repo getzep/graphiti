@@ -245,11 +245,13 @@ async def node_search(
     search_results: list[list[EntityNode]] = list(
         await semaphore_gather(
             *[
-                node_fulltext_search(driver, query, group_ids, 2 * limit),
+                node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
                 node_similarity_search(
-                    driver, query_vector, group_ids, 2 * limit, config.sim_min_score
+                    driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
                 ),
-                node_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth, 2 * limit),
+                node_bfs_search(
+                    driver, bfs_origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+                ),
             ]
         )
     )

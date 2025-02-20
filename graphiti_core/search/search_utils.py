@@ -229,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                """
+                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                        """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -448,7 +448,7 @@ async def node_bfs_search(
         """
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-            WHERE n.group_id = $origin.group_id
+            WHERE n.group_id = origin.group_id
             """
         + filter_query
         + """
@@ -565,6 +565,7 @@ async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
     driver: AsyncDriver,
+    search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
@@ -609,8 +610,14 @@ async def hybrid_node_search(
     start = time()
     results: list[list[EntityNode]] = list(
         await semaphore_gather(
-            *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
-            *[node_similarity_search(driver, e, group_ids, 2 * limit) for e in embeddings],
+            *[
+                node_fulltext_search(driver, q, search_filter, group_ids, 2 * limit)
+                for q in queries
+            ],
+            *[
+                node_similarity_search(driver, e, search_filter, group_ids, 2 * limit)
+                for e in embeddings
+            ],
         )
     )
 
@@ -630,6 +637,7 @@ async def hybrid_node_search(
 
 async def get_relevant_nodes(
     driver: AsyncDriver,
+    search_filter: SearchFilters,
     nodes: list[EntityNode],
 ) -> list[EntityNode]:
     """
@@ -661,6 +669,7 @@ async def get_relevant_nodes(
         [node.name for node in nodes],
         [node.name_embedding for node in nodes if node.name_embedding is not None],
         driver,
+        search_filter,
         [node.group_id for node in nodes],
     )
 
