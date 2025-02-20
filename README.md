@@ -4,15 +4,11 @@
   </a>
 </p>
 
-<div align="center">
-
-<img width="350" alt="Graphiti-ts-small" src="https://github.com/user-attachments/assets/bbd02947-e435-4a05-b25a-bbbac36d52c8">
-
-## Temporal Knowledge Graphs for Agentic Applications
-
+<h1 align="center">
+Graphiti
+</h1>
+<h2 align="center"> Temporal Knowledge Graphs for Agentic Applications</h2>
 <br />
-
-Build AI agents that continually learn. Power personalized experiences.</h2>
 
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
 [![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
@@ -20,9 +16,8 @@ Build AI agents that continually learn. Power personalized experiences.</h2>
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/Graphiti)
 
+:star: *Help us reach more developers and grow the Graphiti community. Star this repo!*
 <br />
-
-</div>
 
 Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between
 entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using
