@@ -123,8 +123,10 @@ async def test_hybrid_node_search_with_limit():
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
         # Verify that the limit was passed to the search functions
-        mock_fulltext_search.assert_called_with(mock_driver, 'Test', ['1'], 2)
-        mock_similarity_search.assert_called_with(mock_driver, [0.1, 0.2, 0.3], ['1'], 2)
+        mock_fulltext_search.assert_called_with(mock_driver, SearchFilters(), 'Test', ['1'], 2)
+        mock_similarity_search.assert_called_with(
+            mock_driver, SearchFilters(), [0.1, 0.2, 0.3], ['1'], 2
+        )
 
 
 @pytest.mark.asyncio
@@ -160,5 +162,7 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         assert set(node.name for node in results) == {'Alice', 'Bob', 'Charlie'}
         assert mock_fulltext_search.call_count == 1
         assert mock_similarity_search.call_count == 1
-        mock_fulltext_search.assert_called_with(mock_driver, 'Test', ['1'], 4)
-        mock_similarity_search.assert_called_with(mock_driver, [0.1, 0.2, 0.3], ['1'], 4)
+        mock_fulltext_search.assert_called_with(mock_driver, SearchFilters(), 'Test', ['1'], 4)
+        mock_similarity_search.assert_called_with(
+            mock_driver, SearchFilters(), [0.1, 0.2, 0.3], ['1'], 4
+        )
