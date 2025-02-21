@@ -56,7 +56,7 @@ def node_search_filter_query_constructor(
 
     if filters.node_labels is not None:
         node_labels = ':'.join(filters.node_labels)
-        node_label_filter = 'AND n:' + node_labels
+        node_label_filter = ' AND n:' + node_labels
         filter_query += node_label_filter
 
     return filter_query, filter_params
@@ -69,7 +69,7 @@ def edge_search_filter_query_constructor(
     filter_params: dict[str, Any] = {}
 
     if filters.valid_at is not None:
-        valid_at_filter = 'AND ('
+        valid_at_filter = ' AND ('
         for i, or_list in enumerate(filters.valid_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['valid_at_' + str(j)] = date_filter.date
@@ -94,7 +94,7 @@ def edge_search_filter_query_constructor(
         filter_query += valid_at_filter
 
     if filters.invalid_at is not None:
-        invalid_at_filter = 'AND ('
+        invalid_at_filter = ' AND ('
         for i, or_list in enumerate(filters.invalid_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['invalid_at_' + str(j)] = date_filter.date
@@ -119,7 +119,7 @@ def edge_search_filter_query_constructor(
         filter_query += invalid_at_filter
 
     if filters.created_at is not None:
-        created_at_filter = 'AND ('
+        created_at_filter = ' AND ('
         for i, or_list in enumerate(filters.created_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['created_at_' + str(j)] = date_filter.date
