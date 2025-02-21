@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from graphiti_core.nodes import EntityNode
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import hybrid_node_search
 
 
@@ -30,7 +31,7 @@ async def test_hybrid_node_search_deduplication():
         # Call the function with test data
         queries = ['Alice', 'Bob']
         embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-        results = await hybrid_node_search(queries, embeddings, mock_driver)
+        results = await hybrid_node_search(queries, embeddings, mock_driver, SearchFilters())
 
         # Assertions
         assert len(results) == 3
@@ -56,7 +57,7 @@ async def test_hybrid_node_search_empty_results():
 
         queries = ['NonExistent']
         embeddings = [[0.1, 0.2, 0.3]]
-        results = await hybrid_node_search(queries, embeddings, mock_driver)
+        results = await hybrid_node_search(queries, embeddings, mock_driver, SearchFilters())
 
         assert len(results) == 0
 
@@ -77,7 +78,7 @@ async def test_hybrid_node_search_only_fulltext():
 
         queries = ['Alice']
         embeddings = []
-        results = await hybrid_node_search(queries, embeddings, mock_driver)
+        results = await hybrid_node_search(queries, embeddings, mock_driver, SearchFilters())
 
         assert len(results) == 1
         assert results[0].name == 'Alice'
@@ -111,7 +112,9 @@ async def test_hybrid_node_search_with_limit():
         queries = ['Test']
         embeddings = [[0.1, 0.2, 0.3]]
         limit = 1
-        results = await hybrid_node_search(queries, embeddings, mock_driver, ['1'], limit)
+        results = await hybrid_node_search(
+            queries, embeddings, mock_driver, SearchFilters(), ['1'], limit
+        )
 
         # We expect 4 results because the limit is applied per search method
         # before deduplication, and we're not actually limiting the results
@@ -145,7 +148,9 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         queries = ['Test']
         embeddings = [[0.1, 0.2, 0.3]]
         limit = 2
-        results = await hybrid_node_search(queries, embeddings, mock_driver, ['1'], limit)
+        results = await hybrid_node_search(
+            queries, embeddings, mock_driver, SearchFilters(), ['1'], limit
+        )
 
         # We expect 3 results because:
         # 1. The limit of 2 is applied to each search method

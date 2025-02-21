@@ -29,7 +29,6 @@ from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
 )
-from graphiti_core.search.search_filters import SearchFilters
 
 pytestmark = pytest.mark.integration
 
