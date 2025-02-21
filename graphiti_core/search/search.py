@@ -259,7 +259,9 @@ async def node_search(
     if NodeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         origin_node_uuids = [node.uuid for result in search_results for node in result]
         search_results.append(
-            await node_bfs_search(driver, origin_node_uuids, config.bfs_max_depth, 2 * limit)
+            await node_bfs_search(
+                driver, origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+            )
         )
 
     search_result_uuids = [[node.uuid for node in result] for result in search_results]
