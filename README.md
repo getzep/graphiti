@@ -1,9 +1,13 @@
-<div align="center">
+<p align="center">
+  <a href="https://www.getzep.com/">
+    <img src="https://github.com/user-attachments/assets/119c5682-9654-4257-8922-56b7cb8ffd73" width="150" alt="Zep Logo">
+  </a>
+</p>
 
-# Graphiti
-
-## Temporal Knowledge Graphs for Agentic Applications
-
+<h1 align="center">
+Graphiti
+</h1>
+<h2 align="center"> Temporal Knowledge Graphs for Agentic Applications</h2>
 <br />
 
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
@@ -12,9 +16,8 @@
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/Graphiti)
 
+:star: *Help us reach more developers and grow the Graphiti community. Star this repo!*
 <br />
-
-</div>
 
 Graphiti builds dynamic, temporally aware Knowledge Graphs that represent complex, evolving relationships between
 entities over time. Graphiti ingests both unstructured and structured data, and the resulting graph may be queried using
@@ -178,7 +181,6 @@ graphiti.close()
 ```
 
 ## Graph Service
-
 The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
 
 Please see the [server README](./server/README.md) for more information.
