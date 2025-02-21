@@ -47,7 +47,8 @@ recall and state-based reasoning for both assistants and agents.
 
 Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for LLM-powered Assistants and Agents.
 
-Using Graphiti, we've demonstrated Zep is the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
+Using Graphiti, we've demonstrated Zep is
+the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
 Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
 
@@ -86,7 +87,7 @@ scale:
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.21 or higher
+- Neo4j 5.26 or higher
 - OpenAI API key (for LLM inference and embedding)
 
 Optional:
@@ -111,7 +112,8 @@ poetry add graphiti-core
 
 > [!IMPORTANT]
 > Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI compatible APIs.
+> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
+> compatible APIs.
 
 ```python
 from graphiti_core import Graphiti
@@ -203,8 +205,8 @@ as such this feature is off by default.
 Graphiti is under active development. We aim to maintain API stability while working on:
 
 - [ ] Supporting custom graph schemas:
-  - Allow developers to provide their own defined node and edge classes when ingesting episodes
-  - Enable more flexible knowledge representation tailored to specific use cases
+    - Allow developers to provide their own defined node and edge classes when ingesting episodes
+    - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
