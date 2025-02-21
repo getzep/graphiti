@@ -38,7 +38,11 @@ from graphiti_core.nodes import (
     get_community_node_from_record,
     get_entity_node_from_record,
 )
-from graphiti_core.search.search_filters import SearchFilters, search_filter_query_constructor
+from graphiti_core.search.search_filters import (
+    SearchFilters,
+    edge_search_filter_query_constructor,
+    node_search_filter_query_constructor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +152,7 @@ async def edge_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    filter_query, filter_params = search_filter_query_constructor(search_filter)
+    filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     cypher_query = Query(
         """
@@ -207,7 +211,7 @@ async def edge_similarity_search(
 
     query_params: dict[str, Any] = {}
 
-    filter_query, filter_params = search_filter_query_constructor(search_filter)
+    filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
 
     group_filter_query: LiteralString = ''
@@ -225,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                    """
+                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                        """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -278,7 +282,7 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
-    filter_query, filter_params = search_filter_query_constructor(search_filter)
+    filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     query = Query(
         """
@@ -325,6 +329,7 @@ async def edge_bfs_search(
 async def node_fulltext_search(
     driver: AsyncDriver,
     query: str,
+    search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
@@ -333,10 +338,17 @@ async def node_fulltext_search(
     if fuzzy_query == '':
         return []
 
+    filter_query, filter_params = node_search_filter_query_constructor(search_filter)
+
     records, _, _ = await driver.execute_query(
         """
         CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-        YIELD node AS n, score
+        YIELD node AS node, score
+        MATCH (n:Entity)
+        WHERE n.uuid = node.uuid
+        """
+        + filter_query
+        + """
         RETURN
             n.uuid AS uuid,
             n.group_id AS group_id, 
@@ -349,6 +361,7 @@ async def node_fulltext_search(
         ORDER BY score DESC
         LIMIT $limit
         """,
+        filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
@@ -363,6 +376,7 @@ async def node_fulltext_search(
 async def node_similarity_search(
     driver: AsyncDriver,
     search_vector: list[float],
+    search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -379,12 +393,16 @@ async def node_similarity_search(
         group_filter_query += 'WHERE n.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
+    filter_query, filter_params = node_search_filter_query_constructor(search_filter)
+    query_params.update(filter_params)
+
     records, _, _ = await driver.execute_query(
         runtime_query
         + """
             MATCH (n:Entity)
             """
         + group_filter_query
+        + filter_query
         + """
             WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
             WHERE score > $min_score
@@ -416,6 +434,7 @@ async def node_similarity_search(
 async def node_bfs_search(
     driver: AsyncDriver,
     bfs_origin_node_uuids: list[str] | None,
+    search_filter: SearchFilters,
     bfs_max_depth: int,
     limit: int,
 ) -> list[EntityNode]:
@@ -423,21 +442,28 @@ async def node_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
+    filter_query, filter_params = node_search_filter_query_constructor(search_filter)
+
     records, _, _ = await driver.execute_query(
         """
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-            RETURN DISTINCT
-                n.uuid As uuid,
-                n.group_id AS group_id,
-                n.name AS name, 
-                n.name_embedding AS name_embedding,
-                n.created_at AS created_at, 
-                n.summary AS summary,
-                labels(n) AS labels,
-                properties(n) AS attributes
-            LIMIT $limit
-            """,
+            WHERE n.group_id = origin.group_id
+            """
+        + filter_query
+        + """
+        RETURN DISTINCT
+            n.uuid As uuid,
+            n.group_id AS group_id,
+            n.name AS name, 
+            n.name_embedding AS name_embedding,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
+        LIMIT $limit
+        """,
+        filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
@@ -539,6 +565,7 @@ async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
     driver: AsyncDriver,
+    search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
@@ -583,8 +610,14 @@ async def hybrid_node_search(
     start = time()
     results: list[list[EntityNode]] = list(
         await semaphore_gather(
-            *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
-            *[node_similarity_search(driver, e, group_ids, 2 * limit) for e in embeddings],
+            *[
+                node_fulltext_search(driver, q, search_filter, group_ids, 2 * limit)
+                for q in queries
+            ],
+            *[
+                node_similarity_search(driver, e, search_filter, group_ids, 2 * limit)
+                for e in embeddings
+            ],
         )
     )
 
@@ -604,6 +637,7 @@ async def hybrid_node_search(
 
 async def get_relevant_nodes(
     driver: AsyncDriver,
+    search_filter: SearchFilters,
     nodes: list[EntityNode],
 ) -> list[EntityNode]:
     """
@@ -635,6 +669,7 @@ async def get_relevant_nodes(
         [node.name for node in nodes],
         [node.name_embedding for node in nodes if node.name_embedding is not None],
         driver,
+        search_filter,
         [node.group_id for node in nodes],
     )
 

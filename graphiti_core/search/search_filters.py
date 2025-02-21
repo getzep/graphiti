@@ -39,18 +39,37 @@ class DateFilter(BaseModel):
 
 
 class SearchFilters(BaseModel):
+    node_labels: list[str] | None = Field(
+        default=None, description='List of node labels to filter on'
+    )
     valid_at: list[list[DateFilter]] | None = Field(default=None)
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
 
 
-def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralString, dict[str, Any]]:
+def node_search_filter_query_constructor(
+    filters: SearchFilters,
+) -> tuple[LiteralString, dict[str, Any]]:
+    filter_query: LiteralString = ''
+    filter_params: dict[str, Any] = {}
+
+    if filters.node_labels is not None:
+        node_labels = ':'.join(filters.node_labels)
+        node_label_filter = ' AND n:' + node_labels
+        filter_query += node_label_filter
+
+    return filter_query, filter_params
+
+
+def edge_search_filter_query_constructor(
+    filters: SearchFilters,
+) -> tuple[LiteralString, dict[str, Any]]:
     filter_query: LiteralString = ''
     filter_params: dict[str, Any] = {}
 
     if filters.valid_at is not None:
-        valid_at_filter = 'AND ('
+        valid_at_filter = ' AND ('
         for i, or_list in enumerate(filters.valid_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['valid_at_' + str(j)] = date_filter.date
@@ -75,7 +94,7 @@ def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralStri
         filter_query += valid_at_filter
 
     if filters.invalid_at is not None:
-        invalid_at_filter = 'AND ('
+        invalid_at_filter = ' AND ('
         for i, or_list in enumerate(filters.invalid_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['invalid_at_' + str(j)] = date_filter.date
@@ -100,7 +119,7 @@ def search_filter_query_constructor(filters: SearchFilters) -> tuple[LiteralStri
         filter_query += invalid_at_filter
 
     if filters.created_at is not None:
-        created_at_filter = 'AND ('
+        created_at_filter = ' AND ('
         for i, or_list in enumerate(filters.created_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['created_at_' + str(j)] = date_filter.date

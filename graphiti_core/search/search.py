@@ -100,6 +100,7 @@ async def search(
             query_vector,
             group_ids,
             config.node_config,
+            search_filter,
             center_node_uuid,
             bfs_origin_node_uuids,
             config.limit,
@@ -233,6 +234,7 @@ async def node_search(
     query_vector: list[float],
     group_ids: list[str] | None,
     config: NodeSearchConfig | None,
+    search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
@@ -243,11 +245,13 @@ async def node_search(
     search_results: list[list[EntityNode]] = list(
         await semaphore_gather(
             *[
-                node_fulltext_search(driver, query, group_ids, 2 * limit),
+                node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
                 node_similarity_search(
-                    driver, query_vector, group_ids, 2 * limit, config.sim_min_score
+                    driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
                 ),
-                node_bfs_search(driver, bfs_origin_node_uuids, config.bfs_max_depth, 2 * limit),
+                node_bfs_search(
+                    driver, bfs_origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+                ),
             ]
         )
     )
@@ -255,7 +259,9 @@ async def node_search(
     if NodeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         origin_node_uuids = [node.uuid for result in search_results for node in result]
         search_results.append(
-            await node_bfs_search(driver, origin_node_uuids, config.bfs_max_depth, 2 * limit)
+            await node_bfs_search(
+                driver, origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+            )
         )
 
     search_result_uuids = [[node.uuid for node in result] for result in search_results]

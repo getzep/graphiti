@@ -37,6 +37,7 @@ from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_SAVE_BULK,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import (
@@ -188,7 +189,7 @@ async def dedupe_nodes_bulk(
 
     existing_nodes_chunks: list[list[EntityNode]] = list(
         await semaphore_gather(
-            *[get_relevant_nodes(driver, node_chunk) for node_chunk in node_chunks]
+            *[get_relevant_nodes(driver, SearchFilters(), node_chunk) for node_chunk in node_chunks]
         )
     )
 
