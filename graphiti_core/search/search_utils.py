@@ -158,7 +158,7 @@ async def edge_fulltext_search(
         """
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
               YIELD relationship AS rel, score
-              MATCH (:ENTITY)-[r:RELATES_TO]->(:ENTITY)
+              MATCH (:Entity)-[r:RELATES_TO]->(:Entity)
               WHERE r.group_id IN $group_ids"""
         + filter_query
         + """\nWITH r, score, startNode(r) AS n, endNode(r) AS m
@@ -229,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                        """
+                                                                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                            """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
