@@ -514,7 +514,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any) -> EntityNode:
-    return EntityNode(
+    entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
@@ -524,6 +524,15 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         summary=record['summary'],
         attributes=record['attributes'],
     )
+
+    del entity_node.attributes['uuid']
+    del entity_node.attributes['name']
+    del entity_node.attributes['group_id']
+    del entity_node.attributes['name_embedding']
+    del entity_node.attributes['summary']
+    del entity_node.attributes['created_at']
+
+    return entity_node
 
 
 def get_community_node_from_record(record: Any) -> CommunityNode:
