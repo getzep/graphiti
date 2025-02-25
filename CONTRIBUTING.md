@@ -1,8 +1,24 @@
 # Contributing to Graphiti
 
-We're thrilled you're interested in contributing to Graphiti! As firm believers in the power of open source collaboration, we're committed to building not just a tool, but a vibrant community where developers of all experience levels can make meaningful contributions. Whether you're fixing a typo, improving documentation, adding a new feature, or sharing innovative ideas, your input is invaluable to making Graphiti better for everyone.
+We're thrilled you're interested in contributing to Graphiti! As firm believers in the power of open source collaboration, we're committed to building not just a tool, but a vibrant community where developers of all experience levels can make meaningful contributions.
 
-Our dedication to open source principles drives everything we do. By making Graphiti open source, we're investing in a future where developers can freely build, modify, and enhance data storage and retreival to serve their unique needs. We've already seen incredible contributions from our community members, and we're excited to see how your ideas and expertise will help shape the future of this project. Join our [Discord](https://discord.gg/2JbGZQZT) community to connect with other contributors, share ideas, and get help with your contributions!
+When I first joined this project, I was overwhelmed trying to figure out where to start. Someone eventually pointed me to a random "good first issue," but I later discovered there were multiple ways I could have contributed that would have better matched my skills and interests.
+
+We've restructured our contribution paths to solve this problem:
+
+# Four Ways to Get Involved
+- Pick up existing issues: Our developers regularly tag issues with "help wanted" and "good first issue." These are pre-vetted tasks with clear scope and someone ready to help you if you get stuck.
+
+- Create your own tickets: See something that needs fixing? Have an idea for an improvement? You don't need permission to identify problems. Create a ticket describing what you'd like to change and why it matters.
+
+- Share your use cases: Sometimes the most valuable contribution isn't code. If you're using our project in an interesting way, add it to the examples folder. This helps others discover new possibilities and counts as a meaningful contribution. We regularly feature compelling examples in our blog posts and videos - your work might be showcased to the broader community!
+
+- Help others in Discord: Join our Discord community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
+
+# What happens next?
+Regardless of which path you choose, the process works the same way: fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below.
+
+Your perspective is valuable, no matter how you choose to contribute. Come say hello in our [Discord server](https://discord.gg/2JbGZQZT)  - whether you're ready to contribute or just want to learn more, we're happy to have you!
 
 ## Getting Started
 
