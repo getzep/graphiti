@@ -27,15 +27,14 @@ For **bug reports**, we need enough context to reproduce the problem. Use the [G
 Sometimes the most valuable contribution isn't code. If you're using our project in an interesting way, add it to the [examples](https://github.com/getzep/graphiti/tree/main/examples) folder. This helps others discover new possibilities and counts as a meaningful contribution. We regularly feature compelling examples in our blog posts and videos - your work might be showcased to the broader community!
 
 ### Help Others in Discord
-Join our [Discord](https://discord.gg/2JbGZQZT)  community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
+Join our [Discord server](https://discord.gg/2JbGZQZT)  community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
 
 ## What happens next?
-Regardless of which path you choose, the process works the same way: fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below.
+Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
-Your perspective is valuable, no matter how you choose to contribute. Come say hello in our [Discord server](https://discord.gg/2JbGZQZT). Whether you're ready to contribute or just want to learn more, we're happy to have you!
+1. Share your approach in the issue discussion or [Discord](https://discord.gg/2JbGZQZT) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework. 
 
-# From Idea to Pull Request
-Once you've found a issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution. These steps ensure your work integrates smoothly with the project and saves everyone time in the review process.
+2. Fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below; be open to feedback during review.
 
 ## Setup
 1. Fork the repository on GitHub.
@@ -118,6 +117,6 @@ make check
 This command will format your code, run linting checks, and execute tests.
 
 # Questions?
-Stuck on a contribution or have a half-formed idea? Drop by our [Discord server](https://discord.gg/2JbGZQZT) in the #💡-graphiti-features-and-contributing channel. It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
+Stuck on a contribution or have a half-formed idea? Come say hello in our [Discord server](https://discord.gg/2JbGZQZT). Whether you're ready to contribute or just want to learn more, we're happy to have you! It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
 
 Thank you for contributing to Graphiti!
