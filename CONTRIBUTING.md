@@ -2,7 +2,7 @@
 
 We're thrilled you're interested in contributing to Graphiti! As firm believers in the power of open source collaboration, we're committed to building not just a tool, but a vibrant community where developers of all experience levels can make meaningful contributions. Whether you're fixing a typo, improving documentation, adding a new feature, or sharing innovative ideas, your input is invaluable to making Graphiti better for everyone.
 
-Our dedication to open source principles drives everything we do. By making Graphiti open source, we're investing in a future where developers can freely build, modify, and enhance data visualization tools to serve their unique needs. We've already seen incredible contributions from our community members, and we're excited to see how your ideas and expertise will help shape the future of this project. Join our [Discord](https://discord.gg/2JbGZQZT) community to connect with other contributors, share ideas, and get help with your contributions!
+Our dedication to open source principles drives everything we do. By making Graphiti open source, we're investing in a future where developers can freely build, modify, and enhance data storage and retreival to serve their unique needs. We've already seen incredible contributions from our community members, and we're excited to see how your ideas and expertise will help shape the future of this project. Join our [Discord](https://discord.gg/2JbGZQZT) community to connect with other contributors, share ideas, and get help with your contributions!
 
 ## Getting Started
 
