@@ -31,9 +31,13 @@ class MissedEntities(BaseModel):
 
 
 class EntityClassification(BaseModel):
-    entity_classification: str = Field(
+    entities: list[str] = Field(
         ...,
-        description='Dictionary of entity classifications. Key is the entity name and value is the entity type',
+        description='List of entities',
+    )
+    entity_classifications: list[str | None] = Field(
+        ...,
+        description='List of entities classifications. The index of the classification should match the index of the entity it corresponds to.',
     )
 
 
@@ -180,7 +184,8 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
     
     Guidelines:
     1. Each entity must have exactly one type
-    2. If none of the provided entity types accurately classify an extracted node, the type should be set to None
+    2. Only use the provided ENTITY TYPES as types, do not use additional types to classify entities.
+    3. If none of the provided entity types accurately classify an extracted node, the type should be set to None
 """
     return [
         Message(role='system', content=sys_prompt),
