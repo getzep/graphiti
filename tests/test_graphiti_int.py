@@ -29,6 +29,7 @@ from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
 )
+from graphiti_core.search.search_filters import SearchFilters
 
 pytestmark = pytest.mark.integration
 
@@ -71,6 +72,7 @@ async def test_graphiti_init():
         'My name is Alice',
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
         group_ids=['test'],
+        search_filter=SearchFilters(node_labels=['Entity']),
     )
 
     pretty_results = {
