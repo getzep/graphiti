@@ -40,9 +40,6 @@ class EntityClassification(BaseModel):
         description='List of entities classifications. The index of the classification should match the index of the entity it corresponds to.',
     )
 
-    # entity_classifications: list[tuple[str, str]] = Field(...,
-    #                                                     description='List of entity classifications. The format for the tuple is (<ENTITY_NAME>, <ENTITY_TYPE>)')
-
 
 class Prompt(Protocol):
     extract_message: PromptVersion
