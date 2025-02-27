@@ -163,8 +163,9 @@ async def extract_nodes(
             prompt_library.extract_nodes.classify_nodes(node_classification_context),
             response_model=EntityClassification,
         )
-        response_string = llm_response.get('entity_classification', '{}')
-        node_classifications.update(ast.literal_eval(response_string))
+        entities = llm_response.get('entities', [])
+        entity_classifications = llm_response.get('entity_classifications', [])
+        node_classifications.update(dict(zip(entities, entity_classifications)))
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
@@ -173,7 +174,9 @@ async def extract_nodes(
     for name in extracted_node_names:
         entity_type = node_classifications.get(name)
         labels = (
-            ['Entity'] if entity_type is None or entity_type == 'None' else ['Entity', entity_type]
+            ['Entity']
+            if entity_type is None or entity_type == 'None' or entity_type == 'null'
+            else ['Entity', entity_type]
         )
 
         new_node = EntityNode(
