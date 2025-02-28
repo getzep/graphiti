@@ -168,7 +168,7 @@ async def extract_nodes(
             node_classifications.update(dict(zip(entities, entity_classifications)))
         # catch classification errors and continue if we can't classify
         except Exception as e:
-            logger.error(f'Failed to classify nodes: {extracted_node_names} with error: {e}')
+            logger.exception(e)
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
