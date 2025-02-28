@@ -158,13 +158,17 @@ async def extract_nodes(
     node_classifications: dict[str, str | None] = {}
 
     if entity_types is not None:
-        llm_response = await llm_client.generate_response(
-            prompt_library.extract_nodes.classify_nodes(node_classification_context),
-            response_model=EntityClassification,
-        )
-        entities = llm_response.get('entities', [])
-        entity_classifications = llm_response.get('entity_classifications', [])
-        node_classifications.update(dict(zip(entities, entity_classifications)))
+        try:
+            llm_response = await llm_client.generate_response(
+                prompt_library.extract_nodes.classify_nodes(node_classification_context),
+                response_model=EntityClassification,
+            )
+            entities = llm_response.get('entities', [])
+            entity_classifications = llm_response.get('entity_classifications', [])
+            node_classifications.update(dict(zip(entities, entity_classifications)))
+        # catch classification errors and continue if we can't classify
+        except Exception as e:
+            logger.exception(e)
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
