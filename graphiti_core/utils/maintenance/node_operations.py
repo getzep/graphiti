@@ -167,8 +167,8 @@ async def extract_nodes(
             entity_classifications = llm_response.get('entity_classifications', [])
             node_classifications.update(dict(zip(entities, entity_classifications)))
         # catch classification errors and continue if we can't classify
-        finally:
-            logger.error(f'Failed to classify nodes: {extracted_node_names}')
+        except Exception as e:
+            logger.error(f'Failed to classify nodes: {extracted_node_names} with error: {e}')
 
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
