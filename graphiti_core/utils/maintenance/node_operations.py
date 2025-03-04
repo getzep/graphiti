@@ -369,6 +369,13 @@ async def resolve_extracted_node(
             node = existing_node
             node.name = name
             node.summary = summary_response.get('summary', '')
+
+            new_attributes = existing_node.attributes
+            existing_attributes = existing_node.attributes
+            for attribute_name, attribute_value in existing_attributes.items():
+                if new_attributes.get(attribute_name) is None:
+                    new_attributes[attribute_name] = attribute_value
+
             uuid_map[extracted_node.uuid] = existing_node.uuid
 
     end = time()

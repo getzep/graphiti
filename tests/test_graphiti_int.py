@@ -71,7 +71,7 @@ async def test_graphiti_init():
     results = await graphiti._search(
         'My name is Alice',
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-        group_ids=['podcast'],
+        group_ids=['test'],
         search_filter=SearchFilters(node_labels=['Entity']),
     )
 
