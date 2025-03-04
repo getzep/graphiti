@@ -64,7 +64,7 @@ def node(context: dict[str, Any]) -> list[Message]:
         {json.dumps(context['existing_nodes'], indent=2)}
         </EXISTING NODES>
         
-        Given the above EXISTING NODES, MESSAGE, and PREVIOUS MESSAGES. Determine if the NEW NODE extracted from the conversation
+        Given the above EXISTING NODES and their attributes, MESSAGE, and PREVIOUS MESSAGES. Determine if the NEW NODE extracted from the conversation
         is a duplicate entity of one of the EXISTING NODES.
 
         <NEW NODE>

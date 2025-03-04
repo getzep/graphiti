@@ -289,7 +289,10 @@ async def resolve_extracted_node(
     start = time()
 
     # Prepare context for LLM
-    existing_nodes_context = [{'uuid': node.uuid, 'name': node.name} for node in existing_nodes]
+    existing_nodes_context = [
+        {'uuid': node.uuid, 'name': node.name, 'attributes': node.attributes}
+        for node in existing_nodes
+    ]
 
     extracted_node_context = {
         'uuid': extracted_node.uuid,
@@ -313,7 +316,6 @@ async def resolve_extracted_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
-        'attributes': [],
     }
 
     entity_type_classes: tuple[BaseModel, ...] = tuple()
