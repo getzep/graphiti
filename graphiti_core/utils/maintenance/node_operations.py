@@ -316,6 +316,7 @@ async def resolve_extracted_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
+        'attributes': [],
     }
 
     entity_type_classes: tuple[BaseModel, ...] = tuple()
