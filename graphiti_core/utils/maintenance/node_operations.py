@@ -171,9 +171,7 @@ async def extract_nodes(
                 prompt_library.extract_nodes.classify_nodes(node_classification_context),
                 response_model=EntityClassification,
             )
-            entity_classifications: list[EntityClassificationTriple] = llm_response.get(
-                'entity_classifications', []
-            )
+            entity_classifications = llm_response.get('entity_classifications', [])
             node_classifications.update(
                 {
                     entity_classification.get('name'): entity_classification.get('entity_type')
