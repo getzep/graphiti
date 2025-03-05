@@ -18,12 +18,14 @@ import asyncio
 import logging
 import os
 import sys
+from typing import ClassVar
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.nodes import EntityType
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -54,7 +56,8 @@ def setup_logging():
     return logger
 
 
-class Person(BaseModel):
+class Person(EntityType):
+    type_description: ClassVar[str] = 'A human person, fictional or nonfictional.'
     first_name: str | None = Field(..., description='First name')
     last_name: str | None = Field(..., description='Last name')
     occupation: str | None = Field(..., description="The person's work occupation")

@@ -18,14 +18,17 @@ import logging
 from time import time
 
 import pydantic
-from pydantic import BaseModel
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EntityType, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
-from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
+from graphiti_core.prompts.extract_nodes import (
+    EntityClassification,
+    ExtractedNodes,
+    MissedEntities,
+)
 from graphiti_core.prompts.summarize_nodes import Summary
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -117,7 +120,7 @@ async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, EntityType] | None = None,
 ) -> list[EntityNode]:
     start = time()
     extracted_node_names: list[str] = []
@@ -152,7 +155,11 @@ async def extract_nodes(
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': extracted_node_names,
-        'entity_types': entity_types.keys() if entity_types is not None else [],
+        'entity_types': {
+            type_name: values.type_description for type_name, values in entity_types.items()
+        }
+        if entity_types is not None
+        else {},
     }
 
     node_classifications: dict[str, str | None] = {}
@@ -163,9 +170,13 @@ async def extract_nodes(
                 prompt_library.extract_nodes.classify_nodes(node_classification_context),
                 response_model=EntityClassification,
             )
-            entities = llm_response.get('entities', [])
             entity_classifications = llm_response.get('entity_classifications', [])
-            node_classifications.update(dict(zip(entities, entity_classifications)))
+            node_classifications.update(
+                {
+                    entity_classification.get('name'): entity_classification.get('entity_type')
+                    for entity_classification in entity_classifications
+                }
+            )
         # catch classification errors and continue if we can't classify
         except Exception as e:
             logger.exception(e)
@@ -251,7 +262,7 @@ async def resolve_extracted_nodes(
     existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, EntityType] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
@@ -284,7 +295,7 @@ async def resolve_extracted_node(
     existing_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, EntityType] | None = None,
 ) -> tuple[EntityNode, dict[str, str]]:
     start = time()
 
@@ -319,7 +330,7 @@ async def resolve_extracted_node(
         'attributes': [],
     }
 
-    entity_type_classes: tuple[BaseModel, ...] = tuple()
+    entity_type_classes: tuple[EntityType, ...] = tuple()
     if entity_types is not None:  # type: ignore
         entity_type_classes = entity_type_classes + tuple(
             filter(
