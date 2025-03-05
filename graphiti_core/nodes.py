@@ -39,12 +39,6 @@ from graphiti_core.utils.datetime_utils import utc_now
 logger = logging.getLogger(__name__)
 
 
-class EntityType(BaseModel):
-    type_description: ClassVar[str] = Field(
-        default='', description='Description of what the entity type represents'
-    )
-
-
 class EpisodeType(Enum):
     """
     Enumeration of different types of episodes that can be processed.
