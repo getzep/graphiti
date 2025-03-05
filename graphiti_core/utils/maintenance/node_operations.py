@@ -18,7 +18,6 @@ import logging
 from time import time
 
 import pydantic
-from pydantic import BaseModel
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
