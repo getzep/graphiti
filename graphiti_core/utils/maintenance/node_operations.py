@@ -26,7 +26,6 @@ from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import (
     EntityClassification,
-    EntityClassificationTriple,
     ExtractedNodes,
     MissedEntities,
 )
