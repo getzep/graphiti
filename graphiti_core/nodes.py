@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
-from typing import Any, ClassVar
+from typing import Any
 from uuid import uuid4
 
 from neo4j import AsyncDriver
