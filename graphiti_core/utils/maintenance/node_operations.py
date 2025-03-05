@@ -157,7 +157,9 @@ async def extract_nodes(
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': extracted_node_names,
-        'entity_types': {type_name: values.type_description for type_name, values in entity_types}
+        'entity_types': {
+            type_name: values.type_description for type_name, values in entity_types.items()
+        }
         if entity_types is not None
         else {},
     }
@@ -175,7 +177,7 @@ async def extract_nodes(
             )
             node_classifications.update(
                 {
-                    entity_classification.name: entity_classification.entity_type
+                    entity_classification.get('name'): entity_classification.get('entity_type')
                     for entity_classification in entity_classifications
                 }
             )

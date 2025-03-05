@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from neo4j import AsyncDriver
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class EntityType(BaseModel):
-    type_description: str = Field(
+    type_description: ClassVar[str] = Field(
         default='', description='Description of what the entity type represents'
     )
 
