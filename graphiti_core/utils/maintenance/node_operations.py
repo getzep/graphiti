@@ -18,10 +18,11 @@ import logging
 from time import time
 
 import pydantic
+from pydantic import BaseModel
 
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EntityType, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import (
@@ -120,7 +121,7 @@ async def extract_nodes(
     llm_client: LLMClient,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
-    entity_types: dict[str, EntityType] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
     extracted_node_names: list[str] = []
@@ -156,7 +157,8 @@ async def extract_nodes(
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': extracted_node_names,
         'entity_types': {
-            type_name: values.type_description for type_name, values in entity_types.items()
+            type_name: values.model_json_schema().get('description')
+            for type_name, values in entity_types.items()
         }
         if entity_types is not None
         else {},
@@ -262,7 +264,7 @@ async def resolve_extracted_nodes(
     existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, EntityType] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
@@ -295,7 +297,7 @@ async def resolve_extracted_node(
     existing_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, EntityType] | None = None,
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityNode, dict[str, str]]:
     start = time()
 
@@ -330,7 +332,7 @@ async def resolve_extracted_node(
         'attributes': [],
     }
 
-    entity_type_classes: tuple[EntityType, ...] = tuple()
+    entity_type_classes: tuple[BaseModel, ...] = tuple()
     if entity_types is not None:  # type: ignore
         entity_type_classes = entity_type_classes + tuple(
             filter(
