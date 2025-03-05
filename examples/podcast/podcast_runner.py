@@ -55,6 +55,7 @@ def setup_logging():
 
 
 class Person(BaseModel):
+    type_description: str = 'A Person, fictional or nonfictional.'
     first_name: str | None = Field(..., description='First name')
     last_name: str | None = Field(..., description='Last name')
     occupation: str | None = Field(..., description="The person's work occupation")

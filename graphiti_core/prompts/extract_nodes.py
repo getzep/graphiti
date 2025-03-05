@@ -30,14 +30,17 @@ class MissedEntities(BaseModel):
     missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
 
 
-class EntityClassification(BaseModel):
-    entities: list[str] = Field(
-        ...,
-        description='List of entities',
+class EntityClassificationTriple(BaseModel):
+    uuid: str = Field(description='UUID of the entity')
+    name: str = Field(description='Name of the entity')
+    entity_type: str | None = Field(
+        default=None, description='Type of the entity. Must be one of the provided types or None'
     )
-    entity_classifications: list[str | None] = Field(
-        ...,
-        description='List of entities classifications. The index of the classification should match the index of the entity it corresponds to.',
+
+
+class EntityClassification(BaseModel):
+    entity_classifications: list[EntityClassificationTriple] = Field(
+        ..., description='List of entities classification triples.'
     )
 
 
@@ -180,7 +183,7 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
     {context['entity_types']}
     </ENTITY TYPES>
     
-    Given the above conversation, extracted entities, and provided entity types, classify the extracted entities.
+    Given the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.
     
     Guidelines:
     1. Each entity must have exactly one type
