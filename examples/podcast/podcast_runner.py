@@ -18,7 +18,6 @@ import asyncio
 import logging
 import os
 import sys
-from typing import ClassVar
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
