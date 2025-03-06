@@ -32,10 +32,10 @@ a fusion of time, full-text, semantic, and graph algorithm approaches, effective
 <br />
 
 Graphiti helps you create and query Knowledge Graphs that evolve over time. A knowledge graph is a network of
-interconnected facts, such as _"Kendra loves Adidas shoes."_ Each fact is a "triplet" represented by two entities, or
-nodes (_"Kendra"_, _"Adidas shoes"_), and their relationship, or edge (_"loves"_). Knowledge Graphs have been explored
+interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or
+nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored
 extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
-while handling changing relationships and maintaining long-term context.
+while handling changing relationships and maintaining historical context.
 
 With Graphiti, you can build LLM applications such as:
 
