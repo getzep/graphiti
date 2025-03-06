@@ -74,10 +74,10 @@ scale:
   edges include temporal metadata to record relationship lifecycles, creating a comprehensive context window extension.
 - **Episodic Processing:** Ingests data as discrete episodes, maintaining data provenance and allowing incremental
   entity and relationship extraction, ideal for chat state management.
-- **Hybrid Search:** Combines semantic memory and BM25 full-text search, with the ability to rerank results by distance from a
+- **Hybrid Search:** Combines semantic and BM25 full-text search, with the ability to rerank results by distance from a
   central node e.g. "Kendra".
 - **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while
-  preserving the chronology of events, enabling efficient knowledge retrieval.
+  preserving the chronology of events and enabling efficient knowledge retrieval.
 - **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data and store them in an optimized vector database format.
 
 <p align="center">
