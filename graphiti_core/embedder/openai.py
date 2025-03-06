@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import Any
 
 from openai import AsyncOpenAI
 from openai.types import EmbeddingModel
@@ -35,11 +36,19 @@ class OpenAIEmbedder(EmbedderClient):
     OpenAI Embedder Client
     """
 
-    def __init__(self, config: OpenAIEmbedderConfig | None = None):
+    def __init__(
+        self,
+        config: OpenAIEmbedderConfig | None = None,
+        client: Any = None,
+    ):
         if config is None:
             config = OpenAIEmbedderConfig()
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+
+        if client is None:
+            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        else:
+            self.client = client
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
