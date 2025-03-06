@@ -78,7 +78,7 @@ scale:
   central node e.g. "Kendra".
 - **Scalable:** Designed for processing large datasets, with parallelization of LLM calls for bulk processing while
   preserving the chronology of events and enabling efficient knowledge retrieval.
-- **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data and store them in an optimized vector database format.
+- **Supports Varied Sources:** Can ingest both unstructured text and structured JSON data.
 
 <p align="center">
     <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
