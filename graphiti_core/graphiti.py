@@ -707,7 +707,7 @@ class Graphiti:
             bfs_origin_node_uuids,
         )
 
-    async def nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:
+    async def get_nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
 
         edges_list = await semaphore_gather(
