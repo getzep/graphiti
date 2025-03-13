@@ -708,7 +708,7 @@ class Graphiti:
             bfs_origin_node_uuids,
         )
 
-    async def get_episode_mentions(self, episode_uuids: list[str]) -> SearchResults:
+    async def nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
 
         edges_list = await semaphore_gather(
@@ -719,9 +719,7 @@ class Graphiti:
 
         nodes = await get_mentioned_nodes(self.driver, episodes)
 
-        communities = await get_communities_by_nodes(self.driver, nodes)
-
-        return SearchResults(edges=edges, nodes=nodes, communities=communities)
+        return SearchResults(edges=edges, nodes=nodes, communities=[])
 
     async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:

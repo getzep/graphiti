@@ -337,6 +337,32 @@ class EntityEdge(Edge):
             raise GroupsEdgesNotFoundError(group_ids)
         return edges
 
+    @classmethod
+    async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
+        query: LiteralString = """
+        MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+        RETURN DISTINCT
+            e.uuid AS uuid,
+            n.uuid AS source_node_uuid,
+            m.uuid AS target_node_uuid,
+            e.created_at AS created_at,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.fact AS fact,
+            e.fact_embedding AS fact_embedding,
+            e.episodes AS episodes,
+            e.expired_at AS expired_at,
+            e.valid_at AS valid_at,
+            e.invalid_at AS invalid_at
+        """
+        records, _, _ = await driver.execute_query(
+            query, node_uuid=node_uuid, database_=DEFAULT_DATABASE, routing_='r'
+        )
+
+        edges = [get_entity_edge_from_record(record) for record in records]
+
+        return edges
+
 
 class CommunityEdge(Edge):
     async def save(self, driver: AsyncDriver):
