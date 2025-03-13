@@ -39,7 +39,6 @@ from graphiti_core.search.search_config_recipes import (
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
-    get_communities_by_nodes,
     get_mentioned_nodes,
     get_relevant_edges,
     get_relevant_nodes,
