@@ -36,7 +36,11 @@ class BooleanClassifier(BaseModel):
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(
+        self,
+        config: LLMConfig | None = None,
+        client: Any = None,
+    ):
         """
         Initialize the OpenAIClient with the provided configuration, cache setting, and client.
 
@@ -44,13 +48,15 @@ class OpenAIRerankerClient(CrossEncoderClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
-
         """
         if config is None:
             config = LLMConfig()
 
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        if client is None:
+            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        else:
+            self.client = client
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         openai_messages_list: Any = [
@@ -62,7 +68,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                 Message(
                     role='user',
                     content=f"""
-                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
+                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
                            <PASSAGE>
                            {passage}
                            </PASSAGE>
