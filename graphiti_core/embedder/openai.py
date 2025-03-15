@@ -15,8 +15,9 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import Union
 
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types import EmbeddingModel
 
 from .client import EmbedderClient, EmbedderConfig
@@ -33,13 +34,23 @@ class OpenAIEmbedderConfig(EmbedderConfig):
 class OpenAIEmbedder(EmbedderClient):
     """
     OpenAI Embedder Client
+
+    This client supports both AsyncOpenAI and AsyncAzureOpenAI clients.
     """
 
-    def __init__(self, config: OpenAIEmbedderConfig | None = None):
+    def __init__(
+        self,
+        config: OpenAIEmbedderConfig | None = None,
+        client: Union[AsyncOpenAI, AsyncAzureOpenAI, None] = None,
+    ):
         if config is None:
             config = OpenAIEmbedderConfig()
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+
+        if client is not None:
+            self.client = client
+        else:
+            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
