@@ -205,6 +205,7 @@ from openai import AsyncAzureOpenAI
 from graphiti_core import Graphiti
 from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
 # Azure OpenAI configuration
 api_key = "<your-api-key>"
@@ -230,6 +231,10 @@ graphiti = Graphiti(
         config=OpenAIEmbedderConfig(
             embedding_model="text-embedding-3-small"  # Use your Azure deployed embedding model name
         ),
+        client=azure_openai_client
+    ),
+    # Optional: Configure the OpenAI cross encoder with Azure OpenAI
+    cross_encoder=OpenAIRerankerClient(
         client=azure_openai_client
     )
 )

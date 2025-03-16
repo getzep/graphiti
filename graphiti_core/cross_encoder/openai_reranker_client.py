@@ -18,7 +18,7 @@ import logging
 from typing import Any
 
 import openai
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel
 
 from ..helpers import semaphore_gather
@@ -36,21 +36,29 @@ class BooleanClassifier(BaseModel):
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(
+        self,
+        config: LLMConfig | None = None,
+        client: AsyncOpenAI | AsyncAzureOpenAI | None = None,
+    ):
         """
-        Initialize the OpenAIClient with the provided configuration, cache setting, and client.
+        Initialize the OpenAIRerankerClient with the provided configuration and client.
+
+        This reranker uses the OpenAI API to run a simple boolean classifier prompt concurrently
+        for each passage. Log-probabilities are used to rank the passages.
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
-            cache (bool): Whether to use caching for responses. Defaults to False.
-            client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
-
+            client (AsyncOpenAI | AsyncAzureOpenAI | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
         """
         if config is None:
             config = LLMConfig()
 
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        if client is None:
+            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        else:
+            self.client = client
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         openai_messages_list: Any = [
@@ -62,7 +70,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                 Message(
                     role='user',
                     content=f"""
-                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
+                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
                            <PASSAGE>
                            {passage}
                            </PASSAGE>
