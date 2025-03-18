@@ -189,7 +189,7 @@ async def extract_nodes(
     new_nodes = []
     for name in extracted_node_names:
         entity_type = node_classifications.get(name)
-        if entity_types is not None and entity_type not in entity_types.keys():
+        if entity_types is not None and entity_type not in entity_types:
             entity_type = None
 
         labels = (
