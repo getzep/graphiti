@@ -7,7 +7,7 @@
 <h1 align="center">
 Graphiti
 </h1>
-<h2 align="center"> A Framework for Real-Time Knowledge Graphs in Agentic AI</h2>
+<h2 align="center"> Build Real-Time Knowledge Graphs for AI Agents</h2>
 <br />
 
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
@@ -19,7 +19,7 @@ Graphiti
 :star: _Help us reach more developers and grow the Graphiti community. Star this repo!_
 <br />
 
-Graphiti is a framework designed for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
+Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
 
 Use Graphiti to:
 
