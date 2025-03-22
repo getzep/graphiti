@@ -256,11 +256,7 @@ Make sure to replace the placeholder values with your actual Azure OpenAI creden
 
 Graphiti is under active development. We aim to maintain API stability while working on:
 
-<<<<<<< HEAD
 - [x] Supporting custom graph schemas:
-=======
-- [ ] Supporting custom graph schemas:
->>>>>>> 67e3c84 (experimental)
   - Allow developers to provide their own defined node and edge classes when ingesting episodes
   - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
