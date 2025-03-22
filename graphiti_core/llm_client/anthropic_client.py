@@ -29,7 +29,7 @@ from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'claude-3-5-sonnet-20240620'
+DEFAULT_MODEL = 'claude-3-7-sonnet-latest'
 DEFAULT_MAX_TOKENS = 8192
 
 

@@ -1,3 +1,4 @@
-mcp>=1.2.0
+mcp>=1.5.0
 httpx>=0.27.0
 graphiti-core>=0.1.0
+anthropic>=0.49.0

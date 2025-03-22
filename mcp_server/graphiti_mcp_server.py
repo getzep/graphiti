@@ -5,11 +5,14 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 
 import argparse
 import asyncio
+import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Type
 
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
 from graphiti_core import Graphiti
@@ -23,12 +26,45 @@ from graphiti_core.nodes import EpisodeType
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 
+load_dotenv()
+
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stderr,
+)
 logger = logging.getLogger(__name__)
 
+# MCP server instructions
+GRAPHITI_MCP_INSTRUCTIONS = """
+Welcome to Graphiti - an advanced knowledge graph system designed for semantic memory management. 
+
+Graphiti transforms unstructured information into a richly connected knowledge network, allowing you to 
+capture relationships between concepts, entities, and information. The system organizes data as episodes 
+(content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic, 
+queryable memory store that evolves with new information. Graphiti supports multiple data formats, including 
+structured JSON data, enabling seamless integration with existing data pipelines and systems.
+
+Key capabilities:
+1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_episode tool
+2. Search for nodes (entities) in the graph using natural language queries with search_nodes
+3. Find relevant facts (relationships between entities) with search_facts
+4. Retrieve specific entity edges or episodes by UUID
+5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
+
+The server connects to a database for persistent storage and uses language models for certain operations. 
+Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
+
+When adding information, provide descriptive names and detailed content to improve search quality. 
+When searching, use specific queries and consider filtering by group_id for more relevant results.
+
+For optimal performance, ensure the database is properly configured and accessible, and valid 
+API keys are provided for any language model operations.
+"""
+
 # Initialize FastMCP server
-mcp = FastMCP('graphiti')
+mcp = FastMCP('graphiti', instructions=GRAPHITI_MCP_INSTRUCTIONS)
 
 # Environment variables
 NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
@@ -124,12 +160,40 @@ async def add_episode(
     """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
 
     Args:
+        group_id: A unique ID for this graph. You should reuse this ID for all episodes in the same graph. May be an arbitrary string.
         name: Name of the episode
         episode_body: The content of the episode
-        source: Source type (text, message, etc.)
+        source: Source type (text, json, message)
         source_description: Description of the source
-        group_id: Optional group ID to organize episodes
         uuid: Optional UUID for the episode
+
+    Examples:
+        # Adding plain text content
+        add_episode(
+            name="Company News",
+            episode_body="Acme Corp announced a new product line today.",
+            source="text",
+            source_description="news article",
+            group_id="some_arbitrary_string"
+        )
+
+        # Adding structured JSON data
+        add_episode(
+            name="Customer Profile",
+            episode_body='{"name": "John Smith", "company": "Acme Corp", "role": "CEO"}',
+            source="json",
+            source_description="CRM data",
+            group_id="some_arbitrary_string"
+        )
+
+        # Adding message-style content
+        add_episode(
+            name="Customer Conversation",
+            episode_body="user: What's your return policy?\nassistant: You can return items within 30 days.",
+            source="message",
+            source_description="chat transcript",
+            group_id="some_arbitrary_string"
+        )
     """
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
@@ -153,8 +217,23 @@ async def add_episode(
         )
         return {'message': f"Episode '{name}' added successfully"}
     except Exception as e:
-        logger.error(f'Error adding episode: {str(e)}')
-        return {'error': f'Error adding episode: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error adding episode: {error_msg}')
+
+        # Provide more helpful error messages based on common issues
+        if (
+            'Neo.ClientError.Statement.TypeError' in error_msg
+            and 'Property values can only be of primitive types' in error_msg
+        ):
+            return {
+                'error': f'Error adding episode: {error_msg}',
+                'suggestion': 'The error suggests Neo4j received a complex data structure instead of primitive types. '
+                'This is likely due to the LLM generating a structured response during entity extraction. '
+                'Try simplifying your episode content to avoid complex structures or nested information. '
+                "For text data, ensure the content is straightforward and doesn't contain nested quotes or special characters.",
+            }
+
+        return {'error': f'Error adding episode: {error_msg}'}
 
 
 @mcp.tool()
@@ -366,7 +445,7 @@ async def clear_graph() -> dict:
         return {'error': f'Error clearing graph: {str(e)}'}
 
 
-@mcp.resource('graphiti/status')
+@mcp.resource('http://graphiti/status')
 async def get_status() -> dict:
     """Get the status of the Graphiti MCP server and Neo4j connection."""
     if graphiti_client is None:
@@ -416,8 +495,8 @@ def create_llm_client(
     return LLM_CLIENT_TYPES[client_type](config=config)
 
 
-async def main():
-    """Main function to parse arguments and initialize the Graphiti MCP server."""
+async def initialize_server():
+    """Initialize the Graphiti server with the specified LLM client."""
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with optional LLM client'
     )
@@ -427,35 +506,54 @@ async def main():
         help='Type of LLM client to use (default: anthropic if available, otherwise openai)',
     )
     parser.add_argument('--model', help='Model name to use with the LLM client')
+    parser.add_argument('--skip-neo4j', action='store_true', help='Skip Neo4j initialization')
 
     args = parser.parse_args()
 
-    try:
-        llm_client = None
+    llm_client = None
 
-        # Create LLM client if specified
-        if args.llm_client:
-            # Get API key based on client type from environment variables
-            api_key = None
-            if args.llm_client == 'openai':
-                api_key = OPENAI_API_KEY
-            elif args.llm_client == 'anthropic':
-                api_key = ANTHROPIC_API_KEY
+    # Create LLM client if specified
+    if args.llm_client:
+        # Get API key based on client type from environment variables
+        api_key = None
+        if args.llm_client == 'openai':
+            api_key = OPENAI_API_KEY
+        elif args.llm_client == 'anthropic':
+            api_key = ANTHROPIC_API_KEY
 
-            # Create the client
-            llm_client = create_llm_client(
-                client_type=args.llm_client, api_key=api_key, model=args.model
-            )
+        # Create the client
+        llm_client = create_llm_client(
+            client_type=args.llm_client, api_key=api_key, model=args.model
+        )
 
-        # Initialize Graphiti with the specified LLM client
+    # Initialize Graphiti with the specified LLM client
+    if not args.skip_neo4j:
         await initialize_graphiti(llm_client)
+    else:
+        # If skipping Neo4j, just set up the LLM client without Neo4j
+        global graphiti_client
+        graphiti_client = None
+        logger.info('Skipping Neo4j initialization as requested')
 
-        # Run the server with stdio transport for MCP
-        mcp.run(transport='stdio')
+
+async def run_mcp_server():
+    """Run the MCP server in the current event loop."""
+    # Initialize the server
+    await initialize_server()
+
+    # Run the server with stdio transport for MCP in the same event loop
+    await mcp.run_stdio_async()
+
+
+def main():
+    """Main function to run the Graphiti MCP server."""
+    try:
+        # Run everything in a single event loop
+        asyncio.run(run_mcp_server())
     except Exception as e:
         logger.error(f'Error initializing Graphiti MCP server: {str(e)}')
         raise
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()

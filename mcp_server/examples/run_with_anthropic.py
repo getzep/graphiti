@@ -10,9 +10,10 @@ import sys
 # Add parent directory to path to import from graphiti_mcp_server
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from graphiti_mcp_server import initialize_graphiti, mcp
+
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_mcp_server import initialize_graphiti, mcp
 
 
 async def main():
