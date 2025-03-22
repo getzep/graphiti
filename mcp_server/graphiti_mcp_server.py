@@ -5,7 +5,6 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -219,19 +218,6 @@ async def add_episode(
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error adding episode: {error_msg}')
-
-        # Provide more helpful error messages based on common issues
-        if (
-            'Neo.ClientError.Statement.TypeError' in error_msg
-            and 'Property values can only be of primitive types' in error_msg
-        ):
-            return {
-                'error': f'Error adding episode: {error_msg}',
-                'suggestion': 'The error suggests Neo4j received a complex data structure instead of primitive types. '
-                'This is likely due to the LLM generating a structured response during entity extraction. '
-                'Try simplifying your episode content to avoid complex structures or nested information. '
-                "For text data, ensure the content is straightforward and doesn't contain nested quotes or special characters.",
-            }
 
         return {'error': f'Error adding episode: {error_msg}'}
 
