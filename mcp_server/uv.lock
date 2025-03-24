@@ -267,7 +267,6 @@ name = "mcp-server"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "anthropic" },
     { name = "graphiti-core" },
     { name = "mcp" },
     { name = "openai" },
@@ -275,7 +274,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.49.0" },
     { name = "graphiti-core", directory = "../" },
     { name = "mcp", specifier = ">=1.5.0" },
     { name = "openai", specifier = ">=1.68.2" },

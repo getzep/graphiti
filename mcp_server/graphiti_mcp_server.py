@@ -10,19 +10,19 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypedDict, TypeVar, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
+# graphiti_core imports
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
-from graphiti_core.nodes import EpisodeType
+from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -30,7 +30,77 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 load_dotenv()
 
 
+# Type definitions for API responses
+class ErrorResponse(TypedDict):
+    error: str
+
+
+class SuccessResponse(TypedDict):
+    message: str
+
+
+class NodeResult(TypedDict):
+    uuid: str
+    name: str
+    summary: str
+    labels: List[str]
+    group_id: str
+    created_at: str
+    attributes: Dict[str, Any]
+
+
+class NodeSearchResponse(TypedDict):
+    message: str
+    nodes: List[NodeResult]
+
+
+class FactSearchResponse(TypedDict):
+    message: str
+    facts: List[Dict[str, Any]]
+
+
+class EpisodeSearchResponse(TypedDict):
+    message: str
+    episodes: List[Dict[str, Any]]
+
+
+class StatusResponse(TypedDict):
+    status: str
+    message: str
+
+
+# Server configuration classes
+class GraphitiConfig(BaseModel):
+    """Configuration for Graphiti client.
+
+    Centralizes all configuration parameters for the Graphiti client,
+    including database connection details and LLM settings.
+    """
+
+    neo4j_uri: str = 'bolt://localhost:7687'
+    neo4j_user: str = 'neo4j'
+    neo4j_password: str = 'password'
+    openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    group_id: Optional[str] = None
+
+    @classmethod
+    def from_env(cls) -> 'GraphitiConfig':
+        """Create a configuration instance from environment variables."""
+        return cls(
+            neo4j_uri=os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
+            neo4j_user=os.environ.get('NEO4J_USER', 'neo4j'),
+            neo4j_password=os.environ.get('NEO4J_PASSWORD', 'password'),
+            openai_api_key=os.environ.get('OPENAI_API_KEY'),
+            openai_base_url=os.environ.get('OPENAI_BASE_URL'),
+            model_name=os.environ.get('MODEL_NAME'),
+        )
+
+
 class MCPConfig(BaseModel):
+    """Configuration for MCP server."""
+
     transport: str
 
 
@@ -41,6 +111,9 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+
+# Create global config instance
+config = GraphitiConfig.from_env()
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
@@ -73,30 +146,24 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
-# Initialize FastMCP server
+
+# MCP server instance
 mcp = FastMCP(
     'graphiti',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
-# Environment variables
-NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
-NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'password')
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-OPENAI_BASE_URL = os.environ.get('OPENAI_BASE_URL')
 
-MODEL_NAME = os.environ.get('MODEL_NAME')
+# Initialize Graphiti client
+graphiti_client: Optional[Graphiti] = None
 
-# Available LLM client types
-LLM_CLIENT_TYPES: Dict[str, Type[LLMClient]] = {
-    'openai': OpenAIClient,
-    'openai_generic': OpenAIGenericClient,
-}
+# Type for functions that can be wrapped with graphiti_error_handler
+T = TypeVar('T')
+GraphitiFunc = Callable[..., Awaitable[T]]
 
-# Initialize Graphiti client and default group_id
-graphiti_client = None
-default_group_id = None
+
+# Note: We've removed the error handler decorator in favor of inline error handling
+# This is to avoid type checking issues with the global graphiti_client variable
 
 
 async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_graph: bool = False):
@@ -110,24 +177,24 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
 
     # If no client is provided, create a default OpenAI client
     if not llm_client:
-        if OPENAI_API_KEY:
-            config = LLMConfig(api_key=OPENAI_API_KEY)
-            if OPENAI_BASE_URL:
-                config.base_url = OPENAI_BASE_URL
-            if MODEL_NAME:
-                config.model = MODEL_NAME
-            llm_client = OpenAIClient(config=config)
+        if config.openai_api_key:
+            llm_config = LLMConfig(api_key=config.openai_api_key)
+            if config.openai_base_url:
+                llm_config.base_url = config.openai_base_url
+            if config.model_name:
+                llm_config.model = config.model_name
+            llm_client = OpenAIClient(config=llm_config)
             logger.info('Using OpenAI as LLM client')
         else:
             raise ValueError('OPENAI_API_KEY must be set when not using a custom LLM client')
 
-    if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
+    if not config.neo4j_uri or not config.neo4j_user or not config.neo4j_password:
         raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
     graphiti_client = Graphiti(
-        uri=NEO4J_URI,
-        user=NEO4J_USER,
-        password=NEO4J_PASSWORD,
+        uri=config.neo4j_uri,
+        user=config.neo4j_user,
+        password=config.neo4j_password,
         llm_client=llm_client,
     )
 
@@ -140,10 +207,16 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
     logger.info('Graphiti client initialized successfully')
 
 
-def format_fact_result(edge: EntityEdge) -> dict:
+def format_fact_result(edge: EntityEdge) -> Dict[str, Any]:
     """Format an entity edge into a readable result.
 
     Since EntityEdge is a Pydantic BaseModel, we can use its built-in serialization capabilities.
+
+    Args:
+        edge: The EntityEdge to format
+
+    Returns:
+        A dictionary representation of the edge with serialized dates and excluded embeddings
     """
     # Convert to dict using Pydantic's model_dump method with mode='json'
     # This automatically handles datetime serialization and other complex types
@@ -163,7 +236,7 @@ async def add_episode(
     source: str = 'text',
     source_description: str = '',
     uuid: Optional[str] = None,
-) -> dict:
+) -> Union[SuccessResponse, ErrorResponse]:
     """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
 
     Args:
@@ -194,7 +267,7 @@ async def add_episode(
         # NOTE: episode_body must be a properly escaped JSON string
         add_episode(
             name="Customer Profile",
-            episode_body='\{"name": "John Smith", "company": "Acme Corp", "role": "CEO"\}',
+            episode_body="{\\\"company\\\": {\\\"name\\\": \\\"Acme Technologies\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\", \\\"name\\\": \\\"CloudSync\\\"}, {\\\"id\\\": \\\"P002\\\", \\\"name\\\": \\\"DataMiner\\\"}]}",
             source="json",
             source_description="CRM data"
         )
@@ -224,26 +297,43 @@ async def add_episode(
         - Entities will be created from appropriate JSON properties
         - Relationships between entities will be established based on the JSON structure
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
-    # Map string source to EpisodeType enum
-    source_type = EpisodeType.text
-    if source.lower() == 'message':
-        source_type = EpisodeType.message
-    elif source.lower() == 'json':
-        source_type = EpisodeType.json
-
-    # Use the provided group_id or fall back to the default
-    effective_group_id = group_id if group_id is not None else default_group_id
-
     try:
-        await graphiti_client.add_episode(
+        # Map string source to EpisodeType enum
+        source_type = EpisodeType.text
+        if source.lower() == 'message':
+            source_type = EpisodeType.message
+        elif source.lower() == 'json':
+            source_type = EpisodeType.json
+
+        # Use the provided group_id or fall back to the default from config
+        effective_group_id = group_id if group_id is not None else config.group_id
+
+        # Cast group_id to str to satisfy type checker
+        # The Graphiti client expects a str for group_id, not Optional[str]
+        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
+
+        # We've already checked that graphiti_client is not None above
+        # This assert statement helps type checkers understand that graphiti_client is defined
+        # from this point forward in the function
+        assert graphiti_client is not None, 'graphiti_client should not be None here'
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        # This doesn't change the runtime behavior, only helps with static type checking
+        client = cast(Graphiti, graphiti_client)
+
+        # Type checking will now know that client is a Graphiti instance (not None)
+        # and group_id is a str, not Optional[str]
+        await client.add_episode(
             name=name,
             episode_body=episode_body,
             source=source_type,
             source_description=source_description,
-            group_id=effective_group_id,
+            group_id=group_id_str,  # Using the string version of group_id
             uuid=uuid,
             reference_time=datetime.now(timezone.utc),
         )
@@ -251,7 +341,6 @@ async def add_episode(
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error adding episode: {error_msg}')
-
         return {'error': f'Error adding episode: {error_msg}'}
 
 
@@ -261,7 +350,7 @@ async def search_nodes(
     group_ids: Optional[List[str]] = None,
     max_nodes: int = 10,
     center_node_uuid: Optional[str] = None,
-) -> dict:
+) -> Union[NodeSearchResponse, ErrorResponse]:
     """Search the Graphiti knowledge graph for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
 
@@ -271,19 +360,29 @@ async def search_nodes(
         max_nodes: Maximum number of nodes to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
-    # Use the provided group_ids or fall back to the default if none provided
-    effective_group_ids = group_ids if group_ids is not None else [default_group_id]
-
     try:
+        # Use the provided group_ids or fall back to the default from config if none provided
+        effective_group_ids = (
+            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+        )
+
         # Configure the search
         search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
         search_config.limit = max_nodes
 
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
         # Perform the search using the _search method
-        search_results = await graphiti_client._search(
+        search_results = await client._search(
             query=query,
             config=search_config,
             group_ids=effective_group_ids,
@@ -310,8 +409,9 @@ async def search_nodes(
 
         return {'message': 'Nodes retrieved successfully', 'nodes': formatted_nodes}
     except Exception as e:
-        logger.error(f'Error searching nodes: {str(e)}')
-        return {'error': f'Error searching nodes: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error searching nodes: {error_msg}')
+        return {'error': f'Error searching nodes: {error_msg}'}
 
 
 @mcp.tool()
@@ -320,7 +420,7 @@ async def search_facts(
     group_ids: Optional[List[str]] = None,
     max_facts: int = 10,
     center_node_uuid: Optional[str] = None,
-) -> dict:
+) -> Union[FactSearchResponse, ErrorResponse]:
     """Search the Graphiti knowledge graph for relevant facts.
 
     Args:
@@ -329,14 +429,24 @@ async def search_facts(
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
-    # Use the provided group_ids or fall back to the default if none provided
-    effective_group_ids = group_ids if group_ids is not None else [default_group_id]
-
     try:
-        relevant_edges = await graphiti_client.search(
+        # Use the provided group_ids or fall back to the default from config if none provided
+        effective_group_ids = (
+            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+        )
+
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
+        relevant_edges = await client.search(
             group_ids=effective_group_ids,
             query=query,
             num_results=max_facts,
@@ -349,96 +459,131 @@ async def search_facts(
         facts = [format_fact_result(edge) for edge in relevant_edges]
         return {'message': 'Facts retrieved successfully', 'facts': facts}
     except Exception as e:
-        logger.error(f'Error searching: {str(e)}')
-        return {'error': f'Error searching: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error searching facts: {error_msg}')
+        return {'error': f'Error searching facts: {error_msg}'}
 
 
 @mcp.tool()
-async def delete_entity_edge(uuid: str) -> dict:
+async def delete_entity_edge(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
     """Delete an entity edge from the Graphiti knowledge graph.
 
     Args:
         uuid: UUID of the entity edge to delete
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
         # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(graphiti_client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
         # Delete the edge using its delete method
-        await entity_edge.delete(graphiti_client.driver)
+        await entity_edge.delete(client.driver)
         return {'message': f'Entity edge with UUID {uuid} deleted successfully'}
     except Exception as e:
-        logger.error(f'Error deleting entity edge: {str(e)}')
-        return {'error': f'Error deleting entity edge: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error deleting entity edge: {error_msg}')
+        return {'error': f'Error deleting entity edge: {error_msg}'}
 
 
 @mcp.tool()
-async def delete_episode(uuid: str) -> dict:
+async def delete_episode(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
     """Delete an episode from the Graphiti knowledge graph.
 
     Args:
         uuid: UUID of the episode to delete
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Import EpisodicNode class
-        from graphiti_core.nodes import EpisodicNode
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
 
-        # Get the episodic node by UUID
-        episodic_node = await EpisodicNode.get_by_uuid(graphiti_client.driver, uuid)
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
+        # Get the episodic node by UUID - EpisodicNode is already imported at the top
+        episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
         # Delete the node using its delete method
-        await episodic_node.delete(graphiti_client.driver)
+        await episodic_node.delete(client.driver)
         return {'message': f'Episode with UUID {uuid} deleted successfully'}
     except Exception as e:
-        logger.error(f'Error deleting episode: {str(e)}')
-        return {'error': f'Error deleting episode: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error deleting episode: {error_msg}')
+        return {'error': f'Error deleting episode: {error_msg}'}
 
 
 @mcp.tool()
-async def get_entity_edge(uuid: str) -> dict:
+async def get_entity_edge(uuid: str) -> Union[Dict[str, Any], ErrorResponse]:
     """Get an entity edge from the Graphiti knowledge graph by its UUID.
 
     Args:
         uuid: UUID of the entity edge to retrieve
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
         # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(graphiti_client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
         return format_fact_result(entity_edge)
     except Exception as e:
-        logger.error(f'Error getting entity edge: {str(e)}')
-        return {'error': f'Error getting entity edge: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error getting entity edge: {error_msg}')
+        return {'error': f'Error getting entity edge: {error_msg}'}
 
 
 @mcp.tool()
-async def get_episodes(group_id: Optional[str] = None, last_n: int = 10) -> list[dict] | dict:
+async def get_episodes(
+    group_id: Optional[str] = None, last_n: int = 10
+) -> Union[List[Dict[str, Any]], EpisodeSearchResponse, ErrorResponse]:
     """Get the most recent episodes for a specific group.
 
     Args:
         group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
         last_n: Number of most recent episodes to retrieve (default: 10)
     """
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
-    # Use the provided group_id or fall back to the default
-    effective_group_id = group_id if group_id is not None else default_group_id
-
-    if not isinstance(effective_group_id, str):
-        return {'error': 'Group ID must be a string'}
-
     try:
-        episodes = await graphiti_client.retrieve_episodes(
+        # Use the provided group_id or fall back to the default from config
+        effective_group_id = group_id if group_id is not None else config.group_id
+
+        if not isinstance(effective_group_id, str):
+            return {'error': 'Group ID must be a string'}
+
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
+        episodes = await client.retrieve_episodes(
             group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
         )
 
@@ -455,41 +600,60 @@ async def get_episodes(group_id: Optional[str] = None, last_n: int = 10) -> list
         # Return the Python list directly - MCP will handle serialization
         return formatted_episodes
     except Exception as e:
-        logger.error(f'Error getting episodes: {str(e)}')
-        return {'error': f'Error getting episodes: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error getting episodes: {error_msg}')
+        return {'error': f'Error getting episodes: {error_msg}'}
 
 
 @mcp.tool()
-async def clear_graph() -> dict:
+async def clear_graph() -> Union[SuccessResponse, ErrorResponse]:
     """Clear all data from the Graphiti knowledge graph and rebuild indices."""
+    global graphiti_client
+
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        from graphiti_core.utils.maintenance.graph_data_operations import clear_data
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
 
-        await clear_data(graphiti_client.driver)
-        await graphiti_client.build_indices_and_constraints()
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
+        # clear_data is already imported at the top
+        await clear_data(client.driver)
+        await client.build_indices_and_constraints()
         return {'message': 'Graph cleared successfully and indices rebuilt'}
     except Exception as e:
-        logger.error(f'Error clearing graph: {str(e)}')
-        return {'error': f'Error clearing graph: {str(e)}'}
+        error_msg = str(e)
+        logger.error(f'Error clearing graph: {error_msg}')
+        return {'error': f'Error clearing graph: {error_msg}'}
 
 
 @mcp.resource('http://graphiti/status')
-async def get_status() -> dict:
+async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and Neo4j connection."""
+    global graphiti_client
+
     if graphiti_client is None:
         return {'status': 'error', 'message': 'Graphiti client not initialized'}
 
     try:
+        # We've already checked that graphiti_client is not None above
+        assert graphiti_client is not None
+
+        # Use cast to help the type checker understand that graphiti_client is not None
+        client = cast(Graphiti, graphiti_client)
+
         # Test Neo4j connection
-        await graphiti_client.driver.verify_connectivity()
+        await client.driver.verify_connectivity()
         return {'status': 'ok', 'message': 'Graphiti MCP server is running and connected to Neo4j'}
     except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error checking Neo4j connection: {error_msg}')
         return {
             'status': 'error',
-            'message': f'Graphiti MCP server is running but Neo4j connection failed: {str(e)}',
+            'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
         }
 
 
@@ -506,29 +670,20 @@ def create_llm_client(
     Returns:
         An instance of the OpenAI LLM client
     """
-    if client_type not in LLM_CLIENT_TYPES:
-        raise ValueError(
-            f"Unsupported LLM client type: {client_type}. Only OpenAI clients are supported: {', '.join(LLM_CLIENT_TYPES.keys())}"
-        )
-
     # Create config with provided API key and model
-    config = LLMConfig(api_key=api_key)
+    llm_config = LLMConfig(api_key=api_key)
 
     # Set model if provided
     if model:
-        config.model = model
-
-    # Set base URL for OpenAI client if available
-    if client_type == 'openai' and OPENAI_BASE_URL:
-        config.base_url = OPENAI_BASE_URL
+        llm_config.model = model
 
     # Create and return the client
-    return LLM_CLIENT_TYPES[client_type](config=config)
+    return OpenAIClient(config=llm_config)
 
 
 async def initialize_server() -> MCPConfig:
     """Initialize the Graphiti server with the specified LLM client."""
-    global default_group_id
+    global config
 
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with optional LLM client'
@@ -550,21 +705,25 @@ async def initialize_server() -> MCPConfig:
 
     args = parser.parse_args()
 
-    # Set the default group_id from CLI argument or generate a random one
+    # Set the group_id from CLI argument or generate a random one
     if args.group_id:
-        default_group_id = args.group_id
-        logger.info(f'Using provided group_id: {default_group_id}')
+        config.group_id = args.group_id
+        logger.info(f'Using provided group_id: {config.group_id}')
     else:
-        default_group_id = f'graph_{uuid.uuid4().hex[:8]}'
-        logger.info(f'Generated random group_id: {default_group_id}')
+        config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
+        logger.info(f'Generated random group_id: {config.group_id}')
 
     llm_client = None
 
     # Create OpenAI client if model is specified or if OPENAI_API_KEY is available
-    if args.model or OPENAI_API_KEY:
+    if args.model or config.openai_api_key:
+        # Override model from command line if specified
+        if args.model:
+            config.model_name = args.model
+
         # Create the OpenAI client
         llm_client = create_llm_client(
-            client_type='openai', api_key=OPENAI_API_KEY, model=args.model
+            client_type='openai', api_key=config.openai_api_key, model=config.model_name
         )
 
     # Initialize Graphiti with the specified LLM client
