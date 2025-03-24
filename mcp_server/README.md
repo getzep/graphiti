@@ -1,6 +1,8 @@
 # Graphiti MCP Server
 
-This is a Model Context Protocol (MCP) server implementation for Graphiti, a dynamic, temporally aware Knowledge Graph system. The MCP server exposes Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge graph capabilities.
+Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
+
+This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge graph capabilities.
 
 ## Features
 
@@ -69,13 +71,64 @@ Available arguments:
 
 ### Docker Deployment
 
-You can also run the server using Docker Compose:
+The Graphiti MCP server can be deployed using Docker. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
+
+#### Environment Configuration
+
+Before running the Docker Compose setup, you need to configure the environment variables. You have two options:
+
+1. **Using a .env file** (recommended):
+
+   - Copy the provided `.env.example` file to create a `.env` file:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit the `.env` file to set your OpenAI API key and other configuration options:
+     ```
+     # Required for LLM operations
+     OPENAI_API_KEY=your_openai_api_key_here
+     MODEL_NAME=gpt-4o
+     # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
+     # OPENAI_BASE_URL=https://api.openai.com/v1
+     ```
+   - The Docker Compose setup is configured to use this file if it exists (it's optional)
+
+2. **Using environment variables directly**:
+   - You can also set the environment variables when running the Docker Compose command:
+     ```bash
+     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4o docker compose up
+     ```
+
+#### Neo4j Configuration
+
+The Docker Compose setup includes a Neo4j container with the following default configuration:
+
+- Username: `neo4j`
+- Password: `demodemo`
+- URI: `bolt://neo4j:7687` (from within the Docker network)
+- Memory settings optimized for development use
+
+#### Running with Docker Compose
+
+Start the services using Docker Compose:
+
+```bash
+docker compose up
+```
+
+Or if you're using an older version of Docker Compose:
 
 ```bash
 docker-compose up
 ```
 
-This will start both the Neo4j database and the Graphiti MCP server.
+This will start both the Neo4j database and the Graphiti MCP server. The Docker setup:
+
+- Uses `uv` for package management and running the server
+- Installs dependencies from the `pyproject.toml` file
+- Connects to the Neo4j container using the environment variables
+- Exposes the server on port 8000 for HTTP-based SSE transport
+- Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
 

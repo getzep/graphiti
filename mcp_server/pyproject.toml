@@ -9,6 +9,3 @@ dependencies = [
     "openai>=1.68.2",
     "graphiti-core>=0.8.1",
 ]
-
-[tool.uv.sources]
-graphiti-core = { path = "../" }
