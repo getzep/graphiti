@@ -363,7 +363,7 @@ async def search_nodes(
     global graphiti_client
 
     if graphiti_client is None:
-        return {'error': 'Graphiti client not initialized'}
+        return ErrorResponse(error='Graphiti client not initialized')
 
     try:
         # Use the provided group_ids or fall back to the default from config if none provided
@@ -391,10 +391,10 @@ async def search_nodes(
         )
 
         if not search_results.nodes:
-            return {'message': 'No relevant nodes found', 'nodes': []}
+            return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
         # Format the node results
-        formatted_nodes = [
+        formatted_nodes: List[NodeResult] = [
             {
                 'uuid': node.uuid,
                 'name': node.name,
@@ -407,11 +407,11 @@ async def search_nodes(
             for node in search_results.nodes
         ]
 
-        return {'message': 'Nodes retrieved successfully', 'nodes': formatted_nodes}
+        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=formatted_nodes)
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
-        return {'error': f'Error searching nodes: {error_msg}'}
+        return ErrorResponse(error=f'Error searching nodes: {error_msg}')
 
 
 @mcp.tool()

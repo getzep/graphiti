@@ -1,24 +1,36 @@
 # Graphiti MCP Server
 
-This is a Model Context Protocol (MCP) server implementation for Graphiti, a dynamic, temporally aware Knowledge Graph system. The MCP server exposes Graphiti's key functionality through the Anthropic MCP protocol, allowing AI assistants like Claude to interact with Graphiti's knowledge graph capabilities.
+This is a Model Context Protocol (MCP) server implementation for Graphiti, a dynamic, temporally aware Knowledge Graph system. The MCP server exposes Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge graph capabilities.
 
 ## Features
 
 The Graphiti MCP server exposes the following key high-level functions of Graphiti:
 
 - **Episode Management**: Add, retrieve, and delete episodes (text, messages, or JSON data)
-- **Entity Management**: Add and manage entity nodes in the knowledge graph
-- **Search Capabilities**: Search for facts (edges) and node summaries using semantic and full-text search
-- **Group Management**: Organize and manage groups of related data
+- **Entity Management**: Search and manage entity nodes and relationships in the knowledge graph
+- **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
+- **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
 
 ## Installation
 
+### Prerequisites
+
 1. Ensure you have Python 3.10 or higher installed.
-2. Install the required dependencies:
+2. A running Neo4j database (version 5.26 or later required)
+3. OpenAI API key for LLM operations
+
+### Setup
+
+1. Clone the repository and navigate to the mcp_server directory
+2. Use `uv` to create a virtual environment and install dependencies:
 
 ```bash
-pip install -r requirements.txt
+# Install uv if you don't have it already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a virtual environment and install dependencies in one step
+uv sync
 ```
 
 ## Configuration
@@ -27,105 +39,169 @@ The server uses the following environment variables:
 
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
-- `NEO4J_PASSWORD`: Neo4j password (default: `password`)
-- `ANTHROPIC_API_KEY`: Anthropic API key (preferred LLM provider)
-- `OPENAI_API_KEY`: OpenAI API key (fallback LLM provider)
+- `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
+- `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: Optional model name to use for LLM inference
 
+You can set these variables in a `.env` file in the project directory.
+
 ## Running the Server
 
-To run the Graphiti MCP server:
+To run the Graphiti MCP server directly using `uv`:
 
 ```bash
-python graphiti_mcp_server.py
+uv run graphiti_mcp_server.py
 ```
 
-You can specify an LLM client to use (default is Anthropic if the API key is available, otherwise OpenAI):
+With options:
 
 ```bash
-python graphiti_mcp_server.py --llm-client anthropic
-# or
-python graphiti_mcp_server.py --llm-client openai
+uv run graphiti_mcp_server.py --model gpt-4o --transport sse
 ```
 
-You can also specify a model name:
+Available arguments:
+
+- `--model`: Specify the model name to use with the LLM client
+- `--transport`: Choose the transport method (sse or stdio, default: sse)
+- `--group-id`: Set a namespace for the graph (optional)
+- `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
+
+### Docker Deployment
+
+You can also run the server using Docker Compose:
 
 ```bash
-python graphiti_mcp_server.py --model claude-3-opus-20240229
+docker-compose up
 ```
 
-## Integrating with Claude Desktop
+This will start both the Neo4j database and the Graphiti MCP server.
 
-To use the Graphiti MCP server with Claude Desktop:
+## Integrating with MCP Clients
 
-1. Make sure you have Claude Desktop installed and updated to the latest version.
-2. Configure Claude Desktop to use the Graphiti MCP server by editing the configuration file:
+### Configuration
+
+To use the Graphiti MCP server with an MCP-compatible client, configure it to connect to the server:
 
 ```json
 {
   "mcpServers": {
     "graphiti": {
-      "command": "python",
-      "args": ["/ABSOLUTE/PATH/TO/graphiti_mcp_server.py"]
+      "transport": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "/ABSOLUTE/PATH/TO/graphiti_mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "demodemo",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "MODEL_NAME": "gpt-4o"
+      }
     }
   }
 }
 ```
 
-Replace `/ABSOLUTE/PATH/TO/` with the absolute path to the `graphiti_mcp_server.py` file.
+For SSE transport (HTTP-based), you can use this configuration:
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+Or start the server with uv and connect to it:
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "command": "uv",
+      "args": [
+        "run",
+        "/ABSOLUTE/PATH/TO/graphiti_mcp_server.py",
+        "--transport",
+        "sse"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "demodemo",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "MODEL_NAME": "gpt-4o"
+      }
+    }
+  }
+}
+```
 
 ## Available Tools
 
 The Graphiti MCP server exposes the following tools:
 
-- `add_episode`: Add an episode to the knowledge graph
-- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
+- `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
 - `search_nodes`: Search the knowledge graph for relevant node summaries
-- `add_entity_node`: Add an entity node to the knowledge graph
+- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph
-- `delete_group`: Delete a group and all its associated nodes and edges
 - `delete_episode`: Delete an episode from the knowledge graph
 - `get_entity_edge`: Get an entity edge by its UUID
 - `get_episodes`: Get the most recent episodes for a specific group
 - `clear_graph`: Clear all data from the knowledge graph and rebuild indices
+- `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
 
-## Available Resources
+## Working with JSON Data
 
-- `graphiti/status`: Get the status of the Graphiti MCP server and Neo4j connection
-
-## Example Usage with Claude
-
-Once the Graphiti MCP server is running and configured with Claude Desktop, you can use it like this:
+The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This allows you to automatically extract entities and relationships from structured data:
 
 ```
-User: Add an episode about Kamala Harris to the knowledge graph.
-
-Claude: I'll help you add an episode about Kamala Harris to the knowledge graph. Let me do that for you.
-
-[Claude uses the add_episode tool to add the information]
-
-User: Now search for information about Kamala Harris.
-
-Claude: I'll search the knowledge graph for information about Kamala Harris.
-
-[Claude uses the search_facts tool to find relevant facts]
-
-User: Can you show me a summary of entities related to Kamala Harris?
-
-Claude: I'll search for node summaries related to Kamala Harris.
-
-[Claude uses the search_nodes tool to find relevant entity summaries]
+add_episode(
+    name="Customer Profile",
+    episode_body="{\"company\": {\"name\": \"Acme Technologies\"}, \"products\": [{\"id\": \"P001\", \"name\": \"CloudSync\"}, {\"id\": \"P002\", \"name\": \"DataMiner\"}]}",
+    source="json",
+    source_description="CRM data"
+)
 ```
 
-See the `example_usage.py` file for a more detailed example.
+## Example Usage
+
+Once the Graphiti MCP server is running and configured with an MCP-compatible client:
+
+```
+User: Add information about a company to the knowledge graph.
+
+Assistant: I'll help you add information about a company to the knowledge graph.
+
+[Assistant uses the add_episode tool to add the information]
+
+User: Now search for information about this company.
+
+Assistant: I'll search the knowledge graph for information about the company.
+
+[Assistant uses the search_facts tool to find relevant facts]
+
+User: Can you show me a summary of entities related to this company?
+
+Assistant: I'll search for node summaries related to the company.
+
+[Assistant uses the search_nodes tool to find relevant entity summaries]
+```
 
 ## Requirements
 
 - Python 3.10 or higher
-- Neo4j database
-- OpenAI API key (for LLM inference and embedding)
-- MCP-compatible client (like Claude Desktop)
+- Neo4j database (version 5.26 or later required)
+- OpenAI API key (for LLM operations)
+- MCP-compatible client
 
 ## License
 
