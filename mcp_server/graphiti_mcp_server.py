@@ -9,8 +9,9 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, TypedDict, TypeVar, Union, cast
+from typing import Any, Optional, TypedDict, TypeVar, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
@@ -43,25 +44,25 @@ class NodeResult(TypedDict):
     uuid: str
     name: str
     summary: str
-    labels: List[str]
+    labels: list[str]
     group_id: str
     created_at: str
-    attributes: Dict[str, Any]
+    attributes: dict[str, Any]
 
 
 class NodeSearchResponse(TypedDict):
     message: str
-    nodes: List[NodeResult]
+    nodes: list[NodeResult]
 
 
 class FactSearchResponse(TypedDict):
     message: str
-    facts: List[Dict[str, Any]]
+    facts: list[dict[str, Any]]
 
 
 class EpisodeSearchResponse(TypedDict):
     message: str
-    episodes: List[Dict[str, Any]]
+    episodes: list[dict[str, Any]]
 
 
 class StatusResponse(TypedDict):
@@ -207,7 +208,7 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
     logger.info('Graphiti client initialized successfully')
 
 
-def format_fact_result(edge: EntityEdge) -> Dict[str, Any]:
+def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
     """Format an entity edge into a readable result.
 
     Since EntityEdge is a Pydantic BaseModel, we can use its built-in serialization capabilities.
@@ -347,7 +348,7 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: Optional[List[str]] = None,
+    group_ids: Optional[list[str]] = None,
     max_nodes: int = 10,
     center_node_uuid: Optional[str] = None,
 ) -> Union[NodeSearchResponse, ErrorResponse]:
@@ -394,7 +395,7 @@ async def search_nodes(
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
         # Format the node results
-        formatted_nodes: List[NodeResult] = [
+        formatted_nodes: list[NodeResult] = [
             {
                 'uuid': node.uuid,
                 'name': node.name,
@@ -417,7 +418,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: Optional[List[str]] = None,
+    group_ids: Optional[list[str]] = None,
     max_facts: int = 10,
     center_node_uuid: Optional[str] = None,
 ) -> Union[FactSearchResponse, ErrorResponse]:
@@ -525,7 +526,7 @@ async def delete_episode(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
 
 
 @mcp.tool()
-async def get_entity_edge(uuid: str) -> Union[Dict[str, Any], ErrorResponse]:
+async def get_entity_edge(uuid: str) -> Union[dict[str, Any], ErrorResponse]:
     """Get an entity edge from the Graphiti knowledge graph by its UUID.
 
     Args:
@@ -558,7 +559,7 @@ async def get_entity_edge(uuid: str) -> Union[Dict[str, Any], ErrorResponse]:
 @mcp.tool()
 async def get_episodes(
     group_id: Optional[str] = None, last_n: int = 10
-) -> Union[List[Dict[str, Any]], EpisodeSearchResponse, ErrorResponse]:
+) -> Union[list[dict[str, Any]], EpisodeSearchResponse, ErrorResponse]:
     """Get the most recent episodes for a specific group.
 
     Args:
