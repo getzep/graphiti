@@ -1,11 +1,11 @@
-version: '3.8'
+version: "3.8"
 
 services:
   neo4j:
     image: neo4j:5.13.0
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
     environment:
       - NEO4J_AUTH=neo4j/password
       - NEO4J_apoc_export_file_enabled=true
@@ -32,7 +32,7 @@ services:
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - MODEL_NAME=${MODEL_NAME}
     ports:
-      - "8000:8000"  # If you want to expose the MCP server via HTTP
+      - "8000:8000" # If you want to expose the MCP server via HTTP
 
 volumes:
   neo4j_data:

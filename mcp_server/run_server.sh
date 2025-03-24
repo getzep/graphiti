@@ -13,7 +13,7 @@
 #   ./run_server.sh                                # Use default (Anthropic if available, otherwise OpenAI)
 #   ./run_server.sh --llm-client=anthropic         # Use Anthropic explicitly
 #   ./run_server.sh --llm-client=openai            # Use OpenAI
-#   ./run_server.sh --llm-client=anthropic --model=claude-3-5-sonnet-20240620  # Use specific model
+#   ./run_server.sh --llm-client=anthropic --model=claude-3-7-sonnet-latest  # Use specific model
 
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
