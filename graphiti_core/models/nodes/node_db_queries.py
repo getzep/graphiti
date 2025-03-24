@@ -30,10 +30,10 @@ EPISODIC_NODE_SAVE_BULK = """
 """
 
 ENTITY_NODE_SAVE = """
-        MERGE (n:Entity {uuid: $uuid})
+        MERGE (n:Entity {uuid: $entity_data.uuid})
         SET n:$($labels)
         SET n = $entity_data
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
         RETURN n.uuid AS uuid"""
 
 ENTITY_NODE_SAVE_BULK = """
