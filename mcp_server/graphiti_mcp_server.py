@@ -17,8 +17,6 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-# graphiti_core imports
-import asyncio
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
