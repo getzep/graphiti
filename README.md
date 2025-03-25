@@ -187,6 +187,22 @@ The `server` directory contains an API service for interacting with the Graphiti
 
 Please see the [server README](./server/README.md) for more information.
 
+## MCP Server
+
+The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server allows AI assistants to interact with Graphiti's knowledge graph capabilities through the MCP protocol.
+
+Key features of the MCP server include:
+
+- Episode management (add, retrieve, delete)
+- Entity management and relationship handling
+- Semantic and hybrid search capabilities
+- Group management for organizing related data
+- Graph maintenance operations
+
+The MCP server can be deployed using Docker with Neo4j, making it easy to integrate Graphiti into your AI assistant workflows.
+
+For detailed setup instructions and usage examples, see the [MCP server README](./mcp_server/README.md).
+
 ## Optional Environment Variables
 
 In addition to the Neo4j and OpenAi-compatible credentials, Graphiti also has a few optional environment variables.
@@ -260,7 +276,7 @@ Graphiti is under active development. We aim to maintain API stability while wor
   - Allow developers to provide their own defined node and edge classes when ingesting episodes
   - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
-- [ ] Graphiti MCP Server
+- [x] Graphiti MCP Server
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
 
 ## Contributing

@@ -29,7 +29,7 @@ from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'claude-3-5-sonnet-20240620'
+DEFAULT_MODEL = 'claude-3-7-sonnet-latest'
 DEFAULT_MAX_TOKENS = 8192
 
 
@@ -58,11 +58,14 @@ class AnthropicClient(LLMClient):
             {'role': 'assistant', 'content': '{'}
         ]
 
+        # Ensure max_tokens is not greater than config.max_tokens or DEFAULT_MAX_TOKENS
+        max_tokens = min(max_tokens, self.config.max_tokens, DEFAULT_MAX_TOKENS)
+
         try:
             result = await self.client.messages.create(
                 system='Only include JSON in the response. Do not include any additional text or explanation of the content.\n'
                 + system_message.content,
-                max_tokens=max_tokens or self.max_tokens,
+                max_tokens=max_tokens,
                 temperature=self.temperature,
                 messages=user_messages,  # type: ignore
                 model=self.model or DEFAULT_MODEL,

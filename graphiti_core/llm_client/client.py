@@ -54,7 +54,11 @@ class LLMClient(ABC):
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
-        self.cache_dir = Cache(DEFAULT_CACHE_DIR)  # Create a cache directory
+        self.cache_dir = None
+
+        # Only create the cache directory if caching is enabled
+        if self.cache_enabled:
+            self.cache_dir = Cache(DEFAULT_CACHE_DIR)
 
     def _clean_input(self, input: str) -> str:
         """Clean input string of invalid unicode and control characters.
@@ -129,7 +133,7 @@ class LLMClient(ABC):
                 f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
             )
 
-        if self.cache_enabled:
+        if self.cache_enabled and self.cache_dir is not None:
             cache_key = self._get_cache_key(messages)
 
             cached_response = self.cache_dir.get(cache_key)
@@ -142,7 +146,8 @@ class LLMClient(ABC):
 
         response = await self._generate_response_with_retry(messages, response_model, max_tokens)
 
-        if self.cache_enabled:
+        if self.cache_enabled and self.cache_dir is not None:
+            cache_key = self._get_cache_key(messages)
             self.cache_dir.set(cache_key, response)
 
         return response
