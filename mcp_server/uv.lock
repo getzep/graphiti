@@ -11,24 +11,6 @@ wheels = [
 ]
 
 [[package]]
-name = "anthropic"
-version = "0.49.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "httpx" },
-    { name = "jiter" },
-    { name = "pydantic" },
-    { name = "sniffio" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/86/e3/a88c8494ce4d1a88252b9e053607e885f9b14d0a32273d47b727cbee4228/anthropic-0.49.0.tar.gz", hash = "sha256:c09e885b0f674b9119b4f296d8508907f6cff0009bc20d5cf6b35936c40b4398", size = 210016 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/74/5d90ad14d55fbe3f9c474fdcb6e34b4bed99e3be8efac98734a5ddce88c1/anthropic-0.49.0-py3-none-any.whl", hash = "sha256:bbc17ad4e7094988d2fa86b87753ded8dce12498f4b85fe5810f208f454a8375", size = 243368 },
-]
-
-[[package]]
 name = "anyio"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -103,11 +85,9 @@ wheels = [
 [[package]]
 name = "graphiti-core"
 version = "0.8.1"
-source = { directory = "../" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anthropic" },
     { name = "diskcache" },
-    { name = "mcp" },
     { name = "neo4j" },
     { name = "numpy" },
     { name = "openai" },
@@ -115,18 +95,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.49.0,<0.50.0" },
-    { name = "diskcache", specifier = ">=5.6.3,<6.0.0" },
-    { name = "mcp", specifier = ">=1.5.0,<2.0.0" },
-    { name = "neo4j", specifier = ">=5.23.0,<6.0.0" },
-    { name = "numpy", specifier = ">=1.0.0" },
-    { name = "openai", specifier = ">=1.53.0,<2.0.0" },
-    { name = "pydantic", specifier = ">=2.8.2,<3.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
-    { name = "tenacity", specifier = "==9.0.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/6c/18/33266acf712d952b96a9b525d54c047f88e4760a00f3742c7e00349de290/graphiti_core-0.8.1.tar.gz", hash = "sha256:76f64428ddefa76049b997f02124099ac97a0b910e4551adfed4dfcf7589d31a", size = 62128 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/fd/3420e4e774a586c5c92c2925d2311aa21c4ad89bc22ff0488a60cad2d58d/graphiti_core-0.8.1-py3-none-any.whl", hash = "sha256:58bede60d5de1d08fafc4d1e87230129c5cfebf8cd764e95a648f9b9573e0385", size = 94875 },
 ]
 
 [[package]]
@@ -274,7 +245,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "graphiti-core", directory = "../" },
+    { name = "graphiti-core", specifier = ">=0.8.1" },
     { name = "mcp", specifier = ">=1.5.0" },
     { name = "openai", specifier = ">=1.68.2" },
 ]

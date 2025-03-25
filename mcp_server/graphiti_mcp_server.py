@@ -15,20 +15,75 @@ from typing import Any, Optional, TypedDict, TypeVar, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # graphiti_core imports
+import asyncio
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EpisodeType, EpisodicNode
-from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+from graphiti_core.search.search_config_recipes import (
+    NODE_HYBRID_SEARCH_NODE_DISTANCE,
+    NODE_HYBRID_SEARCH_RRF,
+)
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
+
+
+class Preference(BaseModel):
+    """A Preference represents a user's expressed like, dislike, or preference for something.
+
+    Instructions for identifying and extracting preferences:
+    1. Look for explicit statements of preference such as "I like/love/enjoy/prefer X" or "I don't like/hate/dislike X"
+    2. Pay attention to comparative statements ("I prefer X over Y")
+    3. Consider the emotional tone when users mention certain topics
+    4. Extract only preferences that are clearly expressed, not assumptions
+    5. Categorize the preference appropriately based on its domain (food, music, brands, etc.)
+    6. Include relevant qualifiers (e.g., "likes spicy food" rather than just "likes food")
+    7. Only extract preferences directly stated by the user, not preferences of others they mention
+    8. Provide a concise but specific description that captures the nature of the preference
+    """
+
+    category: Optional[str] = Field(
+        ..., description="The category of the preference. (e.g., 'Brands', 'Food', 'Music')"
+    )
+    description: Optional[str] = Field(
+        None,
+        description='Brief description of the preference. Only use information mentioned in the messages to write this description.',
+    )
+
+
+class Procedure(BaseModel):
+    """A Procedure informing the agent what actions to take or how to perform in certain scenarios. Procedures are typically composed of several steps.
+
+    Instructions for identifying and extracting procedures:
+    1. Look for sequential instructions or steps ("First do X, then do Y")
+    2. Identify explicit directives or commands ("Always do X when Y happens")
+    3. Pay attention to conditional statements ("If X occurs, then do Y")
+    4. Note recurring patterns in how the user wants tasks performed
+    5. Extract procedures that have clear beginning and end points
+    6. Focus on actionable instructions rather than general information
+    7. Preserve the original sequence and dependencies between steps
+    8. Include any specified conditions or triggers for the procedure
+    9. Capture any stated purpose or goal of the procedure
+    10. Summarize complex procedures while maintaining critical details
+    """
+
+    description: Optional[str] = Field(
+        None,
+        description='Brief description of the procedure. Only use information mentioned in the messages to write this description.',
+    )
+
+
+ENTITY_TYPES: dict[str, BaseModel] = {
+    'Preference': Preference,  # type: ignore
+    'Procedure': Procedure,  # type: ignore
+}
 
 
 # Type definitions for API responses
@@ -240,6 +295,8 @@ async def add_episode(
 ) -> Union[SuccessResponse, ErrorResponse]:
     """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
 
+    This function returns immediately and processes the episode addition in the background.
+
     Args:
         name (str): Name of the episode
         episode_body (str): The content of the episode. When source='json', this must be a properly escaped JSON string,
@@ -320,29 +377,38 @@ async def add_episode(
 
         # We've already checked that graphiti_client is not None above
         # This assert statement helps type checkers understand that graphiti_client is defined
-        # from this point forward in the function
         assert graphiti_client is not None, 'graphiti_client should not be None here'
 
         # Use cast to help the type checker understand that graphiti_client is not None
-        # This doesn't change the runtime behavior, only helps with static type checking
         client = cast(Graphiti, graphiti_client)
 
-        # Type checking will now know that client is a Graphiti instance (not None)
-        # and group_id is a str, not Optional[str]
-        await client.add_episode(
-            name=name,
-            episode_body=episode_body,
-            source=source_type,
-            source_description=source_description,
-            group_id=group_id_str,  # Using the string version of group_id
-            uuid=uuid,
-            reference_time=datetime.now(timezone.utc),
-        )
-        return {'message': f"Episode '{name}' added successfully"}
+        # Define the background task function
+        async def process_episode_in_background():
+            try:
+                await client.add_episode(
+                    name=name,
+                    episode_body=episode_body,
+                    source=source_type,
+                    source_description=source_description,
+                    group_id=group_id_str,  # Using the string version of group_id
+                    uuid=uuid,
+                    reference_time=datetime.now(timezone.utc),
+                    entity_types=ENTITY_TYPES,
+                )
+                logger.info(f"Episode '{name}' processed successfully in background")
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f'Error processing episode in background: {error_msg}')
+
+        # Create and start the background task without awaiting it
+        asyncio.create_task(process_episode_in_background())
+
+        # Return immediately with a success message
+        return {'message': f"Episode '{name}' queued for processing"}
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error adding episode: {error_msg}')
-        return {'error': f'Error adding episode: {error_msg}'}
+        logger.error(f'Error preparing episode task: {error_msg}')
+        return {'error': f'Error preparing episode task: {error_msg}'}
 
 
 @mcp.tool()
@@ -351,15 +417,19 @@ async def search_nodes(
     group_ids: Optional[list[str]] = None,
     max_nodes: int = 10,
     center_node_uuid: Optional[str] = None,
+    entity: str = '',  # cursor seems to break with None
 ) -> Union[NodeSearchResponse, ErrorResponse]:
     """Search the Graphiti knowledge graph for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
+
+    Note: entity is a single entity type to filter results (permitted: "Preference", "Procedure").
 
     Args:
         query: The search query
         group_ids: Optional list of group IDs to filter results
         max_nodes: Maximum number of nodes to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
+        entity: Optional single entity type to filter results (permitted: "Preference", "Procedure")
     """
     global graphiti_client
 
@@ -373,8 +443,15 @@ async def search_nodes(
         )
 
         # Configure the search
-        search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
+        if center_node_uuid is not None:
+            search_config = NODE_HYBRID_SEARCH_NODE_DISTANCE.model_copy(deep=True)
+        else:
+            search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
         search_config.limit = max_nodes
+
+        filters = SearchFilters()
+        if entity != '':
+            filters.node_labels = [entity]
 
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -388,7 +465,7 @@ async def search_nodes(
             config=search_config,
             group_ids=effective_group_ids,
             center_node_uuid=center_node_uuid,
-            search_filter=SearchFilters(),
+            search_filter=filters,
         )
 
         if not search_results.nodes:
