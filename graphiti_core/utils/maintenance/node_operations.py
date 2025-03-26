@@ -364,7 +364,11 @@ async def resolve_extracted_node(
     )
 
     extracted_node.summary = node_attributes_response.get('summary', '')
-    extracted_node.attributes.update(node_attributes_response)
+    node_attributes = {
+        key: value if value != 'None' else None for key, value in node_attributes_response.items()
+    }
+
+    extracted_node.attributes.update(node_attributes)
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
     uuid: str | None = llm_response.get('uuid', None)
@@ -386,11 +390,12 @@ async def resolve_extracted_node(
             node.name = name
             node.summary = summary_response.get('summary', '')
 
-            new_attributes = existing_node.attributes
+            new_attributes = extracted_node.attributes
             existing_attributes = existing_node.attributes
             for attribute_name, attribute_value in existing_attributes.items():
                 if new_attributes.get(attribute_name) is None:
                     new_attributes[attribute_name] = attribute_value
+            node.attributes = new_attributes
 
             uuid_map[extracted_node.uuid] = existing_node.uuid
 
