@@ -32,6 +32,36 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
+DEFAULT_LLM_MODEL = 'gpt-4o'
+
+
+class Requirement(BaseModel):
+    """A Requirement represents a specific need, feature, or functionality that a product or service must fulfill.
+
+    Always ensure an edge is created between the requirement and the project it belongs to, and clearly indicate on the
+    edge that the requirement is a requirement.
+
+    Instructions for identifying and extracting requirements:
+    1. Look for explicit statements of needs or necessities ("We need X", "X is required", "X must have Y")
+    2. Identify functional specifications that describe what the system should do
+    3. Pay attention to non-functional requirements like performance, security, or usability criteria
+    4. Extract constraints or limitations that must be adhered to
+    5. Focus on clear, specific, and measurable requirements rather than vague wishes
+    6. Capture the priority or importance if mentioned ("critical", "high priority", etc.)
+    7. Include any dependencies between requirements when explicitly stated
+    8. Preserve the original intent and scope of the requirement
+    9. Categorize requirements appropriately based on their domain or function
+    """
+
+    project_name: str = Field(
+        ...,
+        description='The name of the project to which the requirement belongs.',
+    )
+    description: str = Field(
+        ...,
+        description='Description of the requirement. Only use information mentioned in the context to write this description.',
+    )
+
 
 class Preference(BaseModel):
     """A Preference represents a user's expressed like, dislike, or preference for something.
@@ -47,11 +77,12 @@ class Preference(BaseModel):
     8. Provide a concise but specific description that captures the nature of the preference
     """
 
-    category: Optional[str] = Field(
-        ..., description="The category of the preference. (e.g., 'Brands', 'Food', 'Music')"
+    category: str = Field(
+        ...,
+        description="The category of the preference. (e.g., 'Brands', 'Food', 'Music')",
     )
-    description: Optional[str] = Field(
-        None,
+    description: str = Field(
+        ...,
         description='Brief description of the preference. Only use information mentioned in the context to write this description.',
     )
 
@@ -71,13 +102,14 @@ class Procedure(BaseModel):
     9. Summarize complex procedures while maintaining critical details
     """
 
-    description: Optional[str] = Field(
-        None,
+    description: str = Field(
+        ...,
         description='Brief description of the procedure. Only use information mentioned in the context to write this description.',
     )
 
 
 ENTITY_TYPES: dict[str, BaseModel] = {
+    'Requirement': Requirement,  # type: ignore
     'Preference': Preference,  # type: ignore
     'Procedure': Procedure,  # type: ignore
 }
@@ -281,6 +313,47 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
     )
 
 
+# Dictionary to store queues for each group_id
+# Each queue is a list of tasks to be processed sequentially
+episode_queues: dict[str, asyncio.Queue] = {}
+# Dictionary to track if a worker is running for each group_id
+queue_workers: dict[str, bool] = {}
+
+
+async def process_episode_queue(group_id: str):
+    """Process episodes for a specific group_id sequentially.
+
+    This function runs as a long-lived task that processes episodes
+    from the queue one at a time.
+    """
+    global queue_workers
+
+    logger.info(f'Starting episode queue worker for group_id: {group_id}')
+    queue_workers[group_id] = True
+
+    try:
+        while True:
+            # Get the next episode processing function from the queue
+            # This will wait if the queue is empty
+            process_func = await episode_queues[group_id].get()
+
+            try:
+                # Process the episode
+                await process_func()
+            except Exception as e:
+                logger.error(f'Error processing queued episode for group_id {group_id}: {str(e)}')
+            finally:
+                # Mark the task as done regardless of success/failure
+                episode_queues[group_id].task_done()
+    except asyncio.CancelledError:
+        logger.info(f'Episode queue worker for group_id {group_id} was cancelled')
+    except Exception as e:
+        logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
+    finally:
+        queue_workers[group_id] = False
+        logger.info(f'Stopped episode queue worker for group_id: {group_id}')
+
+
 @mcp.tool()
 async def add_episode(
     name: str,
@@ -293,6 +366,7 @@ async def add_episode(
     """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
+    Episodes for the same group_id are processed sequentially to avoid race conditions.
 
     Args:
         name (str): Name of the episode
@@ -352,7 +426,7 @@ async def add_episode(
         - Entities will be created from appropriate JSON properties
         - Relationships between entities will be established based on the JSON structure
     """
-    global graphiti_client
+    global graphiti_client, episode_queues, queue_workers
 
     if graphiti_client is None:
         return {'error': 'Graphiti client not initialized'}
@@ -379,9 +453,10 @@ async def add_episode(
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Define the background task function
-        async def process_episode_in_background():
+        # Define the episode processing function
+        async def process_episode():
             try:
+                logger.info(f"Processing queued episode '{name}' for group_id: {group_id_str}")
                 await client.add_episode(
                     name=name,
                     episode_body=episode_body,
@@ -392,20 +467,37 @@ async def add_episode(
                     reference_time=datetime.now(timezone.utc),
                     entity_types=ENTITY_TYPES,
                 )
-                logger.info(f"Episode '{name}' processed successfully in background")
+                logger.info(f"Episode '{name}' added successfully")
+
+                logger.info(f"Building communities after episode '{name}'")
+                await client.build_communities()
+
+                logger.info(f"Episode '{name}' processed successfully")
             except Exception as e:
                 error_msg = str(e)
-                logger.error(f'Error processing episode in background: {error_msg}')
+                logger.error(
+                    f"Error processing episode '{name}' for group_id {group_id_str}: {error_msg}"
+                )
 
-        # Create and start the background task without awaiting it
-        asyncio.create_task(process_episode_in_background())
+        # Initialize queue for this group_id if it doesn't exist
+        if group_id_str not in episode_queues:
+            episode_queues[group_id_str] = asyncio.Queue()
+
+        # Add the episode processing function to the queue
+        await episode_queues[group_id_str].put(process_episode)
+
+        # Start a worker for this queue if one isn't already running
+        if not queue_workers.get(group_id_str, False):
+            asyncio.create_task(process_episode_queue(group_id_str))
 
         # Return immediately with a success message
-        return {'message': f"Episode '{name}' queued for processing"}
+        return {
+            'message': f"Episode '{name}' queued for processing (position: {episode_queues[group_id_str].qsize()})"
+        }
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error preparing episode task: {error_msg}')
-        return {'error': f'Error preparing episode task: {error_msg}'}
+        logger.error(f'Error queuing episode task: {error_msg}')
+        return {'error': f'Error queuing episode task: {error_msg}'}
 
 
 @mcp.tool()
@@ -732,13 +824,10 @@ async def get_status() -> StatusResponse:
         }
 
 
-def create_llm_client(
-    client_type: str = 'openai', api_key: Optional[str] = None, model: Optional[str] = None
-) -> LLMClient:
+def create_llm_client(api_key: Optional[str] = None, model: Optional[str] = None) -> LLMClient:
     """Create an OpenAI LLM client.
 
     Args:
-        client_type: Type of LLM client to create (only 'openai' or 'openai_generic' supported)
         api_key: API key for the OpenAI service
         model: Model name to use
 
@@ -793,13 +882,11 @@ async def initialize_server() -> MCPConfig:
     # Create OpenAI client if model is specified or if OPENAI_API_KEY is available
     if args.model or config.openai_api_key:
         # Override model from command line if specified
-        if args.model:
-            config.model_name = args.model
+
+        config.model_name = args.model or DEFAULT_LLM_MODEL
 
         # Create the OpenAI client
-        llm_client = create_llm_client(
-            client_type='openai', api_key=config.openai_api_key, model=config.model_name
-        )
+        llm_client = create_llm_client(api_key=config.openai_api_key, model=config.model_name)
 
     # Initialize Graphiti with the specified LLM client
     await initialize_graphiti(llm_client, destroy_graph=args.destroy_graph)
