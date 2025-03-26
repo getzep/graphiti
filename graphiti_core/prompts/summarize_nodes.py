@@ -85,8 +85,10 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         provided ENTITY. Summaries must be under 500 words.
         
         In addition, extract any values for the provided entity properties based on their descriptions.
-        If the value of the entity property cannot be found in the current context, set the value of the property to None.
-        Do not hallucinate entity property values if they cannot be found in the current context.
+        If the value of the entity property cannot be found in the current context, set the value of the property to the Python value None.
+        
+        Guidelines:
+        1. Do not hallucinate entity property values if they cannot be found in the current context.
         
         <ENTITY>
         {context['node_name']}
