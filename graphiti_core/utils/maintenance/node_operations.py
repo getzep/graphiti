@@ -369,6 +369,11 @@ async def resolve_extracted_node(
         for key, value in node_attributes_response.items()
     }
 
+    try:
+        del node_attributes['summary']
+    except KeyError:
+        pass
+
     extracted_node.attributes.update(node_attributes)
 
     is_duplicate: bool = llm_response.get('is_duplicate', False)
