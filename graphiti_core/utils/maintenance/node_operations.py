@@ -365,7 +365,8 @@ async def resolve_extracted_node(
 
     extracted_node.summary = node_attributes_response.get('summary', '')
     node_attributes = {
-        key: value if value != 'None' else None for key, value in node_attributes_response.items()
+        key: value if (value != 'None' or key == 'summary') else None
+        for key, value in node_attributes_response.items()
     }
 
     extracted_node.attributes.update(node_attributes)
