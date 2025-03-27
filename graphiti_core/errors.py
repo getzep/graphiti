@@ -27,6 +27,14 @@ class EdgeNotFoundError(GraphitiError):
         super().__init__(self.message)
 
 
+class EdgesNotFoundError(GraphitiError):
+    """Raised when a list of edges is not found."""
+
+    def __init__(self, uuids: list[str]):
+        self.message = f'None of the edges for {uuids} were found.'
+        super().__init__(self.message)
+
+
 class GroupsEdgesNotFoundError(GraphitiError):
     """Raised when no edges are found for a list of group ids."""
 
