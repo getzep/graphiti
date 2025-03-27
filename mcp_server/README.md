@@ -226,30 +226,6 @@ add_episode(
 )
 ```
 
-## Example Usage
-
-Once the Graphiti MCP server is running and configured with an MCP-compatible client:
-
-```
-User: Add information about a company to the knowledge graph.
-
-Assistant: I'll help you add information about a company to the knowledge graph.
-
-[Assistant uses the add_episode tool to add the information]
-
-User: Now search for information about this company.
-
-Assistant: I'll search the knowledge graph for information about the company.
-
-[Assistant uses the search_facts tool to find relevant facts]
-
-User: Can you show me a summary of entities related to this company?
-
-Assistant: I'll search for node summaries related to the company.
-
-[Assistant uses the search_nodes tool to find relevant entity summaries]
-```
-
 ## Integrating with the Cursor IDE
 
 To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
