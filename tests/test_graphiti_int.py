@@ -68,6 +68,8 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
+    await graphiti.remove_episode('31376f51-aa37-49b0-a264-2cfb5384430a')
+
     results = await graphiti._search(
         'My name is Alice',
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
