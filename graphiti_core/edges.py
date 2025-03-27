@@ -139,11 +139,11 @@ class EpisodicEdge(Edge):
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        created_at: datetime | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -289,17 +289,15 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        if len(edges) == 0:
-            raise EdgesNotFoundError(uuids)
         return edges
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        created_at: datetime | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -428,11 +426,11 @@ class CommunityEdge(Edge):
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        created_at: datetime | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            created_at: datetime | None = None,
     ):
         cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
