@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.errors import EdgeNotFoundError, EdgesNotFoundError, GroupsEdgesNotFoundError
+from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_SAVE,
@@ -289,8 +289,6 @@ class EntityEdge(Edge):
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
-        if len(edges) == 0:
-            raise EdgesNotFoundError(uuids)
         return edges
 
     @classmethod

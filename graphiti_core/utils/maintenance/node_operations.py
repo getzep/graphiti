@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from contextlib import suppress
 from time import time
 
 import pydantic
@@ -365,8 +366,12 @@ async def resolve_extracted_node(
 
     extracted_node.summary = node_attributes_response.get('summary', '')
     node_attributes = {
-        key: value if value != 'None' else None for key, value in node_attributes_response.items()
+        key: value if (value != 'None' or key == 'summary') else None
+        for key, value in node_attributes_response.items()
     }
+
+    with suppress(KeyError):
+        del node_attributes['summary']
 
     extracted_node.attributes.update(node_attributes)
 
