@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from contextlib import suppress
 from time import time
 
 import pydantic
@@ -369,10 +370,8 @@ async def resolve_extracted_node(
         for key, value in node_attributes_response.items()
     }
 
-    try:
+    with suppress(KeyError):
         del node_attributes['summary']
-    except KeyError:
-        pass
 
     extracted_node.attributes.update(node_attributes)
 
