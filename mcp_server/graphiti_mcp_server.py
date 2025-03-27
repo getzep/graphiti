@@ -9,9 +9,8 @@ import logging
 import os
 import sys
 import uuid
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any, Optional, TypedDict, TypeVar, Union, cast
+from typing import Any, Optional, TypedDict, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
@@ -169,6 +168,7 @@ class GraphitiConfig(BaseModel):
     openai_base_url: Optional[str] = None
     model_name: Optional[str] = None
     group_id: Optional[str] = None
+    use_custom_entities: bool = False
 
     @classmethod
     def from_env(cls) -> 'GraphitiConfig':
@@ -242,14 +242,6 @@ mcp = FastMCP(
 # Initialize Graphiti client
 graphiti_client: Optional[Graphiti] = None
 
-# Type for functions that can be wrapped with graphiti_error_handler
-T = TypeVar('T')
-GraphitiFunc = Callable[..., Awaitable[T]]
-
-
-# Note: We've removed the error handler decorator in favor of inline error handling
-# This is to avoid type checking issues with the global graphiti_client variable
-
 
 async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_graph: bool = False):
     """Initialize the Graphiti client with the provided settings.
@@ -269,7 +261,6 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
             if config.model_name:
                 llm_config.model = config.model_name
             llm_client = OpenAIClient(config=llm_config)
-            logger.info('Using OpenAI as LLM client')
         else:
             raise ValueError('OPENAI_API_KEY must be set when not using a custom LLM client')
 
@@ -303,12 +294,10 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
     Returns:
         A dictionary representation of the edge with serialized dates and excluded embeddings
     """
-    # Convert to dict using Pydantic's model_dump method with mode='json'
-    # This automatically handles datetime serialization and other complex types
     return edge.model_dump(
-        mode='json',  # Properly handle datetime serialization for JSON
+        mode='json',
         exclude={
-            'fact_embedding',  # Exclude embedding data
+            'fact_embedding',
         },
     )
 
@@ -393,20 +382,12 @@ async def add_episode(
         )
 
         # Adding structured JSON data
-        # NOTE: episode_body must be a properly escaped JSON string
+        # NOTE: episode_body must be a properly escaped JSON string. Note the triple backslashes
         add_episode(
             name="Customer Profile",
             episode_body="{\\\"company\\\": {\\\"name\\\": \\\"Acme Technologies\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\", \\\"name\\\": \\\"CloudSync\\\"}, {\\\"id\\\": \\\"P002\\\", \\\"name\\\": \\\"DataMiner\\\"}]}",
             source="json",
             source_description="CRM data"
-        )
-
-        # Adding more complex JSON with arrays and nested objects
-        add_episode(
-            name="Product Catalog",
-            episode_body='\{"catalog": \{"company": "Tech Solutions Inc.", "products": [\{"id": "P001", "name": "Product X", "features": ["Feature A", "Feature B"]\}]\}\}',
-            source="json",
-            source_description="Product catalog"
         )
 
         # Adding message-style content
@@ -457,6 +438,9 @@ async def add_episode(
         async def process_episode():
             try:
                 logger.info(f"Processing queued episode '{name}' for group_id: {group_id_str}")
+                # Use all entity types if use_custom_entities is enabled, otherwise use empty dict
+                entity_types = ENTITY_TYPES if config.use_custom_entities else {}
+
                 await client.add_episode(
                     name=name,
                     episode_body=episode_body,
@@ -465,7 +449,7 @@ async def add_episode(
                     group_id=group_id_str,  # Using the string version of group_id
                     uuid=uuid,
                     reference_time=datetime.now(timezone.utc),
-                    entity_types=ENTITY_TYPES,
+                    entity_types=entity_types,
                 )
                 logger.info(f"Episode '{name}' added successfully")
 
@@ -866,6 +850,11 @@ async def initialize_server() -> MCPConfig:
     # OpenAI is the only supported LLM client
     parser.add_argument('--model', help='Model name to use with the LLM client')
     parser.add_argument('--destroy-graph', action='store_true', help='Destroy all Graphiti graphs')
+    parser.add_argument(
+        '--use-custom-entities',
+        action='store_true',
+        help='Enable entity extraction using the predefined ENTITY_TYPES',
+    )
 
     args = parser.parse_args()
 
@@ -876,6 +865,13 @@ async def initialize_server() -> MCPConfig:
     else:
         config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
         logger.info(f'Generated random group_id: {config.group_id}')
+
+    # Set use_custom_entities flag if specified
+    if args.use_custom_entities:
+        config.use_custom_entities = True
+        logger.info('Entity extraction enabled using predefined ENTITY_TYPES')
+    else:
+        logger.info('Entity extraction disabled (no custom entities will be used)')
 
     llm_client = None
 

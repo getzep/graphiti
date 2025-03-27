@@ -68,6 +68,7 @@ Available arguments:
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
 - `--group-id`: Set a namespace for the graph (optional)
 - `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
+- `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
 ### Docker Deployment
 
@@ -249,11 +250,41 @@ Assistant: I'll search for node summaries related to the company.
 [Assistant uses the search_nodes tool to find relevant entity summaries]
 ```
 
+## Integrating with the Cursor IDE
+
+To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
+
+1. Run the Graphiti MCP server using the SSE transport:
+
+```bash
+python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
+```
+
+Hint: specify a `group_id` to retain prior graph data. If you do not specify a `group_id`, the server will create a new graph
+
+2. Configure Cursor to connect to the Graphiti MCP server.
+
+```json
+{
+  "mcpServers": {
+    "Graphiti": {
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+
+4. Kick off an agent session in Cursor.
+
+The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph capabilities.
+
 ## Requirements
 
 - Python 3.10 or higher
 - Neo4j database (version 5.26 or later required)
-- OpenAI API key (for LLM operations)
+- OpenAI API key (for LLM operations and embeddings)
 - MCP-compatible client
 
 ## License
