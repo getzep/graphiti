@@ -198,7 +198,7 @@ class GraphitiConfig(BaseModel):
             azure_openai_deployment_name=os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None),
             azure_openai_embedding_api_version=os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None),
             azure_openai_embedding_deployment_name=os.environ.get('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None),
-            azure_openai_use_managed_identity=bool(os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', False)),
+            azure_openai_use_managed_identity=os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', 'false').lower() == 'true',
         )
 
 
