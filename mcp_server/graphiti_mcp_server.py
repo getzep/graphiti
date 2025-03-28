@@ -836,7 +836,7 @@ def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
         config: the configuration for mcp server
 
     Returns:
-        An instance of the OpenAI Embedder client
+        An instance of the CrossEncoderClient
     """
     if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
