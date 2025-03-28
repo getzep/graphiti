@@ -14,13 +14,19 @@ from typing import Any, Optional, TypedDict, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     NODE_HYBRID_SEARCH_NODE_DISTANCE,
@@ -169,6 +175,13 @@ class GraphitiConfig(BaseModel):
     model_name: Optional[str] = None
     group_id: Optional[str] = None
     use_custom_entities: bool = False
+    azure_openai_endopoint: Optional[str] = None
+    azure_openai_deployment_name: Optional[str] = None
+    azure_openai_embedding_deployment_name: Optional[str] = None
+    azure_openai_api_version: Optional[str] = None
+    azure_openai_embedding_api_version: Optional[str] = None
+    azure_openai_use_managed_identity: bool = False
+    
 
     @classmethod
     def from_env(cls) -> 'GraphitiConfig':
@@ -180,6 +193,12 @@ class GraphitiConfig(BaseModel):
             openai_api_key=os.environ.get('OPENAI_API_KEY'),
             openai_base_url=os.environ.get('OPENAI_BASE_URL'),
             model_name=os.environ.get('MODEL_NAME'),
+            azure_openai_endopoint=os.environ.get('AZURE_OPENAI_ENDPOINT', None),
+            azure_openai_api_version=os.environ.get('AZURE_OPENAI_API_VERSION', None),
+            azure_openai_deployment_name=os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None),
+            azure_openai_embedding_api_version=os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None),
+            azure_openai_embedding_deployment_name=os.environ.get('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None),
+            azure_openai_use_managed_identity=bool(os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', False)),
         )
 
 
@@ -243,7 +262,7 @@ mcp = FastMCP(
 graphiti_client: Optional[Graphiti] = None
 
 
-async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_graph: bool = False):
+async def initialize_graphiti(llm_client: Optional[LLMClient] = None, embedder_client: Optional[EmbedderClient] = None, cross_encoder_client : Optional[CrossEncoderClient] = None,  destroy_graph: bool = False):
     """Initialize the Graphiti client with the provided settings.
 
     Args:
@@ -255,6 +274,7 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
     # If no client is provided, create a default OpenAI client
     if not llm_client:
         if config.openai_api_key:
+            logger.info('Using OpenAI')
             llm_config = LLMConfig(api_key=config.openai_api_key)
             if config.openai_base_url:
                 llm_config.base_url = config.openai_base_url
@@ -272,6 +292,8 @@ async def initialize_graphiti(llm_client: Optional[LLMClient] = None, destroy_gr
         user=config.neo4j_user,
         password=config.neo4j_password,
         llm_client=llm_client,
+        embedder=embedder_client,
+        cross_encoder=cross_encoder_client,
     )
 
     if destroy_graph:
@@ -806,27 +828,121 @@ async def get_status() -> StatusResponse:
             'status': 'error',
             'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
         }
+    
+def create_reranker_client(config= GraphitiConfig) -> CrossEncoderClient | None:
+    """Create an OpenAI Reranker client.
 
+    Args:
+        config: the configuration for mcp server
 
-def create_llm_client(api_key: Optional[str] = None, model: Optional[str] = None) -> LLMClient:
+    Returns:
+        An instance of the OpenAI Embedder client
+    """
+    if config.azure_openai_endopoint:
+        logger.info('Using Azure OpenAI')
+        if config.azure_openai_use_managed_identity:
+            logger.info('Using Azure Managed Identity')
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            azure_client = AsyncAzureOpenAI(
+                    azure_ad_token_provider=token_provider,
+                    api_version=config.azure_openai_api_version,
+                    azure_endpoint=config.azure_openai_endopoint,
+                     azure_deployment=config.azure_openai_deployment_name,
+                    )
+        else:
+            logger.info('Using Azure OpenAI with API key')
+            azure_client = AsyncAzureOpenAI(
+                api_key=config.openai_api_key,
+                api_version=config.azure_openai_api_version,
+                azure_endpoint=config.azure_openai_endopoint,
+                 azure_deployment=config.azure_openai_deployment_name,
+                )
+        return OpenAIRerankerClient(client=azure_client)
+
+    return None
+
+def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
+    """Create an OpenAI Embedder client.
+
+    Args:
+        config: the configuration for mcp server
+
+    Returns:
+        An instance of the OpenAI Embedder client
+    """
+    if config.azure_openai_endopoint:
+        logger.info('Using Azure OpenAI')
+        if config.azure_openai_use_managed_identity:
+            logger.info('Using Azure Managed Identity')
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            azure_client = AsyncAzureOpenAI(
+                    azure_ad_token_provider=token_provider,
+                    api_version=config.azure_openai_embedding_api_version,
+                    azure_endpoint=config.azure_openai_endopoint,
+                    azure_deployment=config.azure_openai_embedding_deployment_name,
+                    )
+        else:
+            logger.info('Using Azure OpenAI with API key')
+            azure_client = AsyncAzureOpenAI(
+                api_key=config.openai_api_key,
+                api_version=config.azure_openai_embedding_api_version,
+                azure_endpoint=config.azure_openai_endopoint,
+                 azure_deployment=config.azure_openai_deployment_name,
+                )
+        return OpenAIEmbedder(
+            client=azure_client,
+            config=OpenAIEmbedderConfig(
+                embedding_model=config.azure_openai_embedding_deployment_name
+                ),
+            )
+
+    return None
+
+def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
     """Create an OpenAI LLM client.
 
     Args:
-        api_key: API key for the OpenAI service
-        model: Model name to use
+        config: the configuration for mcp server
 
     Returns:
         An instance of the OpenAI LLM client
     """
-    # Create config with provided API key and model
-    llm_config = LLMConfig(api_key=api_key)
+    if config.azure_openai_endopoint:
+        logger.info('Using Azure OpenAI')
+        if config.azure_openai_use_managed_identity:
+            logger.info('Using Azure Managed Identity')
+            credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            azure_client = AsyncAzureOpenAI(
+                    azure_ad_token_provider=token_provider,
+                    api_version=config.azure_openai_api_version,
+                    azure_endpoint=config.azure_openai_endopoint,
+                    azure_deployment=config.azure_openai_deployment_name,
+                    )
+        else:
+            logger.info('Using Azure OpenAI with API key')
+            azure_client = AsyncAzureOpenAI(
+                api_key=config.openai_api_key,
+                api_version=config.azure_openai_api_version,
+                azure_endpoint=config.azure_openai_endopoint,
+                azure_deployment=config.azure_openai_deployment_name,
+                )
+        return OpenAIClient(client=azure_client)
+    elif config.openai_api_key:
+        logger.info('Using OpenAI')
+        llm_config = LLMConfig(api_key=config.openai_api_key)
+        if config.openai_base_url:
+            llm_config.base_url = config.openai_base_url
+        if config.model_name:
+            llm_config.model = config.model_name
 
-    # Set model if provided
-    if model:
-        llm_config.model = model
+        return OpenAIClient(config=llm_config)
+
 
     # Create and return the client
-    return OpenAIClient(config=llm_config)
+    return None
 
 
 async def initialize_server() -> MCPConfig:
@@ -873,7 +989,9 @@ async def initialize_server() -> MCPConfig:
     else:
         logger.info('Entity extraction disabled (no custom entities will be used)')
 
-    llm_client = None
+    llm_client: LLMClient = None
+    embedder_client: EmbedderClient = None
+    cross_encoder_client: CrossEncoderClient = None
 
     # Create OpenAI client if model is specified or if OPENAI_API_KEY is available
     if args.model or config.openai_api_key:
@@ -881,11 +999,13 @@ async def initialize_server() -> MCPConfig:
 
         config.model_name = args.model or DEFAULT_LLM_MODEL
 
-        # Create the OpenAI client
-        llm_client = create_llm_client(api_key=config.openai_api_key, model=config.model_name)
+    # Create the OpenAI client
+    llm_client = create_llm_client(config=config)
+    embedder_client = create_embedder_client(config=config)
+    cross_encoder_client = create_reranker_client(config=config)
 
     # Initialize Graphiti with the specified LLM client
-    await initialize_graphiti(llm_client, destroy_graph=args.destroy_graph)
+    await initialize_graphiti( llm_client= llm_client, embedder_client=embedder_client,cross_encoder_client=cross_encoder_client,  destroy_graph=args.destroy_graph)
 
     return MCPConfig(transport=args.transport)
 
