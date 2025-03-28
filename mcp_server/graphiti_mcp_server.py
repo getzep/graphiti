@@ -830,7 +830,7 @@ async def get_status() -> StatusResponse:
         }
     
 def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
-    """Create an CrossEncoderClient.
+    """Create a CrossEncoderClient.
 
     Args:
         config: the configuration for mcp server
