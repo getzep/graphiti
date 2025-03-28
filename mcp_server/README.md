@@ -45,7 +45,7 @@ The server uses the following environment variables:
 - `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: Optional model name to use for LLM inference
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endopoint ul
+- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI deployment name
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI dembedding deployment name
