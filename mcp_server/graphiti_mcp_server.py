@@ -830,7 +830,7 @@ async def get_status() -> StatusResponse:
         }
     
 def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
-    """Create an OpenAI Reranker client.
+    """Create an CrossEncoderClient.
 
     Args:
         config: the configuration for mcp server
@@ -863,13 +863,13 @@ def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
     return None
 
 def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
-    """Create an OpenAI Embedder client.
+    """Create an EmbedderClient.
 
     Args:
         config: the configuration for mcp server
 
     Returns:
-        An instance of the OpenAI Embedder client
+        An instance of the EmbedderClient
     """
     if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
@@ -901,13 +901,13 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
     return None
 
 def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
-    """Create an OpenAI LLM client.
+    """Create an LLMClient.
 
     Args:
         config: the configuration for mcp server
 
     Returns:
-        An instance of the OpenAI LLM client
+        An instance of the LLMClient
     """
     if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
