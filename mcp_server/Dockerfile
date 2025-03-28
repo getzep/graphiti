@@ -16,6 +16,9 @@ RUN uv sync
 
 # Copy application code
 COPY graphiti_mcp_server.py .
+COPY .env .
+
+EXPOSE 8000
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

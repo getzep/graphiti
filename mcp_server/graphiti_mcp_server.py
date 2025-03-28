@@ -175,7 +175,7 @@ class GraphitiConfig(BaseModel):
     model_name: Optional[str] = None
     group_id: Optional[str] = None
     use_custom_entities: bool = False
-    azure_openai_endopoint: Optional[str] = None
+    azure_openai_endpoint: Optional[str] = None
     azure_openai_deployment_name: Optional[str] = None
     azure_openai_embedding_deployment_name: Optional[str] = None
     azure_openai_api_version: Optional[str] = None
@@ -193,7 +193,7 @@ class GraphitiConfig(BaseModel):
             openai_api_key=os.environ.get('OPENAI_API_KEY'),
             openai_base_url=os.environ.get('OPENAI_BASE_URL'),
             model_name=os.environ.get('MODEL_NAME'),
-            azure_openai_endopoint=os.environ.get('AZURE_OPENAI_ENDPOINT', None),
+            azure_openai_endpoint=os.environ.get('AZURE_OPENAI_ENDPOINT', None),
             azure_openai_api_version=os.environ.get('AZURE_OPENAI_API_VERSION', None),
             azure_openai_deployment_name=os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None),
             azure_openai_embedding_api_version=os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None),
@@ -838,7 +838,7 @@ def create_reranker_client(config= GraphitiConfig) -> CrossEncoderClient | None:
     Returns:
         An instance of the OpenAI Embedder client
     """
-    if config.azure_openai_endopoint:
+    if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
@@ -847,7 +847,7 @@ def create_reranker_client(config= GraphitiConfig) -> CrossEncoderClient | None:
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_api_version,
-                    azure_endpoint=config.azure_openai_endopoint,
+                    azure_endpoint=config.azure_openai_endpoint,
                      azure_deployment=config.azure_openai_deployment_name,
                     )
         else:
@@ -855,7 +855,7 @@ def create_reranker_client(config= GraphitiConfig) -> CrossEncoderClient | None:
             azure_client = AsyncAzureOpenAI(
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_api_version,
-                azure_endpoint=config.azure_openai_endopoint,
+                azure_endpoint=config.azure_openai_endpoint,
                  azure_deployment=config.azure_openai_deployment_name,
                 )
         return OpenAIRerankerClient(client=azure_client)
@@ -871,7 +871,7 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
     Returns:
         An instance of the OpenAI Embedder client
     """
-    if config.azure_openai_endopoint:
+    if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
@@ -880,7 +880,7 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_embedding_api_version,
-                    azure_endpoint=config.azure_openai_endopoint,
+                    azure_endpoint=config.azure_openai_endpoint,
                     azure_deployment=config.azure_openai_embedding_deployment_name,
                     )
         else:
@@ -888,7 +888,7 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
             azure_client = AsyncAzureOpenAI(
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_embedding_api_version,
-                azure_endpoint=config.azure_openai_endopoint,
+                azure_endpoint=config.azure_openai_endpoint,
                  azure_deployment=config.azure_openai_embedding_deployment_name,
                 )
         return OpenAIEmbedder(
@@ -909,7 +909,7 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
     Returns:
         An instance of the OpenAI LLM client
     """
-    if config.azure_openai_endopoint:
+    if config.azure_openai_endpoint:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
@@ -918,7 +918,7 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_api_version,
-                    azure_endpoint=config.azure_openai_endopoint,
+                    azure_endpoint=config.azure_openai_endpoint,
                     azure_deployment=config.azure_openai_deployment_name,
                     )
         else:
@@ -926,7 +926,7 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
             azure_client = AsyncAzureOpenAI(
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_api_version,
-                azure_endpoint=config.azure_openai_endopoint,
+                azure_endpoint=config.azure_openai_endpoint,
                 azure_deployment=config.azure_openai_deployment_name,
                 )
         return OpenAIClient(client=azure_client)
