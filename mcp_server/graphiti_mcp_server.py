@@ -829,7 +829,7 @@ async def get_status() -> StatusResponse:
             'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
         }
     
-def create_reranker_client(config= GraphitiConfig) -> CrossEncoderClient | None:
+def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
     """Create an OpenAI Reranker client.
 
     Args:
