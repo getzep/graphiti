@@ -889,7 +889,7 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_embedding_api_version,
                 azure_endpoint=config.azure_openai_endopoint,
-                 azure_deployment=config.azure_openai_deployment_name,
+                 azure_deployment=config.azure_openai_embedding_deployment_name,
                 )
         return OpenAIEmbedder(
             client=azure_client,
