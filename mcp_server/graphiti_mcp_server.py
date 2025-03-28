@@ -10,7 +10,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, TypedDict, Union, cast
+from typing import Any, Callable, Optional, TypedDict, Union, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
@@ -260,7 +260,6 @@ mcp = FastMCP(
 
 # Initialize Graphiti client
 graphiti_client: Optional[Graphiti] = None
-
 
 async def initialize_graphiti(llm_client: Optional[LLMClient] = None, embedder_client: Optional[EmbedderClient] = None, cross_encoder_client : Optional[CrossEncoderClient] = None,  destroy_graph: bool = False):
     """Initialize the Graphiti client with the provided settings.
@@ -828,7 +827,12 @@ async def get_status() -> StatusResponse:
             'status': 'error',
             'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
         }
-    
+
+def create_azure_credential_token_provider() -> Callable[[], str]:
+    credential = DefaultAzureCredential()
+    token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+    return token_provider
+
 def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
     """Create a CrossEncoderClient.
 
@@ -842,8 +846,7 @@ def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
-            credential = DefaultAzureCredential()
-            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_api_version,
@@ -875,8 +878,7 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
-            credential = DefaultAzureCredential()
-            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_embedding_api_version,
@@ -913,8 +915,7 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
         logger.info('Using Azure OpenAI')
         if config.azure_openai_use_managed_identity:
             logger.info('Using Azure Managed Identity')
-            credential = DefaultAzureCredential()
-            token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+            token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
                     azure_ad_token_provider=token_provider,
                     api_version=config.azure_openai_api_version,
