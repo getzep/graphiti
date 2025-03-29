@@ -1,6 +1,8 @@
 import asyncio
 from contextlib import asynccontextmanager
 from functools import partial
+import os
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
@@ -9,18 +11,28 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
+LLM_RATE_LIMIT = int(os.getenv('LLM_RATE_LIMIT', 60))
+
 
 class AsyncWorker:
     def __init__(self):
         self.queue = asyncio.Queue()
         self.task = None
+        self.rate_limit_semaphore = asyncio.Semaphore(LLM_RATE_LIMIT)
+        self.last_request_time = datetime.min
 
     async def worker(self):
         while True:
             try:
                 print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
-                await job()
+                async with self.rate_limit_semaphore:
+                    now = datetime.now()
+                    elapsed = (now - self.last_request_time).total_seconds()
+                    if elapsed < 60 / LLM_RATE_LIMIT:
+                        await asyncio.sleep(60 / LLM_RATE_LIMIT - elapsed)
+                    self.last_request_time = datetime.now()
+                    await job()
             except asyncio.CancelledError:
                 break
 
