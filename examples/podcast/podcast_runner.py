@@ -70,6 +70,11 @@ async def main():
     messages = parse_podcast_messages()
 
     for i, message in enumerate(messages[3:14]):
+        episodes = await client.retrieve_episodes(
+            message.actual_timestamp, 3, group_ids=['podcast']
+        )
+        episode_uuids = [episode.uuid for episode in episodes]
+
         await client.add_episode(
             name=f'Message {i}',
             episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
@@ -77,6 +82,7 @@ async def main():
             source_description='Podcast Transcript',
             group_id='podcast',
             entity_types={'Person': Person},
+            previous_episode_uuids=episode_uuids,
         )
 
 

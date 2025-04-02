@@ -262,6 +262,7 @@ class Graphiti:
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
+        previous_episode_uuids: list[str] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -287,6 +288,9 @@ class Graphiti:
             Optional uuid of the episode.
         update_communities : bool
             Optional. Whether to update communities with new node information
+        previous_episode_uuids : list[str] | None
+            Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
+            the most recent episodes by created_at date will be used.
 
         Returns
         -------
@@ -315,8 +319,12 @@ class Graphiti:
             entity_edges: list[EntityEdge] = []
             now = utc_now()
 
-            previous_episodes = await self.retrieve_episodes(
-                reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
+            previous_episodes = (
+                await self.retrieve_episodes(
+                    reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
+                )
+                if previous_episode_uuids is None
+                else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
             )
 
             episode = (
