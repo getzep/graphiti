@@ -92,13 +92,22 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
     )
 
 
-async def clear_data(driver: AsyncDriver):
+async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
     async with driver.session() as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
-        await session.execute_write(delete_all)
+        async def delete_group_ids(tx):
+            await tx.run(
+                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                group_ids=group_ids,
+            )
+
+        if group_ids is None:
+            await session.execute_write(delete_all)
+        else:
+            await session.execute_write(delete_group_ids)
 
 
 async def retrieve_episodes(
