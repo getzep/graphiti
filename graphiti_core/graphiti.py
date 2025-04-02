@@ -90,14 +90,14 @@ class AddEpisodeResults(BaseModel):
 
 class Graphiti:
     def __init__(
-        self,
-        uri: str,
-        user: str,
-        password: str,
-        llm_client: LLMClient | None = None,
-        embedder: EmbedderClient | None = None,
-        cross_encoder: CrossEncoderClient | None = None,
-        store_raw_episode_content: bool = True,
+            self,
+            uri: str,
+            user: str,
+            password: str,
+            llm_client: LLMClient | None = None,
+            embedder: EmbedderClient | None = None,
+            cross_encoder: CrossEncoderClient | None = None,
+            store_raw_episode_content: bool = True,
     ):
         """
         Initialize a Graphiti instance.
@@ -219,10 +219,10 @@ class Graphiti:
         await build_indices_and_constraints(self.driver, delete_existing)
 
     async def retrieve_episodes(
-        self,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
+            self,
+            reference_time: datetime,
+            last_n: int = EPISODE_WINDOW_LEN,
+            group_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -252,17 +252,17 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
 
     async def add_episode(
-        self,
-        name: str,
-        episode_body: str,
-        source_description: str,
-        reference_time: datetime,
-        source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
-        uuid: str | None = None,
-        update_communities: bool = False,
-        entity_types: dict[str, BaseModel] | None = None,
-        previous_episode_uuids: list[str] | None = None,
+            self,
+            name: str,
+            episode_body: str,
+            source_description: str,
+            reference_time: datetime,
+            source: EpisodeType = EpisodeType.message,
+            group_id: str = '',
+            uuid: str | None = None,
+            update_communities: bool = False,
+            entity_types: dict[str, BaseModel] | None = None,
+            previous_episode_uuids: list[str] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -324,7 +324,7 @@ class Graphiti:
                     reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
                 )
                 if previous_episode_uuids is None
-                else EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
+                else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
             )
 
             episode = (
@@ -636,12 +636,12 @@ class Graphiti:
         return community_nodes
 
     async def search(
-        self,
-        query: str,
-        center_node_uuid: str | None = None,
-        group_ids: list[str] | None = None,
-        num_results=DEFAULT_SEARCH_LIMIT,
-        search_filter: SearchFilters | None = None,
+            self,
+            query: str,
+            center_node_uuid: str | None = None,
+            group_ids: list[str] | None = None,
+            num_results=DEFAULT_SEARCH_LIMIT,
+            search_filter: SearchFilters | None = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -695,13 +695,13 @@ class Graphiti:
         return edges
 
     async def _search(
-        self,
-        query: str,
-        config: SearchConfig,
-        group_ids: list[str] | None = None,
-        center_node_uuid: str | None = None,
-        bfs_origin_node_uuids: list[str] | None = None,
-        search_filter: SearchFilters | None = None,
+            self,
+            query: str,
+            config: SearchConfig,
+            group_ids: list[str] | None = None,
+            center_node_uuid: str | None = None,
+            bfs_origin_node_uuids: list[str] | None = None,
+            search_filter: SearchFilters | None = None,
     ) -> SearchResults:
         return await search(
             self.driver,
