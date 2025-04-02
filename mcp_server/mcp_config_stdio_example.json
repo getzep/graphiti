@@ -14,7 +14,7 @@
                 "NEO4J_USER": "neo4j",
                 "NEO4J_PASSWORD": "demodemo",
                 "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-                "MODEL_NAME": "gpt-4o"
+                "MODEL_NAME": "gpt-4o-mini"
             }
         }
     }
