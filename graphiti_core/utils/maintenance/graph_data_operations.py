@@ -92,14 +92,17 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
     )
 
 
-async def clear_data(driver: AsyncDriver, group_ids: list[str] | None):
+async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
     async with driver.session() as session:
+
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            await tx.run('MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
-                         group_ids=group_ids)
+            await tx.run(
+                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                group_ids=group_ids,
+            )
 
         if group_ids is None:
             await session.execute_write(delete_all)
@@ -108,10 +111,10 @@ async def clear_data(driver: AsyncDriver, group_ids: list[str] | None):
 
 
 async def retrieve_episodes(
-        driver: AsyncDriver,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
+    driver: AsyncDriver,
+    reference_time: datetime,
+    last_n: int = EPISODE_WINDOW_LEN,
+    group_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
