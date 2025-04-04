@@ -1,8 +1,15 @@
 # Graphiti MCP Server
 
-Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
+Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents
+operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti
+continuously integrates user interactions, structured and unstructured enterprise data, and external information into a
+coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical
+queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI
+applications.
 
-This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge graph capabilities.
+This is an experimental Model Context Protocol (MCP) server implementation for Graphiti. The MCP server exposes
+Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
+graph capabilities.
 
 ## Features
 
@@ -59,7 +66,7 @@ uv run graphiti_mcp_server.py
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4o --transport sse
+uv run graphiti_mcp_server.py --model gpt-4o-mini --transport sse
 ```
 
 Available arguments:
@@ -72,7 +79,8 @@ Available arguments:
 
 ### Docker Deployment
 
-The Graphiti MCP server can be deployed using Docker. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
+The Graphiti MCP server can be deployed using Docker. The Dockerfile uses `uv` for package management, ensuring
+consistent dependency installation.
 
 #### Environment Configuration
 
@@ -80,25 +88,25 @@ Before running the Docker Compose setup, you need to configure the environment v
 
 1. **Using a .env file** (recommended):
 
-   - Copy the provided `.env.example` file to create a `.env` file:
-     ```bash
-     cp .env.example .env
-     ```
-   - Edit the `.env` file to set your OpenAI API key and other configuration options:
-     ```
-     # Required for LLM operations
-     OPENAI_API_KEY=your_openai_api_key_here
-     MODEL_NAME=gpt-4o
-     # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
-     # OPENAI_BASE_URL=https://api.openai.com/v1
-     ```
-   - The Docker Compose setup is configured to use this file if it exists (it's optional)
+    - Copy the provided `.env.example` file to create a `.env` file:
+      ```bash
+      cp .env.example .env
+      ```
+    - Edit the `.env` file to set your OpenAI API key and other configuration options:
+      ```
+      # Required for LLM operations
+      OPENAI_API_KEY=your_openai_api_key_here
+      MODEL_NAME=gpt-4o-mini
+      # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
+      # OPENAI_BASE_URL=https://api.openai.com/v1
+      ```
+    - The Docker Compose setup is configured to use this file if it exists (it's optional)
 
 2. **Using environment variables directly**:
-   - You can also set the environment variables when running the Docker Compose command:
-     ```bash
-     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4o docker compose up
-     ```
+    - You can also set the environment variables when running the Docker Compose command:
+      ```bash
+      OPENAI_API_KEY=your_key MODEL_NAME=gpt-4o-mini docker compose up
+      ```
 
 #### Neo4j Configuration
 
@@ -154,7 +162,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "demodemo",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-        "MODEL_NAME": "gpt-4o"
+        "MODEL_NAME": "gpt-4o-mini"
       }
     }
   }
@@ -192,7 +200,7 @@ Or start the server with uv and connect to it:
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "demodemo",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-        "MODEL_NAME": "gpt-4o"
+        "MODEL_NAME": "gpt-4o-mini"
       }
     }
   }
@@ -215,7 +223,8 @@ The Graphiti MCP server exposes the following tools:
 
 ## Working with JSON Data
 
-The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This allows you to automatically extract entities and relationships from structured data:
+The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This
+allows you to automatically extract entities and relationships from structured data:
 
 ```
 add_episode(
@@ -236,7 +245,8 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
 ```
 
-Hint: specify a `group_id` to retain prior graph data. If you do not specify a `group_id`, the server will create a new graph
+Hint: specify a `group_id` to retain prior graph data. If you do not specify a `group_id`, the server will create a new
+graph
 
 2. Configure Cursor to connect to the Graphiti MCP server.
 
@@ -254,7 +264,8 @@ Hint: specify a `group_id` to retain prior graph data. If you do not specify a `
 
 4. Kick off an agent session in Cursor.
 
-The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph capabilities.
+The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph
+capabilities.
 
 ## Requirements
 

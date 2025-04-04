@@ -76,6 +76,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
+from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +319,8 @@ class Graphiti:
 
             entity_edges: list[EntityEdge] = []
             now = utc_now()
+
+            validate_entity_types(entity_types)
 
             previous_episodes = (
                 await self.retrieve_episodes(
