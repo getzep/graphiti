@@ -65,3 +65,11 @@ class SearchRerankerError(GraphitiError):
     def __init__(self, text: str):
         self.message = text
         super().__init__(self.message)
+
+
+class EntityTypeValidationError(GraphitiError):
+    """Raised when an entity type uses protected attribute names."""
+
+    def __init__(self, entity_type: str, entity_type_attribute: str):
+        self.message = f'{entity_type_attribute} cannot be used as an attribute for {entity_type} as it is a protected attribute name.'
+        super().__init__(self.message)
