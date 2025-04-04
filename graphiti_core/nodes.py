@@ -237,7 +237,7 @@ class EpisodicNode(Node):
             e.source_description AS source_description,
             e.source AS source,
             e.entity_edges AS entity_edges
-        ORDER BY e.created_at DESC
+        ORDER BY e.created_at, e.uuid DESC
         """
             + limit_query,
             group_ids=group_ids,
