@@ -214,6 +214,8 @@ to enable Neo4j's parallel runtime feature for several of our search queries.
 Note that this feature is not supported for Neo4j Community edition or for smaller AuraDB instances,
 as such this feature is off by default.
 
+`LLM_RATE_LIMIT` is an optional integer variable that can be set to limit the number of LLM requests per minute. This can help avoid rate limiting issues with the inference provider. The default value is 60.
+
 ## Using Graphiti with Azure OpenAI
 
 Graphiti supports Azure OpenAI for both LLM inference and embeddings. To use Azure OpenAI, you'll need to configure both the LLM client and embedder with your Azure OpenAI credentials.
