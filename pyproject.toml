@@ -21,7 +21,11 @@ openai = "^1.53.0"
 tenacity = "9.0.0"
 numpy = ">=1.0.0"
 python-dotenv = "^1.0.1"
-anthropic = "~0.49.0"
+
+[tool.poetry.extras]
+anthropic = ["anthropic"]
+groq = ["groq"]
+google-genai = ["google-genai"]
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"

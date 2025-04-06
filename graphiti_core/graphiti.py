@@ -71,10 +71,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     build_indices_and_constraints,
     retrieve_episodes,
 )
-from graphiti_core.utils.maintenance.node_operations import (
-    extract_nodes,
-    resolve_extracted_nodes,
-)
+from graphiti_core.utils.maintenance.node_operations import extract_nodes, resolve_extracted_nodes
 from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 

@@ -35,8 +35,8 @@ Use Graphiti to:
 
 <br />
 
-A knowledge graph is a network of interconnected facts, such as _“Kendra loves Adidas shoes.”_ Each fact is a “triplet” represented by two entities, or
-nodes (_”Kendra”_, _“Adidas shoes”_), and their relationship, or edge (_”loves”_). Knowledge Graphs have been explored
+A knowledge graph is a network of interconnected facts, such as _"Kendra loves Adidas shoes."_ Each fact is a "triplet" represented by two entities, or
+nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Knowledge Graphs have been explored
 extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
 while handling changing relationships and maintaining historical context.
 
@@ -96,7 +96,7 @@ Requirements:
 
 Optional:
 
-- Anthropic or Groq API key (for alternative LLM providers)
+- Google Gemini, Anthropic, or Groq API key (for alternative LLM providers)
 
 > [!TIP]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
@@ -110,6 +110,22 @@ or
 
 ```bash
 poetry add graphiti-core
+```
+
+You can also install optional LLM providers as extras:
+
+```bash
+# Install with Anthropic support
+pip install graphiti-core[anthropic]
+
+# Install with Groq support
+pip install graphiti-core[groq]
+
+# Install with Google Gemini support
+pip install graphiti-core[google-genai]
+
+# Install with multiple providers
+pip install graphiti-core[anthropic,groq,google-genai]
 ```
 
 ## Quick Start
@@ -210,6 +226,42 @@ graphiti = Graphiti(
 ```
 
 Make sure to replace the placeholder values with your actual Azure OpenAI credentials and specify the correct embedding model name that's deployed in your Azure OpenAI service.
+
+## Using Graphiti with Google Gemini
+
+Graphiti supports Google's Gemini models for both LLM inference and embeddings. To use Gemini, you'll need to configure both the LLM client and embedder with your Google API key.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
+from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+
+# Google API key configuration
+api_key = "<your-google-api-key>"
+
+# Initialize Graphiti with Gemini clients
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=GeminiClient(
+        config=LLMConfig(
+            api_key=api_key,
+            model="gemini-2.0-flash"
+        )
+    ),
+    embedder=GeminiEmbedder(
+        config=GeminiEmbedderConfig(
+            api_key=api_key,
+            embedding_model="embedding-001"
+        )
+    )
+)
+
+# Now you can use Graphiti with Google Gemini
+```
+
+Make sure to replace the placeholder value with your actual Google API key. You can find more details in the example file at `examples/gemini_example.py`.
 
 ## Documentation
 
