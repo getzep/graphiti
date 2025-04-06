@@ -26,11 +26,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
-from graphiti_core.prompts.extract_nodes import (
-    EntityClassification,
-    ExtractedNodes,
-    MissedEntities,
-)
+from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
 from graphiti_core.utils.datetime_utils import utc_now
 

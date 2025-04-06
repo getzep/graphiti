@@ -262,6 +262,42 @@ graphiti = Graphiti(
 
 Make sure to replace the placeholder values with your actual Azure OpenAI credentials and specify the correct embedding model name that's deployed in your Azure OpenAI service.
 
+## Using Graphiti with Google Gemini
+
+Graphiti supports Google's Gemini models for both LLM inference and embeddings. To use Gemini, you'll need to configure both the LLM client and embedder with your Google API key.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client import GeminiClient, LLMConfig
+from graphiti_core.embedder import GeminiEmbedder, GeminiEmbedderConfig
+
+# Google API key configuration
+api_key = "<your-google-api-key>"
+
+# Initialize Graphiti with Gemini clients
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=GeminiClient(
+        config=LLMConfig(
+            api_key=api_key,
+            model="gemini-2.0-flash" 
+        )
+    ),
+    embedder=GeminiEmbedder(
+        config=GeminiEmbedderConfig(
+            api_key=api_key,
+            embedding_model="embedding-001" 
+        )
+    )
+)
+
+# Now you can use Graphiti with Google Gemini
+```
+
+Make sure to replace the placeholder value with your actual Google API key. You can find more details in the example file at `examples/gemini_example.py`.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
