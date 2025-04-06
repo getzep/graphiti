@@ -284,7 +284,7 @@ Graphiti supports Google's Gemini models for both LLM inference and embeddings. 
 
 ```python
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import GeminiClient, LLMConfig
+from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
 from graphiti_core.embedder import GeminiEmbedder, GeminiEmbedderConfig
 
 # Google API key configuration
