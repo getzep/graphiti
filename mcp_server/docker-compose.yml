@@ -34,7 +34,6 @@ services:
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=demodemo
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - MODEL_NAME=${MODEL_NAME}
       - PATH=/root/.local/bin:${PATH}
     ports:
