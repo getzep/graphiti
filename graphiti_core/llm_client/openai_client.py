@@ -87,6 +87,8 @@ class OpenAIClient(LLMClient):
         else:
             self.client = client
 
+        self.max_tokens = max_tokens
+
     async def _generate_response(
         self,
         messages: list[Message],
