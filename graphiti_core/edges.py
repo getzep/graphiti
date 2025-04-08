@@ -161,7 +161,7 @@ class EpisodicEdge(Edge):
             n.uuid AS source_node_uuid, 
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
-        ORDER BY e.uuid DESC 
+        ORDER BY e.created_at, e.uuid DESC 
         """
             + limit_query,
             group_ids=group_ids,
@@ -322,7 +322,7 @@ class EntityEdge(Edge):
             e.expired_at AS expired_at,
             e.valid_at AS valid_at,
             e.invalid_at AS invalid_at
-        ORDER BY e.uuid DESC 
+        ORDER BY e.created_at, e.uuid DESC 
         """
             + limit_query,
             group_ids=group_ids,
@@ -448,7 +448,7 @@ class CommunityEdge(Edge):
             n.uuid AS source_node_uuid, 
             m.uuid AS target_node_uuid, 
             e.created_at AS created_at
-        ORDER BY e.uuid DESC
+        ORDER BY e.created_at, e.uuid DESC
         """
             + limit_query,
             group_ids=group_ids,

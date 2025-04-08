@@ -237,7 +237,7 @@ class EpisodicNode(Node):
             e.source_description AS source_description,
             e.source AS source,
             e.entity_edges AS entity_edges
-        ORDER BY e.uuid DESC
+        ORDER BY e.created_at, e.uuid DESC
         """
             + limit_query,
             group_ids=group_ids,
@@ -368,7 +368,7 @@ class EntityNode(Node):
             n.summary AS summary,
             labels(n) AS labels,
             properties(n) AS attributes
-        ORDER BY n.uuid DESC
+        ORDER BY n.created_at DESC
         """
             + limit_query,
             group_ids=group_ids,
@@ -483,7 +483,7 @@ class CommunityNode(Node):
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
-        ORDER BY n.uuid DESC
+        ORDER BY n.created_at DESC
         """
             + limit_query,
             group_ids=group_ids,
