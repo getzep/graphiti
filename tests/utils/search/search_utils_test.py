@@ -13,11 +13,10 @@ async def test_hybrid_node_search_deduplication():
     mock_driver = AsyncMock()
 
     # Mock the node_fulltext_search and entity_similarity_search functions
-    with patch(
-        'graphiti_core.search.search_utils.node_fulltext_search'
-    ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.node_similarity_search'
-    ) as mock_similarity_search:
+    with (
+        patch('graphiti_core.search.search_utils.node_fulltext_search') as mock_fulltext_search,
+        patch('graphiti_core.search.search_utils.node_similarity_search') as mock_similarity_search,
+    ):
         # Set up mock return values
         mock_fulltext_search.side_effect = [
             [EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')],
@@ -47,11 +46,10 @@ async def test_hybrid_node_search_deduplication():
 async def test_hybrid_node_search_empty_results():
     mock_driver = AsyncMock()
 
-    with patch(
-        'graphiti_core.search.search_utils.node_fulltext_search'
-    ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.node_similarity_search'
-    ) as mock_similarity_search:
+    with (
+        patch('graphiti_core.search.search_utils.node_fulltext_search') as mock_fulltext_search,
+        patch('graphiti_core.search.search_utils.node_similarity_search') as mock_similarity_search,
+    ):
         mock_fulltext_search.return_value = []
         mock_similarity_search.return_value = []
 
@@ -66,11 +64,10 @@ async def test_hybrid_node_search_empty_results():
 async def test_hybrid_node_search_only_fulltext():
     mock_driver = AsyncMock()
 
-    with patch(
-        'graphiti_core.search.search_utils.node_fulltext_search'
-    ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.node_similarity_search'
-    ) as mock_similarity_search:
+    with (
+        patch('graphiti_core.search.search_utils.node_fulltext_search') as mock_fulltext_search,
+        patch('graphiti_core.search.search_utils.node_similarity_search') as mock_similarity_search,
+    ):
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1')
         ]
@@ -90,11 +87,10 @@ async def test_hybrid_node_search_only_fulltext():
 async def test_hybrid_node_search_with_limit():
     mock_driver = AsyncMock()
 
-    with patch(
-        'graphiti_core.search.search_utils.node_fulltext_search'
-    ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.node_similarity_search'
-    ) as mock_similarity_search:
+    with (
+        patch('graphiti_core.search.search_utils.node_fulltext_search') as mock_fulltext_search,
+        patch('graphiti_core.search.search_utils.node_similarity_search') as mock_similarity_search,
+    ):
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
             EntityNode(uuid='2', name='Bob', labels=['Entity'], group_id='1'),
@@ -133,11 +129,10 @@ async def test_hybrid_node_search_with_limit():
 async def test_hybrid_node_search_with_limit_and_duplicates():
     mock_driver = AsyncMock()
 
-    with patch(
-        'graphiti_core.search.search_utils.node_fulltext_search'
-    ) as mock_fulltext_search, patch(
-        'graphiti_core.search.search_utils.node_similarity_search'
-    ) as mock_similarity_search:
+    with (
+        patch('graphiti_core.search.search_utils.node_fulltext_search') as mock_fulltext_search,
+        patch('graphiti_core.search.search_utils.node_similarity_search') as mock_similarity_search,
+    ):
         mock_fulltext_search.return_value = [
             EntityNode(uuid='1', name='Alice', labels=['Entity'], group_id='1'),
             EntityNode(uuid='2', name='Bob', labels=['Entity'], group_id='1'),

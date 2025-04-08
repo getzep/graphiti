@@ -111,7 +111,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                     if bool(logprob.token):
                         scores.append(logprob.logprob)
 
-            results = [(passage, score) for passage, score in zip(passages, scores)]
+            results = [(passage, score) for passage, score in zip(passages, scores, strict=False)]
             results.sort(reverse=True, key=lambda x: x[1])
             return results
         except openai.RateLimitError as e:

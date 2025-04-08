@@ -36,7 +36,7 @@ class BGERerankerClient(CrossEncoderClient):
         scores = await loop.run_in_executor(None, self.model.predict, input_pairs)
 
         ranked_passages = sorted(
-            [(passage, float(score)) for passage, score in zip(passages, scores)],
+            [(passage, float(score)) for passage, score in zip(passages, scores, strict=False)],
             key=lambda x: x[1],
             reverse=True,
         )

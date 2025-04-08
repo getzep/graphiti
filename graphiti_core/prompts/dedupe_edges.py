@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import json
-from typing import Any, Optional, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -24,7 +24,7 @@ from .models import Message, PromptFunction, PromptVersion
 
 class EdgeDuplicate(BaseModel):
     is_duplicate: bool = Field(..., description='true or false')
-    uuid: Optional[str] = Field(
+    uuid: str | None = Field(
         None,
         description="uuid of the existing edge like '5d643020624c42fa9de13f97b1b3fa39' or null",
     )

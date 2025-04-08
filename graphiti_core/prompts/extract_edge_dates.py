@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Optional, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -22,11 +22,11 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class EdgeDates(BaseModel):
-    valid_at: Optional[str] = Field(
+    valid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact became true or was established. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
     )
-    invalid_at: Optional[str] = Field(
+    invalid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact stopped being true or ended. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
     )

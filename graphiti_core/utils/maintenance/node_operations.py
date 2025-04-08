@@ -279,7 +279,9 @@ async def resolve_extracted_nodes(
                     previous_episodes,
                     entity_types,
                 )
-                for extracted_node, existing_nodes in zip(extracted_nodes, existing_nodes_lists)
+                for extracted_node, existing_nodes in zip(
+                    extracted_nodes, existing_nodes_lists, strict=False
+                )
             ]
         )
     )

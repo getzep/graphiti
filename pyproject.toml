@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
-version = "0.9.3"
 description = "A temporal graph building library"
+version = "0.9.3"
 authors = [
     {"name" = "Paul Paliychuk", "email" = "paul@getzep.com"},
     {"name" = "Preston Rasmussen", "email" = "preston@getzep.com"},
@@ -9,10 +9,8 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache-2.0"
-
 requires-python = ">=3.10"
 packages = [{ include = "graphiti_core", from = "." }]
-
 dependencies = [
     "pydantic>=2.8.2",
     "neo4j>=5.23.0",
@@ -22,6 +20,11 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
 ]
+
+
+[project.urls]
+Homepage = "https://help.getzep.com/graphiti/graphiti/overview"
+Repository = "https://github.com/getzep/graphiti"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.49.0"]
@@ -53,6 +56,9 @@ dev = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+requires-poetry = ">=2.0"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

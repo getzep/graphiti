@@ -10,7 +10,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, TypedDict, Union, cast
+from typing import Any, TypedDict, cast
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
@@ -169,7 +169,7 @@ class GraphitiLLMConfig(BaseModel):
     Centralizes all LLM-specific configuration parameters including API keys and model selection.
     """
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     model: str = DEFAULT_LLM_MODEL
     temperature: float = 0.0
 
@@ -216,7 +216,7 @@ class GraphitiLLMConfig(BaseModel):
 
         return config
 
-    def create_client(self) -> Optional[LLMClient]:
+    def create_client(self) -> LLMClient | None:
         """Create an LLM client based on this configuration.
 
         Returns:
@@ -258,7 +258,7 @@ class GraphitiConfig(BaseModel):
 
     llm: GraphitiLLMConfig = Field(default_factory=GraphitiLLMConfig)
     neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig)
-    group_id: Optional[str] = None
+    group_id: str | None = None
     use_custom_entities: bool = False
     destroy_graph: bool = False
 
@@ -353,7 +353,7 @@ mcp = FastMCP(
 
 
 # Initialize Graphiti client
-graphiti_client: Optional[Graphiti] = None
+graphiti_client: Graphiti | None = None
 
 
 async def initialize_graphiti():
@@ -469,11 +469,11 @@ async def process_episode_queue(group_id: str):
 async def add_episode(
     name: str,
     episode_body: str,
-    group_id: Optional[str] = None,
+    group_id: str | None = None,
     source: str = 'text',
     source_description: str = '',
-    uuid: Optional[str] = None,
-) -> Union[SuccessResponse, ErrorResponse]:
+    uuid: str | None = None,
+) -> SuccessResponse | ErrorResponse:
     """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
@@ -609,11 +609,11 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: Optional[list[str]] = None,
+    group_ids: list[str] | None = None,
     max_nodes: int = 10,
-    center_node_uuid: Optional[str] = None,
+    center_node_uuid: str | None = None,
     entity: str = '',  # cursor seems to break with None
-) -> Union[NodeSearchResponse, ErrorResponse]:
+) -> NodeSearchResponse | ErrorResponse:
     """Search the Graphiti knowledge graph for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
 
@@ -690,10 +690,10 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: Optional[list[str]] = None,
+    group_ids: list[str] | None = None,
     max_facts: int = 10,
-    center_node_uuid: Optional[str] = None,
-) -> Union[FactSearchResponse, ErrorResponse]:
+    center_node_uuid: str | None = None,
+) -> FactSearchResponse | ErrorResponse:
     """Search the Graphiti knowledge graph for relevant facts.
 
     Args:
@@ -738,7 +738,7 @@ async def search_facts(
 
 
 @mcp.tool()
-async def delete_entity_edge(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
+async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete an entity edge from the Graphiti knowledge graph.
 
     Args:
@@ -768,7 +768,7 @@ async def delete_entity_edge(uuid: str) -> Union[SuccessResponse, ErrorResponse]
 
 
 @mcp.tool()
-async def delete_episode(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
+async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete an episode from the Graphiti knowledge graph.
 
     Args:
@@ -798,7 +798,7 @@ async def delete_episode(uuid: str) -> Union[SuccessResponse, ErrorResponse]:
 
 
 @mcp.tool()
-async def get_entity_edge(uuid: str) -> Union[dict[str, Any], ErrorResponse]:
+async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     """Get an entity edge from the Graphiti knowledge graph by its UUID.
 
     Args:
@@ -830,8 +830,8 @@ async def get_entity_edge(uuid: str) -> Union[dict[str, Any], ErrorResponse]:
 
 @mcp.tool()
 async def get_episodes(
-    group_id: Optional[str] = None, last_n: int = 10
-) -> Union[list[dict[str, Any]], EpisodeSearchResponse, ErrorResponse]:
+    group_id: str | None = None, last_n: int = 10
+) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
     """Get the most recent episodes for a specific group.
 
     Args:
@@ -879,7 +879,7 @@ async def get_episodes(
 
 
 @mcp.tool()
-async def clear_graph() -> Union[SuccessResponse, ErrorResponse]:
+async def clear_graph() -> SuccessResponse | ErrorResponse:
     """Clear all data from the Graphiti knowledge graph and rebuild indices."""
     global graphiti_client
 
