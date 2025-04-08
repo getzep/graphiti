@@ -297,7 +297,7 @@ class EntityEdge(Edge):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int | None = None,
-        uuid_cursor: datetime | None = None,
+        uuid_cursor: str | None = None,
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
