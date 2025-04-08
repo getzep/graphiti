@@ -165,7 +165,7 @@ class EpisodicEdge(Edge):
         """
             + limit_query,
             group_ids=group_ids,
-            created_at=created_at,
+            uuid=uuid_cursor,
             limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
