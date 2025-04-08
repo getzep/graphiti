@@ -216,9 +216,9 @@ class EpisodicNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int | None = None,
-        created_at: datetime | None = None,
+        uuid_cursor: str | None = None,
     ):
-        cursor_query: LiteralString = 'AND e.created_at < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
@@ -241,7 +241,7 @@ class EpisodicNode(Node):
         """
             + limit_query,
             group_ids=group_ids,
-            created_at=created_at,
+            uuid=uuid_cursor,
             limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -348,9 +348,9 @@ class EntityNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int | None = None,
-        created_at: datetime | None = None,
+        uuid_cursor: str | None = None,
     ):
-        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
@@ -372,7 +372,7 @@ class EntityNode(Node):
         """
             + limit_query,
             group_ids=group_ids,
-            created_at=created_at,
+            uuid=uuid_cursor,
             limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -465,9 +465,9 @@ class CommunityNode(Node):
         driver: AsyncDriver,
         group_ids: list[str],
         limit: int | None = None,
-        created_at: datetime | None = None,
+        uuid_cursor: str | None = None,
     ):
-        cursor_query: LiteralString = 'AND n.created_at < $created_at' if created_at else ''
+        cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
@@ -487,7 +487,7 @@ class CommunityNode(Node):
         """
             + limit_query,
             group_ids=group_ids,
-            created_at=created_at,
+            uuid=uuid_cursor,
             limit=limit,
             database_=DEFAULT_DATABASE,
             routing_='r',
