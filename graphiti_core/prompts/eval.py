@@ -130,7 +130,7 @@ def eval_add_episode_results(context: dict[str, Any]) -> list[Message]:
     conversation is higher quality than the CANDIDATE graph data extracted from the conversation.
     
     Return False if the BASELINE extraction is better, and True otherwise. If the CANDIDATE extraction and
-    BASELINE extraction are near identical in quality, return True.
+    BASELINE extraction are nearly identical in quality, return True.
     
     <PREVIOUS MESSAGES>
     {context['previous_messages']}
