@@ -37,16 +37,25 @@ class EvalResponse(BaseModel):
     )
 
 
+class EvalAddEpisodeResults(BaseModel):
+    baseline_is_better: bool = Field(
+        ...,
+        description='boolean if the baseline extraction is higher quality than the candidate extraction.',
+    )
+
+
 class Prompt(Protocol):
     qa_prompt: PromptVersion
     eval_prompt: PromptVersion
     query_expansion: PromptVersion
+    eval_add_episode_results: PromptVersion
 
 
 class Versions(TypedDict):
     qa_prompt: PromptFunction
     eval_prompt: PromptFunction
     query_expansion: PromptFunction
+    eval_add_episode_results: PromptFunction
 
 
 def query_expansion(context: dict[str, Any]) -> list[Message]:
@@ -112,8 +121,41 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def eval_add_episode_results(context: dict[str, Any]) -> list[Message]:
+    sys_prompt = """You are a judge that determines whether a baseline graph building result from a list of messages is better
+        than a candidate graph building result based on the same messages."""
+
+    user_prompt = f"""
+    Given the following PREVIOUS MESSAGES and MESSAGE, determine if the BASELINE graph data extracted from the 
+    conversation is higher quality than the CANDIDATE graph data extracted from the conversation.
+    
+    Return False if the BASELINE extraction is better, and True otherwise. If the CANDIDATE extraction and
+    BASELINE extraction are near identical in quality, return True.
+    
+    <PREVIOUS MESSAGES>
+    {context['previous_messages']}
+    </PREVIOUS MESSAGES>
+    <MESSAGE>
+    {context['answer']}
+    </MESSAGE>
+    
+    <BASELINE>
+    {context['baseline']}
+    </BASELINE>
+    
+    <CANDIDATE>
+    {context['candidate']}
+    </CANDIDATE>
+    """
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
 versions: Versions = {
     'qa_prompt': qa_prompt,
     'eval_prompt': eval_prompt,
     'query_expansion': query_expansion,
+    'eval_add_episode_results': eval_add_episode_results,
 }
