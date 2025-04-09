@@ -51,6 +51,11 @@ pytest-asyncio = ">=0.24.0"
 pytest-xdist = ">=3.6.1"
 ruff = ">=0.7.1"
 
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.49.0"]
+groq = ["groq>=0.2.0"]
+google-genai = ["google-genai>=1.8.0"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
