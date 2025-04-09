@@ -39,7 +39,7 @@ def create_episodes_from_messages(input_message, input_previous_messages):
             group_id='',
             source=EpisodeType.message,
             source_description='',
-            content=f"{message['role']}: {message['content']}",
+            content=f'{message["role"]}: {message["content"]}',
             valid_at=previous_time,
         )
         for message, previous_time in zip(input_previous_messages, previous_times)
@@ -62,9 +62,9 @@ async def ingest_and_label_snippet(llm_client, snippet_df, output_column_name):
 
         #### Process 'extract_nodes' task
         extract_nodes_row = message_df[message_df['task_name'] == 'extract_nodes']
-        assert (
-            len(extract_nodes_row) == 1
-        ), f"There should be exactly one row for 'extract_nodes' but there are {len(extract_nodes_row)}"
+        assert len(extract_nodes_row) == 1, (
+            f"There should be exactly one row for 'extract_nodes' but there are {len(extract_nodes_row)}"
+        )
         input_message = json.loads(extract_nodes_row.iloc[0]['input_message'])
         input_previous_messages = json.loads(extract_nodes_row.iloc[0]['input_previous_messages'])
         episode, previous_episodes = create_episodes_from_messages(
@@ -77,9 +77,9 @@ async def ingest_and_label_snippet(llm_client, snippet_df, output_column_name):
 
         #### Process 'dedupe_nodes' task
         dedupe_nodes_row = message_df[message_df['task_name'] == 'dedupe_nodes']
-        assert (
-            len(dedupe_nodes_row) == 1
-        ), "There should be exactly one row for 'dedupe_nodes' but there are {len(dedupe_nodes_row)}"
+        assert len(dedupe_nodes_row) == 1, (
+            "There should be exactly one row for 'dedupe_nodes' but there are {len(dedupe_nodes_row)}"
+        )
 
         # Calculate existing nodes list
         existing_nodes = []
@@ -109,9 +109,9 @@ async def ingest_and_label_snippet(llm_client, snippet_df, output_column_name):
 
         #### Process 'extract_edges' task
         extract_edges_row = message_df[message_df['task_name'] == 'extract_edges']
-        assert (
-            len(extract_edges_row) == 1
-        ), f"There should be exactly one row for 'extract_edges' but there are {len(extract_edges_row)}"
+        assert len(extract_edges_row) == 1, (
+            f"There should be exactly one row for 'extract_edges' but there are {len(extract_edges_row)}"
+        )
         extracted_edges = await extract_edges(
             llm_client,
             episode,

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Tuple
 
 import pandas as pd
 
@@ -13,7 +12,7 @@ from tests.test_graphiti_int import NEO4J_URI, NEO4j_PASSWORD, NEO4j_USER
 
 async def build_graph(
     multi_session: list[int], session_length: int, graphiti: Graphiti
-) -> Tuple[dict[str, list[AddEpisodeResults]], dict[str, list[str]]]:
+) -> tuple[dict[str, list[AddEpisodeResults]], dict[str, list[str]]]:
     # Get longmemeval dataset
     lme_dataset_option = 'data/longmemeval_oracle.json'  # Can be _oracle, _s, or _m
     lme_dataset_df = pd.read_json(lme_dataset_option)
@@ -33,12 +32,12 @@ async def build_graph(
         for session_idx, session in enumerate(multi_session):
             if session_idx >= session_length:
                 continue
-            for msx_idx, msg in enumerate(session):
+            for _, msg in enumerate(session):
                 date = multi_session_dates[session_idx] + ' UTC'
                 date_format = '%Y/%m/%d (%a) %H:%M UTC'
                 date_string = datetime.strptime(date, date_format).replace(tzinfo=timezone.utc)
 
-                episode_body = f"{msg["role"]}: {msg["content"]}"
+                episode_body = f'{msg["role"]}: {msg["content"]}'
                 results = await graphiti.add_episode(
                     name=msg['name'],
                     episode_body=episode_body,
