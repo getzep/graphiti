@@ -24,7 +24,7 @@ def format_edge_date_range(edge: EntityEdge) -> str:
 
 
 def search_results_to_context_string(search_results: SearchResults) -> str:
-    """Reformats a set of SearchResults into a single string to pass directly to ann LLM as context"""
+    """Reformats a set of SearchResults into a single string to pass directly to an LLM as context"""
     context_string = """FACTS and ENTITIES represent relevant context to the current conversation.
                         COMMUNITIES represent a cluster of closely related entities.
 
