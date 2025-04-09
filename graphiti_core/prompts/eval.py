@@ -38,7 +38,7 @@ class EvalResponse(BaseModel):
 
 
 class EvalAddEpisodeResults(BaseModel):
-    baseline_is_better: bool = Field(
+    candidate_is_worse: bool = Field(
         ...,
         description='boolean if the baseline extraction is higher quality than the candidate extraction.',
     )
