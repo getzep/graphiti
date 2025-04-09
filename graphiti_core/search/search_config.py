@@ -26,7 +26,7 @@ from graphiti_core.search.search_utils import (
     MAX_SEARCH_DEPTH,
 )
 
-DEFAULT_SEARCH_LIMIT = 10
+DEFAULT_SEARCH_LIMIT = 20
 
 
 class EdgeSearchMethod(Enum):

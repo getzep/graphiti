@@ -229,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                """
+                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score

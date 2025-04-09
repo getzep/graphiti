@@ -1,11 +1,11 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.9.4"
+version = "0.9.5"
 authors = [
-    {"name" = "Paul Paliychuk", "email" = "paul@getzep.com"},
-    {"name" = "Preston Rasmussen", "email" = "preston@getzep.com"},
-    {"name" = "Daniel Chalef", "email" = "daniel@getzep.com"},
+    { "name" = "Paul Paliychuk", "email" = "paul@getzep.com" },
+    { "name" = "Preston Rasmussen", "email" = "preston@getzep.com" },
+    { "name" = "Daniel Chalef", "email" = "daniel@getzep.com" },
 ]
 readme = "README.md"
 license = "Apache-2.0"
@@ -19,6 +19,7 @@ dependencies = [
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
+    "graph-service (>=1.0.0.7,<2.0.0.0)",
 ]
 
 [project.urls]

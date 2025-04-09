@@ -1031,6 +1031,17 @@ typing-extensions = ">=4.11.0,<5.0.0"
 websockets = ">=13.0.0,<15.1.0"
 
 [[package]]
+name = "graph-service"
+version = "1.0.0.7"
+description = "project descriptions here"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "graph_service-1.0.0.7-py3-none-any.whl", hash = "sha256:d34cd38529ff0704b83fa4e8692b4f8fcf1524dce7110f89d4ee33423eeff0bd"},
+]
+
+[[package]]
 name = "groq"
 version = "0.11.0"
 description = "The official Python library for the groq API"
@@ -3148,6 +3159,7 @@ optional = false
 python-versions = ">=3.8"
 groups = ["main", "dev"]
 files = [
+    {file = "pyasn1-0.6.1-py3-none-any.whl", hash = "sha256:0d632f46f2ba09143da3a8afe9e33fb6f92fa2320ab7e886e2d0f7672af84629"},
     {file = "pyasn1-0.6.1.tar.gz", hash = "sha256:6f580d2bdd84365380830acf45550f2511469f673cb4a5ae3857a3170128b034"},
 ]
 
@@ -5316,4 +5328,4 @@ groq = ["groq"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "4ffa68a8953cb18a1d2a43335cf2187e609659cd414bcd7f65ab285971ba72aa"
+content-hash = "fa0608494d973b528ccad56576f42c04cff04a66c1325796d224dedab292aa16"
