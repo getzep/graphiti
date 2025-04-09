@@ -54,12 +54,6 @@ MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 32
 
 
-class SearchResults(BaseModel):
-    edges: list[EntityEdge]
-    nodes: list[EntityNode]
-    communities: list[CommunityNode]
-
-
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
         [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
@@ -236,8 +230,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                        """
+                                                                                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                            """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
