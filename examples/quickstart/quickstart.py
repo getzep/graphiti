@@ -217,7 +217,7 @@ async def main():
             print(f'Node Name: {node.name}')
             node_summary = node.summary[:100] + '...' if len(node.summary) > 100 else node.summary
             print(f'Content Summary: {node_summary}')
-            print(f"Node Labels: {', '.join(node.labels)}")
+            print(f'Node Labels: {", ".join(node.labels)}')
             print(f'Created At: {node.created_at}')
             if hasattr(node, 'attributes') and node.attributes:
                 print('Attributes:')

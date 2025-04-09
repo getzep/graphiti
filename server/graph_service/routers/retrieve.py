@@ -59,5 +59,5 @@ async def get_memory(
 def compose_query_from_messages(messages: list[Message]):
     combined_query = ''
     for message in messages:
-        combined_query += f"{message.role_type or ''}({message.role or ''}): {message.content}\n"
+        combined_query += f'{message.role_type or ""}({message.role or ""}): {message.content}\n'
     return combined_query

@@ -68,7 +68,7 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
-{context["episode_content"]}
+{context['episode_content']}
 </CURRENT MESSAGE>
 
 {context['custom_prompt']}
@@ -96,10 +96,10 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <SOURCE DESCRIPTION>:
-{context["source_description"]}
+{context['source_description']}
 </SOURCE DESCRIPTION>
 <JSON>
-{context["episode_content"]}
+{context['episode_content']}
 </JSON>
 
 {context['custom_prompt']}
@@ -121,7 +121,7 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <TEXT>
-{context["episode_content"]}
+{context['episode_content']}
 </TEXT>
 
 {context['custom_prompt']}
@@ -148,11 +148,11 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
-{context["episode_content"]}
+{context['episode_content']}
 </CURRENT MESSAGE>
 
 <EXTRACTED ENTITIES>
-{context["extracted_entities"]}
+{context['extracted_entities']}
 </EXTRACTED ENTITIES>
 
 Given the above previous messages, current message, and list of extracted entities; determine if any entities haven't been
@@ -172,7 +172,7 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
     {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
     </PREVIOUS MESSAGES>
     <CURRENT MESSAGE>
-    {context["episode_content"]}
+    {context['episode_content']}
     </CURRENT MESSAGE>
     
     <EXTRACTED ENTITIES>
