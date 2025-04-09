@@ -55,4 +55,4 @@ class VoyageAIEmbedder(EmbedderClient):
             return []
 
         result = await self.client.embed(input_list, model=self.config.embedding_model)
-        return result.embeddings[0][: self.config.embedding_dim]
+        return [float(x) for x in result.embeddings[0][: self.config.embedding_dim]]

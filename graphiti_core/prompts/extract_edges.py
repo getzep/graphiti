@@ -60,11 +60,11 @@ def edge(context: dict[str, Any]) -> list[Message]:
         {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
-        {context["episode_content"]}
+        {context['episode_content']}
         </CURRENT MESSAGE>
         
         <ENTITIES>
-        {context["nodes"]}
+        {context['nodes']}
         </ENTITIES>
         
         {context['custom_prompt']}
@@ -90,15 +90,15 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
-{context["episode_content"]}
+{context['episode_content']}
 </CURRENT MESSAGE>
 
 <EXTRACTED ENTITIES>
-{context["nodes"]}
+{context['nodes']}
 </EXTRACTED ENTITIES>
 
 <EXTRACTED FACTS>
-{context["extracted_facts"]}
+{context['extracted_facts']}
 </EXTRACTED FACTS>
 
 Given the above MESSAGES, list of EXTRACTED ENTITIES entities, and list of EXTRACTED FACTS; 
