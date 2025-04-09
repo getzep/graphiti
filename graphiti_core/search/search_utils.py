@@ -236,8 +236,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                    """
+                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                        """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -820,32 +820,3 @@ def maximal_marginal_relevance(
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
 
     return list(set([candidate[0] for candidate in candidates_with_mmr]))
-
-
-def format_edge_date_range(edge: EntityEdge) -> str:
-    # return f"{datetime(edge.valid_at).strftime('%Y-%m-%d %H:%M:%S') if edge.valid_at else 'date unknown'} - {(edge.invalid_at.strftime('%Y-%m-%d %H:%M:%S') if edge.invalid_at else 'present')}"
-    return f'{edge.valid_at if edge.valid_at else "date unknown"} - {(edge.invalid_at if edge.invalid_at else "present")}'
-
-
-def search_results_to_context_string(search_results: SearchResults) -> str:
-    """Reformats a set of SearchResults into a single string to pass directly to ann LLM as context"""
-    context_string = """FACTS and ENTITIES represent relevant context to the current conversation.
-                        COMMUNITIES represent a cluster of closely related entities.
-
-                        # These are the most relevant facts and their valid date ranges
-                        # format: FACT (Date range: from - to)
-                    """
-    context_string += '<FACTS>\n'
-    for edge in search_results.edges:
-        context_string += f'- {edge.fact} ({format_edge_date_range(edge)})\n'
-    context_string += '</FACTS>\n'
-    context_string += '<ENTITIES>\n'
-    for node in search_results.nodes:
-        context_string += f'- {node.name}: {node.summary}\n'
-    context_string += '</ENTITIES>\n'
-    context_string += '<COMMUNITIES>\n'
-    for community in search_results.communities:
-        context_string += f'- {community.name}: {community.summary}\n'
-    context_string += '</COMMUNITIES>\n'
-
-    return context_string
