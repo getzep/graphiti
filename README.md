@@ -231,6 +231,16 @@ Make sure to replace the placeholder values with your actual Azure OpenAI creden
 
 Graphiti supports Google's Gemini models for both LLM inference and embeddings. To use Gemini, you'll need to configure both the LLM client and embedder with your Google API key.
 
+Install Graphiti:
+
+```bash
+poetry add "graphiti-core[google-genai]"
+
+# or
+
+uv add "graphiti-core[google-genai]"
+```
+
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
