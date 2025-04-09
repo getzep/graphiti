@@ -213,7 +213,7 @@ async def resolve_extracted_edges(
                     previous_episodes,
                 )
                 for extracted_edge, related_edges, existing_edges in zip(
-                    extracted_edges, related_edges_lists, existing_edges_lists
+                    extracted_edges, related_edges_lists, existing_edges_lists, strict=False
                 )
             ]
         )

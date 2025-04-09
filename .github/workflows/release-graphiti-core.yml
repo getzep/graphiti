@@ -5,7 +5,7 @@ on:
     tags: ["v*.*.*"]
 
 env:
-  POETRY_VERSION: "1.8.3"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   release:

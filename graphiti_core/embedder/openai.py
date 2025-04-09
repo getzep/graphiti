@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
-from typing import Union
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types import EmbeddingModel
@@ -41,7 +40,7 @@ class OpenAIEmbedder(EmbedderClient):
     def __init__(
         self,
         config: OpenAIEmbedderConfig | None = None,
-        client: Union[AsyncOpenAI, AsyncAzureOpenAI, None] = None,
+        client: AsyncOpenAI | AsyncAzureOpenAI | None = None,
     ):
         if config is None:
             config = OpenAIEmbedderConfig()

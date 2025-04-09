@@ -261,8 +261,6 @@ graphiti = Graphiti(
 # Now you can use Graphiti with Google Gemini
 ```
 
-Make sure to replace the placeholder value with your actual Google API key. You can find more details in the example file at `examples/gemini_example.py`.
-
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).

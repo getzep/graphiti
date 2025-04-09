@@ -451,7 +451,7 @@ class Graphiti:
             existing_edges_list: list[list[EntityEdge]] = [
                 source_lst + target_lst
                 for source_lst, target_lst in zip(
-                    existing_source_edges_list, existing_target_edges_list
+                    existing_source_edges_list, existing_target_edges_list, strict=False
                 )
             ]
 
