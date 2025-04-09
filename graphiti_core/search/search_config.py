@@ -18,15 +18,13 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import CommunityNode, EntityNode
 from graphiti_core.search.search_utils import (
     DEFAULT_MIN_SCORE,
     DEFAULT_MMR_LAMBDA,
     MAX_SEARCH_DEPTH,
 )
 
-DEFAULT_SEARCH_LIMIT = 10
+DEFAULT_SEARCH_LIMIT = 20
 
 
 class EdgeSearchMethod(Enum):
@@ -97,9 +95,3 @@ class SearchConfig(BaseModel):
     node_config: NodeSearchConfig | None = Field(default=None)
     community_config: CommunitySearchConfig | None = Field(default=None)
     limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
-
-
-class SearchResults(BaseModel):
-    edges: list[EntityEdge]
-    nodes: list[EntityNode]
-    communities: list[CommunityNode]
