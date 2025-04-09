@@ -78,7 +78,7 @@ async def ingest_and_label_snippet(llm_client, snippet_df, output_column_name):
         #### Process 'dedupe_nodes' task
         dedupe_nodes_row = message_df[message_df['task_name'] == 'dedupe_nodes']
         assert len(dedupe_nodes_row) == 1, (
-            "There should be exactly one row for 'dedupe_nodes' but there are {len(dedupe_nodes_row)}"
+            f"There should be exactly one row for 'dedupe_nodes' but there are {len(dedupe_nodes_row)}"
         )
 
         # Calculate existing nodes list
