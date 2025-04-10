@@ -28,6 +28,8 @@ from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .errors import RateLimitError, RefusalError
 
+import asyncio
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4o-mini'
@@ -136,13 +138,33 @@ class OpenAIClient(LLMClient):
         retry_count = 0
         last_error = None
 
+        def _parse_retry_after(error_msg: str) -> float:
+            """Extract retry time from OpenAI error message"""
+            try:
+                # Find time in milliseconds (e.g., "Please try again in 479ms")
+                import re
+                match = re.search(r'Please try again in (\d+)ms', error_msg)
+                if match:
+                    return float(match.group(1)) / 1000  # Convert ms to seconds
+                
+                # Fallback to exponential backoff if no time found
+                return min(5 * (2 ** retry_count), max_delay)
+            except:
+                return 5.0  # Default fallback delay
+
         while retry_count <= self.MAX_RETRIES:
             try:
                 response = await self._generate_response(messages, response_model, max_tokens)
                 return response
-            except (RateLimitError, RefusalError):
+            except RefusalError as e:
                 # These errors should not trigger retries
                 raise
+            # Handle rate limits with backoff
+            except RateLimitError as e:
+                retry_after = _parse_retry_after(e)
+                logger.warning(f"Rate limit hit. Retrying in {retry_after}s (attempt {retry_count + 1}/{self.MAX_RETRIES})")
+                await asyncio.sleep(retry_after)
+                retry_count += 1
             except (openai.APITimeoutError, openai.APIConnectionError, openai.InternalServerError):
                 # Let OpenAI's client handle these retries
                 raise
