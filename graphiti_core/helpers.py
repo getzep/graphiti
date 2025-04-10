@@ -17,7 +17,7 @@ limitations under the License.
 import asyncio
 import os
 from collections.abc import Coroutine
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 from dotenv import load_dotenv
@@ -28,6 +28,7 @@ load_dotenv()
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
+LLM_RATE_LIMIT = int(os.getenv('LLM_RATE_LIMIT', 60))  # P3ce5
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 2))
 DEFAULT_PAGE_LIMIT = 20
 
@@ -88,9 +89,18 @@ def normalize_l2(embedding: list[float]):
 # Use this instead of asyncio.gather() to bound coroutines
 async def semaphore_gather(*coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT):
     semaphore = asyncio.Semaphore(max_coroutines)
+    rate_limit_semaphore = asyncio.Semaphore(LLM_RATE_LIMIT)  # Pd729
+    last_request_time = datetime.min  # Pd729
 
     async def _wrap_coroutine(coroutine):
+        nonlocal last_request_time
         async with semaphore:
-            return await coroutine
+            async with rate_limit_semaphore:
+                now = datetime.now()
+                elapsed = (now - last_request_time).total_seconds()
+                if elapsed < 60 / LLM_RATE_LIMIT:
+                    await asyncio.sleep(60 / LLM_RATE_LIMIT - elapsed)
+                last_request_time = datetime.now()
+                return await coroutine
 
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
