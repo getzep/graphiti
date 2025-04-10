@@ -26,8 +26,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_CROSS_ENCODER
-from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_helpers import search_results_to_context_string
 
 pytestmark = pytest.mark.integration
 
@@ -66,18 +65,11 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    results = await graphiti._search(
-        'My name is Alice',
-        COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-        group_ids=['test'],
-        search_filter=SearchFilters(node_labels=['Entity']),
+    results = await graphiti.search_(
+        query="Who is Alice's friend?",
     )
 
-    pretty_results = {
-        'edges': [edge.fact for edge in results.edges],
-        'nodes': [node.name for node in results.nodes],
-        'communities': [community.name for community in results.communities],
-    }
+    pretty_results = search_results_to_context_string(results)
 
     logger.info(pretty_results)
 

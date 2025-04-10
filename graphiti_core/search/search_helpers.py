@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
+
 from graphiti_core.edges import EntityEdge
 from graphiti_core.search.search_config import SearchResults
 
@@ -25,23 +27,37 @@ def format_edge_date_range(edge: EntityEdge) -> str:
 
 def search_results_to_context_string(search_results: SearchResults) -> str:
     """Reformats a set of SearchResults into a single string to pass directly to an LLM as context"""
-    context_string = """FACTS and ENTITIES represent relevant context to the current conversation.
-                        COMMUNITIES represent a cluster of closely related entities.
+    fact_json = [
+        {
+            'fact': edge.fact,
+            'valid_at': str(edge.valid_at),
+            'invalid_at': str(edge.invalid_at or 'Present'),
+        }
+        for edge in search_results.edges
+    ]
+    entity_json = [
+        {'entity_name': node.name, 'summary': node.summary} for node in search_results.nodes
+    ]
+    community_json = [
+        {'community_name': community.name, 'summary': community.summary}
+        for community in search_results.communities
+    ]
 
-                        # These are the most relevant facts and their valid date ranges
-                        # format: FACT (Date range: from - to)
-                    """
-    context_string += '<FACTS>\n'
-    for edge in search_results.edges:
-        context_string += f'- {edge.fact} ({format_edge_date_range(edge)})\n'
-    context_string += '</FACTS>\n'
-    context_string += '<ENTITIES>\n'
-    for node in search_results.nodes:
-        context_string += f'- {node.name}: {node.summary}\n'
-    context_string += '</ENTITIES>\n'
-    context_string += '<COMMUNITIES>\n'
-    for community in search_results.communities:
-        context_string += f'- {community.name}: {community.summary}\n'
-    context_string += '</COMMUNITIES>\n'
+    context_string = f"""
+    FACTS and ENTITIES represent relevant context to the current conversation.
+    COMMUNITIES represent a cluster of closely related entities.
+
+    These are the most relevant facts and their valid and invalid dates. Facts are considered valid
+    between their valid_at and invalid_at dates. Facts with an invalid_at date of "Present" are considered valid.
+    <FACTS>
+    {json.dumps(fact_json, indent=12)}
+    </FACTS>
+    <ENTITIES>
+    {json.dumps(entity_json, indent=12)}
+    </ENTITIES>
+    <COMMUNITIES>
+    {json.dumps(community_json, indent=12)}
+    </COMMUNITIES>
+"""
 
     return context_string
