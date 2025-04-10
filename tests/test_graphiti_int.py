@@ -26,8 +26,6 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_CROSS_ENCODER
-from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_helpers import search_results_to_context_string
 
 pytestmark = pytest.mark.integration
