@@ -48,7 +48,7 @@ def search_results_to_context_string(search_results: SearchResults) -> str:
     COMMUNITIES represent a cluster of closely related entities.
 
     These are the most relevant facts and their valid and invalid dates. Facts are considered valid
-    between there valid_at and invalid_at dates. Facts with an invalid_at date of "Present" are considered valid.
+    between their valid_at and invalid_at dates. Facts with an invalid_at date of "Present" are considered valid.
     <FACTS>
     {json.dumps(fact_json, indent=12)}
     </FACTS>
