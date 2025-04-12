@@ -72,7 +72,7 @@ async def build_graph(
                     edge.fact_embedding = None
 
                 add_episode_results[user_id].append(results)
-                add_episode_context[user_id].append([msg["content"]])
+                add_episode_context[user_id].append(msg["content"])
     return add_episode_results, add_episode_context
 
 
