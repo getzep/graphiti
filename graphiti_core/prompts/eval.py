@@ -42,6 +42,7 @@ class EvalAddEpisodeResults(BaseModel):
         ...,
         description='boolean if the baseline extraction is higher quality than the candidate extraction.',
     )
+    reasoning: str = Field(..., description='why you determined the response was correct or incorrect')
 
 
 class Prompt(Protocol):
@@ -130,13 +131,13 @@ def eval_add_episode_results(context: dict[str, Any]) -> list[Message]:
     conversation is higher quality than the CANDIDATE graph data extracted from the conversation.
     
     Return False if the BASELINE extraction is better, and True otherwise. If the CANDIDATE extraction and
-    BASELINE extraction are nearly identical in quality, return True.
+    BASELINE extraction are nearly identical in quality, return True. Add your reasoning for your decision to the reasoning field
     
     <PREVIOUS MESSAGES>
     {context['previous_messages']}
     </PREVIOUS MESSAGES>
     <MESSAGE>
-    {context['answer']}
+    {context['message']}
     </MESSAGE>
     
     <BASELINE>
