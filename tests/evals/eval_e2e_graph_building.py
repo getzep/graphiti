@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import json
 from datetime import datetime, timezone
 
@@ -29,10 +30,12 @@ from tests.test_graphiti_int import NEO4J_URI, NEO4j_PASSWORD, NEO4j_USER
 
 
 async def build_graph(
-        group_id_suffix: str, multi_session: list[int], session_length: int, graphiti: Graphiti
+    group_id_suffix: str, multi_session: list[int], session_length: int, graphiti: Graphiti
 ) -> tuple[dict[str, list[AddEpisodeResults]], dict[str, list[str]]]:
     # Get longmemeval dataset
-    lme_dataset_option = 'data/longmemeval_data/longmemeval_oracle.json'  # Can be _oracle, _s, or _m
+    lme_dataset_option = (
+        'data/longmemeval_data/longmemeval_oracle.json'  # Can be _oracle, _s, or _m
+    )
     lme_dataset_df = pd.read_json(lme_dataset_option)
 
     add_episode_results: dict[str, list[AddEpisodeResults]] = {}
@@ -64,7 +67,7 @@ async def build_graph(
                     reference_time=date_string,
                     source=EpisodeType.message,
                     source_description='',
-                    group_id=user_id + "_" + group_id_suffix,
+                    group_id=user_id + '_' + group_id_suffix,
                 )
                 for node in results.nodes:
                     node.name_embedding = None
@@ -72,7 +75,7 @@ async def build_graph(
                     edge.fact_embedding = None
 
                 add_episode_results[user_id].append(results)
-                add_episode_context[user_id].append(msg["content"])
+                add_episode_context[user_id].append(msg['content'])
     return add_episode_results, add_episode_context
 
 
@@ -81,12 +84,12 @@ async def build_baseline_graph(multi_session: list[int], session_length: int):
     llm_client = OpenAIClient(config=LLMConfig(model='gpt-4o'))
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
 
-    add_episode_results, _ = await build_graph("baseline", multi_session, session_length, graphiti)
+    add_episode_results, _ = await build_graph('baseline', multi_session, session_length, graphiti)
 
-    filename = "baseline_graph_results.json"
+    filename = 'baseline_graph_results.json'
 
     serializable_baseline_graph_results = {
-        key: [item.model_dump(mode="json") for item in value]
+        key: [item.model_dump(mode='json') for item in value]
         for key, value in add_episode_results.items()
     }
 
@@ -94,9 +97,11 @@ async def build_baseline_graph(multi_session: list[int], session_length: int):
         json.dump(serializable_baseline_graph_results, file, indent=4, default=str)
 
 
-async def eval_graph(multi_session: list[int], session_length: int, llm_client=OpenAIClient()) -> float:
+async def eval_graph(multi_session: list[int], session_length: int, llm_client=None) -> float:
+    if llm_client is None:
+        llm_client = OpenAIClient()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
-    with open('baseline_graph_results.json', 'r') as file:
+    with open('baseline_graph_results.json') as file:
         baseline_results_raw = json.load(file)
 
         baseline_results: dict[str, list[AddEpisodeResults]] = {
@@ -104,13 +109,13 @@ async def eval_graph(multi_session: list[int], session_length: int, llm_client=O
             for key, value in baseline_results_raw.items()
         }
     add_episode_results, add_episode_context = await build_graph(
-        "candidate", multi_session, session_length, graphiti
+        'candidate', multi_session, session_length, graphiti
     )
 
-    filename = "candidate_graph_results.json"
+    filename = 'candidate_graph_results.json'
 
     candidate_baseline_graph_results = {
-        key: [item.model_dump(mode="json") for item in value]
+        key: [item.model_dump(mode='json') for item in value]
         for key, value in add_episode_results.items()
     }
 
@@ -122,9 +127,12 @@ async def eval_graph(multi_session: list[int], session_length: int, llm_client=O
     for user_id in add_episode_results:
         user_count += 1
         user_raw_score = 0
-        print("add_episode_context: ", add_episode_context)
+        print('add_episode_context: ', add_episode_context)
         for baseline_result, add_episode_result, episodes in zip(
-                baseline_results[user_id], add_episode_results[user_id], add_episode_context[user_id]
+            baseline_results[user_id],
+            add_episode_results[user_id],
+            add_episode_context[user_id],
+            strict=True,
         ):
             context = {
                 'baseline': baseline_result,
@@ -135,12 +143,13 @@ async def eval_graph(multi_session: list[int], session_length: int, llm_client=O
             print(context)
 
             llm_response = await llm_client.generate_response(
-                prompt_library.eval.eval_add_episode_results(context), response_model=EvalAddEpisodeResults
+                prompt_library.eval.eval_add_episode_results(context),
+                response_model=EvalAddEpisodeResults,
             )
 
             candidate_is_worse = llm_response.get('candidate_is_worse', False)
             user_raw_score += 0 if candidate_is_worse else 1
-            print("llm_response:", llm_response)
+            print('llm_response:', llm_response)
         user_score = user_raw_score / len(add_episode_results[user_id])
         raw_score += user_score
     score = raw_score / user_count

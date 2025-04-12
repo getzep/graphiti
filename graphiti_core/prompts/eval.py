@@ -42,7 +42,9 @@ class EvalAddEpisodeResults(BaseModel):
         ...,
         description='boolean if the baseline extraction is higher quality than the candidate extraction.',
     )
-    reasoning: str = Field(..., description='why you determined the response was correct or incorrect')
+    reasoning: str = Field(
+        ..., description='why you determined the response was correct or incorrect'
+    )
 
 
 class Prompt(Protocol):
