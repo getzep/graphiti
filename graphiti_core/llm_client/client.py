@@ -33,7 +33,7 @@ DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
 MULTILINGUAL_EXTRACTION_RESPONSES = (
-    f'\n\nAny extracted information should be returned in the same language as it was written in.'
+    '\n\nAny extracted information should be returned in the same language as it was written in.'
 )
 
 logger = logging.getLogger(__name__)
