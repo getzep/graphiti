@@ -32,6 +32,10 @@ from .errors import RateLimitError
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
+MULTILINGUAL_EXTRACTION_RESPONSES = (
+    '\n\nAny extracted information should be returned in the same language as it was written in.'
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +136,9 @@ class LLMClient(ABC):
             ].content += (
                 f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
             )
+
+        # Add multilingual extraction instructions
+        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
 
         if self.cache_enabled and self.cache_dir is not None:
             cache_key = self._get_cache_key(messages)
