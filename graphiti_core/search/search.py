@@ -77,6 +77,7 @@ async def search(
         return SearchResults(
             edges=[],
             nodes=[],
+            episodes=[],
             communities=[],
         )
     query_vector = await embedder.create(input_data=[query.replace('\n', ' ')])

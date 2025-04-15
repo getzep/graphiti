@@ -750,7 +750,7 @@ class Graphiti:
 
         nodes = await get_mentioned_nodes(self.driver, episodes)
 
-        return SearchResults(edges=edges, nodes=nodes, communities=[])
+        return SearchResults(edges=edges, nodes=nodes, episodes=[], communities=[])
 
     async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:
