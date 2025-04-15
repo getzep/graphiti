@@ -229,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                            """
+                                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -770,9 +770,10 @@ async def node_distance_reranker(
 
     # add back in filtered center uuid if it was filtered out
     if center_node_uuid in node_uuids:
+        scores[center_node_uuid] = 0.1
         filtered_uuids = [center_node_uuid] + filtered_uuids
 
-    return [uuid for uuid in filtered_uuids if scores[uuid] == 0 or (1 / scores[uuid]) >= min_score]
+    return [uuid for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score]
 
 
 async def episode_mentions_reranker(
