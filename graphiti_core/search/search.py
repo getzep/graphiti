@@ -25,7 +25,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.nodes import CommunityNode, EntityNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
@@ -33,6 +33,8 @@ from graphiti_core.search.search_config import (
     EdgeReranker,
     EdgeSearchConfig,
     EdgeSearchMethod,
+    EpisodeReranker,
+    EpisodeSearchConfig,
     NodeReranker,
     NodeSearchConfig,
     NodeSearchMethod,
@@ -46,6 +48,7 @@ from graphiti_core.search.search_utils import (
     edge_bfs_search,
     edge_fulltext_search,
     edge_similarity_search,
+    episode_fulltext_search,
     episode_mentions_reranker,
     maximal_marginal_relevance,
     node_bfs_search,
@@ -74,13 +77,14 @@ async def search(
         return SearchResults(
             edges=[],
             nodes=[],
+            episodes=[],
             communities=[],
         )
     query_vector = await embedder.create(input_data=[query.replace('\n', ' ')])
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids else None
-    edges, nodes, communities = await semaphore_gather(
+    edges, nodes, episodes, communities = await semaphore_gather(
         edge_search(
             driver,
             cross_encoder,
@@ -107,6 +111,17 @@ async def search(
             config.limit,
             config.reranker_min_score,
         ),
+        episode_search(
+            driver,
+            cross_encoder,
+            query,
+            query_vector,
+            group_ids,
+            config.episode_config,
+            search_filter,
+            config.limit,
+            config.reranker_min_score,
+        ),
         community_search(
             driver,
             cross_encoder,
@@ -122,6 +137,7 @@ async def search(
     results = SearchResults(
         edges=edges,
         nodes=nodes,
+        episodes=episodes,
         communities=communities,
     )
 
@@ -326,6 +342,54 @@ async def node_search(
     reranked_nodes = [node_uuid_map[uuid] for uuid in reranked_uuids]
 
     return reranked_nodes[:limit]
+
+
+async def episode_search(
+    driver: AsyncDriver,
+    cross_encoder: CrossEncoderClient,
+    query: str,
+    _query_vector: list[float],
+    group_ids: list[str] | None,
+    config: EpisodeSearchConfig | None,
+    search_filter: SearchFilters,
+    limit=DEFAULT_SEARCH_LIMIT,
+    reranker_min_score: float = 0,
+) -> list[EpisodicNode]:
+    if config is None:
+        return []
+
+    search_results: list[list[EpisodicNode]] = list(
+        await semaphore_gather(
+            *[
+                episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
+            ]
+        )
+    )
+
+    search_result_uuids = [[episode.uuid for episode in result] for result in search_results]
+    episode_uuid_map = {episode.uuid: episode for result in search_results for episode in result}
+
+    reranked_uuids: list[str] = []
+    if config.reranker == EpisodeReranker.rrf:
+        reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
+
+    elif config.reranker == EpisodeReranker.cross_encoder:
+        # use rrf as a preliminary reranker
+        rrf_result_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
+        rrf_results = [episode_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
+
+        content_to_uuid_map = {episode.content: episode.uuid for episode in rrf_results}
+
+        reranked_contents = await cross_encoder.rank(query, list(content_to_uuid_map.keys()))
+        reranked_uuids = [
+            content_to_uuid_map[content]
+            for content, score in reranked_contents
+            if score >= reranker_min_score
+        ]
+
+    reranked_episodes = [episode_uuid_map[uuid] for uuid in reranked_uuids]
+
+    return reranked_episodes[:limit]
 
 
 async def community_search(
