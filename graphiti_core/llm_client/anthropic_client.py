@@ -19,6 +19,7 @@ import logging
 import os
 import typing
 from json import JSONDecodeError
+from typing import Literal
 
 import anthropic
 from anthropic import AsyncAnthropic
@@ -32,7 +33,23 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'claude-3-7-sonnet-latest'
+AnthropicModel = Literal[
+    'claude-3-7-sonnet-latest',
+    'claude-3-7-sonnet-20250219',
+    'claude-3-5-haiku-latest',
+    'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet-latest',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-sonnet-20240620',
+    'claude-3-opus-latest',
+    'claude-3-opus-20240229',
+    'claude-3-sonnet-20240229',
+    'claude-3-haiku-20240307',
+    'claude-2.1',
+    'claude-2.0',
+]
+
+DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
 
 
 class AnthropicClient(LLMClient):
@@ -54,6 +71,8 @@ class AnthropicClient(LLMClient):
 
     """
 
+    model: AnthropicModel
+
     def __init__(
         self,
         config: LLMConfig | None = None,
@@ -71,7 +90,7 @@ class AnthropicClient(LLMClient):
 
         super().__init__(config, cache)
         # Explicitly set the instance model to the config model to prevent type checking errors
-        self.model = config.model
+        self.model = typing.cast(AnthropicModel, config.model)
 
         if not client:
             self.client = AsyncAnthropic(
@@ -201,7 +220,7 @@ class AnthropicClient(LLMClient):
             for content_item in result.content:
                 if content_item.type == 'tool_use':
                     if isinstance(content_item.input, dict):
-                        tool_args = content_item.input
+                        tool_args: dict[str, typing.Any] = content_item.input
                     else:
                         tool_args = json.loads(str(content_item.input))
                     return tool_args
