@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 import openai
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import BaseModel
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
