@@ -97,6 +97,7 @@ class SearchConfig(BaseModel):
     node_config: NodeSearchConfig | None = Field(default=None)
     community_config: CommunitySearchConfig | None = Field(default=None)
     limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
+    reranker_min_score: float = Field(default=0)
 
 
 class SearchResults(BaseModel):
