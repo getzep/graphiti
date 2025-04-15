@@ -267,7 +267,7 @@ class EpisodicNode(Node):
             e.source AS source,
             e.entity_edges AS entity_edges
         """,
-            uuids=entity_node_uuid,
+            entity_node_uuid=entity_node_uuid,
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
