@@ -229,8 +229,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                """
+                                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -718,7 +718,7 @@ async def get_relevant_edges(
 
 
 # takes in a list of rankings of uuids
-def rrf(results: list[list[str]], rank_const=1) -> list[str]:
+def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[str]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
@@ -729,11 +729,14 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
     sorted_uuids = [term[0] for term in scored_uuids]
 
-    return sorted_uuids
+    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, node_uuids: list[str], center_node_uuid: str
+    driver: AsyncDriver,
+    node_uuids: list[str],
+    center_node_uuid: str,
+    min_score: float = 0,
 ) -> list[str]:
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
@@ -767,12 +770,15 @@ async def node_distance_reranker(
 
     # add back in filtered center uuid if it was filtered out
     if center_node_uuid in node_uuids:
+        scores[center_node_uuid] = 0.1
         filtered_uuids = [center_node_uuid] + filtered_uuids
 
-    return filtered_uuids
+    return [uuid for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score]
 
 
-async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[str]]) -> list[str]:
+async def episode_mentions_reranker(
+    driver: AsyncDriver, node_uuids: list[list[str]], min_score: float = 0
+) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(node_uuids)
     scores: dict[str, float] = {}
@@ -796,13 +802,14 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
 
-    return sorted_uuids
+    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
 
 
 def maximal_marginal_relevance(
     query_vector: list[float],
     candidates: list[tuple[str, list[float]]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
+    min_score: float = 0,
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
@@ -812,4 +819,6 @@ def maximal_marginal_relevance(
 
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
 
-    return list(set([candidate[0] for candidate in candidates_with_mmr]))
+    return list(
+        set([candidate[0] for candidate in candidates_with_mmr if candidate[1] >= min_score])
+    )

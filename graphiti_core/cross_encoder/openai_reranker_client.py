@@ -17,9 +17,9 @@ limitations under the License.
 import logging
 from typing import Any
 
+import numpy as np
 import openai
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from pydantic import BaseModel
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
@@ -29,10 +29,6 @@ from .client import CrossEncoderClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4.1-nano'
-
-
-class BooleanClassifier(BaseModel):
-    isTrue: bool
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
@@ -107,11 +103,15 @@ class OpenAIRerankerClient(CrossEncoderClient):
             ]
             scores: list[float] = []
             for top_logprobs in responses_top_logprobs:
-                for logprob in top_logprobs:
-                    if bool(logprob.token):
-                        scores.append(logprob.logprob)
+                if len(top_logprobs) == 0:
+                    continue
+                norm_logprobs = np.exp(top_logprobs[0].logprob)
+                if bool(top_logprobs[0].token):
+                    scores.append(norm_logprobs)
+                else:
+                    scores.append(1 - norm_logprobs)
 
-            results = [(passage, score) for passage, score in zip(passages, scores, strict=False)]
+            results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
             results.sort(reverse=True, key=lambda x: x[1])
             return results
         except openai.RateLimitError as e:
