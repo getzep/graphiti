@@ -21,6 +21,9 @@ from graphiti_core.search.search_config import (
     EdgeReranker,
     EdgeSearchConfig,
     EdgeSearchMethod,
+    EpisodeReranker,
+    EpisodeSearchConfig,
+    EpisodeSearchMethod,
     NodeReranker,
     NodeSearchConfig,
     NodeSearchMethod,
@@ -36,6 +39,12 @@ COMBINED_HYBRID_SEARCH_RRF = SearchConfig(
     node_config=NodeSearchConfig(
         search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
         reranker=NodeReranker.rrf,
+    ),
+    episode_config=EpisodeSearchConfig(
+        search_methods=[
+            EpisodeSearchMethod.bm25,
+        ],
+        reranker=EpisodeReranker.rrf,
     ),
     community_config=CommunitySearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
@@ -54,6 +63,12 @@ COMBINED_HYBRID_SEARCH_MMR = SearchConfig(
         search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
         reranker=NodeReranker.mmr,
         mmr_lambda=1,
+    ),
+    episode_config=EpisodeSearchConfig(
+        search_methods=[
+            EpisodeSearchMethod.bm25,
+        ],
+        reranker=EpisodeReranker.rrf,
     ),
     community_config=CommunitySearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],
@@ -79,6 +94,12 @@ COMBINED_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
             NodeSearchMethod.bfs,
         ],
         reranker=NodeReranker.cross_encoder,
+    ),
+    episode_config=EpisodeSearchConfig(
+        search_methods=[
+            EpisodeSearchMethod.bm25,
+        ],
+        reranker=EpisodeReranker.cross_encoder,
     ),
     community_config=CommunitySearchConfig(
         search_methods=[CommunitySearchMethod.bm25, CommunitySearchMethod.cosine_similarity],

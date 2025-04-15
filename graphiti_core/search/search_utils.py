@@ -37,6 +37,7 @@ from graphiti_core.nodes import (
     EpisodicNode,
     get_community_node_from_record,
     get_entity_node_from_record,
+    get_episodic_node_from_record,
 )
 from graphiti_core.search.search_filters import (
     SearchFilters,
@@ -229,8 +230,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                """
+                                                                                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                    """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -473,6 +474,48 @@ async def node_bfs_search(
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
+
+
+async def episode_fulltext_search(
+    driver: AsyncDriver,
+    query: str,
+    _search_filter: SearchFilters,
+    group_ids: list[str] | None = None,
+    limit=RELEVANT_SCHEMA_LIMIT,
+) -> list[EpisodicNode]:
+    # BM25 search to get top episodes
+    fuzzy_query = fulltext_query(query, group_ids)
+    if fuzzy_query == '':
+        return []
+
+    records, _, _ = await driver.execute_query(
+        """
+        CALL db.index.fulltext.queryNodes("episode_content", $query, {limit: $limit}) 
+        YIELD node AS episode, score
+        MATCH (e:Episodic)
+        WHERE e.uuid = episode.uuid
+        RETURN 
+            e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.source_description AS source_description,
+            e.source AS source,
+            e.entity_edges AS entity_edges
+        ORDER BY score DESC
+        LIMIT $limit
+        """,
+        query=fuzzy_query,
+        group_ids=group_ids,
+        limit=limit,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+    episodes = [get_episodic_node_from_record(record) for record in records]
+
+    return episodes
 
 
 async def community_fulltext_search(

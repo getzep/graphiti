@@ -19,7 +19,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import CommunityNode, EntityNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.search.search_utils import (
     DEFAULT_MIN_SCORE,
     DEFAULT_MMR_LAMBDA,
@@ -41,6 +41,10 @@ class NodeSearchMethod(Enum):
     bfs = 'breadth_first_search'
 
 
+class EpisodeSearchMethod(Enum):
+    bm25 = 'bm25'
+
+
 class CommunitySearchMethod(Enum):
     cosine_similarity = 'cosine_similarity'
     bm25 = 'bm25'
@@ -59,6 +63,11 @@ class NodeReranker(Enum):
     node_distance = 'node_distance'
     episode_mentions = 'episode_mentions'
     mmr = 'mmr'
+    cross_encoder = 'cross_encoder'
+
+
+class EpisodeReranker(Enum):
+    rrf = 'reciprocal_rank_fusion'
     cross_encoder = 'cross_encoder'
 
 
@@ -84,6 +93,14 @@ class NodeSearchConfig(BaseModel):
     bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
 
 
+class EpisodeSearchConfig(BaseModel):
+    search_methods: list[EpisodeSearchMethod]
+    reranker: EpisodeReranker = Field(default=EpisodeReranker.rrf)
+    sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
+    mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
+    bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
+
+
 class CommunitySearchConfig(BaseModel):
     search_methods: list[CommunitySearchMethod]
     reranker: CommunityReranker = Field(default=CommunityReranker.rrf)
@@ -95,6 +112,7 @@ class CommunitySearchConfig(BaseModel):
 class SearchConfig(BaseModel):
     edge_config: EdgeSearchConfig | None = Field(default=None)
     node_config: NodeSearchConfig | None = Field(default=None)
+    episode_config: EpisodeSearchConfig | None = Field(default=None)
     community_config: CommunitySearchConfig | None = Field(default=None)
     limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
     reranker_min_score: float = Field(default=0)
@@ -103,4 +121,5 @@ class SearchConfig(BaseModel):
 class SearchResults(BaseModel):
     edges: list[EntityEdge]
     nodes: list[EntityNode]
+    episodes: list[EpisodicNode]
     communities: list[CommunityNode]
