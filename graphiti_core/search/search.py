@@ -35,7 +35,6 @@ from graphiti_core.search.search_config import (
     EdgeSearchMethod,
     EpisodeReranker,
     EpisodeSearchConfig,
-    EpisodeSearchMethod,
     NodeReranker,
     NodeSearchConfig,
     NodeSearchMethod,
