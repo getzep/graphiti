@@ -62,7 +62,7 @@ def search_results_to_context_string(search_results: SearchResults) -> str:
     <ENTITIES>
     {json.dumps(entity_json, indent=12)}
     </ENTITIES>
-    </EPISODES>
+    <EPISODES>
     {json.dumps(episode_json, indent=12)}
     </EPISODES>
     <COMMUNITIES>
