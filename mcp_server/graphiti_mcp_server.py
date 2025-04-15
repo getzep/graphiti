@@ -31,7 +31,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-DEFAULT_LLM_MODEL = 'gpt-4o-mini'
+DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
 
 
 class Requirement(BaseModel):
@@ -344,13 +344,11 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
-
 # MCP server instance
 mcp = FastMCP(
     'graphiti',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
-
 
 # Initialize Graphiti client
 graphiti_client: Graphiti | None = None

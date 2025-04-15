@@ -99,7 +99,7 @@ async def build_baseline_graph(multi_session: list[int], session_length: int):
 
 async def eval_graph(multi_session: list[int], session_length: int, llm_client=None) -> float:
     if llm_client is None:
-        llm_client = OpenAIClient()
+        llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
     with open('baseline_graph_results.json') as file:
         baseline_results_raw = json.load(file)
@@ -127,7 +127,6 @@ async def eval_graph(multi_session: list[int], session_length: int, llm_client=N
     for user_id in add_episode_results:
         user_count += 1
         user_raw_score = 0
-        print('add_episode_context: ', add_episode_context)
         for baseline_result, add_episode_result, episodes in zip(
             baseline_results[user_id],
             add_episode_results[user_id],
