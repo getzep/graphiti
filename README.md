@@ -94,6 +94,11 @@ Requirements:
 - Neo4j 5.26 or higher (serves as the embeddings storage backend)
 - OpenAI API key (for LLM inference and embedding)
 
+> [!IMPORTANT]
+> Graphiti works best with LLM services that support Structured Output (such as OpenAI and Gemini).
+> Using other services may result in incorrect output schemas and ingestion failures. This is particularly
+> problematic when using smaller models.
+
 Optional:
 
 - Google Gemini, Anthropic, or Groq API key (for alternative LLM providers)
