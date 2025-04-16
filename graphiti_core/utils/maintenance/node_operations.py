@@ -324,8 +324,6 @@ async def resolve_extracted_node(
         else [],
     }
 
-    attributes: list[dict[str, str]] = []
-
     summary_context = {
         'node_name': extracted_node.name,
         'node_summary': extracted_node.summary,
@@ -333,8 +331,9 @@ async def resolve_extracted_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
-        'attributes': attributes,
     }
+
+    attributes: list[dict[str, str]] = []
 
     entity_type_classes: tuple[BaseModel, ...] = tuple()
     if entity_types is not None:  # type: ignore
@@ -347,9 +346,11 @@ async def resolve_extracted_node(
 
     for entity_type in entity_type_classes:
         for field_name, field_info in entity_type.model_fields.items():
-            summary_context.get('attributes', []).append(
+            attributes.append(
                 {'attribute_name': field_name, 'attribute_description': field_info.description}
-            )  # type: ignore
+            )
+
+    summary_context['attributes'] = attributes
 
     entity_attributes_model = pydantic.create_model(  # type: ignore
         'EntityAttributes',
