@@ -18,13 +18,15 @@ jobs:
     steps:
       - name: "CLA Assistant"
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
-        uses: contributor-assistant/github-action@v2.5.1
+        uses: contributor-assistant/github-action@v2.6.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # the default github token does not have branch protection override permissions
+          # the repo secrets will need to be updated when the token expires.
+          GITHUB_TOKEN: ${{ secrets.DANIEL_PAT }}
         with:
           path-to-signatures: "signatures/version1/cla.json"
           path-to-document: "https://github.com/getzep/graphiti/blob/main/Zep-CLA.md" # e.g. a CLA or a DCO document
-          # branch should not be protected
+          # branch should not be protected unless a personal PAT is used
           branch: "main"
           allowlist: paul-paliychuk,prasmussen15,danielchalef,dependabot[bot],ellipsis-dev
 
