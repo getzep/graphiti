@@ -57,7 +57,7 @@ def node(context: dict[str, Any]) -> list[Message]:
         {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
-        {context["episode_content"]}
+        {context['episode_content']}
         </CURRENT MESSAGE>
 
         <EXISTING NODES>

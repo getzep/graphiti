@@ -12,21 +12,21 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional, TypedDict, Union, cast
 
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 from graphiti_core import Graphiti
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.client import EmbedderClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
-from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
     NODE_HYBRID_SEARCH_NODE_DISTANCE,
@@ -181,7 +181,6 @@ class GraphitiConfig(BaseModel):
     azure_openai_api_version: Optional[str] = None
     azure_openai_embedding_api_version: Optional[str] = None
     azure_openai_use_managed_identity: bool = False
-    
 
     @classmethod
     def from_env(cls) -> 'GraphitiConfig':
@@ -196,9 +195,16 @@ class GraphitiConfig(BaseModel):
             azure_openai_endpoint=os.environ.get('AZURE_OPENAI_ENDPOINT', None),
             azure_openai_api_version=os.environ.get('AZURE_OPENAI_API_VERSION', None),
             azure_openai_deployment_name=os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None),
-            azure_openai_embedding_api_version=os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None),
-            azure_openai_embedding_deployment_name=os.environ.get('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None),
-            azure_openai_use_managed_identity=os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', 'false').lower() == 'true',
+            azure_openai_embedding_api_version=os.environ.get(
+                'AZURE_OPENAI_EMBEDDING_API_VERSION', None
+            ),
+            azure_openai_embedding_deployment_name=os.environ.get(
+                'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None
+            ),
+            azure_openai_use_managed_identity=os.environ.get(
+                'AZURE_OPENAI_USE_MANAGED_IDENTITY', 'false'
+            ).lower()
+            == 'true',
         )
 
 
@@ -261,7 +267,13 @@ mcp = FastMCP(
 # Initialize Graphiti client
 graphiti_client: Optional[Graphiti] = None
 
-async def initialize_graphiti(llm_client: Optional[LLMClient] = None, embedder_client: Optional[EmbedderClient] = None, cross_encoder_client : Optional[CrossEncoderClient] = None,  destroy_graph: bool = False):
+
+async def initialize_graphiti(
+    llm_client: Optional[LLMClient] = None,
+    embedder_client: Optional[EmbedderClient] = None,
+    cross_encoder_client: Optional[CrossEncoderClient] = None,
+    destroy_graph: bool = False,
+):
     """Initialize the Graphiti client with the provided settings.
 
     Args:
@@ -828,10 +840,14 @@ async def get_status() -> StatusResponse:
             'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
         }
 
+
 def create_azure_credential_token_provider() -> Callable[[], str]:
     credential = DefaultAzureCredential()
-    token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+    token_provider = get_bearer_token_provider(
+        credential, 'https://cognitiveservices.azure.com/.default'
+    )
     return token_provider
+
 
 def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
     """Create a CrossEncoderClient.
@@ -848,22 +864,23 @@ def create_reranker_client(config: GraphitiConfig) -> CrossEncoderClient | None:
             logger.info('Using Azure Managed Identity')
             token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
-                    azure_ad_token_provider=token_provider,
-                    api_version=config.azure_openai_api_version,
-                    azure_endpoint=config.azure_openai_endpoint,
-                     azure_deployment=config.azure_openai_deployment_name,
-                    )
+                azure_ad_token_provider=token_provider,
+                api_version=config.azure_openai_api_version,
+                azure_endpoint=config.azure_openai_endpoint,
+                azure_deployment=config.azure_openai_deployment_name,
+            )
         else:
             logger.info('Using Azure OpenAI with API key')
             azure_client = AsyncAzureOpenAI(
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_api_version,
                 azure_endpoint=config.azure_openai_endpoint,
-                 azure_deployment=config.azure_openai_deployment_name,
-                )
+                azure_deployment=config.azure_openai_deployment_name,
+            )
         return OpenAIRerankerClient(client=azure_client)
 
     return None
+
 
 def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
     """Create an EmbedderClient.
@@ -880,27 +897,28 @@ def create_embedder_client(config: GraphitiConfig) -> EmbedderClient | None:
             logger.info('Using Azure Managed Identity')
             token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
-                    azure_ad_token_provider=token_provider,
-                    api_version=config.azure_openai_embedding_api_version,
-                    azure_endpoint=config.azure_openai_endpoint,
-                    azure_deployment=config.azure_openai_embedding_deployment_name,
-                    )
+                azure_ad_token_provider=token_provider,
+                api_version=config.azure_openai_embedding_api_version,
+                azure_endpoint=config.azure_openai_endpoint,
+                azure_deployment=config.azure_openai_embedding_deployment_name,
+            )
         else:
             logger.info('Using Azure OpenAI with API key')
             azure_client = AsyncAzureOpenAI(
                 api_key=config.openai_api_key,
                 api_version=config.azure_openai_embedding_api_version,
                 azure_endpoint=config.azure_openai_endpoint,
-                 azure_deployment=config.azure_openai_embedding_deployment_name,
-                )
+                azure_deployment=config.azure_openai_embedding_deployment_name,
+            )
         return OpenAIEmbedder(
             client=azure_client,
             config=OpenAIEmbedderConfig(
                 embedding_model=config.azure_openai_embedding_deployment_name
-                ),
-            )
+            ),
+        )
 
     return None
+
 
 def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
     """Create an LLMClient.
@@ -917,11 +935,11 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
             logger.info('Using Azure Managed Identity')
             token_provider = create_azure_credential_token_provider()
             azure_client = AsyncAzureOpenAI(
-                    azure_ad_token_provider=token_provider,
-                    api_version=config.azure_openai_api_version,
-                    azure_endpoint=config.azure_openai_endpoint,
-                    azure_deployment=config.azure_openai_deployment_name,
-                    )
+                azure_ad_token_provider=token_provider,
+                api_version=config.azure_openai_api_version,
+                azure_endpoint=config.azure_openai_endpoint,
+                azure_deployment=config.azure_openai_deployment_name,
+            )
         else:
             logger.info('Using Azure OpenAI with API key')
             azure_client = AsyncAzureOpenAI(
@@ -929,7 +947,7 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
                 api_version=config.azure_openai_api_version,
                 azure_endpoint=config.azure_openai_endpoint,
                 azure_deployment=config.azure_openai_deployment_name,
-                )
+            )
         return OpenAIClient(client=azure_client)
     elif config.openai_api_key:
         logger.info('Using OpenAI')
@@ -940,7 +958,6 @@ def create_llm_client(config: GraphitiConfig) -> LLMClient | None:
             llm_config.model = config.model_name
 
         return OpenAIClient(config=llm_config)
-
 
     # Create and return the client
     return None
@@ -1006,7 +1023,12 @@ async def initialize_server() -> MCPConfig:
     cross_encoder_client = create_reranker_client(config=config)
 
     # Initialize Graphiti with the specified LLM client
-    await initialize_graphiti( llm_client= llm_client, embedder_client=embedder_client,cross_encoder_client=cross_encoder_client,  destroy_graph=args.destroy_graph)
+    await initialize_graphiti(
+        llm_client=llm_client,
+        embedder_client=embedder_client,
+        cross_encoder_client=cross_encoder_client,
+        destroy_graph=args.destroy_graph,
+    )
 
     return MCPConfig(transport=args.transport)
 

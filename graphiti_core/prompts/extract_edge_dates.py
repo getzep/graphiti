@@ -53,7 +53,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             {context['previous_episodes']}
             </PREVIOUS MESSAGES>
             <CURRENT MESSAGE>
-            {context["current_episode"]}
+            {context['current_episode']}
             </CURRENT MESSAGE>
             <REFERENCE TIMESTAMP>
             {context['reference_timestamp']}
