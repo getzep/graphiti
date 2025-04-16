@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from contextlib import suppress
 from time import time
+from typing import Any
 
 import pydantic
 from pydantic import BaseModel
@@ -324,7 +325,7 @@ async def resolve_extracted_node(
         else [],
     }
 
-    summary_context = {
+    summary_context: dict[str, Any] = {
         'node_name': extracted_node.name,
         'node_summary': extracted_node.summary,
         'episode_content': episode.content if episode is not None else '',
@@ -347,7 +348,10 @@ async def resolve_extracted_node(
     for entity_type in entity_type_classes:
         for field_name, field_info in entity_type.model_fields.items():
             attributes.append(
-                {'attribute_name': field_name, 'attribute_description': field_info.description}
+                {
+                    'attribute_name': field_name,
+                    'attribute_description': field_info.description or '',
+                }
             )
 
     summary_context['attributes'] = attributes
