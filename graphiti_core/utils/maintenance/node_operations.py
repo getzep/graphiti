@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from contextlib import suppress
 from time import time
+from typing import Any
 
 import pydantic
 from pydantic import BaseModel
@@ -324,15 +325,16 @@ async def resolve_extracted_node(
         else [],
     }
 
-    summary_context = {
+    summary_context: dict[str, Any] = {
         'node_name': extracted_node.name,
         'node_summary': extracted_node.summary,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
-        'attributes': [],
     }
+
+    attributes: list[dict[str, str]] = []
 
     entity_type_classes: tuple[BaseModel, ...] = tuple()
     if entity_types is not None:  # type: ignore
@@ -344,8 +346,15 @@ async def resolve_extracted_node(
         )
 
     for entity_type in entity_type_classes:
-        for field_name in entity_type.model_fields:
-            summary_context.get('attributes', []).append(field_name)  # type: ignore
+        for field_name, field_info in entity_type.model_fields.items():
+            attributes.append(
+                {
+                    'attribute_name': field_name,
+                    'attribute_description': field_info.description or '',
+                }
+            )
+
+    summary_context['attributes'] = attributes
 
     entity_attributes_model = pydantic.create_model(  # type: ignore
         'EntityAttributes',
