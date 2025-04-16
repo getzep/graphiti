@@ -344,8 +344,10 @@ async def resolve_extracted_node(
         )
 
     for entity_type in entity_type_classes:
-        for field_name in entity_type.model_fields:
-            summary_context.get('attributes', []).append(field_name)  # type: ignore
+        for field_name, field_info in entity_type.model_fields.items():
+            summary_context.get('attributes', []).append(
+                {'attribute_name': field_name, 'attribute_description': field_info.description}
+            )  # type: ignore
 
     entity_attributes_model = pydantic.create_model(  # type: ignore
         'EntityAttributes',
