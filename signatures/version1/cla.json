@@ -1,3 +1,12 @@
 {
-    "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "colombod",
+      "id": 375556,
+      "comment_id": 2761979440,
+      "created_at": "2025-03-28T17:21:29Z",
+      "repoId": 840056306,
+      "pullRequestNo": 310
+    }
+  ]
 }
