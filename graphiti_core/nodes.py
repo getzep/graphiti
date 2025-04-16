@@ -550,12 +550,12 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         attributes=record['attributes'],
     )
 
-    del entity_node.attributes['uuid']
-    del entity_node.attributes['name']
-    del entity_node.attributes['group_id']
-    del entity_node.attributes['name_embedding']
-    del entity_node.attributes['summary']
-    del entity_node.attributes['created_at']
+    entity_node.attributes.pop('uuid', None)
+    entity_node.attributes.pop('name', None)
+    entity_node.attributes.pop('group_id', None)
+    entity_node.attributes.pop('name_embedding', None)
+    entity_node.attributes.pop('summary', None)
+    entity_node.attributes.pop('created_at', None)
 
     return entity_node
 
