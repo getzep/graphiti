@@ -95,7 +95,7 @@ def create_test_data():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_get_edge_contradictions():
-    existing_edge, new_edge, current_episode, previous_episodes = create_test_data()
+    existing_edge, new_edge, _, _ = create_test_data()
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, [existing_edge])
 
@@ -106,7 +106,7 @@ async def test_get_edge_contradictions():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_get_edge_contradictions_no_contradictions():
-    _, new_edge, current_episode, previous_episodes = create_test_data()
+    _, new_edge, _, _ = create_test_data()
 
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, [])
 
@@ -182,7 +182,7 @@ def create_complex_test_data():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_invalidate_edges_complex():
-    existing_edges, nodes = create_complex_test_data()
+    existing_edges, _ = create_complex_test_data()
 
     # Create a new edge that contradicts an existing one
     new_edge = EntityEdge(
@@ -204,7 +204,7 @@ async def test_invalidate_edges_complex():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_get_edge_contradictions_temporal_update():
-    existing_edges, nodes = create_complex_test_data()
+    existing_edges, _ = create_complex_test_data()
 
     # Create a new edge that updates an existing one with new information
     new_edge = EntityEdge(
@@ -226,7 +226,7 @@ async def test_get_edge_contradictions_temporal_update():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_get_edge_contradictions_no_effect():
-    existing_edges, nodes = create_complex_test_data()
+    existing_edges, _ = create_complex_test_data()
 
     # Create a new edge that doesn't invalidate any existing edges
     new_edge = EntityEdge(
@@ -247,7 +247,7 @@ async def test_get_edge_contradictions_no_effect():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_invalidate_edges_partial_update():
-    existing_edges, nodes = create_complex_test_data()
+    existing_edges, _ = create_complex_test_data()
 
     # Create a new edge that partially updates an existing one
     new_edge = EntityEdge(

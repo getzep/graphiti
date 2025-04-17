@@ -17,6 +17,7 @@ limitations under the License.
 # Running tests: pytest -xvs tests/llm_client/test_anthropic_client.py
 
 import os
+import typing
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -37,7 +38,7 @@ class ResponseModel(BaseModel):
 
 
 @pytest.fixture
-def mock_async_anthropic():
+def mock_async_anthropic() -> typing.Generator[typing.Any, typing.Any, None]:
     """Fixture to mock the AsyncAnthropic client."""
     with patch('anthropic.AsyncAnthropic') as mock_client:
         # Setup mock instance and its create method
@@ -47,7 +48,7 @@ def mock_async_anthropic():
 
 
 @pytest.fixture
-def anthropic_client(mock_async_anthropic):
+def anthropic_client(mock_async_anthropic: MagicMock) -> AnthropicClient:
     """Fixture to create an AnthropicClient with a mocked AsyncAnthropic."""
     # Use a context manager to patch the AsyncAnthropic constructor to avoid
     # the client actually trying to create a real connection
@@ -64,7 +65,7 @@ def anthropic_client(mock_async_anthropic):
 class TestAnthropicClientInitialization:
     """Tests for AnthropicClient initialization."""
 
-    def test_init_with_config(self):
+    def test_init_with_config(self) -> None:
         """Test initialization with a config object."""
         config = LLMConfig(
             api_key='test_api_key', model='test-model', temperature=0.5, max_tokens=1000
@@ -76,7 +77,7 @@ class TestAnthropicClientInitialization:
         assert client.temperature == 0.5
         assert client.max_tokens == 1000
 
-    def test_init_with_default_model(self):
+    def test_init_with_default_model(self) -> None:
         """Test initialization with default model when none is provided."""
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
@@ -84,14 +85,14 @@ class TestAnthropicClientInitialization:
         assert client.model == 'claude-3-7-sonnet-latest'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
-    def test_init_without_config(self):
+    def test_init_without_config(self) -> None:
         """Test initialization without a config, using environment variable."""
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
         assert client.model == 'claude-3-7-sonnet-latest'
 
-    def test_init_with_custom_client(self):
+    def test_init_with_custom_client(self) -> None:
         """Test initialization with a custom AsyncAnthropic client."""
         mock_client = MagicMock()
         client = AnthropicClient(client=mock_client)
@@ -103,7 +104,9 @@ class TestAnthropicClientGenerateResponse:
     """Tests for AnthropicClient generate_response method."""
 
     @pytest.mark.asyncio
-    async def test_generate_response_with_tool_use(self, anthropic_client, mock_async_anthropic):
+    async def test_generate_response_with_tool_use(
+        self, anthropic_client: AnthropicClient, mock_async_anthropic: MagicMock
+    ) -> None:
         """Test successful response generation with tool use."""
         # Setup mock response
         content_item = MagicMock()
@@ -130,8 +133,8 @@ class TestAnthropicClientGenerateResponse:
 
     @pytest.mark.asyncio
     async def test_generate_response_with_text_response(
-        self, anthropic_client, mock_async_anthropic
-    ):
+        self, anthropic_client: AnthropicClient, mock_async_anthropic: MagicMock
+    ) -> None:
         """Test response generation when getting text response instead of tool use."""
         # Setup mock response with text content
         content_item = MagicMock()
@@ -156,7 +159,9 @@ class TestAnthropicClientGenerateResponse:
         assert result['test_field'] == 'extracted_value'
 
     @pytest.mark.asyncio
-    async def test_rate_limit_error(self, anthropic_client, mock_async_anthropic):
+    async def test_rate_limit_error(
+        self, anthropic_client: AnthropicClient, mock_async_anthropic: MagicMock
+    ) -> None:
         """Test handling of rate limit errors."""
 
         # Create a custom RateLimitError from Anthropic
@@ -176,12 +181,14 @@ class TestAnthropicClientGenerateResponse:
                 await anthropic_client.generate_response(messages)
 
     @pytest.mark.asyncio
-    async def test_refusal_error(self, anthropic_client, mock_async_anthropic):
+    async def test_refusal_error(
+        self, anthropic_client: AnthropicClient, mock_async_anthropic: MagicMock
+    ) -> None:
         """Test handling of content policy violations (refusal errors)."""
 
         # Create a custom APIError that matches what we need
         class MockAPIError(Exception):
-            def __init__(self, message):
+            def __init__(self, message: str) -> None:
                 self.message = message
                 super().__init__(message)
 
@@ -196,33 +203,35 @@ class TestAnthropicClientGenerateResponse:
                 await anthropic_client.generate_response(messages)
 
     @pytest.mark.asyncio
-    async def test_extract_json_from_text(self, anthropic_client):
+    async def test_extract_json_from_text(self, anthropic_client: AnthropicClient) -> None:
         """Test the _extract_json_from_text method."""
         # Valid JSON embedded in text
         text = 'Some text before {"test_field": "value"} and after'
-        result = anthropic_client._extract_json_from_text(text)
+        result = anthropic_client._extract_json_from_text(text)  # type: ignore[protected-access]
         assert result == {'test_field': 'value'}
 
         # Invalid JSON
         with pytest.raises(ValueError):
-            anthropic_client._extract_json_from_text('Not JSON at all')
+            anthropic_client._extract_json_from_text('Not JSON at all')  # type: ignore[protected-access]
 
     @pytest.mark.asyncio
-    async def test_create_tool(self, anthropic_client):
+    async def test_create_tool(self, anthropic_client: AnthropicClient) -> None:
         """Test the _create_tool method with and without response model."""
         # With response model
-        tools, tool_choice = anthropic_client._create_tool(ResponseModel)
+        tools, tool_choice = anthropic_client._create_tool(ResponseModel)  # type: ignore[protected-access]
         assert len(tools) == 1
         assert tools[0]['name'] == 'ResponseModel'
-        assert tool_choice['name'] == 'ResponseModel'
+        assert tool_choice['name'] == 'ResponseModel'  # type: ignore[index]
 
         # Without response model (generic JSON)
-        tools, tool_choice = anthropic_client._create_tool()
+        tools, tool_choice = anthropic_client._create_tool()  # type: ignore[protected-access]
         assert len(tools) == 1
         assert tools[0]['name'] == 'generic_json_output'
 
     @pytest.mark.asyncio
-    async def test_validation_error_retry(self, anthropic_client, mock_async_anthropic):
+    async def test_validation_error_retry(
+        self, anthropic_client: AnthropicClient, mock_async_anthropic: MagicMock
+    ) -> None:
         """Test retry behavior on validation error."""
         # First call returns invalid data, second call returns valid data
         content_item1 = MagicMock()
@@ -244,7 +253,9 @@ class TestAnthropicClientGenerateResponse:
 
         # Call method
         messages = [Message(role='user', content='Test message')]
-        result = await anthropic_client.generate_response(messages, response_model=ResponseModel)
+        result = await anthropic_client.generate_response(
+            messages=messages, response_model=ResponseModel
+        )
 
         # Should have called create twice due to retry
         assert mock_async_anthropic.messages.create.call_count == 2
