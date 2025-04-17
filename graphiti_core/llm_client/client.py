@@ -39,8 +39,8 @@ MULTILINGUAL_EXTRACTION_RESPONSES = (
 logger = logging.getLogger(__name__)
 
 
-def is_server_or_retry_error(exception):
-    if isinstance(exception, RateLimitError | json.decoder.JSONDecodeError):
+def is_server_or_retry_error(exception: BaseException) -> bool:
+    if isinstance(exception, (RateLimitError | json.decoder.JSONDecodeError)):
         return True
 
     return (

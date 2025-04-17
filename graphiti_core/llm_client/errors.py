@@ -18,7 +18,7 @@ limitations under the License.
 class RateLimitError(Exception):
     """Exception raised when the rate limit is exceeded."""
 
-    def __init__(self, message='Rate limit exceeded. Please try again later.'):
+    def __init__(self, message: str = 'Rate limit exceeded. Please try again later.') -> None:
         self.message = message
         super().__init__(self.message)
 
@@ -26,7 +26,7 @@ class RateLimitError(Exception):
 class RefusalError(Exception):
     """Exception raised when the LLM refuses to generate a response."""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(self.message)
 
@@ -34,6 +34,6 @@ class RefusalError(Exception):
 class EmptyResponseError(Exception):
     """Exception raised when the LLM returns an empty response."""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(self.message)

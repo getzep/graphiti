@@ -220,7 +220,7 @@ class AnthropicClient(LLMClient):
             for content_item in result.content:
                 if content_item.type == 'tool_use':
                     if isinstance(content_item.input, dict):
-                        tool_args: dict[str, typing.Any] = content_item.input
+                        tool_args: dict[str, typing.Any] = content_item.input  # type: ignore[assignment]
                     else:
                         tool_args = json.loads(str(content_item.input))
                     return tool_args
