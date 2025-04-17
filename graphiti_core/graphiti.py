@@ -797,7 +797,7 @@ class Graphiti:
         # We should only delete edges created by the episode
         edges_to_delete: list[EntityEdge] = []
         for edge in edges:
-            if edge.episodes[0] == episode.uuid:
+            if edge.episodes and edge.episodes[0] == episode.uuid:
                 edges_to_delete.append(edge)
 
         # Find nodes mentioned by the episode
