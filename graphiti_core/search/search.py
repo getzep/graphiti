@@ -210,7 +210,6 @@ async def edge_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == EdgeReranker.cross_encoder:
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
@@ -310,7 +309,6 @@ async def node_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == NodeReranker.cross_encoder:
         # use rrf as a preliminary reranker
@@ -437,7 +435,6 @@ async def community_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == CommunityReranker.cross_encoder:
         summary_to_uuid_map = {

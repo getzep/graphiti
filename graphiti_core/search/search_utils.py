@@ -230,8 +230,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                    """
+                                                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                        """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -852,7 +852,6 @@ def maximal_marginal_relevance(
     query_vector: list[float],
     candidates: list[tuple[str, list[float]]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
-    min_score: float = 0,
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
@@ -862,6 +861,4 @@ def maximal_marginal_relevance(
 
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
 
-    return list(
-        set([candidate[0] for candidate in candidates_with_mmr if candidate[1] >= min_score])
-    )
+    return list(set([candidate[0] for candidate in candidates_with_mmr]))
