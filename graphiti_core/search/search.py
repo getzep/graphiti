@@ -62,15 +62,15 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
-    embedder: EmbedderClient,
-    cross_encoder: CrossEncoderClient,
-    query: str,
-    group_ids: list[str] | None,
-    config: SearchConfig,
-    search_filter: SearchFilters,
-    center_node_uuid: str | None = None,
-    bfs_origin_node_uuids: list[str] | None = None,
+        driver: AsyncDriver,
+        embedder: EmbedderClient,
+        cross_encoder: CrossEncoderClient,
+        query: str,
+        group_ids: list[str] | None,
+        config: SearchConfig,
+        search_filter: SearchFilters,
+        center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
 ) -> SearchResults:
     start = time()
     if query.strip() == '':
@@ -149,17 +149,17 @@ async def search(
 
 
 async def edge_search(
-    driver: AsyncDriver,
-    cross_encoder: CrossEncoderClient,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: EdgeSearchConfig | None,
-    search_filter: SearchFilters,
-    center_node_uuid: str | None = None,
-    bfs_origin_node_uuids: list[str] | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
-    reranker_min_score: float = 0,
+        driver: AsyncDriver,
+        cross_encoder: CrossEncoderClient,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: EdgeSearchConfig | None,
+        search_filter: SearchFilters,
+        center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
+        reranker_min_score: float = 0,
 ) -> list[EntityEdge]:
     if config is None:
         return []
@@ -210,7 +210,6 @@ async def edge_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == EdgeReranker.cross_encoder:
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
@@ -257,17 +256,17 @@ async def edge_search(
 
 
 async def node_search(
-    driver: AsyncDriver,
-    cross_encoder: CrossEncoderClient,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: NodeSearchConfig | None,
-    search_filter: SearchFilters,
-    center_node_uuid: str | None = None,
-    bfs_origin_node_uuids: list[str] | None = None,
-    limit=DEFAULT_SEARCH_LIMIT,
-    reranker_min_score: float = 0,
+        driver: AsyncDriver,
+        cross_encoder: CrossEncoderClient,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: NodeSearchConfig | None,
+        search_filter: SearchFilters,
+        center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
+        limit=DEFAULT_SEARCH_LIMIT,
+        reranker_min_score: float = 0,
 ) -> list[EntityNode]:
     if config is None:
         return []
@@ -310,7 +309,6 @@ async def node_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == NodeReranker.cross_encoder:
         # use rrf as a preliminary reranker
@@ -345,15 +343,15 @@ async def node_search(
 
 
 async def episode_search(
-    driver: AsyncDriver,
-    cross_encoder: CrossEncoderClient,
-    query: str,
-    _query_vector: list[float],
-    group_ids: list[str] | None,
-    config: EpisodeSearchConfig | None,
-    search_filter: SearchFilters,
-    limit=DEFAULT_SEARCH_LIMIT,
-    reranker_min_score: float = 0,
+        driver: AsyncDriver,
+        cross_encoder: CrossEncoderClient,
+        query: str,
+        _query_vector: list[float],
+        group_ids: list[str] | None,
+        config: EpisodeSearchConfig | None,
+        search_filter: SearchFilters,
+        limit=DEFAULT_SEARCH_LIMIT,
+        reranker_min_score: float = 0,
 ) -> list[EpisodicNode]:
     if config is None:
         return []
@@ -393,14 +391,14 @@ async def episode_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
-    cross_encoder: CrossEncoderClient,
-    query: str,
-    query_vector: list[float],
-    group_ids: list[str] | None,
-    config: CommunitySearchConfig | None,
-    limit=DEFAULT_SEARCH_LIMIT,
-    reranker_min_score: float = 0,
+        driver: AsyncDriver,
+        cross_encoder: CrossEncoderClient,
+        query: str,
+        query_vector: list[float],
+        group_ids: list[str] | None,
+        config: CommunitySearchConfig | None,
+        limit=DEFAULT_SEARCH_LIMIT,
+        reranker_min_score: float = 0,
 ) -> list[CommunityNode]:
     if config is None:
         return []
@@ -437,7 +435,6 @@ async def community_search(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
-            min_score=reranker_min_score,
         )
     elif config.reranker == CommunityReranker.cross_encoder:
         summary_to_uuid_map = {

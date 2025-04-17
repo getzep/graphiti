@@ -75,10 +75,10 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
 
 
 async def get_episodes_by_mentions(
-    driver: AsyncDriver,
-    nodes: list[EntityNode],
-    edges: list[EntityEdge],
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        nodes: list[EntityNode],
+        edges: list[EntityEdge],
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EpisodicNode]:
     episode_uuids: list[str] = []
     for edge in edges:
@@ -90,7 +90,7 @@ async def get_episodes_by_mentions(
 
 
 async def get_mentioned_nodes(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+        driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
     records, _, _ = await driver.execute_query(
@@ -117,7 +117,7 @@ async def get_mentioned_nodes(
 
 
 async def get_communities_by_nodes(
-    driver: AsyncDriver, nodes: list[EntityNode]
+        driver: AsyncDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
     records, _, _ = await driver.execute_query(
@@ -142,11 +142,11 @@ async def get_communities_by_nodes(
 
 
 async def edge_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids)
@@ -196,14 +196,14 @@ async def edge_fulltext_search(
 
 
 async def edge_similarity_search(
-    driver: AsyncDriver,
-    search_vector: list[float],
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
-    search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
-    min_score: float = DEFAULT_MIN_SCORE,
+        driver: AsyncDriver,
+        search_vector: list[float],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
+        min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     runtime_query: LiteralString = (
@@ -229,12 +229,12 @@ async def edge_similarity_search(
             group_filter_query += '\nAND (m.uuid IN [$source_uuid, $target_uuid])'
 
     query: LiteralString = (
-        """
-                                                                                                                    MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                    """
-        + group_filter_query
-        + filter_query
-        + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+            """
+                                                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                        """
+            + group_filter_query
+            + filter_query
+            + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
                 WHERE score > $min_score
                 RETURN
                     r.uuid AS uuid,
@@ -273,11 +273,11 @@ async def edge_similarity_search(
 
 
 async def edge_bfs_search(
-    driver: AsyncDriver,
-    bfs_origin_node_uuids: list[str] | None,
-    bfs_max_depth: int,
-    search_filter: SearchFilters,
-    limit: int,
+        driver: AsyncDriver,
+        bfs_origin_node_uuids: list[str] | None,
+        bfs_max_depth: int,
+        search_filter: SearchFilters,
+        limit: int,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     if bfs_origin_node_uuids is None:
@@ -328,11 +328,11 @@ async def edge_bfs_search(
 
 
 async def node_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids)
@@ -375,12 +375,12 @@ async def node_fulltext_search(
 
 
 async def node_similarity_search(
-    driver: AsyncDriver,
-    search_vector: list[float],
-    search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
-    min_score: float = DEFAULT_MIN_SCORE,
+        driver: AsyncDriver,
+        search_vector: list[float],
+        search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
+        min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     runtime_query: LiteralString = (
@@ -433,11 +433,11 @@ async def node_similarity_search(
 
 
 async def node_bfs_search(
-    driver: AsyncDriver,
-    bfs_origin_node_uuids: list[str] | None,
-    search_filter: SearchFilters,
-    bfs_max_depth: int,
-    limit: int,
+        driver: AsyncDriver,
+        bfs_origin_node_uuids: list[str] | None,
+        search_filter: SearchFilters,
+        bfs_max_depth: int,
+        limit: int,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     if bfs_origin_node_uuids is None:
@@ -477,11 +477,11 @@ async def node_bfs_search(
 
 
 async def episode_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    _search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        _search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EpisodicNode]:
     # BM25 search to get top episodes
     fuzzy_query = fulltext_query(query, group_ids)
@@ -519,10 +519,10 @@ async def episode_fulltext_search(
 
 
 async def community_fulltext_search(
-    driver: AsyncDriver,
-    query: str,
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        query: str,
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids)
@@ -555,11 +555,11 @@ async def community_fulltext_search(
 
 
 async def community_similarity_search(
-    driver: AsyncDriver,
-    search_vector: list[float],
-    group_ids: list[str] | None = None,
-    limit=RELEVANT_SCHEMA_LIMIT,
-    min_score=DEFAULT_MIN_SCORE,
+        driver: AsyncDriver,
+        search_vector: list[float],
+        group_ids: list[str] | None = None,
+        limit=RELEVANT_SCHEMA_LIMIT,
+        min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
     runtime_query: LiteralString = (
@@ -605,12 +605,12 @@ async def community_similarity_search(
 
 
 async def hybrid_node_search(
-    queries: list[str],
-    embeddings: list[list[float]],
-    driver: AsyncDriver,
-    search_filter: SearchFilters,
-    group_ids: list[str] | None = None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        queries: list[str],
+        embeddings: list[list[float]],
+        driver: AsyncDriver,
+        search_filter: SearchFilters,
+        group_ids: list[str] | None = None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     """
     Perform a hybrid search for nodes using both text queries and embeddings.
@@ -679,9 +679,9 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    driver: AsyncDriver,
-    search_filter: SearchFilters,
-    nodes: list[EntityNode],
+        driver: AsyncDriver,
+        search_filter: SearchFilters,
+        nodes: list[EntityNode],
 ) -> list[EntityNode]:
     """
     Retrieve relevant nodes based on the provided list of EntityNodes.
@@ -720,11 +720,11 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    driver: AsyncDriver,
-    edges: list[EntityEdge],
-    source_node_uuid: str | None,
-    target_node_uuid: str | None,
-    limit: int = RELEVANT_SCHEMA_LIMIT,
+        driver: AsyncDriver,
+        edges: list[EntityEdge],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
+        limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     start = time()
     relevant_edges: list[EntityEdge] = []
@@ -776,10 +776,10 @@ def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[st
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver,
-    node_uuids: list[str],
-    center_node_uuid: str,
-    min_score: float = 0,
+        driver: AsyncDriver,
+        node_uuids: list[str],
+        center_node_uuid: str,
+        min_score: float = 0,
 ) -> list[str]:
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
@@ -820,7 +820,7 @@ async def node_distance_reranker(
 
 
 async def episode_mentions_reranker(
-    driver: AsyncDriver, node_uuids: list[list[str]], min_score: float = 0
+        driver: AsyncDriver, node_uuids: list[list[str]], min_score: float = 0
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(node_uuids)
@@ -849,10 +849,9 @@ async def episode_mentions_reranker(
 
 
 def maximal_marginal_relevance(
-    query_vector: list[float],
-    candidates: list[tuple[str, list[float]]],
-    mmr_lambda: float = DEFAULT_MMR_LAMBDA,
-    min_score: float = 0,
+        query_vector: list[float],
+        candidates: list[tuple[str, list[float]]],
+        mmr_lambda: float = DEFAULT_MMR_LAMBDA,
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
@@ -863,5 +862,5 @@ def maximal_marginal_relevance(
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
 
     return list(
-        set([candidate[0] for candidate in candidates_with_mmr if candidate[1] >= min_score])
+        set([candidate[0] for candidate in candidates_with_mmr])
     )
