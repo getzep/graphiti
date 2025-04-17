@@ -101,9 +101,13 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             ]
 
             community_lst.sort(reverse=True)
-            community_candidate = community_lst[0][1] if len(community_lst) > 0 else -1
-
-            new_community = max(community_candidate, curr_community)
+            candidate_rank, community_candidate = (
+                community_lst[0] if community_lst else (0, -1)
+            )
+            if community_candidate != -1 and candidate_rank > 1:
+                new_community = community_candidate
+            else:
+                new_community = max(community_candidate, curr_community)
 
             new_community_map[uuid] = new_community
 
