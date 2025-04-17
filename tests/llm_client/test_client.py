@@ -14,19 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from graphiti_core.llm_client.client import LLMClient
+# Running tests: pytest -xvs tests/llm_client/test_client.py
+
+from pydantic import BaseModel
+
+from graphiti_core.llm_client.client import DEFAULT_MAX_TOKENS, LLMClient
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.prompts.models import Message
 
 
-class TestLLMClient(LLMClient):
+class MockLLMClient(LLMClient):
     """Concrete implementation of LLMClient for testing"""
 
-    async def _generate_response(self, messages, response_model=None):
+    async def _generate_response(
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+    ) -> dict[str, str]:
         return {'content': 'test'}
 
 
-def test_clean_input():
-    client = TestLLMClient(LLMConfig())
+def test_clean_input() -> None:
+    client = MockLLMClient(LLMConfig())
 
     test_cases = [
         # Basic text should remain unchanged
@@ -54,4 +64,4 @@ def test_clean_input():
     ]
 
     for input_str, expected in test_cases:
-        assert client._clean_input(input_str) == expected, f'Failed for input: {repr(input_str)}'
+        assert client._clean_input(input_str) == expected, f'Failed for input: {repr(input_str)}'  # type: ignore[protected-access]
