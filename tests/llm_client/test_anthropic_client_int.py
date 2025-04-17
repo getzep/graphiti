@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Running tests: pytest -xvs tests/integrations/test_anthropic_client_int.py
+# Running tests: pytest -xvs tests/llm_client/test_anthropic_client_int.py
 
 import os
 

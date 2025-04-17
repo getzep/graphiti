@@ -212,7 +212,7 @@ async def test_get_edge_contradictions_temporal_update():
         source_node_uuid='2',
         target_node_uuid='4',
         name='LEFT_JOB',
-        fact='Bob no longer works at at Company XYZ',
+        fact='Bob no longer works at Company XYZ',
         group_id='1',
         created_at=utc_now(),
     )

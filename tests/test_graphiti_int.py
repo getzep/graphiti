@@ -35,8 +35,8 @@ pytest_plugins = ('pytest_asyncio',)
 load_dotenv()
 
 NEO4J_URI = os.getenv('NEO4J_URI')
-NEO4j_USER = os.getenv('NEO4J_USER')
-NEO4j_PASSWORD = os.getenv('NEO4J_PASSWORD')
+NEO4J_USER = os.getenv('NEO4J_USER')
+NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
 
 def setup_logging():
@@ -63,7 +63,7 @@ def setup_logging():
 @pytest.mark.asyncio
 async def test_graphiti_init():
     logger = setup_logging()
-    graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)  # type: ignore[arg-type]
+    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)  # type: ignore[arg-type]
 
     results = await graphiti.search_(
         query='Who is the User?',
@@ -78,7 +78,7 @@ async def test_graphiti_init():
 
 @pytest.mark.asyncio
 async def test_graph_integration():
-    client = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)  # type: ignore[arg-type]
+    client = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)  # type: ignore[arg-type]
     embedder = client.embedder
     driver = client.driver
 
