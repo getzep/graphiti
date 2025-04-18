@@ -17,6 +17,7 @@ limitations under the License.
 # Running tests: poetry run pytest -xvs tests/embedder/test_openai.py
 # Running tests with coverage: poetry run pytest -xvs tests/embedder/test_openai.py --cov=graphiti_core.embedder.openai --cov-report=term-missing
 
+import os
 from unittest.mock import AsyncMock
 
 import pytest
@@ -38,6 +39,24 @@ def mock_openai_client(mocker: MockerFixture, mock_embedding_values: list[float]
     mock_response.data[0].embedding = mock_embedding_values
     mock_client.embeddings.create.return_value = mock_response
     return mock_client
+
+
+@pytest.fixture
+def mock_env_api_key():
+    """Fixture to safely manage environment variables for testing.
+
+    This fixture ensures thread-safe environment variable handling by:
+    1. Storing the original environment
+    2. Setting the test environment variable
+    3. Yielding the test value
+    4. Restoring the original environment
+    """
+    original_env = dict(os.environ)
+    test_key = 'env_test_key'
+    os.environ['OPENAI_API_KEY'] = test_key
+    yield test_key
+    os.environ.clear()
+    os.environ.update(original_env)
 
 
 @pytest.mark.asyncio
@@ -153,12 +172,9 @@ async def test_openai_embedder_default_config(
 async def test_openai_embedder_with_env_api_key(
     mocker: MockerFixture,
     mock_embedding_values: list[float],
+    mock_env_api_key: str,
 ) -> None:
     """Test that the embedder falls back to environment variables for API key"""
-    # Mock the environment variable being set
-    env_api_key = 'env_test_key'
-    mocker.patch.dict('os.environ', {'OPENAI_API_KEY': env_api_key})
-
     # Import the actual OpenAI client here
     from openai import AsyncOpenAI
 
@@ -166,7 +182,7 @@ async def test_openai_embedder_with_env_api_key(
     real_client = AsyncOpenAI(api_key=None)
 
     # Verify the client picked up the env var
-    assert real_client.api_key == env_api_key
+    assert real_client.api_key == mock_env_api_key
 
     # Now patch the embeddings.create method to avoid actual API calls
     mock_create = mocker.AsyncMock()
@@ -183,7 +199,7 @@ async def test_openai_embedder_with_env_api_key(
     embedder = OpenAIEmbedder(config=OpenAIEmbedderConfig(api_key=None))
 
     # Verify the embedder's client has the correct API key
-    assert embedder.client.api_key == env_api_key
+    assert embedder.client.api_key == mock_env_api_key
 
     # Test that it works when creating embeddings
     await embedder.create('test input')
