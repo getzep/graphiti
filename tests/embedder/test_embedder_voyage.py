@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Running tests: poetry run pytest -xvs tests/embedder/test_voyage.py
+# Running tests: poetry run pytest -xvs tests/embedder/test_embedder_voyage.py
 # Running tests with coverage: poetry run pytest -xvs tests/embedder/test_voyage.py --cov=graphiti_core.embedder.voyage --cov-report=term-missing
 
 from typing import NamedTuple
