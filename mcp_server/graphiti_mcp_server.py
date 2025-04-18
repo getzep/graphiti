@@ -9,8 +9,9 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
