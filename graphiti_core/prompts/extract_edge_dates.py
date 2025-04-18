@@ -82,6 +82,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
             8. If only year is mentioned, use January 1st of that year at 00:00:00.
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
+            10. A fact discussing that something is no longer true should have a valid_at according to when the negated fact became true.
             """,
         ),
     ]
