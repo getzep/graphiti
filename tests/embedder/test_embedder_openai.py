@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Running tests: poetry run pytest -xvs tests/embedder/test_openai.py
+# Running tests: poetry run pytest -xvs tests/embedder/test_embedder_openai.py
 # Running tests with coverage: poetry run pytest -xvs tests/embedder/test_openai.py --cov=graphiti_core.embedder.openai --cov-report=term-missing
 
 import os
