@@ -42,7 +42,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
                 driver.execute_query(
                     """DROP INDEX $name""",
                     name=name,
-                    _database=DEFAULT_DATABASE,
+                    database_=DEFAULT_DATABASE,
                 )
                 for name in index_names
             ]
@@ -87,7 +87,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
         *[
             driver.execute_query(
                 query,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for query in index_queries
         ]
@@ -95,7 +95,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
 
 async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
-    async with driver.session() as session:
+    async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
@@ -150,7 +150,7 @@ async def retrieve_episodes(
         reference_time=reference_time,
         num_episodes=last_n,
         group_ids=group_ids,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
     episodes = [
         EpisodicNode(
