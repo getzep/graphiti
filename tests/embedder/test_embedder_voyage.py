@@ -98,7 +98,7 @@ async def test_voyageai_embedder_create_with_string(
 
     # Verify result
     assert len(result) == EMBEDDING_DIM
-    assert all(x == 0.1 for x in result)
+    assert result == mock_embedding_values
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_voyageai_embedder_create_with_list(
 
     # Verify result
     assert len(result) == EMBEDDING_DIM
-    assert all(x == 0.1 for x in result)
+    assert result == mock_embedding_values
 
 
 @pytest.mark.asyncio
@@ -158,7 +158,11 @@ async def test_voyageai_embedder_with_mixed_types(
     mocker: MockerFixture,
     mock_embedding_values: list[float],
 ) -> None:
-    """Test handling of mixed input types"""
+    """Test handling of mixed input types
+
+    Note: All non-string inputs are converted to strings (e.g., integers like 123 become '123').
+    None values and empty strings are filtered out.
+    """
     mock_voyage = mocker.patch('graphiti_core.embedder.voyage.voyageai')
     mock_client = mocker.AsyncMock()
     mock_voyage.AsyncClient.return_value = mock_client
@@ -179,3 +183,4 @@ async def test_voyageai_embedder_with_mixed_types(
 
     # Verify result
     assert len(result) == EMBEDDING_DIM
+    assert result == mock_embedding_values

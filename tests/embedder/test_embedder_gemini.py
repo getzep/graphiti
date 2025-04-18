@@ -109,7 +109,11 @@ async def test_gemini_embedder_create_with_list(
     mocker: MockerFixture,
     mock_embedding_values: list[float],
 ) -> None:
-    """Test creating embeddings with a list input"""
+    """Test creating embeddings with a list input
+
+    Note: The input list is intentionally wrapped in another list as the Gemini API's
+    embed_content method expects a list of contents, even for single inputs.
+    """
     mock_genai = mocker.patch('graphiti_core.embedder.gemini.genai')
     mock_client = mocker.MagicMock()
     mock_genai.Client.return_value = mock_client
