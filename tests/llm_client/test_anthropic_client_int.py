@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Running tests: pytest -xvs tests/integrations/test_anthropic_client_int.py
+# Running tests: pytest -xvs tests/llm_client/test_anthropic_client_int.py
 
 import os
 
@@ -78,7 +78,7 @@ async def test_extract_json_from_text():
     # A string with embedded JSON
     text = 'Some text before {"message": "Hello, world!"} and after'
 
-    result = client._extract_json_from_text(text)
+    result = client._extract_json_from_text(text)  # type: ignore[protected-access]
 
     assert isinstance(result, dict)
     assert 'message' in result
