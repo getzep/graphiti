@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Running tests: poetry run pytest -xvs tests/embedder/test_gemini.py
+# Running tests: poetry run pytest -xvs tests/embedder/test_embedder_gemini.py
 # Running tests with coverage: poetry run pytest -xvs tests/embedder/test_gemini.py --cov=graphiti_core.embedder.gemini --cov-report=term-missing
 
 import pytest
