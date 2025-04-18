@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_server_or_retry_error(exception: BaseException) -> bool:
-    if isinstance(exception, RateLimitError | json.decoder.JSONDecodeError):
+    if isinstance(exception, (RateLimitError, json.decoder.JSONDecodeError)):  # noqa: UP038
         return True
 
     return (
