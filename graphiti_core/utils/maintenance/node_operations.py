@@ -306,7 +306,7 @@ async def resolve_extracted_node(
 
     # Prepare context for LLM
     existing_nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary}.update(node.attributes)
+        {**{'uuid': node.uuid, 'name': node.name, 'summary': node.summary}, **node.attributes}
         for node in existing_nodes
     ]
 
@@ -408,7 +408,7 @@ async def resolve_extracted_node(
                 if new_attributes.get(attribute_name) is None:
                     new_attributes[attribute_name] = attribute_value
             node.attributes = new_attributes
-            node.labels = set(existing_node.labels + existing_node.labels)
+            node.labels = list(set(existing_node.labels + existing_node.labels))
 
             uuid_map[extracted_node.uuid] = existing_node.uuid
 
