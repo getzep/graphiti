@@ -40,7 +40,7 @@ from graphiti_core.utils.datetime_utils import utc_now
 logger = logging.getLogger(__name__)
 
 ENTITY_NODE_RETURN: LiteralString = """
-        MATCH (e:Episodic)-[r:MENTIONS]->(entity:Entity {uuid: n.uuid})
+        OPTIONAL MATCH (e:Episodic)-[r:MENTIONS]->(n)
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -336,11 +336,14 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
+        query = (
             """
         MATCH (n:Entity {uuid: $uuid})
         """
-            + ENTITY_NODE_RETURN,
+            + ENTITY_NODE_RETURN
+        )
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
             routing_='r',

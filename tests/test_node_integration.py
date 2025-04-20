@@ -1,10 +1,10 @@
 import os
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from neo4j import AsyncGraphDatabase
+import pytest_asyncio
+from neo4j import AsyncDriver, AsyncGraphDatabase
 
 from graphiti_core.nodes import (
     CommunityNode,
@@ -13,30 +13,29 @@ from graphiti_core.nodes import (
     EpisodicNode,
 )
 
-NEO4J_URI = os.getenv('NEO4J_URI')
-NEO4J_USER = os.getenv('NEO4J_USER')
-NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
-
-
-@pytest.fixture(scope='module')
-async def neo4j_driver():
-    driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-    yield driver
-    await driver.close()
+NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
+NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
+NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
 
 
 @pytest.fixture
 def sample_entity_node():
     return EntityNode(
-        name='Test Entity', group_id='group1', labels=['Entity'], summary='Entity Summary'
+        uuid=str(uuid4()),
+        name='Test Entity',
+        group_id='test_group',
+        labels=['Entity'],
+        name_embedding=[0.5] * 1024,
+        summary='Entity Summary',
     )
 
 
 @pytest.fixture
 def sample_episodic_node():
     return EpisodicNode(
+        uuid=str(uuid4()),
         name='Episode 1',
-        group_id='group1',
+        group_id='test_group',
         source=EpisodeType.text,
         source_description='Test source',
         content='Some content here',
@@ -47,128 +46,59 @@ def sample_episodic_node():
 @pytest.fixture
 def sample_community_node():
     return CommunityNode(
+        uuid=str(uuid4()),
         name='Community A',
-        group_id='group1',
+        name_embedding=[0.5] * 1024,
+        group_id='test_group',
         summary='Community summary',
     )
 
 
 @pytest.mark.asyncio
-async def test_entity_node_save(neo4j_driver, sample_entity_node):
-    neo4j_driver.execute_query.return_value = 'OK'
+async def test_entity_node_save_get_and_delete(sample_entity_node):
+    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    await sample_entity_node.save(neo4j_driver)
+    retrieved = await EntityNode.get_by_uuid(neo4j_driver, sample_entity_node.uuid)
+    assert retrieved.uuid == sample_entity_node.uuid
+    assert retrieved.name == 'Test Entity'
+    assert retrieved.group_id == 'test_group'
 
-    result = await sample_entity_node.save(neo4j_driver)
+    await sample_entity_node.delete(neo4j_driver)
 
-    neo4j_driver.execute_query.assert_awaited_once()
-    assert result == 'OK'
-
-
-@pytest.mark.asyncio
-async def test_episodic_node_save(neo4j_driver, sample_episodic_node):
-    neo4j_driver.execute_query.return_value = 'OK'
-
-    result = await sample_episodic_node.save(neo4j_driver)
-
-    neo4j_driver.execute_query.assert_awaited_once()
-    assert result == 'OK'
+    await neo4j_driver.close()
 
 
 @pytest.mark.asyncio
-async def test_community_node_save(neo4j_driver, sample_community_node):
-    neo4j_driver.execute_query.return_value = 'OK'
+async def test_community_node_save_get_and_delete(sample_community_node):
+    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-    result = await sample_community_node.save(neo4j_driver)
+    await sample_community_node.save(neo4j_driver)
 
-    neo4j_driver.execute_query.assert_awaited_once()
-    assert result == 'OK'
+    retrieved = await CommunityNode.get_by_uuid(neo4j_driver, sample_community_node.uuid)
+    assert retrieved.uuid == sample_community_node.uuid
+    assert retrieved.name == 'Community A'
+    assert retrieved.group_id == 'test_group'
+    assert retrieved.summary == 'Community summary'
 
+    await sample_community_node.delete(neo4j_driver)
 
-@pytest.mark.asyncio
-async def test_node_delete(neo4j_driver, sample_entity_node):
-    neo4j_driver.execute_query.return_value = 'DELETED'
-
-    result = await sample_entity_node.delete(neo4j_driver)
-
-    assert result == 'DELETED'
-    neo4j_driver.execute_query.assert_awaited_once()
+    await neo4j_driver.close()
 
 
 @pytest.mark.asyncio
-async def test_node_delete_by_group_id(neo4j_driver):
-    result = await EntityNode.delete_by_group_id(neo4j_driver, 'group1')
+async def test_episodic_node_save_get_and_delete(sample_episodic_node):
+    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-    assert result == 'SUCCESS'
-    neo4j_driver.execute_query.assert_awaited_once()
+    await sample_episodic_node.save(neo4j_driver)
 
+    retrieved = await EpisodicNode.get_by_uuid(neo4j_driver, sample_episodic_node.uuid)
+    assert retrieved.uuid == sample_episodic_node.uuid
+    assert retrieved.name == 'Episode 1'
+    assert retrieved.group_id == 'test_group'
+    assert retrieved.source == EpisodeType.text
+    assert retrieved.source_description == 'Test source'
+    assert retrieved.content == 'Some content here'
 
-@pytest.mark.asyncio
-async def test_generate_name_embedding(sample_entity_node):
-    mock_embedder = AsyncMock()
-    mock_embedder.create = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+    await sample_episodic_node.delete(neo4j_driver)
 
-    embedding = await sample_entity_node.generate_name_embedding(mock_embedder)
-
-    assert embedding == [[0.1, 0.2, 0.3]]
-    assert sample_entity_node.name_embedding == [[0.1, 0.2, 0.3]]
-
-
-@pytest.mark.asyncio
-async def test_entity_node_get_by_uuid_parses_correctly(neo4j_driver):
-    now = datetime.now(timezone.utc)
-    mock_record = {
-        'uuid': str(uuid4()),
-        'name': 'Entity Test',
-        'name_embedding': [0.1, 0.2],
-        'group_id': 'group1',
-        'created_at': now,
-        'summary': 'A summary',
-        'labels': ['Entity'],
-        'attributes': {'extra': 'info'},
-        'episodes': ['ep1', 'ep2'],
-    }
-    neo4j_driver.execute_query.return_value = ([mock_record], None, None)
-
-    node = await EntityNode.get_by_uuid(neo4j_driver, mock_record['uuid'])
-    assert node.name == 'Entity Test'
-    assert node.group_id == 'group1'
-    assert 'extra' in node.attributes
-
-
-@pytest.mark.asyncio
-async def test_episodic_node_get_by_uuid_parses_correctly(neo4j_driver):
-    now = datetime.now(timezone.utc)
-    mock_record = {
-        'uuid': str(uuid4()),
-        'name': 'Episodic Test',
-        'group_id': 'group1',
-        'source': 'text',
-        'source_description': 'desc',
-        'content': 'Episode content',
-        'created_at': now,
-        'valid_at': now,
-        'entity_edges': ['ent1', 'ent2'],
-    }
-    neo4j_driver.execute_query.return_value = ([mock_record], None, None)
-
-    node = await EpisodicNode.get_by_uuid(neo4j_driver, mock_record['uuid'])
-    assert node.name == 'Episodic Test'
-    assert node.source == EpisodeType.text
-    assert 'ent1' in node.entity_edges
-
-
-@pytest.mark.asyncio
-async def test_community_node_get_by_uuid_parses_correctly(neo4j_driver):
-    now = datetime.now(timezone.utc)
-    mock_record = {
-        'uuid': str(uuid4()),
-        'name': 'Community A',
-        'group_id': 'group1',
-        'name_embedding': [0.5],
-        'created_at': now,
-        'summary': 'Test summary',
-    }
-    neo4j_driver.execute_query.return_value = ([mock_record], None, None)
-
-    node = await CommunityNode.get_by_uuid(neo4j_driver, mock_record['uuid'])
-    assert node.name == 'Community A'
-    assert node.group_id == 'group1'
+    await neo4j_driver.close()
