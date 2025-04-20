@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
+from traitlets import default
 from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
@@ -37,6 +38,20 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
+
+ENTITY_NODE_RETURN: LiteralString = """
+        MATCH (e:Episodic)-[r:MENTIONS]->(entity:Entity {uuid: n.uuid})
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes,
+            collect(e.uuid) AS episodes
+        """
 
 
 class EpisodeType(Enum):
@@ -280,6 +295,9 @@ class EpisodicNode(Node):
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
+    episodes: list[str] | None = Field(
+        default=None, description='List of episode uuids that mention this node.'
+    )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the node. Dependent on node labels'
     )
@@ -321,16 +339,8 @@ class EntityNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity {uuid: $uuid})
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+        """
+            + ENTITY_NODE_RETURN,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -348,16 +358,8 @@ class EntityNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.uuid IN $uuids
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+        """
+            + ENTITY_NODE_RETURN,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -383,16 +385,8 @@ class EntityNode(Node):
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
         """
             + cursor_query
+            + ENTITY_NODE_RETURN
             + """
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         ORDER BY n.uuid DESC
         """
             + limit_query,
@@ -548,6 +542,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
         attributes=record['attributes'],
+        episodes=record['episodes'],
     )
 
     entity_node.attributes.pop('uuid', None)

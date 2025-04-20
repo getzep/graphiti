@@ -32,6 +32,7 @@ from graphiti_core.helpers import (
     semaphore_gather,
 )
 from graphiti_core.nodes import (
+    ENTITY_NODE_RETURN,
     CommunityNode,
     EntityNode,
     EpisodicNode,
@@ -230,8 +231,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                        """
+                                                                                                                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                            """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -349,16 +350,8 @@ async def node_fulltext_search(
         WHERE n.uuid = node.uuid
         """
         + filter_query
+        + ENTITY_NODE_RETURN
         + """
-        RETURN
-            n.uuid AS uuid,
-            n.group_id AS group_id, 
-            n.name AS name, 
-            n.name_embedding AS name_embedding,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         ORDER BY score DESC
         LIMIT $limit
         """,
@@ -406,19 +399,12 @@ async def node_similarity_search(
         + filter_query
         + """
             WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
-            WHERE score > $min_score
-            RETURN
-                n.uuid As uuid,
-                n.group_id AS group_id,
-                n.name AS name, 
-                n.name_embedding AS name_embedding,
-                n.created_at AS created_at, 
-                n.summary AS summary,
-                labels(n) AS labels,
-                properties(n) AS attributes
-            ORDER BY score DESC
-            LIMIT $limit
-            """,
+            WHERE score > $min_score"""
+        + ENTITY_NODE_RETURN
+        + """
+        ORDER BY score DESC
+        LIMIT $limit
+        """,
         query_params,
         search_vector=search_vector,
         group_ids=group_ids,
@@ -452,16 +438,8 @@ async def node_bfs_search(
             WHERE n.group_id = origin.group_id
             """
         + filter_query
+        + ENTITY_NODE_RETURN
         + """
-        RETURN DISTINCT
-            n.uuid As uuid,
-            n.group_id AS group_id,
-            n.name AS name, 
-            n.name_embedding AS name_embedding,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         LIMIT $limit
         """,
         filter_params,
