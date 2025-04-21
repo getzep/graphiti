@@ -24,7 +24,6 @@ from uuid import uuid4
 
 from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
-from traitlets import default
 from typing_extensions import LiteralString
 
 from graphiti_core.embedder import EmbedderClient
@@ -338,8 +337,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-            MATCH (n:Entity {uuid: $uuid})
-            """
+                MATCH (n:Entity {uuid: $uuid})
+                """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(

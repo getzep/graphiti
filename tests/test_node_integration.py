@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
-from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase
 
 from graphiti_core.nodes import (
     CommunityNode,
