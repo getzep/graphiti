@@ -262,7 +262,7 @@ class AnthropicClient(LLMClient):
         self,
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: int | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -280,6 +280,9 @@ class AnthropicClient(LLMClient):
             RefusalError: If the LLM refuses to respond.
             Exception: If an error occurs during the generation process.
         """
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
         retry_count = 0
         max_retries = 2
         last_error: Exception | None = None

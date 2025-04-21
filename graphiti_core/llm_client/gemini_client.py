@@ -166,7 +166,7 @@ class GeminiClient(LLMClient):
         self,
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: int | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model.
@@ -180,6 +180,9 @@ class GeminiClient(LLMClient):
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
         # Call the internal _generate_response method
         return await self._generate_response(
             messages=messages, response_model=response_model, max_tokens=max_tokens
