@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 ENTITY_NODE_RETURN: LiteralString = """
         OPTIONAL MATCH (e:Episodic)-[r:MENTIONS]->(n)
+        WITH n, collect(e.uuid) AS episodes
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -50,8 +51,7 @@ ENTITY_NODE_RETURN: LiteralString = """
             n.summary AS summary,
             labels(n) AS labels,
             properties(n) AS attributes,
-            collect(e.uuid) AS episodes
-        """
+            episodes"""
 
 
 class EpisodeType(Enum):
@@ -338,8 +338,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-        MATCH (n:Entity {uuid: $uuid})
-        """
+            MATCH (n:Entity {uuid: $uuid})
+            """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
