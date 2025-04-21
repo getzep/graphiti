@@ -72,7 +72,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
     fulltext_indices: list[LiteralString] = [
         """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
-        FOR (e:Episodic) ON EACH [e.content, e.source, e.group_id]""",
+        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
         """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
         FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
         """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
