@@ -32,6 +32,7 @@ from graphiti_core.helpers import (
     semaphore_gather,
 )
 from graphiti_core.nodes import (
+    ENTITY_NODE_RETURN,
     CommunityNode,
     EntityNode,
     EpisodicNode,
@@ -52,6 +53,20 @@ DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 32
+
+SEARCH_ENTITY_NODE_RETURN: LiteralString = """
+        OPTIONAL MATCH (e:Episodic)-[r:MENTIONS]->(n)
+        WITH n, score, collect(e.uuid) AS episodes
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes,
+            episodes"""
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
@@ -230,8 +245,8 @@ async def edge_similarity_search(
 
     query: LiteralString = (
         """
-                                                                                                                        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                        """
+                                                                                                                                            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                                                                                                                                            """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -341,27 +356,21 @@ async def node_fulltext_search(
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
-    records, _, _ = await driver.execute_query(
+    query = (
         """
-        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-        YIELD node AS node, score
-        MATCH (n:Entity)
-        WHERE n.uuid = node.uuid
-        """
+                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                YIELD node AS n, score
+                WHERE n:Entity
+                """
         + filter_query
+        + SEARCH_ENTITY_NODE_RETURN
         + """
-        RETURN
-            n.uuid AS uuid,
-            n.group_id AS group_id, 
-            n.name AS name, 
-            n.name_embedding AS name_embedding,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         ORDER BY score DESC
-        LIMIT $limit
-        """,
+        """
+    )
+
+    records, _, _ = await driver.execute_query(
+        query,
         filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
@@ -406,19 +415,12 @@ async def node_similarity_search(
         + filter_query
         + """
             WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
-            WHERE score > $min_score
-            RETURN
-                n.uuid As uuid,
-                n.group_id AS group_id,
-                n.name AS name, 
-                n.name_embedding AS name_embedding,
-                n.created_at AS created_at, 
-                n.summary AS summary,
-                labels(n) AS labels,
-                properties(n) AS attributes
-            ORDER BY score DESC
-            LIMIT $limit
-            """,
+            WHERE score > $min_score"""
+        + SEARCH_ENTITY_NODE_RETURN
+        + """
+        ORDER BY score DESC
+        LIMIT $limit
+        """,
         query_params,
         search_vector=search_vector,
         group_ids=group_ids,
@@ -452,16 +454,8 @@ async def node_bfs_search(
             WHERE n.group_id = origin.group_id
             """
         + filter_query
+        + ENTITY_NODE_RETURN
         + """
-        RETURN DISTINCT
-            n.uuid As uuid,
-            n.group_id AS group_id,
-            n.name AS name, 
-            n.name_embedding AS name_embedding,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         LIMIT $limit
         """,
         filter_params,

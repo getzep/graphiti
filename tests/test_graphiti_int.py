@@ -65,9 +65,7 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
-    results = await graphiti.search_(
-        query='Who is the User?',
-    )
+    results = await graphiti.search_(query='Who is the User?')
 
     pretty_results = search_results_to_context_string(results)
 
