@@ -9,13 +9,16 @@ Graphiti
 </h1>
 <h2 align="center"> Build Real-Time Knowledge Graphs for AI Agents</h2>
 <br />
-
 [![Discord](https://dcbadge.vercel.app/api/server/W8Kw6bsgXQ?style=flat)](https://discord.com/invite/W8Kw6bsgXQ)
-[![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
-[![Unit Tests](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml)
-[![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/getzep/Graphiti)
+[![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg?style=flat)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
+[![Unit Tests](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml/badge.svg?style=flat)](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml)
+[![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg?style=flat)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
+[![arXiv](https://img.shields.io/badge/arXiv-2504.03182-b31b1b.svg?style=flat)](https://arxiv.org/abs/2504.03182)
+<br />
+<div align="center">
 
+<a href="https://trendshift.io/repositories/12986" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12986" alt="getzep%2Fgraphiti | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</div>
 :star: _Help us reach more developers and grow the Graphiti community. Star this repo!_
 <br />
 
