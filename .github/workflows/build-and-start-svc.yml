@@ -1,8 +1,6 @@
 name: Build and Start Graphiti Service
 
 on:
-  pull_request:
-    branches: [ "main" ]
   push:
     tags: [ 'v*.*.*' ]
   workflow_call:
