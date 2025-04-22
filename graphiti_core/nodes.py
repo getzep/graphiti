@@ -39,8 +39,6 @@ from graphiti_core.utils.datetime_utils import utc_now
 logger = logging.getLogger(__name__)
 
 ENTITY_NODE_RETURN: LiteralString = """
-        OPTIONAL MATCH (e:Episodic)-[r:MENTIONS]->(n)
-        WITH n, collect(e.uuid) AS episodes
         RETURN
             n.uuid As uuid, 
             n.name AS name,
@@ -49,8 +47,8 @@ ENTITY_NODE_RETURN: LiteralString = """
             n.created_at AS created_at, 
             n.summary AS summary,
             labels(n) AS labels,
-            properties(n) AS attributes,
-            episodes"""
+            properties(n) AS attributes
+            """
 
 
 class EpisodeType(Enum):
@@ -265,13 +263,35 @@ class EpisodicNode(Node):
 
         return episodes
 
+    @classmethod
+    async def get_by_entity_node_uuid(cls, driver: AsyncDriver, entity_node_uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
+            RETURN DISTINCT
+            e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.source_description AS source_description,
+            e.source AS source,
+            e.entity_edges AS entity_edges
+        """,
+            entity_node_uuid=entity_node_uuid,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        return episodes
+
 
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
-    episodes: list[str] | None = Field(
-        default=None, description='List of episode uuids that mention this node.'
-    )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the node. Dependent on node labels'
     )
@@ -312,8 +332,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-                    MATCH (n:Entity {uuid: $uuid})
-                    """
+                            MATCH (n:Entity {uuid: $uuid})
+                            """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -519,7 +539,6 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
         attributes=record['attributes'],
-        episodes=record['episodes'],
     )
 
     entity_node.attributes.pop('uuid', None)

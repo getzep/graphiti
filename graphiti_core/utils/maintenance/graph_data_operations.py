@@ -132,10 +132,14 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    result = await driver.execute_query(
+    group_id_filter: LiteralString = 'AND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+
+    query: LiteralString = (
         """
-        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time 
-        AND ($group_ids IS NULL) OR e.group_id in $group_ids
+        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+        """
+        + group_id_filter
+        + """
         RETURN e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
@@ -144,9 +148,13 @@ async def retrieve_episodes(
             e.name AS name,
             e.source_description AS source_description,
             e.source AS source
-        ORDER BY e.created_at DESC
+        ORDER BY e.valid_at DESC
         LIMIT $num_episodes
-        """,
+        """
+    )
+
+    result = await driver.execute_query(
+        query,
         reference_time=reference_time,
         num_episodes=last_n,
         group_ids=group_ids,
