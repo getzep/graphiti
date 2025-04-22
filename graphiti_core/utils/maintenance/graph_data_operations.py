@@ -132,7 +132,7 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    group_id_filter: LiteralString = 'AND e.group_id IN $group_ids' if len(group_ids) > 0 else ''
+    group_id_filter: LiteralString = 'AND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
 
     query: LiteralString = (
         """
