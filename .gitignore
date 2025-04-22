@@ -128,6 +128,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv-py310/
 
 # Spyder project settings
 .spyderproject
@@ -164,3 +165,13 @@ cython_debug/
 ## Other
 # Cache files
 cache.db*
+
+# Specific untracked files/artifacts
+uv.lock
+~/
+cursor_rules.md
+GRAPHITI-COMMANDS.md
+graphiti-cmd.sh
+test.json
+cli/GRAPHITI-COMMANDS.md
+cli/graphiti-cmd.sh

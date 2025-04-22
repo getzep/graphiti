@@ -20,6 +20,7 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
     "graph-service (>=1.0.0.7,<2.0.0.0)",
+    "typer>=0.15.0",
 ]
 
 [project.urls]
@@ -49,6 +50,7 @@ voyageai = ">=0.2.3"
 pytest = ">=8.3.3"
 pytest-asyncio = ">=0.24.0"
 pytest-xdist = ">=3.6.1"
+pytest-mock = ">=3.10.0"
 ruff = ">=0.7.1"
 
 [build-system]
@@ -57,6 +59,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 requires-poetry = ">=2.0"
+
+[tool.poetry.scripts]
+graphiti = "cli.main:cli_app"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
