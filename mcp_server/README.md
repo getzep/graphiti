@@ -52,6 +52,12 @@ The server uses the following environment variables:
 - `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: Optional model name to use for LLM inference
+- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endpoint URL
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI deployment name
+- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
+- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
+- `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
+- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
 
 You can set these variables in a `.env` file in the project directory.
 
@@ -66,7 +72,7 @@ uv run graphiti_mcp_server.py
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4o-mini --transport sse
+uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 ```
 
 Available arguments:
@@ -96,7 +102,7 @@ Before running the Docker Compose setup, you need to configure the environment v
       ```
       # Required for LLM operations
       OPENAI_API_KEY=your_openai_api_key_here
-      MODEL_NAME=gpt-4o-mini
+      MODEL_NAME=gpt-4.1-mini
       # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
       # OPENAI_BASE_URL=https://api.openai.com/v1
       ```
@@ -105,7 +111,7 @@ Before running the Docker Compose setup, you need to configure the environment v
 2. **Using environment variables directly**:
     - You can also set the environment variables when running the Docker Compose command:
       ```bash
-      OPENAI_API_KEY=your_key MODEL_NAME=gpt-4o-mini docker compose up
+      OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1-mini docker compose up
       ```
 
 #### Neo4j Configuration
@@ -162,7 +168,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "demodemo",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-        "MODEL_NAME": "gpt-4o-mini"
+        "MODEL_NAME": "gpt-4.1-mini"
       }
     }
   }
@@ -200,7 +206,7 @@ Or start the server with uv and connect to it:
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "demodemo",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-        "MODEL_NAME": "gpt-4o-mini"
+        "MODEL_NAME": "gpt-4.1-mini"
       }
     }
   }

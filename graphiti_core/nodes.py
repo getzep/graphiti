@@ -38,6 +38,18 @@ from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+ENTITY_NODE_RETURN: LiteralString = """
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.name_embedding AS name_embedding,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes
+            """
+
 
 class EpisodeType(Enum):
     """
@@ -251,6 +263,31 @@ class EpisodicNode(Node):
 
         return episodes
 
+    @classmethod
+    async def get_by_entity_node_uuid(cls, driver: AsyncDriver, entity_node_uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
+            RETURN DISTINCT
+            e.content AS content,
+            e.created_at AS created_at,
+            e.valid_at AS valid_at,
+            e.uuid AS uuid,
+            e.name AS name,
+            e.group_id AS group_id,
+            e.source_description AS source_description,
+            e.source AS source,
+            e.entity_edges AS entity_edges
+        """,
+            entity_node_uuid=entity_node_uuid,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+
+        return episodes
+
 
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
@@ -293,19 +330,14 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
+        query = (
             """
-        MATCH (n:Entity {uuid: $uuid})
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+                            MATCH (n:Entity {uuid: $uuid})
+                            """
+            + ENTITY_NODE_RETURN
+        )
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -323,16 +355,8 @@ class EntityNode(Node):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.uuid IN $uuids
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
-        """,
+        """
+            + ENTITY_NODE_RETURN,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
             routing_='r',
@@ -358,16 +382,8 @@ class EntityNode(Node):
         MATCH (n:Entity) WHERE n.group_id IN $group_ids
         """
             + cursor_query
+            + ENTITY_NODE_RETURN
             + """
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.name_embedding AS name_embedding,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary,
-            labels(n) AS labels,
-            properties(n) AS attributes
         ORDER BY n.uuid DESC
         """
             + limit_query,
@@ -525,12 +541,12 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         attributes=record['attributes'],
     )
 
-    del entity_node.attributes['uuid']
-    del entity_node.attributes['name']
-    del entity_node.attributes['group_id']
-    del entity_node.attributes['name_embedding']
-    del entity_node.attributes['summary']
-    del entity_node.attributes['created_at']
+    entity_node.attributes.pop('uuid', None)
+    entity_node.attributes.pop('name', None)
+    entity_node.attributes.pop('group_id', None)
+    entity_node.attributes.pop('name_embedding', None)
+    entity_node.attributes.pop('summary', None)
+    entity_node.attributes.pop('created_at', None)
 
     return entity_node
 

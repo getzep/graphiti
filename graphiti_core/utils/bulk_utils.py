@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from typing_extensions import Any
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
-from graphiti_core.helpers import semaphore_gather
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
     ENTITY_EDGE_SAVE_BULK,
@@ -95,7 +95,7 @@ async def add_nodes_and_edges_bulk(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
 ):
-    async with driver.session() as session:
+    async with driver.session(database=DEFAULT_DATABASE) as session:
         await session.execute_write(
             add_nodes_and_edges_bulk_tx, episodic_nodes, episodic_edges, entity_nodes, entity_edges
         )

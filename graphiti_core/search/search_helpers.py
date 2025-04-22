@@ -38,6 +38,13 @@ def search_results_to_context_string(search_results: SearchResults) -> str:
     entity_json = [
         {'entity_name': node.name, 'summary': node.summary} for node in search_results.nodes
     ]
+    episode_json = [
+        {
+            'source_description': episode.source_description,
+            'content': episode.content,
+        }
+        for episode in search_results.episodes
+    ]
     community_json = [
         {'community_name': community.name, 'summary': community.summary}
         for community in search_results.communities
@@ -55,6 +62,9 @@ def search_results_to_context_string(search_results: SearchResults) -> str:
     <ENTITIES>
     {json.dumps(entity_json, indent=12)}
     </ENTITIES>
+    <EPISODES>
+    {json.dumps(episode_json, indent=12)}
+    </EPISODES>
     <COMMUNITIES>
     {json.dumps(community_json, indent=12)}
     </COMMUNITIES>

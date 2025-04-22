@@ -29,3 +29,11 @@ class RefusalError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
+
+
+class EmptyResponseError(Exception):
+    """Exception raised when the LLM returns an empty response."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)

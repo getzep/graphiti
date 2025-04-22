@@ -750,7 +750,7 @@ class Graphiti:
 
         nodes = await get_mentioned_nodes(self.driver, episodes)
 
-        return SearchResults(edges=edges, nodes=nodes, communities=[])
+        return SearchResults(edges=edges, nodes=nodes, episodes=[], communities=[])
 
     async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:
@@ -797,7 +797,7 @@ class Graphiti:
         # We should only delete edges created by the episode
         edges_to_delete: list[EntityEdge] = []
         for edge in edges:
-            if edge.episodes[0] == episode.uuid:
+            if edge.episodes and edge.episodes[0] == episode.uuid:
                 edges_to_delete.append(edge)
 
         # Find nodes mentioned by the episode

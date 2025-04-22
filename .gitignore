@@ -175,3 +175,5 @@ graphiti-cmd.sh
 test.json
 cli/GRAPHITI-COMMANDS.md
 cli/graphiti-cmd.sh
+# All DS_Store files
+.DS_Store

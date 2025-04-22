@@ -43,7 +43,7 @@ class LLMConfig:
                                                 This is required for making authorized requests.
 
                 model (str, optional): The specific LLM model to use for generating responses.
-                                                                Defaults to "gpt-4o-mini", which appears to be a custom model name.
+                                                                Defaults to "gpt-4.1-mini", which appears to be a custom model name.
                                                                 Common values might include "gpt-3.5-turbo" or "gpt-4".
 
                 base_url (str, optional): The base URL of the LLM API service.

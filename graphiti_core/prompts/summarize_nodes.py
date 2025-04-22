@@ -89,6 +89,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
+        2. Only use the provided messages, entity, and entity context to set attribute values.
         
         <ENTITY>
         {context['node_name']}

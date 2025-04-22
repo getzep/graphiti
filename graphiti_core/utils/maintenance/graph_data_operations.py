@@ -42,7 +42,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
                 driver.execute_query(
                     """DROP INDEX $name""",
                     name=name,
-                    _database=DEFAULT_DATABASE,
+                    database_=DEFAULT_DATABASE,
                 )
                 for name in index_names
             ]
@@ -71,6 +71,8 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
     ]
 
     fulltext_indices: list[LiteralString] = [
+        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
+        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
         """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
         FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
         """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
@@ -85,7 +87,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
         *[
             driver.execute_query(
                 query,
-                _database=DEFAULT_DATABASE,
+                database_=DEFAULT_DATABASE,
             )
             for query in index_queries
         ]
@@ -93,7 +95,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
 
 
 async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
-    async with driver.session() as session:
+    async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
@@ -130,10 +132,14 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    result = await driver.execute_query(
+    group_id_filter: LiteralString = 'AND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+
+    query: LiteralString = (
         """
-        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time 
-        AND ($group_ids IS NULL) OR e.group_id in $group_ids
+        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+        """
+        + group_id_filter
+        + """
         RETURN e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
@@ -142,13 +148,17 @@ async def retrieve_episodes(
             e.name AS name,
             e.source_description AS source_description,
             e.source AS source
-        ORDER BY e.created_at DESC
+        ORDER BY e.valid_at DESC
         LIMIT $num_episodes
-        """,
+        """
+    )
+
+    result = await driver.execute_query(
+        query,
         reference_time=reference_time,
         num_episodes=last_n,
         group_ids=group_ids,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
     episodes = [
         EpisodicNode(
