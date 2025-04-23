@@ -169,10 +169,5 @@ cache.db*
 # Specific untracked files/artifacts
 uv.lock
 ~/
-GRAPHITI-COMMANDS.md
-graphiti-cmd.sh
-test.json
-cli/GRAPHITI-COMMANDS.md
-cli/graphiti-cmd.sh
 # All DS_Store files
 .DS_Store
