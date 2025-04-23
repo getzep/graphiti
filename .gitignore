@@ -169,7 +169,6 @@ cache.db*
 # Specific untracked files/artifacts
 uv.lock
 ~/
-cursor_rules.md
 GRAPHITI-COMMANDS.md
 graphiti-cmd.sh
 test.json
