@@ -71,6 +71,75 @@ cli_app = typer.Typer(
 app = cli_app
 
 
+# --- Typer Option Constants ---
+# add_json options
+JSON_FILE_OPTION = typer.Option(
+    ...,
+    '--json-file',
+    '-f',
+    help='Path to the JSON file to ingest.',
+    exists=True,
+    file_okay=True,
+    dir_okay=False,
+    readable=True,
+    resolve_path=True,
+)
+NAME_OPTION = typer.Option(..., '--name', '-n', help='Name for the episode.')
+SOURCE_DESC_OPTION = typer.Option(None, '--desc', '-d', help='Description of the data source.')
+GROUP_ID_OPTION = typer.Option(
+    None,
+    '--group-id',
+    '-g',
+    help='Optional group ID for the graph. If not provided, generates one based on workspace path.',
+)
+UUID_OPTION = typer.Option(None, '--uuid', help='Optional UUID for the episode.')
+WORKSPACE_PATH_OPTION = typer.Option(
+    None,
+    '--workspace',
+    '-w',
+    help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
+)
+
+# add_json_string options
+JSON_DATA_OPTION = typer.Option(
+    ..., '--json-data', '-d', help='JSON string to ingest (must be valid JSON).'
+)
+SOURCE_DESC_STRING_OPTION = typer.Option(None, '--desc', '-s', help='Description of the data source.')
+
+# search_nodes options
+QUERY_OPTION = typer.Option(..., '--query', '-q', help='Search query string')
+MAX_NODES_OPTION = typer.Option(10, '--max', '-m', help='Maximum number of nodes to return')
+CENTER_NODE_UUID_OPTION = typer.Option(
+    None, '--center', '-c', help='Optional UUID of a node to center the search around'
+)
+ENTITY_OPTION = typer.Option(
+    '',
+    '--entity',
+    '-e',
+    help="Optional entity type to filter results (e.g., 'Preference', 'Procedure')",
+)
+
+# search_facts options
+MAX_FACTS_OPTION = typer.Option(10, '--max', '-m', help='Maximum number of facts to return')
+
+# get_episodes options
+LAST_N_OPTION = typer.Option(
+    10, '--last', '-n', help='Number of most recent episodes to retrieve'
+)
+
+# delete options
+CONFIRM_OPTION = typer.Option(False, '--confirm', help='Confirmation flag is required for deletion')
+SKIP_PREVIEW_OPTION = typer.Option(False, '--skip-preview', help='Skip the preview step')
+
+# clear_graph options
+FORCE_OPTION = typer.Option(False, '--force', help='Force flag as secondary confirmation')
+
+# General options used in multiple commands
+UUID_EDGE_OPTION = typer.Option(..., '--uuid', '-u', help='UUID of the entity edge to retrieve/delete')
+UUID_EPISODE_OPTION = typer.Option(..., '--uuid', '-u', help='UUID of the episode to delete')
+CONFIRM_FLAG_OPTION = typer.Option(False, '--confirm', help='Initial confirmation flag')
+
+
 def generate_project_group_id(workspace_path: str = None) -> str:
     """
     Generate a consistent group_id based on the workspace path.
@@ -267,34 +336,12 @@ async def _add_json_string_episode(
 
 @cli_app.command()
 def add_json(
-    json_file: Path = typer.Option(
-        ...,
-        '--json-file',
-        '-f',
-        help='Path to the JSON file to ingest.',
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-    ),
-    name: str = typer.Option(..., '--name', '-n', help='Name for the episode.'),
-    source_description: str | None = typer.Option(
-        None, '--desc', '-d', help='Description of the data source.'
-    ),
-    group_id: str | None = typer.Option(
-        None,
-        '--group-id',
-        '-g',
-        help='Optional group ID for the graph. If not provided, generates one based on workspace path.',
-    ),
-    uuid_str: str | None = typer.Option(None, '--uuid', help='Optional UUID for the episode.'),
-    workspace_path: str | None = typer.Option(
-        None,
-        '--workspace',
-        '-w',
-        help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
-    ),
+    json_file: Path = JSON_FILE_OPTION,
+    name: str = NAME_OPTION,
+    source_description: str | None = SOURCE_DESC_OPTION,
+    group_id: str | None = GROUP_ID_OPTION,
+    uuid_str: str | None = UUID_OPTION,
+    workspace_path: str | None = WORKSPACE_PATH_OPTION,
 ):
     """
     Adds a JSON file content as an episode to Graphiti using graphiti-core.
@@ -315,26 +362,12 @@ def add_json(
 
 @cli_app.command()
 def add_json_string(
-    json_data: str = typer.Option(
-        ..., '--json-data', '-d', help='JSON string to ingest (must be valid JSON).'
-    ),
-    name: str = typer.Option(..., '--name', '-n', help='Name for the episode.'),
-    source_description: str | None = typer.Option(
-        None, '--desc', '-s', help='Description of the data source.'
-    ),
-    group_id: str | None = typer.Option(
-        None,
-        '--group-id',
-        '-g',
-        help='Optional group ID for the graph. If not provided, generates one based on workspace path.',
-    ),
-    uuid_str: str | None = typer.Option(None, '--uuid', help='Optional UUID for the episode.'),
-    workspace_path: str | None = typer.Option(
-        None,
-        '--workspace',
-        '-w',
-        help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
-    ),
+    json_data: str = JSON_DATA_OPTION,
+    name: str = NAME_OPTION,
+    source_description: str | None = SOURCE_DESC_STRING_OPTION,
+    group_id: str | None = GROUP_ID_OPTION,
+    uuid_str: str | None = UUID_OPTION,
+    workspace_path: str | None = WORKSPACE_PATH_OPTION,
 ):
     """
     Adds a JSON string directly as an episode to Graphiti using graphiti-core.
@@ -388,29 +421,12 @@ def check_connection():
 
 @cli_app.command()
 def search_nodes(
-    query: str = typer.Option(..., '--query', '-q', help='Search query string'),
-    group_id: str | None = typer.Option(
-        None,
-        '--group-id',
-        '-g',
-        help='Optional group ID for search scope. If not provided, generates one based on workspace path.',
-    ),
-    max_nodes: int = typer.Option(10, '--max', '-m', help='Maximum number of nodes to return'),
-    center_node_uuid: str | None = typer.Option(
-        None, '--center', '-c', help='Optional UUID of a node to center the search around'
-    ),
-    entity: str = typer.Option(
-        '',
-        '--entity',
-        '-e',
-        help="Optional entity type to filter results (e.g., 'Preference', 'Procedure')",
-    ),
-    workspace_path: str | None = typer.Option(
-        None,
-        '--workspace',
-        '-w',
-        help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
-    ),
+    query: str = QUERY_OPTION,
+    group_id: str | None = GROUP_ID_OPTION,
+    max_nodes: int = MAX_NODES_OPTION,
+    center_node_uuid: str | None = CENTER_NODE_UUID_OPTION,
+    entity: str = ENTITY_OPTION,
+    workspace_path: str | None = WORKSPACE_PATH_OPTION,
 ):
     """
     Searches the knowledge graph for relevant nodes matching the query.
@@ -543,23 +559,11 @@ async def _search_nodes(
 
 @cli_app.command()
 def search_facts(
-    query: str = typer.Option(..., '--query', '-q', help='Search query string'),
-    group_id: str | None = typer.Option(
-        None,
-        '--group-id',
-        '-g',
-        help='Optional group ID for search scope. If not provided, generates one based on workspace path.',
-    ),
-    max_facts: int = typer.Option(10, '--max', '-m', help='Maximum number of facts to return'),
-    center_node_uuid: str | None = typer.Option(
-        None, '--center', '-c', help='Optional UUID of a node to center the search around'
-    ),
-    workspace_path: str | None = typer.Option(
-        None,
-        '--workspace',
-        '-w',
-        help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
-    ),
+    query: str = QUERY_OPTION,
+    group_id: str | None = GROUP_ID_OPTION,
+    max_facts: int = MAX_FACTS_OPTION,
+    center_node_uuid: str | None = CENTER_NODE_UUID_OPTION,
+    workspace_path: str | None = WORKSPACE_PATH_OPTION,
 ):
     """
     Searches the knowledge graph for relevant facts (relationships) matching the query.
@@ -670,7 +674,7 @@ async def _search_facts(
 
 @cli_app.command()
 def get_entity_edge(
-    uuid: str = typer.Option(..., '--uuid', '-u', help='UUID of the entity edge to retrieve'),
+    uuid: str = UUID_EDGE_OPTION,
 ):
     """
     Retrieves detailed information about a specific entity edge (relationship) from the knowledge graph.
@@ -768,21 +772,9 @@ async def _get_entity_edge(uuid: str):
 
 @cli_app.command()
 def get_episodes(
-    group_id: str | None = typer.Option(
-        None,
-        '--group-id',
-        '-g',
-        help='ID of the group to retrieve episodes from. If not provided, generates one based on workspace path.',
-    ),
-    last_n: int = typer.Option(
-        10, '--last', '-n', help='Number of most recent episodes to retrieve'
-    ),
-    workspace_path: str | None = typer.Option(
-        None,
-        '--workspace',
-        '-w',
-        help='Workspace path for generating consistent group_id. If not provided, uses CURSOR_WORKSPACE env var or cwd.',
-    ),
+    group_id: str | None = GROUP_ID_OPTION,
+    last_n: int = LAST_N_OPTION,
+    workspace_path: str | None = WORKSPACE_PATH_OPTION,
 ):
     """
     Retrieves the most recent episodes for a specific group from the knowledge graph.
@@ -966,11 +958,9 @@ async def _get_episodes(group_id: str, last_n: int):
 
 @cli_app.command()
 def delete_entity_edge(
-    uuid: str = typer.Option(..., '--uuid', '-u', help='UUID of the entity edge to delete'),
-    confirm: bool = typer.Option(
-        False, '--confirm', help='Confirmation flag is required for deletion'
-    ),
-    skip_preview: bool = typer.Option(False, '--skip-preview', help='Skip the preview step'),
+    uuid: str = UUID_EDGE_OPTION,
+    confirm: bool = CONFIRM_OPTION,
+    skip_preview: bool = SKIP_PREVIEW_OPTION,
 ):
     """
     Deletes an entity edge (relationship) from the knowledge graph.
@@ -1065,11 +1055,9 @@ async def _delete_entity_edge(uuid: str, skip_preview: bool = False):
 
 @cli_app.command()
 def delete_episode(
-    uuid: str = typer.Option(..., '--uuid', '-u', help='UUID of the episode to delete'),
-    confirm: bool = typer.Option(
-        False, '--confirm', help='Confirmation flag is required for deletion'
-    ),
-    skip_preview: bool = typer.Option(False, '--skip-preview', help='Skip the preview step'),
+    uuid: str = UUID_EPISODE_OPTION,
+    confirm: bool = CONFIRM_OPTION,
+    skip_preview: bool = SKIP_PREVIEW_OPTION,
 ):
     """
     Deletes an episode from the knowledge graph.
@@ -1230,8 +1218,8 @@ async def _delete_episode(uuid: str, skip_preview: bool = False):
 
 @cli_app.command()
 def clear_graph(
-    confirm: bool = typer.Option(False, '--confirm', help='Initial confirmation flag'),
-    force: bool = typer.Option(False, '--force', help='Force flag as secondary confirmation'),
+    confirm: bool = CONFIRM_FLAG_OPTION,
+    force: bool = FORCE_OPTION,
 ):
     """
     Clears all data from the knowledge graph and rebuilds indices.
