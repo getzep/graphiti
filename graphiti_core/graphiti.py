@@ -19,7 +19,7 @@ from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
-from neo4j import AsyncGraphDatabase
+from neo4j import AsyncDriver, AsyncGraphDatabase
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
@@ -27,6 +27,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
@@ -150,6 +151,13 @@ class Graphiti:
         else:
             self.cross_encoder = OpenAIRerankerClient()
 
+        self.clients = GraphitiClients(
+            driver=self.driver,
+            llm_client=self.llm_client,
+            embedder=self.embedder,
+            cross_encoder=self.cross_encoder,
+        )
+
     async def close(self):
         """
         Close the connection to the Neo4j database.
@@ -222,6 +230,7 @@ class Graphiti:
         reference_time: datetime,
         last_n: int = EPISODE_WINDOW_LEN,
         group_ids: list[str] | None = None,
+        source: EpisodeType | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -248,7 +257,7 @@ class Graphiti:
         The actual retrieval is performed by the `retrieve_episodes` function
         from the `graphiti_core.utils` module.
         """
-        return await retrieve_episodes(self.driver, reference_time, last_n, group_ids)
+        return await retrieve_episodes(self.driver, reference_time, last_n, group_ids, source)
 
     async def add_episode(
         self,
@@ -322,7 +331,10 @@ class Graphiti:
 
             previous_episodes = (
                 await self.retrieve_episodes(
-                    reference_time, last_n=RELEVANT_SCHEMA_LIMIT, group_ids=[group_id]
+                    reference_time,
+                    last_n=RELEVANT_SCHEMA_LIMIT,
+                    group_ids=[group_id],
+                    source=source,
                 )
                 if previous_episode_uuids is None
                 else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
@@ -346,55 +358,24 @@ class Graphiti:
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
-                self.llm_client, episode, previous_episodes, entity_types
-            )
-            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-
-            # Calculate Embeddings
-
-            await semaphore_gather(
-                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes]
+                self.clients, episode, previous_episodes, entity_types
             )
 
-            # Find relevant nodes already in the graph
-            existing_nodes_lists: list[list[EntityNode]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_nodes(self.driver, SearchFilters(), [node])
-                        for node in extracted_nodes
-                    ]
-                )
-            )
-
-            # Resolve extracted nodes with nodes already in the graph and extract facts
-            logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-
-            (mentioned_nodes, uuid_map), extracted_edges = await semaphore_gather(
+            # Extract edges and resolve nodes
+            (nodes, uuid_map), extracted_edges = await semaphore_gather(
                 resolve_extracted_nodes(
-                    self.llm_client,
+                    self.clients,
                     extracted_nodes,
-                    existing_nodes_lists,
                     episode,
                     previous_episodes,
                     entity_types,
+                    group_id,
                 ),
-                extract_edges(
-                    self.llm_client, episode, extracted_nodes, previous_episodes, group_id
-                ),
+                extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
             )
-            logger.debug(f'Adjusted mentioned nodes: {[(n.name, n.uuid) for n in mentioned_nodes]}')
-            nodes = mentioned_nodes
 
             extracted_edges_with_resolved_pointers = resolve_edge_pointers(
                 extracted_edges, uuid_map
-            )
-
-            # calculate embeddings
-            await semaphore_gather(
-                *[
-                    edge.generate_embedding(self.embedder)
-                    for edge in extracted_edges_with_resolved_pointers
-                ]
             )
 
             # Resolve extracted edges with related edges already in the graph
@@ -467,11 +448,7 @@ class Graphiti:
 
             entity_edges.extend(resolved_edges + invalidated_edges)
 
-            logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
-
-            episodic_edges: list[EpisodicEdge] = build_episodic_edges(mentioned_nodes, episode, now)
-
-            logger.debug(f'Built episodic edges: {episodic_edges}')
+            episodic_edges: list[EpisodicEdge] = build_episodic_edges(nodes, episode, now)
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -684,9 +661,7 @@ class Graphiti:
 
         edges = (
             await search(
-                self.driver,
-                self.embedder,
-                self.cross_encoder,
+                self.clients,
                 query,
                 group_ids,
                 search_config,
@@ -728,9 +703,7 @@ class Graphiti:
         """
 
         return await search(
-            self.driver,
-            self.embedder,
-            self.cross_encoder,
+            self.clients,
             query,
             group_ids,
             config,

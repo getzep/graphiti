@@ -22,6 +22,7 @@ from typing import Any
 import pydantic
 from pydantic import BaseModel
 
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -29,6 +30,10 @@ from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
+from graphiti_core.search.search import search
+from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -116,12 +121,14 @@ async def extract_nodes_reflexion(
 
 
 async def extract_nodes(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
+    llm_client = clients.llm_client
+    embedder = clients.embedder
     extracted_node_names: list[str] = []
     custom_prompt = ''
     entities_missed = True
@@ -184,7 +191,7 @@ async def extract_nodes(
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
-    new_nodes = []
+    extracted_nodes = []
     for name in extracted_node_names:
         entity_type = node_classifications.get(name)
         if entity_types is not None and entity_type not in entity_types:
@@ -203,10 +210,13 @@ async def extract_nodes(
             summary='',
             created_at=utc_now(),
         )
-        new_nodes.append(new_node)
+        extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
-    return new_nodes
+    await semaphore_gather(*[node.generate_name_embedding(embedder) for node in extracted_nodes])
+
+    logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+    return extracted_nodes
 
 
 async def dedupe_extracted_nodes(
@@ -260,13 +270,34 @@ async def dedupe_extracted_nodes(
 
 
 async def resolve_extracted_nodes(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
-    existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
+    group_id: str | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
+    llm_client = clients.llm_client
+
+    # Find relevant nodes already in the graph
+    search_results: list[SearchResults] = list(
+        await semaphore_gather(
+            *[
+                search(
+                    clients=clients,
+                    query=node.name,
+                    query_vector=node.name_embedding,
+                    group_ids=[group_id],
+                    config=NODE_HYBRID_SEARCH_RRF,
+                    search_filter=SearchFilters(),
+                )
+                for node in extracted_nodes
+            ]
+        )
+    )
+
+    existing_nodes_lists: list[list[EntityNode]] = [result.nodes for result in search_results]
+
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
     results: list[tuple[EntityNode, dict[str, str]]] = list(
@@ -290,6 +321,8 @@ async def resolve_extracted_nodes(
     for result in results:
         uuid_map.update(result[1])
         resolved_nodes.append(result[0])
+
+    logger.debug(f'Resolved nodes: {[(n.name, n.uuid) for n in resolved_nodes]}')
 
     return resolved_nodes, uuid_map
 
