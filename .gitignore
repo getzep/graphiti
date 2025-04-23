@@ -167,7 +167,5 @@ cython_debug/
 cache.db*
 
 # Specific untracked files/artifacts
-uv.lock
-~/
 # All DS_Store files
 .DS_Store
