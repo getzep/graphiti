@@ -34,6 +34,7 @@ from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -145,7 +146,6 @@ async def extract_nodes(
         elif episode.source == EpisodeType.json:
             extracted_node_names = await extract_json_nodes(llm_client, episode, custom_prompt)
 
-        reflexion_iterations += 1
         if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
             missing_entities = await extract_nodes_reflexion(
                 llm_client, episode, previous_episodes, extracted_node_names
@@ -156,6 +156,7 @@ async def extract_nodes(
             custom_prompt = 'The following entities were missed in a previous extraction: '
             for entity in missing_entities:
                 custom_prompt += f'\n{entity},'
+            reflexion_iterations += 1
 
     node_classification_context = {
         'episode_content': episode.content,
@@ -275,28 +276,14 @@ async def resolve_extracted_nodes(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
-    group_id: str | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     llm_client = clients.llm_client
+    driver = clients.driver
 
     # Find relevant nodes already in the graph
-    search_results: list[SearchResults] = list(
-        await semaphore_gather(
-            *[
-                search(
-                    clients=clients,
-                    query=node.name,
-                    query_vector=node.name_embedding,
-                    group_ids=[group_id],
-                    config=NODE_HYBRID_SEARCH_RRF,
-                    search_filter=SearchFilters(),
-                )
-                for node in extracted_nodes
-            ]
-        )
+    existing_nodes_lists: list[list[EntityNode]] = await get_relevant_nodes(
+        driver, extracted_nodes, SearchFilters(), 0.8
     )
-
-    existing_nodes_lists: list[list[EntityNode]] = [result.nodes for result in search_results]
 
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []

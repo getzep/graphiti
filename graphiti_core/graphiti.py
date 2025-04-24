@@ -369,7 +369,6 @@ class Graphiti:
                     episode,
                     previous_episodes,
                     entity_types,
-                    group_id,
                 ),
                 extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
             )
@@ -395,9 +394,6 @@ class Graphiti:
             )
             logger.debug(
                 f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
-            )
-            logger.debug(
-                f'Extracted edges: {[(e.name, e.uuid) for e in extracted_edges_with_resolved_pointers]}'
             )
 
             existing_source_edges_list: list[list[EntityEdge]] = list(
