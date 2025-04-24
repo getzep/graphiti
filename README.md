@@ -151,12 +151,6 @@ For a complete working example, see the [Quickstart Example](./examples/quicksta
 
 The example is fully documented with clear explanations of each functionality and includes a comprehensive README with setup instructions and next steps.
 
-## Graph Service
-
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
-
-Please see the [server README](./server/README.md) for more information.
-
 ## MCP Server
 
 The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server allows AI assistants to interact with Graphiti's knowledge graph capabilities through the MCP protocol.
@@ -172,6 +166,12 @@ Key features of the MCP server include:
 The MCP server can be deployed using Docker with Neo4j, making it easy to integrate Graphiti into your AI assistant workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](./mcp_server/README.md).
+
+## Graph Service
+
+The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+
+Please see the [server README](./server/README.md) for more information.
 
 ## Optional Environment Variables
 

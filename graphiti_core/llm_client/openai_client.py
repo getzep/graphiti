@@ -19,7 +19,7 @@ import typing
 from typing import ClassVar
 
 import openai
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
@@ -61,7 +61,7 @@ class OpenAIClient(LLMClient):
         self,
         config: LLMConfig | None = None,
         cache: bool = False,
-        client: typing.Any = None,
+        client: AsyncOpenAI | AsyncAzureOpenAI | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
         """
