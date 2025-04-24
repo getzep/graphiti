@@ -10,3 +10,6 @@ dependencies = [
     "graphiti-core>=0.8.2",
     "azure-identity>=1.21.0",
 ]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.49.0"]

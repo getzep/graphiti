@@ -26,6 +26,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -186,7 +187,9 @@ class GraphitiLLMConfig(BaseModel):
     Centralizes all LLM-specific configuration parameters including API keys and model selection.
     """
 
+    model_provider: str = 'openai'
     api_key: str | None = None
+    anthropic_api_key: str | None = None
     model: str = DEFAULT_LLM_MODEL
     temperature: float = 0.0
     azure_openai_endpoint: str | None = None
@@ -196,75 +199,114 @@ class GraphitiLLMConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> 'GraphitiLLMConfig':
-        """Create LLM configuration from environment variables."""
-        # Get model from environment, or use default if not set or empty
+        """Create LLM configuration from environment variables.
+        Loads potential keys and default settings. Provider-specific logic is handled in from_cli_and_env.
+        """
+        # Load all potentially relevant keys and settings from environment
+        model_provider = os.environ.get('MODEL_PROVIDER', 'openai').lower()
         model_env = os.environ.get('MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_LLM_MODEL
-
-        azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
-        azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', None)
-        azure_openai_deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None)
-        azure_openai_use_managed_identity = (
+        openai_api_key = os.environ.get('OPENAI_API_KEY')
+        anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
+        azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
+        azure_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
+        azure_api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
+        azure_use_managed_identity = (
             os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', 'false').lower() == 'true'
         )
+        temperature = float(os.environ.get('LLM_TEMPERATURE', '0.0'))
 
-        if azure_openai_endpoint is None:
-            # Setup for OpenAI API
-            # Log if empty model was provided
-            if model_env == '':
-                logger.debug(
-                    f'MODEL_NAME environment variable not set, using default: {DEFAULT_LLM_MODEL}'
-                )
-            elif not model_env.strip():
-                logger.warning(
-                    f'Empty MODEL_NAME environment variable, using default: {DEFAULT_LLM_MODEL}'
-                )
-
-            return cls(
-                api_key=os.environ.get('OPENAI_API_KEY'),
-                model=model,
-                temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
-            )
-        else:
-            # Setup for Azure OpenAI API
-            # Log if empty deployment name was provided
-            if azure_openai_deployment_name is None:
-                logger.error('AZURE_OPENAI_DEPLOYMENT_NAME environment variable not set')
-
-                raise ValueError('AZURE_OPENAI_DEPLOYMENT_NAME environment variable not set')
-            if not azure_openai_use_managed_identity:
-                # api key
-                api_key = os.environ.get('OPENAI_API_KEY', None)
-            else:
-                # Managed identity
-                api_key = None
-
-            return cls(
-                azure_openai_use_managed_identity=azure_openai_use_managed_identity,
-                azure_openai_endpoint=azure_openai_endpoint,
-                api_key=api_key,
-                azure_openai_api_version=azure_openai_api_version,
-                azure_openai_deployment_name=azure_openai_deployment_name,
-                temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
-            )
+        # Return a config with all loaded env vars, provider logic deferred
+        return cls(
+            model_provider=model_provider,  # Initial provider from env
+            api_key=openai_api_key,
+            anthropic_api_key=anthropic_api_key,
+            model=model,
+            temperature=temperature,
+            azure_openai_endpoint=azure_endpoint,
+            azure_openai_deployment_name=azure_deployment,
+            azure_openai_api_version=azure_api_version,
+            azure_openai_use_managed_identity=azure_use_managed_identity,
+        )
 
     @classmethod
     def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiLLMConfig':
-        """Create LLM configuration from CLI arguments, falling back to environment variables."""
-        # Start with environment-based config
-        config = cls.from_env()
+        """Create LLM configuration from CLI arguments, falling back to environment variables.
+        Determines final provider and loads settings accordingly.
+        """
+        # 1. Determine the final model provider (CLI > Env Var > Default)
+        final_model_provider = 'openai'  # Default
+        if 'MODEL_PROVIDER' in os.environ:
+            final_model_provider = os.environ['MODEL_PROVIDER'].lower()
+        if hasattr(args, 'model_provider') and args.model_provider:
+            final_model_provider = args.model_provider.lower()
 
-        # CLI arguments override environment variables when provided
-        if hasattr(args, 'model') and args.model:
-            # Only use CLI model if it's not empty
-            if args.model.strip():
-                config.model = args.model
-            else:
-                # Log that empty model was provided and default is used
-                logger.warning(f'Empty model name provided, using default: {DEFAULT_LLM_MODEL}')
+        # 2. Determine final model name (CLI > Env Var > Default)
+        final_model = DEFAULT_LLM_MODEL  # Default
+        if 'MODEL_NAME' in os.environ and os.environ['MODEL_NAME'].strip():
+            final_model = os.environ['MODEL_NAME']
+        if hasattr(args, 'model') and args.model and args.model.strip():
+            final_model = args.model
+        elif final_model_provider != 'openai' and final_model == DEFAULT_LLM_MODEL:
+            # Warn if using non-openai provider but haven't specified a model
+            logger.warning(
+                f"Model provider is '{final_model_provider}' but no model specified. "
+                f"Using default '{DEFAULT_LLM_MODEL}', which might be incorrect."
+            )
 
+        # 3. Determine final temperature (CLI > Env Var > Default)
+        final_temperature = 0.0  # Default
+        if 'LLM_TEMPERATURE' in os.environ:
+            try:
+                final_temperature = float(os.environ['LLM_TEMPERATURE'])
+            except ValueError:
+                logger.warning('Invalid LLM_TEMPERATURE in env, using default 0.0')
         if hasattr(args, 'temperature') and args.temperature is not None:
-            config.temperature = args.temperature
+            final_temperature = args.temperature
+
+        # 4. Load relevant API keys and Azure settings from environment
+        openai_api_key = os.environ.get('OPENAI_API_KEY')
+        anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
+        azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
+        azure_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
+        azure_api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
+        azure_use_managed_identity = (
+            os.environ.get('AZURE_OPENAI_USE_MANAGED_IDENTITY', 'false').lower() == 'true'
+        )
+
+        # 5. Construct the final config object based on the provider
+        config_params = {
+            'model_provider': final_model_provider,
+            'model': final_model,
+            'temperature': final_temperature,
+        }
+
+        if final_model_provider == 'anthropic':
+            config_params['anthropic_api_key'] = anthropic_api_key
+        elif final_model_provider == 'azure_openai':
+            config_params['azure_openai_endpoint'] = azure_endpoint
+            config_params['azure_openai_deployment_name'] = azure_deployment
+            config_params['azure_openai_api_version'] = azure_api_version
+            config_params['azure_openai_use_managed_identity'] = azure_use_managed_identity
+            if not azure_use_managed_identity:
+                config_params['api_key'] = (
+                    openai_api_key  # Azure uses OPENAI_API_KEY var for key auth
+                )
+        else:  # Default to openai
+            config_params['api_key'] = openai_api_key
+
+        # Log the Anthropic key if relevant, for debugging
+        if final_model_provider == 'anthropic':
+            key_snippet = (
+                f'{anthropic_api_key[:5]}...{anthropic_api_key[-4:]}'
+                if anthropic_api_key
+                else 'None'
+            )
+            logger.info(
+                f'Anthropic provider selected. Read ANTHROPIC_API_KEY from env: {key_snippet}'
+            )
+
+        config = cls(**config_params)
 
         return config
 
@@ -275,47 +317,161 @@ class GraphitiLLMConfig(BaseModel):
             LLMClient instance if able, None otherwise
         """
 
-        if self.azure_openai_endpoint is not None:
-            # Azure OpenAI API setup
+        # --- Anthropic Client ---
+        if self.model_provider == 'anthropic':
+            logger.info(f'Using Anthropic model: {self.model}')
+            if not self.anthropic_api_key:
+                logger.error('ANTHROPIC_API_KEY must be set when model_provider is anthropic')
+                return None
+            anthropic_config = LLMConfig(
+                api_key=self.anthropic_api_key, model=self.model, temperature=self.temperature
+            )
+            return AnthropicClient(config=anthropic_config)
+
+        # --- Azure OpenAI Client ---
+        elif self.model_provider == 'azure':
+            logger.info(f'Attempting to use Azure OpenAI model: {self.model}')
+
+            # Check required Azure configuration
+            if not self.azure_openai_endpoint:
+                logger.error('AZURE_OPENAI_ENDPOINT must be set when model_provider is azure')
+                return None
+            if not self.azure_openai_deployment_name:
+                logger.error(
+                    'AZURE_OPENAI_DEPLOYMENT_NAME must be set when model_provider is azure'
+                )
+                return None
+            if not self.azure_openai_api_version:
+                logger.error('AZURE_OPENAI_API_VERSION must be set when model_provider is azure')
+                return None
+            if not self.azure_openai_use_managed_identity and not self.api_key:
+                logger.error(
+                    'OPENAI_API_KEY must be set for Azure OpenAI when not using managed identity'
+                )
+                return None
+
+            llm_client: AsyncAzureOpenAI | None = None
             if self.azure_openai_use_managed_identity:
                 # Use managed identity for authentication
                 token_provider = create_azure_credential_token_provider()
-                return AsyncAzureOpenAI(
+                llm_client = AsyncAzureOpenAI(
                     azure_endpoint=self.azure_openai_endpoint,
                     azure_deployment=self.azure_openai_deployment_name,
                     api_version=self.azure_openai_api_version,
                     azure_ad_token_provider=token_provider,
                 )
-            elif self.api_key:
+            elif self.api_key:  # We already checked api_key exists if needed
                 # Use API key for authentication
-                return AsyncAzureOpenAI(
+                llm_client = AsyncAzureOpenAI(
                     azure_endpoint=self.azure_openai_endpoint,
                     azure_deployment=self.azure_openai_deployment_name,
                     api_version=self.azure_openai_api_version,
                     api_key=self.api_key,
                 )
-            else:
-                logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
-                return None
 
-        if not self.api_key:
+            # Wrap the Azure client in OpenAIClient
+            if llm_client:
+                # Assuming OpenAIClient can accept an initialized client
+                return OpenAIClient(client=llm_client)  # type: ignore
             return None
 
-        llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+        # --- Standard OpenAI Client ---
+        elif self.model_provider == 'openai':
+            logger.info(f'Using standard OpenAI model: {self.model}')
+            if not self.api_key:
+                logger.error('OPENAI_API_KEY must be set when model_provider is openai')
+                return None
 
-        # Set temperature
-        llm_client_config.temperature = self.temperature
+            llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
 
-        return OpenAIClient(config=llm_client_config)
+            # Set temperature
+            llm_client_config.temperature = self.temperature
+
+            return OpenAIClient(config=llm_client_config)
+        else:
+            logger.error(f'Unknown model provider configured: {self.model_provider}')
+            return None
 
     def create_cross_encoder_client(self) -> CrossEncoderClient | None:
         """Create a cross-encoder client based on this configuration."""
-        if self.azure_openai_endpoint is not None:
-            client = self.create_client()
-            return OpenAIRerankerClient(client=client)
-        else:
+        # Note: OpenAIRerankerClient currently only supports OpenAI models.
+        # If Anthropic is selected as the main LLM, reranking might not function correctly
+        # or may require a separate OpenAI configuration specifically for reranking.
+        if self.model_provider == 'anthropic':
+            logger.warning(
+                'Anthropic selected as LLM provider. Cross-Encoder (reranking) might not work as expected '
+                'as it currently relies on OpenAI models. Using Anthropic client for reranking attempt.'
+            )
+
+        # Determine the client needed based on LLM provider config
+        reranker_azure_client: AsyncAzureOpenAI | None = None
+
+        if self.model_provider == 'azure_openai':
+            # Check required Azure configuration for reranker
+            if not all(
+                [
+                    self.azure_openai_endpoint,
+                    self.azure_openai_deployment_name,
+                    self.azure_openai_api_version,
+                ]
+            ):
+                logger.error('Azure config (endpoint, deployment, version) missing for reranker')
+                return None
+            if not self.azure_openai_use_managed_identity and not self.api_key:
+                logger.error('OPENAI_API_KEY needed for Azure reranker without managed identity')
+                return None
+
+            # Create the raw Azure client again for OpenAIRerankerClient
+            if self.azure_openai_use_managed_identity:
+                token_provider = create_azure_credential_token_provider()
+                reranker_azure_client = AsyncAzureOpenAI(
+                    azure_endpoint=self.azure_openai_endpoint,  # type: ignore[arg-type]
+                    azure_deployment=self.azure_openai_deployment_name,  # Use LLM deployment name
+                    api_version=self.azure_openai_api_version,  # Use LLM API version
+                    azure_ad_token_provider=token_provider,
+                )
+            elif self.api_key:
+                reranker_azure_client = AsyncAzureOpenAI(
+                    azure_endpoint=self.azure_openai_endpoint,  # type: ignore[arg-type]
+                    azure_deployment=self.azure_openai_deployment_name,  # Use LLM deployment name
+                    api_version=self.azure_openai_api_version,  # Use LLM API version
+                    api_key=self.api_key,
+                )
+        elif self.model_provider == 'openai':
+            if not self.api_key:
+                logger.error('OPENAI_API_KEY needed for OpenAI reranker')
+                return None
+            # Standard OpenAI config for reranker
             llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+            # OpenAIRerankerClient expects a config or a raw client.
+            # Passing config is consistent with how OpenAIClient itself can be initialized.
             return OpenAIRerankerClient(config=llm_client_config)
+        elif self.model_provider == 'anthropic':
+            # Attempt to use Anthropic client for reranking, though likely incompatible
+            if not self.anthropic_api_key:
+                logger.error('ANTHROPIC_API_KEY needed for Anthropic reranker attempt')
+                return None
+            # Pass config, OpenAIRerankerClient might handle it or raise error
+            # This might require changes in graphiti-core's OpenAIRerankerClient
+            # return OpenAIRerankerClient(config=anthropic_config) # Assuming it might work?
+            # Raise an error as OpenAIRerankerClient does not support Anthropic
+            raise ValueError(
+                'Cannot create CrossEncoderClient (reranker): OpenAIRerankerClient currently only supports '
+                'OpenAI or Azure OpenAI models. Anthropic was selected as the model_provider.'
+            )
+        else:
+            logger.error(f"Unsupported model provider '{self.model_provider}' for CrossEncoder")
+            return None
+
+        # Pass the raw Azure client instance if created
+        if reranker_azure_client:
+            return OpenAIRerankerClient(client=reranker_azure_client)
+        else:
+            # This case should ideally not be reached if provider is Azure due to checks above
+            logger.error(
+                'Failed to create Azure client for CrossEncoder despite provider being Azure'
+            )
+            return None
 
 
 class GraphitiEmbedderConfig(BaseModel):
@@ -381,12 +537,13 @@ class GraphitiEmbedderConfig(BaseModel):
             )
 
     def create_client(self) -> EmbedderClient | None:
+        embedder_client: AsyncAzureOpenAI | None = None
         if self.azure_openai_endpoint is not None:
             # Azure OpenAI API setup
             if self.azure_openai_use_managed_identity:
                 # Use managed identity for authentication
                 token_provider = create_azure_credential_token_provider()
-                return AsyncAzureOpenAI(
+                embedder_client = AsyncAzureOpenAI(
                     azure_endpoint=self.azure_openai_endpoint,
                     azure_deployment=self.azure_openai_deployment_name,
                     api_version=self.azure_openai_api_version,
@@ -394,7 +551,7 @@ class GraphitiEmbedderConfig(BaseModel):
                 )
             elif self.api_key:
                 # Use API key for authentication
-                return AsyncAzureOpenAI(
+                embedder_client = AsyncAzureOpenAI(
                     azure_endpoint=self.azure_openai_endpoint,
                     azure_deployment=self.azure_openai_deployment_name,
                     api_version=self.azure_openai_api_version,
@@ -403,12 +560,17 @@ class GraphitiEmbedderConfig(BaseModel):
             else:
                 logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
                 return None
+            # Wrap the Azure client in OpenAIEmbedder
+            if embedder_client:
+                # Assuming OpenAIEmbedder can accept an initialized client
+                return OpenAIEmbedder(client=embedder_client)  # type: ignore
+            return None
         else:
             # OpenAI API setup
             if not self.api_key:
                 return None
 
-            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, model=self.model)
+            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, embedding_model=self.model)
 
             return OpenAIEmbedder(config=embedder_config)
 
@@ -541,11 +703,37 @@ async def initialize_graphiti():
     global graphiti_client, config
 
     try:
+        # --- Critical Check: Embedder API Key ---
+        # Embeddings always use OpenAI/Azure, so we need the key regardless of LLM provider
+        # Check if using standard OpenAI embeddings and API key is missing
+        if not config.embedder.azure_openai_endpoint and not config.embedder.api_key:
+            raise ValueError(
+                'OPENAI_API_KEY must be set for embeddings (via OPENAI_API_KEY env var), '
+                'even if using a different LLM provider like Anthropic.'
+            )
+        # Check if using Azure embeddings and relevant Azure config/key is missing
+        elif (
+            config.embedder.azure_openai_endpoint
+            and not config.embedder.azure_openai_use_managed_identity
+            and not config.embedder.api_key
+        ):
+            raise ValueError(
+                'OPENAI_API_KEY must be set for Azure embeddings (via OPENAI_API_KEY env var) '
+                'if not using managed identity.'
+            )
+
         # Create LLM client if possible
         llm_client = config.llm.create_client()
-        if not llm_client and config.use_custom_entities:
-            # If custom entities are enabled, we must have an LLM client
-            raise ValueError('OPENAI_API_KEY must be set when custom entities are enabled')
+        # Check if custom entities require an LLM and if the selected LLM provider is configured
+        if config.use_custom_entities and not llm_client:
+            missing_key = (
+                'ANTHROPIC_API_KEY'
+                if config.llm.model_provider == 'anthropic'
+                else 'OPENAI_API_KEY or Azure equivalent'
+            )
+            raise ValueError(
+                f"{missing_key} must be set when custom entities are enabled and model provider is '{config.llm.model_provider}'."
+            )
 
         # Validate Neo4j configuration
         if not config.neo4j.uri or not config.neo4j.user or not config.neo4j.password:
@@ -1134,6 +1322,12 @@ async def initialize_server() -> MCPConfig:
         help='Transport to use for communication with the client. (default: sse)',
     )
     parser.add_argument(
+        '--model-provider',
+        choices=['openai', 'anthropic', 'azure_openai'],
+        default='openai',
+        help='Which LLM provider to use (openai, azure_openai, anthropic). Affects --model and API key usage. (default: openai)',
+    )
+    parser.add_argument(
         '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
     )
     parser.add_argument(
@@ -1160,6 +1354,7 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Generated random group_id: {config.group_id}')
 
     # Log entity extraction configuration
+    logger.info(f'Using LLM Provider: {config.llm.model_provider}')
     if config.use_custom_entities:
         logger.info('Entity extraction enabled using predefined ENTITY_TYPES')
     else:

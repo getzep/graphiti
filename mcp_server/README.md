@@ -78,6 +78,7 @@ uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 Available arguments:
 
 - `--model`: Specify the model name to use with the LLM client
+- `--model-provider <openai|azure_openai|anthropic>`: Select the LLM provider for primary operations (default: `openai`). Affects `--model` and requires the corresponding API key/Azure environment variables. **Embeddings always use OpenAI/Azure OpenAI regardless of this setting.**
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
 - `--group-id`: Set a namespace for the graph (optional)
 - `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
@@ -94,25 +95,25 @@ Before running the Docker Compose setup, you need to configure the environment v
 
 1. **Using a .env file** (recommended):
 
-    - Copy the provided `.env.example` file to create a `.env` file:
-      ```bash
-      cp .env.example .env
-      ```
-    - Edit the `.env` file to set your OpenAI API key and other configuration options:
-      ```
-      # Required for LLM operations
-      OPENAI_API_KEY=your_openai_api_key_here
-      MODEL_NAME=gpt-4.1-mini
-      # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
-      # OPENAI_BASE_URL=https://api.openai.com/v1
-      ```
-    - The Docker Compose setup is configured to use this file if it exists (it's optional)
+   - Copy the provided `.env.example` file to create a `.env` file:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit the `.env` file to set your OpenAI API key and other configuration options:
+     ```
+     # Required for LLM operations
+     OPENAI_API_KEY=your_openai_api_key_here
+     MODEL_NAME=gpt-4.1-mini
+     # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
+     # OPENAI_BASE_URL=https://api.openai.com/v1
+     ```
+   - The Docker Compose setup is configured to use this file if it exists (it's optional)
 
 2. **Using environment variables directly**:
-    - You can also set the environment variables when running the Docker Compose command:
-      ```bash
-      OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1-mini docker compose up
-      ```
+   - You can also set the environment variables when running the Docker Compose command:
+     ```bash
+     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1-mini docker compose up
+     ```
 
 #### Neo4j Configuration
 
@@ -283,3 +284,58 @@ capabilities.
 ## License
 
 This project is licensed under the same license as the Graphiti project.
+
+### Using Anthropic Models
+
+To use an Anthropic model (like Claude) as the primary LLM:
+
+1.  Ensure the `anthropic` package is installed:
+    ```bash
+    # Install the server with anthropic support
+    uv pip install -e .[anthropic]
+    ```
+2.  Set the `ANTHROPIC_API_KEY` environment variable:
+    ```bash
+    export ANTHROPIC_API_KEY='your-anthropic-api-key'
+    ```
+3.  Set the `OPENAI_API_KEY` environment variable (or Azure equivalents). This is still required for the embedding model, which currently uses OpenAI or Azure OpenAI.
+    ```bash
+    export OPENAI_API_KEY='your-openai-api-key'
+    ```
+4.  Run the server specifying Anthropic as the provider and optionally the model name:
+    ```bash
+    uv run graphiti_mcp_server.py --model-provider anthropic --model claude-3-7-sonnet-latest
+    ```
+    - If `--model` is not specified, it will use the default specified in the code (currently OpenAI's default, which might not be ideal - specify an Anthropic model explicitly).
+    - Features requiring LLM interaction (like custom entity extraction with `--use-custom-entities`) will use the configured Anthropic model.
+    - Embeddings will still use OpenAI/Azure services.
+    - **Note:** Reranking (`OpenAIRerankerClient`) is currently incompatible with the Anthropic provider and will cause an error during initialization if attempted.
+
+### Using Azure OpenAI Models
+
+To use Azure OpenAI as the primary LLM provider:
+
+1.  Set the required Azure OpenAI environment variables:
+    ```bash
+    export AZURE_OPENAI_ENDPOINT='your-azure-endpoint'
+    export AZURE_OPENAI_DEPLOYMENT_NAME='your-llm-deployment-name' # Deployment name for the LLM model
+    export AZURE_OPENAI_API_VERSION='your-api-version'
+    # Set if using API Key auth (omit if using Managed Identity)
+    export OPENAI_API_KEY='your-azure-openai-api-key'
+    # Set if using Managed Identity auth (omit if using API Key)
+    # export AZURE_OPENAI_USE_MANAGED_IDENTITY=true
+    ```
+2.  Ensure the embedding configuration is also correct. If using Azure for embeddings too, set:
+    ```bash
+    export AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME='your-embedding-deployment-name'
+    export AZURE_OPENAI_EMBEDDING_API_VERSION='your-embedding-api-version' # Often same as LLM version
+    # OPENAI_API_KEY is reused if needed; AZURE_OPENAI_ENDPOINT is reused.
+    ```
+    If using standard OpenAI for embeddings, just ensure `OPENAI_API_KEY` is set.
+3.  Run the server specifying Azure OpenAI as the provider and optionally the model name (which should match your Azure deployment):
+    ```bash
+    uv run graphiti_mcp_server.py --model-provider azure_openai --model your-llm-deployment-name
+    ```
+    - The `--model` argument here should generally match the `AZURE_OPENAI_DEPLOYMENT_NAME`.
+    - Features requiring LLM interaction will use the configured Azure OpenAI service.
+    - Embeddings will use either Azure OpenAI or standard OpenAI based on the presence of `AZURE_OPENAI_ENDPOINT` and the embedding-specific deployment/version variables.
