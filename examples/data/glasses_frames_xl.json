@@ -1,0 +1,3614 @@
+[
+    {
+      "frame_id": 1,
+      "timestamp": "2025-01-01T07:00:00Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [100, 150, 140, 220],
+          "confidence": 0.97,
+          "description": "Traveler checking smartphone."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_1"],
+        "updated_entities": [],
+        "removed_entities": []
+      },
+      "previous_frame_id": null
+    },
+    {
+      "frame_id": 2,
+      "timestamp": "2025-01-01T07:00:01Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [102, 152, 142, 222],
+          "confidence": 0.97,
+          "description": "Traveler checking smartphone."
+        },
+        {
+          "entity_id": "object_1",
+          "type": "sign",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.93,
+          "description": "Station sign: 'Kyoto'."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_1"],
+        "updated_entities": ["person_1"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 1
+    },
+    {
+      "frame_id": 3,
+      "timestamp": "2025-01-01T07:00:02Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [105, 155, 145, 225],
+          "confidence": 0.97,
+          "description": "Traveler looking around for exit."
+        },
+        {
+          "entity_id": "object_1",
+          "type": "sign",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.93,
+          "description": "Station sign: 'Kyoto'."
+        },
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [200, 250, 240, 320],
+          "confidence": 0.95,
+          "description": "Local carrying groceries."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_1",
+          "predicate": "glances_at",
+          "object": "person_2"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_2"],
+        "updated_entities": ["person_1"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 2
+    },
+    {
+      "frame_id": 4,
+      "timestamp": "2025-01-01T07:00:03Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [108, 158, 148, 228],
+          "confidence": 0.96,
+          "description": "Traveler heading towards escalator."
+        },
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [200, 250, 240, 320],
+          "confidence": 0.95,
+          "description": "Local carrying groceries."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_1"],
+        "removed_entities": ["object_1"]
+      },
+      "previous_frame_id": 3
+    },
+    {
+      "frame_id": 5,
+      "timestamp": "2025-01-01T07:00:04Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [200, 250, 240, 320],
+          "confidence": 0.95,
+          "description": "Local heading to ticket gates."
+        },
+        {
+          "entity_id": "object_2",
+          "type": "train_board",
+          "bbox": [310, 80, 420, 180],
+          "confidence": 0.93,
+          "description": "Departure board: Next train to Osaka."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_2"],
+        "updated_entities": ["person_2"],
+        "removed_entities": ["person_1"]
+      },
+      "previous_frame_id": 4
+    },
+    {
+      "frame_id": 6,
+      "timestamp": "2025-01-01T07:00:05Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [202, 252, 242, 322],
+          "confidence": 0.95,
+          "description": "Local scanning IC card at gate."
+        },
+        {
+          "entity_id": "object_2",
+          "type": "train_board",
+          "bbox": [310, 80, 420, 180],
+          "confidence": 0.93,
+          "description": "Departure board: Next train to Osaka."
+        },
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [400, 500, 440, 550],
+          "confidence": 0.94,
+          "description": "Station staff assisting travelers."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_3"],
+        "updated_entities": ["person_2", "object_2"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 5
+    },
+    {
+      "frame_id": 7,
+      "timestamp": "2025-01-01T07:00:06Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [202, 252, 242, 322],
+          "confidence": 0.95,
+          "description": "Local heading to platform."
+        },
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [400, 500, 440, 550],
+          "confidence": 0.94,
+          "description": "Station staff assisting travelers."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_3",
+          "predicate": "points_towards",
+          "object": "person_2"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_2", "person_3"],
+        "removed_entities": ["object_2"]
+      },
+      "previous_frame_id": 6
+    },
+    {
+      "frame_id": 8,
+      "timestamp": "2025-01-01T07:00:07Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [400, 500, 440, 550],
+          "confidence": 0.94,
+          "description": "Station staff waving goodbye."
+        },
+        {
+          "entity_id": "object_3",
+          "type": "train",
+          "bbox": [100, 400, 300, 600],
+          "confidence": 0.93,
+          "description": "Local train arriving at platform."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_3"],
+        "updated_entities": ["person_3"],
+        "removed_entities": ["person_2"]
+      },
+      "previous_frame_id": 7
+    },
+    {
+      "frame_id": 9,
+      "timestamp": "2025-01-01T07:00:08Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [400, 500, 440, 550],
+          "confidence": 0.94,
+          "description": "Station staff standing by."
+        },
+        {
+          "entity_id": "object_3",
+          "type": "train",
+          "bbox": [95, 395, 295, 595],
+          "confidence": 0.93,
+          "description": "Local train opening doors."
+        },
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [150, 220, 190, 270],
+          "confidence": 0.95,
+          "description": "Passenger stepping off."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_4"],
+        "updated_entities": ["person_3", "object_3"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 8
+    },
+    {
+      "frame_id": 10,
+      "timestamp": "2025-01-01T07:00:09Z",
+      "environment": "kyoto_station",
+      "entities": [
+        {
+          "entity_id": "object_3",
+          "type": "train",
+          "bbox": [95, 395, 295, 595],
+          "confidence": 0.93,
+          "description": "Local train waiting briefly."
+        },
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [150, 220, 190, 270],
+          "confidence": 0.95,
+          "description": "Passenger walking away."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_3", "person_4"],
+        "removed_entities": ["person_3"]
+      },
+      "previous_frame_id": 9
+    },
+  
+    {
+      "frame_id": 11,
+      "timestamp": "2025-01-01T07:00:10Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "object_4",
+          "type": "torii_gate",
+          "bbox": [400, 100, 600, 300],
+          "confidence": 0.97,
+          "description": "Entrance to Fushimi Inari shrine."
+        },
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [100, 200, 140, 270],
+          "confidence": 0.95,
+          "description": "Tourist admiring the gate."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_4", "person_5"],
+        "updated_entities": [],
+        "removed_entities": ["object_3", "person_4"]
+      },
+      "previous_frame_id": 10
+    },
+    {
+      "frame_id": 12,
+      "timestamp": "2025-01-01T07:00:11Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "object_4",
+          "type": "torii_gate",
+          "bbox": [400, 100, 600, 300],
+          "confidence": 0.97,
+          "description": "Brightly colored shrine gate."
+        },
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Tourist checking camera."
+        },
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local wearing traditional kimono."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_5",
+          "predicate": "photographs",
+          "object": "person_6"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_6"],
+        "updated_entities": ["person_5", "object_4"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 11
+    },
+    {
+      "frame_id": 13,
+      "timestamp": "2025-01-01T07:00:12Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Tourist stepping forward under gate."
+        },
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local adjusting kimono sleeve."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_5", "person_6"],
+        "removed_entities": ["object_4"]
+      },
+      "previous_frame_id": 12
+    },
+    {
+      "frame_id": 14,
+      "timestamp": "2025-01-01T07:00:13Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [105, 205, 145, 275],
+          "confidence": 0.95,
+          "description": "Tourist reading map."
+        },
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local speaking to tourist."
+        },
+        {
+          "entity_id": "object_5",
+          "type": "fox_statue",
+          "bbox": [500, 200, 540, 300],
+          "confidence": 0.93,
+          "description": "Stone statue near shrine path."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_5"],
+        "updated_entities": ["person_5", "person_6"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 13
+    },
+    {
+      "frame_id": 15,
+      "timestamp": "2025-01-01T07:00:14Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local offering directions."
+        },
+        {
+          "entity_id": "object_5",
+          "type": "fox_statue",
+          "bbox": [500, 200, 540, 300],
+          "confidence": 0.93,
+          "description": "Fox guardian statue."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_6", "object_5"],
+        "removed_entities": ["person_5"]
+      },
+      "previous_frame_id": 14
+    },
+    {
+      "frame_id": 16,
+      "timestamp": "2025-01-01T07:00:15Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "object_5",
+          "type": "fox_statue",
+          "bbox": [500, 200, 540, 300],
+          "confidence": 0.93,
+          "description": "Fox statue with red bib."
+        },
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [150, 230, 190, 290],
+          "confidence": 0.95,
+          "description": "Tourist couple walking up steps."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_7"],
+        "updated_entities": ["object_5"],
+        "removed_entities": ["person_6"]
+      },
+      "previous_frame_id": 15
+    },
+    {
+      "frame_id": 17,
+      "timestamp": "2025-01-01T07:00:16Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [153, 233, 193, 293],
+          "confidence": 0.95,
+          "description": "Couple pausing for photo."
+        },
+        {
+          "entity_id": "object_5",
+          "type": "fox_statue",
+          "bbox": [500, 200, 540, 300],
+          "confidence": 0.93,
+          "description": "Fox statue near path entrance."
+        },
+        {
+          "entity_id": "object_6",
+          "type": "omokaru_stone",
+          "bbox": [250, 450, 300, 500],
+          "confidence": 0.92,
+          "description": "Weight-lifting fortune stone."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_6"],
+        "updated_entities": ["person_7", "object_5"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 16
+    },
+    {
+      "frame_id": 18,
+      "timestamp": "2025-01-01T07:00:17Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [153, 233, 193, 293],
+          "confidence": 0.95,
+          "description": "Couple checking photos."
+        },
+        {
+          "entity_id": "object_6",
+          "type": "omokaru_stone",
+          "bbox": [250, 450, 300, 500],
+          "confidence": 0.92,
+          "description": "Visitors testing stone's weight."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_7", "object_6"],
+        "removed_entities": ["object_5"]
+      },
+      "previous_frame_id": 17
+    },
+    {
+      "frame_id": 19,
+      "timestamp": "2025-01-01T07:00:18Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "object_6",
+          "type": "omokaru_stone",
+          "bbox": [250, 450, 300, 500],
+          "confidence": 0.92,
+          "description": "Omokaru stone under small shrine."
+        },
+        {
+          "entity_id": "object_7",
+          "type": "vendor_stall",
+          "bbox": [400, 300, 460, 350],
+          "confidence": 0.93,
+          "description": "Food stall selling yakitori."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_7"],
+        "updated_entities": ["object_6"],
+        "removed_entities": ["person_7"]
+      },
+      "previous_frame_id": 18
+    },
+    {
+      "frame_id": 20,
+      "timestamp": "2025-01-01T07:00:19Z",
+      "environment": "fushimi_inari",
+      "entities": [
+        {
+          "entity_id": "object_7",
+          "type": "vendor_stall",
+          "bbox": [400, 300, 460, 350],
+          "confidence": 0.93,
+          "description": "Food stall, fresh yakitori cooking."
+        },
+        {
+          "entity_id": "person_8",
+          "type": "person",
+          "bbox": [150, 200, 190, 250],
+          "confidence": 0.95,
+          "description": "Vendor handing out food samples."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_8"],
+        "updated_entities": ["object_7"],
+        "removed_entities": ["object_6"]
+      },
+      "previous_frame_id": 19
+    },
+  
+    {
+      "frame_id": 21,
+      "timestamp": "2025-01-01T07:00:20Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_8",
+          "type": "bamboo_grove",
+          "bbox": [300, 50, 700, 400],
+          "confidence": 0.98,
+          "description": "Tall bamboo lining the path."
+        },
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [100, 200, 150, 260],
+          "confidence": 0.96,
+          "description": "Tourist in awe of the bamboo."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_8", "person_9"],
+        "updated_entities": [],
+        "removed_entities": ["object_7", "person_8"]
+      },
+      "previous_frame_id": 20
+    },
+    {
+      "frame_id": 22,
+      "timestamp": "2025-01-01T07:00:21Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_8",
+          "type": "bamboo_grove",
+          "bbox": [300, 50, 700, 400],
+          "confidence": 0.98,
+          "description": "Serene bamboo forest walkway."
+        },
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [102, 202, 152, 262],
+          "confidence": 0.96,
+          "description": "Tourist photographing tall bamboo."
+        },
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [210, 320, 260, 370],
+          "confidence": 0.94,
+          "description": "Local guide leading a small group."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_10"],
+        "updated_entities": ["person_9", "object_8"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 21
+    },
+    {
+      "frame_id": 23,
+      "timestamp": "2025-01-01T07:00:22Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [105, 205, 155, 265],
+          "confidence": 0.96,
+          "description": "Tourist adjusting camera lens."
+        },
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [210, 320, 260, 370],
+          "confidence": 0.94,
+          "description": "Guide pointing out scenic view."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_10",
+          "predicate": "talks_to",
+          "object": "person_9"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_9", "person_10"],
+        "removed_entities": ["object_8"]
+      },
+      "previous_frame_id": 22
+    },
+    {
+      "frame_id": 24,
+      "timestamp": "2025-01-01T07:00:23Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [105, 205, 155, 265],
+          "confidence": 0.96,
+          "description": "Tourist pausing to admire nature."
+        },
+        {
+          "entity_id": "object_9",
+          "type": "rickshaw",
+          "bbox": [400, 300, 450, 370],
+          "confidence": 0.92,
+          "description": "Empty rickshaw parked by path."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_9"],
+        "updated_entities": ["person_9"],
+        "removed_entities": ["person_10"]
+      },
+      "previous_frame_id": 23
+    },
+    {
+      "frame_id": 25,
+      "timestamp": "2025-01-01T07:00:24Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_9",
+          "type": "rickshaw",
+          "bbox": [400, 300, 450, 370],
+          "confidence": 0.92,
+          "description": "Traditional rickshaw."
+        },
+        {
+          "entity_id": "person_11",
+          "type": "person",
+          "bbox": [200, 220, 240, 280],
+          "confidence": 0.94,
+          "description": "Rickshaw driver waiting for customers."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_11"],
+        "updated_entities": ["object_9"],
+        "removed_entities": ["person_9"]
+      },
+      "previous_frame_id": 24
+    },
+    {
+      "frame_id": 26,
+      "timestamp": "2025-01-01T07:00:25Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "person_11",
+          "type": "person",
+          "bbox": [200, 220, 240, 280],
+          "confidence": 0.94,
+          "description": "Rickshaw driver greeting passersby."
+        },
+        {
+          "entity_id": "object_9",
+          "type": "rickshaw",
+          "bbox": [400, 300, 450, 370],
+          "confidence": 0.92,
+          "description": "Polished wooden rickshaw."
+        },
+        {
+          "entity_id": "person_12",
+          "type": "person",
+          "bbox": [320, 350, 370, 420],
+          "confidence": 0.95,
+          "description": "Traveler in awe of scenery."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_12"],
+        "updated_entities": ["person_11", "object_9"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 25
+    },
+    {
+      "frame_id": 27,
+      "timestamp": "2025-01-01T07:00:26Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_9",
+          "type": "rickshaw",
+          "bbox": [400, 300, 450, 370],
+          "confidence": 0.92,
+          "description": "Rickshaw with a canopy."
+        },
+        {
+          "entity_id": "person_12",
+          "type": "person",
+          "bbox": [320, 350, 370, 420],
+          "confidence": 0.95,
+          "description": "Traveler strolling deeper in forest."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_9", "person_12"],
+        "removed_entities": ["person_11"]
+      },
+      "previous_frame_id": 26
+    },
+    {
+      "frame_id": 28,
+      "timestamp": "2025-01-01T07:00:27Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_9",
+          "type": "rickshaw",
+          "bbox": [400, 300, 450, 370],
+          "confidence": 0.92,
+          "description": "Rickshaw occupant is now inside."
+        },
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [500, 550, 540, 600],
+          "confidence": 0.93,
+          "description": "A child pointing at the tall bamboo."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_13"],
+        "updated_entities": ["object_9"],
+        "removed_entities": ["person_12"]
+      },
+      "previous_frame_id": 27
+    },
+    {
+      "frame_id": 29,
+      "timestamp": "2025-01-01T07:00:28Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [500, 550, 540, 600],
+          "confidence": 0.93,
+          "description": "Child marveling at bamboo canopy."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "snack_cart",
+          "bbox": [250, 350, 300, 400],
+          "confidence": 0.92,
+          "description": "Cart selling matcha soft serve."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_10"],
+        "updated_entities": ["person_13"],
+        "removed_entities": ["object_9"]
+      },
+      "previous_frame_id": 28
+    },
+    {
+      "frame_id": 30,
+      "timestamp": "2025-01-01T07:00:29Z",
+      "environment": "arashiyama_bamboo_forest",
+      "entities": [
+        {
+          "entity_id": "object_10",
+          "type": "snack_cart",
+          "bbox": [250, 350, 300, 400],
+          "confidence": 0.92,
+          "description": "Matcha ice cream on display."
+        },
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [150, 200, 190, 260],
+          "confidence": 0.95,
+          "description": "Tourist purchasing a treat."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_14"],
+        "updated_entities": ["object_10"],
+        "removed_entities": ["person_13"]
+      },
+      "previous_frame_id": 29
+    },
+  
+    {
+      "frame_id": 31,
+      "timestamp": "2025-01-01T07:00:30Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "object_11",
+          "type": "teahouse",
+          "bbox": [300, 200, 450, 350],
+          "confidence": 0.94,
+          "description": "Traditional machiya teahouse."
+        },
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [100, 180, 140, 250],
+          "confidence": 0.96,
+          "description": "Geisha walking gracefully."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_11", "person_15"],
+        "updated_entities": [],
+        "removed_entities": ["object_10", "person_14"]
+      },
+      "previous_frame_id": 30
+    },
+    {
+      "frame_id": 32,
+      "timestamp": "2025-01-01T07:00:31Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "object_11",
+          "type": "teahouse",
+          "bbox": [300, 200, 450, 350],
+          "confidence": 0.94,
+          "description": "Teahouse with wooden lattice facade."
+        },
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [102, 182, 142, 252],
+          "confidence": 0.96,
+          "description": "Geisha holding an umbrella."
+        },
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [200, 280, 240, 340],
+          "confidence": 0.95,
+          "description": "Photographer capturing the moment."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_16",
+          "predicate": "focuses_on",
+          "object": "person_15"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_16"],
+        "updated_entities": ["object_11", "person_15"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 31
+    },
+    {
+      "frame_id": 33,
+      "timestamp": "2025-01-01T07:00:32Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [102, 182, 142, 252],
+          "confidence": 0.96,
+          "description": "Geisha slowly passing by."
+        },
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [200, 280, 240, 340],
+          "confidence": 0.95,
+          "description": "Photographer adjusting camera settings."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_15", "person_16"],
+        "removed_entities": ["object_11"]
+      },
+      "previous_frame_id": 32
+    },
+    {
+      "frame_id": 34,
+      "timestamp": "2025-01-01T07:00:33Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [105, 185, 145, 255],
+          "confidence": 0.96,
+          "description": "Geisha turning a corner."
+        },
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [200, 280, 240, 340],
+          "confidence": 0.95,
+          "description": "Photographer walking quickly."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "lantern",
+          "bbox": [420, 210, 460, 260],
+          "confidence": 0.93,
+          "description": "Paper lantern with kanji."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_12"],
+        "updated_entities": ["person_15", "person_16"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 33
+    },
+    {
+      "frame_id": 35,
+      "timestamp": "2025-01-01T07:00:34Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [200, 280, 240, 340],
+          "confidence": 0.95,
+          "description": "Photographer continuing pursuit."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "lantern",
+          "bbox": [420, 210, 460, 260],
+          "confidence": 0.93,
+          "description": "Gion style lantern."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_16", "object_12"],
+        "removed_entities": ["person_15"]
+      },
+      "previous_frame_id": 34
+    },
+    {
+      "frame_id": 36,
+      "timestamp": "2025-01-01T07:00:35Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "object_12",
+          "type": "lantern",
+          "bbox": [420, 210, 460, 260],
+          "confidence": 0.93,
+          "description": "Lantern lighting up the street."
+        },
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [310, 410, 350, 460],
+          "confidence": 0.95,
+          "description": "Shop owner sweeping entrance."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_17"],
+        "updated_entities": ["object_12"],
+        "removed_entities": ["person_16"]
+      },
+      "previous_frame_id": 35
+    },
+    {
+      "frame_id": 37,
+      "timestamp": "2025-01-01T07:00:36Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "object_12",
+          "type": "lantern",
+          "bbox": [420, 210, 460, 260],
+          "confidence": 0.93,
+          "description": "Lantern gently swaying in breeze."
+        },
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [310, 410, 350, 460],
+          "confidence": 0.95,
+          "description": "Shop owner finishing chores."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [500, 600, 540, 650],
+          "confidence": 0.94,
+          "description": "Customer looking at sweets display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_18"],
+        "updated_entities": ["object_12", "person_17"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 36
+    },
+    {
+      "frame_id": 38,
+      "timestamp": "2025-01-01T07:00:37Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [310, 410, 350, 460],
+          "confidence": 0.95,
+          "description": "Shop owner greeting the customer."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [500, 600, 540, 650],
+          "confidence": 0.94,
+          "description": "Customer holding a shopping bag."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_17", "person_18"],
+        "removed_entities": ["object_12"]
+      },
+      "previous_frame_id": 37
+    },
+    {
+      "frame_id": 39,
+      "timestamp": "2025-01-01T07:00:38Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [310, 410, 350, 460],
+          "confidence": 0.95,
+          "description": "Shop owner handing out free sample."
+        },
+        {
+          "entity_id": "object_13",
+          "type": "sign",
+          "bbox": [200, 100, 300, 180],
+          "confidence": 0.93,
+          "description": "Wooden sign with store name."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_13"],
+        "updated_entities": ["person_17"],
+        "removed_entities": ["person_18"]
+      },
+      "previous_frame_id": 38
+    },
+    {
+      "frame_id": 40,
+      "timestamp": "2025-01-01T07:00:39Z",
+      "environment": "gion_district",
+      "entities": [
+        {
+          "entity_id": "object_13",
+          "type": "sign",
+          "bbox": [200, 100, 300, 180],
+          "confidence": 0.93,
+          "description": "Hand-painted sign in Japanese characters."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_13"],
+        "removed_entities": ["person_17"]
+      },
+      "previous_frame_id": 39
+    },
+  
+    {
+      "frame_id": 41,
+      "timestamp": "2025-01-01T07:00:40Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "object_14",
+          "type": "castle",
+          "bbox": [300, 20, 500, 220],
+          "confidence": 0.98,
+          "description": "Osaka Castle main keep."
+        },
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [100, 250, 150, 320],
+          "confidence": 0.95,
+          "description": "Tourist scanning castle info sign."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_14", "person_19"],
+        "updated_entities": [],
+        "removed_entities": ["object_13"]
+      },
+      "previous_frame_id": 40
+    },
+    {
+      "frame_id": 42,
+      "timestamp": "2025-01-01T07:00:41Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "object_14",
+          "type": "castle",
+          "bbox": [300, 20, 500, 220],
+          "confidence": 0.98,
+          "description": "Green-roofed Osaka Castle."
+        },
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [102, 252, 152, 322],
+          "confidence": 0.95,
+          "description": "Tourist taking photos with phone."
+        },
+        {
+          "entity_id": "person_20",
+          "type": "person",
+          "bbox": [200, 350, 250, 420],
+          "confidence": 0.94,
+          "description": "Tour guide pointing to the top floor."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_20",
+          "predicate": "gestures_toward",
+          "object": "object_14"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_20"],
+        "updated_entities": ["person_19", "object_14"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 41
+    },
+    {
+      "frame_id": 43,
+      "timestamp": "2025-01-01T07:00:42Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [102, 252, 152, 322],
+          "confidence": 0.95,
+          "description": "Tourist capturing wide-angle shot."
+        },
+        {
+          "entity_id": "person_20",
+          "type": "person",
+          "bbox": [200, 350, 250, 420],
+          "confidence": 0.94,
+          "description": "Tour guide holding pamphlet."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_19", "person_20"],
+        "removed_entities": ["object_14"]
+      },
+      "previous_frame_id": 42
+    },
+    {
+      "frame_id": 44,
+      "timestamp": "2025-01-01T07:00:43Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [105, 255, 155, 325],
+          "confidence": 0.95,
+          "description": "Tourist approaching moat area."
+        },
+        {
+          "entity_id": "object_15",
+          "type": "moat",
+          "bbox": [400, 300, 550, 350],
+          "confidence": 0.93,
+          "description": "Moat surrounding the castle walls."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_15"],
+        "updated_entities": ["person_19"],
+        "removed_entities": ["person_20"]
+      },
+      "previous_frame_id": 43
+    },
+    {
+      "frame_id": 45,
+      "timestamp": "2025-01-01T07:00:44Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "object_15",
+          "type": "moat",
+          "bbox": [400, 300, 550, 350],
+          "confidence": 0.93,
+          "description": "Tranquil moat reflecting castle image."
+        },
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [200, 250, 240, 310],
+          "confidence": 0.94,
+          "description": "Family with kids, feeding fish."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_21"],
+        "updated_entities": ["object_15"],
+        "removed_entities": ["person_19"]
+      },
+      "previous_frame_id": 44
+    },
+    {
+      "frame_id": 46,
+      "timestamp": "2025-01-01T07:00:45Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [200, 250, 240, 310],
+          "confidence": 0.94,
+          "description": "Children leaning over the railing."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "bridge",
+          "bbox": [100, 300, 300, 350],
+          "confidence": 0.92,
+          "description": "Bridge leading to castle entrance."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_16"],
+        "updated_entities": ["person_21"],
+        "removed_entities": ["object_15"]
+      },
+      "previous_frame_id": 45
+    },
+    {
+      "frame_id": 47,
+      "timestamp": "2025-01-01T07:00:46Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [200, 250, 240, 310],
+          "confidence": 0.94,
+          "description": "Family walking across the bridge."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "bridge",
+          "bbox": [100, 300, 300, 350],
+          "confidence": 0.92,
+          "description": "Historical wooden bridge."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [500, 550, 540, 620],
+          "confidence": 0.93,
+          "description": "Street performer playing shamisen."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_22"],
+        "updated_entities": ["person_21", "object_16"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 46
+    },
+    {
+      "frame_id": 48,
+      "timestamp": "2025-01-01T07:00:47Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "object_16",
+          "type": "bridge",
+          "bbox": [100, 300, 300, 350],
+          "confidence": 0.92,
+          "description": "Bridge with decorative lanterns."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [500, 550, 540, 620],
+          "confidence": 0.93,
+          "description": "Performer collecting tips."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_16", "person_22"],
+        "removed_entities": ["person_21"]
+      },
+      "previous_frame_id": 47
+    },
+    {
+      "frame_id": 49,
+      "timestamp": "2025-01-01T07:00:48Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [500, 550, 540, 620],
+          "confidence": 0.93,
+          "description": "Shamisen player packing up."
+        },
+        {
+          "entity_id": "object_17",
+          "type": "souvenir_stall",
+          "bbox": [300, 350, 370, 400],
+          "confidence": 0.92,
+          "description": "Stall selling castle souvenirs."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_17"],
+        "updated_entities": ["person_22"],
+        "removed_entities": ["object_16"]
+      },
+      "previous_frame_id": 48
+    },
+    {
+      "frame_id": 50,
+      "timestamp": "2025-01-01T07:00:49Z",
+      "environment": "osaka_castle",
+      "entities": [
+        {
+          "entity_id": "object_17",
+          "type": "souvenir_stall",
+          "bbox": [300, 350, 370, 400],
+          "confidence": 0.92,
+          "description": "Stall offering keychains and postcards."
+        },
+        {
+          "entity_id": "person_23",
+          "type": "person",
+          "bbox": [200, 220, 240, 280],
+          "confidence": 0.94,
+          "description": "Visitor browsing items."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_23"],
+        "updated_entities": ["object_17"],
+        "removed_entities": ["person_22"]
+      },
+      "previous_frame_id": 49
+    },
+  
+    {
+      "frame_id": 51,
+      "timestamp": "2025-01-01T07:00:50Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_18",
+          "type": "billboard",
+          "bbox": [300, 100, 500, 200],
+          "confidence": 0.96,
+          "description": "Neon sign for takoyaki shop."
+        },
+        {
+          "entity_id": "person_24",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.95,
+          "description": "Tourist filming the neon lights."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_18", "person_24"],
+        "updated_entities": [],
+        "removed_entities": ["object_17", "person_23"]
+      },
+      "previous_frame_id": 50
+    },
+    {
+      "frame_id": 52,
+      "timestamp": "2025-01-01T07:00:51Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_18",
+          "type": "billboard",
+          "bbox": [300, 100, 500, 200],
+          "confidence": 0.96,
+          "description": "Famous Glico running man sign."
+        },
+        {
+          "entity_id": "person_24",
+          "type": "person",
+          "bbox": [102, 222, 142, 282],
+          "confidence": 0.95,
+          "description": "Tourist taking a selfie with sign."
+        },
+        {
+          "entity_id": "person_25",
+          "type": "person",
+          "bbox": [200, 320, 240, 380],
+          "confidence": 0.94,
+          "description": "Local performer in costume."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_25"],
+        "updated_entities": ["object_18", "person_24"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 51
+    },
+    {
+      "frame_id": 53,
+      "timestamp": "2025-01-01T07:00:52Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "person_24",
+          "type": "person",
+          "bbox": [104, 224, 144, 284],
+          "confidence": 0.95,
+          "description": "Tourist adjusting camera angle."
+        },
+        {
+          "entity_id": "person_25",
+          "type": "person",
+          "bbox": [200, 320, 240, 380],
+          "confidence": 0.94,
+          "description": "Performer doing a dance routine."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_24",
+          "predicate": "films",
+          "object": "person_25"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_24", "person_25"],
+        "removed_entities": ["object_18"]
+      },
+      "previous_frame_id": 52
+    },
+    {
+      "frame_id": 54,
+      "timestamp": "2025-01-01T07:00:53Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "person_25",
+          "type": "person",
+          "bbox": [200, 320, 240, 380],
+          "confidence": 0.94,
+          "description": "Performer juggling takoyaki props."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "restaurant_sign",
+          "bbox": [350, 150, 420, 220],
+          "confidence": 0.92,
+          "description": "Giant octopus sign above door."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_19"],
+        "updated_entities": ["person_25"],
+        "removed_entities": ["person_24"]
+      },
+      "previous_frame_id": 53
+    },
+    {
+      "frame_id": 55,
+      "timestamp": "2025-01-01T07:00:54Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_19",
+          "type": "restaurant_sign",
+          "bbox": [350, 150, 420, 220],
+          "confidence": 0.92,
+          "description": "Bright red octopus sign."
+        },
+        {
+          "entity_id": "person_26",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.95,
+          "description": "Food stall worker calling to customers."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_26"],
+        "updated_entities": ["object_19"],
+        "removed_entities": ["person_25"]
+      },
+      "previous_frame_id": 54
+    },
+    {
+      "frame_id": 56,
+      "timestamp": "2025-01-01T07:00:55Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "person_26",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.95,
+          "description": "Stall worker flipping takoyaki."
+        },
+        {
+          "entity_id": "object_20",
+          "type": "canal",
+          "bbox": [400, 400, 600, 500],
+          "confidence": 0.93,
+          "description": "Famous Dotonbori canal."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_20"],
+        "updated_entities": ["person_26"],
+        "removed_entities": ["object_19"]
+      },
+      "previous_frame_id": 55
+    },
+    {
+      "frame_id": 57,
+      "timestamp": "2025-01-01T07:00:56Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "person_26",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.95,
+          "description": "Stall worker taking an order."
+        },
+        {
+          "entity_id": "object_20",
+          "type": "canal",
+          "bbox": [400, 400, 600, 500],
+          "confidence": 0.93,
+          "description": "Canal with boats passing by."
+        },
+        {
+          "entity_id": "person_27",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.94,
+          "description": "Tourist boat guide with microphone."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_27"],
+        "updated_entities": ["person_26", "object_20"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 56
+    },
+    {
+      "frame_id": 58,
+      "timestamp": "2025-01-01T07:00:57Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_20",
+          "type": "canal",
+          "bbox": [400, 400, 600, 500],
+          "confidence": 0.93,
+          "description": "Dotonbori canal reflecting neon lights."
+        },
+        {
+          "entity_id": "person_27",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.94,
+          "description": "Boat guide waving to onlookers."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_20", "person_27"],
+        "removed_entities": ["person_26"]
+      },
+      "previous_frame_id": 57
+    },
+    {
+      "frame_id": 59,
+      "timestamp": "2025-01-01T07:00:58Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_21",
+          "type": "bridge",
+          "bbox": [150, 320, 350, 370],
+          "confidence": 0.92,
+          "description": "Bridge over canal with crowds."
+        },
+        {
+          "entity_id": "person_27",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.94,
+          "description": "Boat guide continuing commentary."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_21"],
+        "updated_entities": ["person_27"],
+        "removed_entities": ["object_20"]
+      },
+      "previous_frame_id": 58
+    },
+    {
+      "frame_id": 60,
+      "timestamp": "2025-01-01T07:00:59Z",
+      "environment": "dotonbori",
+      "entities": [
+        {
+          "entity_id": "object_21",
+          "type": "bridge",
+          "bbox": [150, 320, 350, 370],
+          "confidence": 0.92,
+          "description": "Pedestrians stopping for photos."
+        },
+        {
+          "entity_id": "person_28",
+          "type": "person",
+          "bbox": [250, 200, 290, 260],
+          "confidence": 0.94,
+          "description": "Street artist sketching passersby."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_28"],
+        "updated_entities": ["object_21"],
+        "removed_entities": ["person_27"]
+      },
+      "previous_frame_id": 59
+    },
+  
+    {
+      "frame_id": 61,
+      "timestamp": "2025-01-01T07:01:00Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_22",
+          "type": "theme_park_gate",
+          "bbox": [200, 50, 600, 250],
+          "confidence": 0.97,
+          "description": "USJ main entrance arch."
+        },
+        {
+          "entity_id": "person_29",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.95,
+          "description": "Visitor scanning park ticket."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_22", "person_29"],
+        "updated_entities": [],
+        "removed_entities": ["object_21", "person_28"]
+      },
+      "previous_frame_id": 60
+    },
+    {
+      "frame_id": 62,
+      "timestamp": "2025-01-01T07:01:01Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_22",
+          "type": "theme_park_gate",
+          "bbox": [200, 50, 600, 250],
+          "confidence": 0.97,
+          "description": "Iconic arch with rotating globe logo."
+        },
+        {
+          "entity_id": "person_29",
+          "type": "person",
+          "bbox": [102, 222, 142, 282],
+          "confidence": 0.95,
+          "description": "Visitor walking inside the park."
+        },
+        {
+          "entity_id": "person_30",
+          "type": "person",
+          "bbox": [250, 300, 290, 360],
+          "confidence": 0.94,
+          "description": "Park staff in uniform."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_30"],
+        "updated_entities": ["object_22", "person_29"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 61
+    },
+    {
+      "frame_id": 63,
+      "timestamp": "2025-01-01T07:01:02Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "person_29",
+          "type": "person",
+          "bbox": [102, 222, 142, 282],
+          "confidence": 0.95,
+          "description": "Visitor checking park map."
+        },
+        {
+          "entity_id": "person_30",
+          "type": "person",
+          "bbox": [250, 300, 290, 360],
+          "confidence": 0.94,
+          "description": "Staff member offering directions."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_30",
+          "predicate": "points_towards",
+          "object": "person_29"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_29", "person_30"],
+        "removed_entities": ["object_22"]
+      },
+      "previous_frame_id": 62
+    },
+    {
+      "frame_id": 64,
+      "timestamp": "2025-01-01T07:01:03Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_23",
+          "type": "mascot_character",
+          "bbox": [400, 300, 450, 400],
+          "confidence": 0.93,
+          "description": "Famous cartoon character greeting guests."
+        },
+        {
+          "entity_id": "person_30",
+          "type": "person",
+          "bbox": [250, 300, 290, 360],
+          "confidence": 0.94,
+          "description": "Staff assisting with photos."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_23"],
+        "updated_entities": ["person_30"],
+        "removed_entities": ["person_29"]
+      },
+      "previous_frame_id": 63
+    },
+    {
+      "frame_id": 65,
+      "timestamp": "2025-01-01T07:01:04Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_23",
+          "type": "mascot_character",
+          "bbox": [400, 300, 450, 400],
+          "confidence": 0.93,
+          "description": "Mascot hugging excited child."
+        },
+        {
+          "entity_id": "person_31",
+          "type": "person",
+          "bbox": [120, 250, 160, 310],
+          "confidence": 0.94,
+          "description": "Photopass photographer with camera."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_31"],
+        "updated_entities": ["object_23"],
+        "removed_entities": ["person_30"]
+      },
+      "previous_frame_id": 64
+    },
+    {
+      "frame_id": 66,
+      "timestamp": "2025-01-01T07:01:05Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "person_31",
+          "type": "person",
+          "bbox": [120, 250, 160, 310],
+          "confidence": 0.94,
+          "description": "Staff capturing group photo."
+        },
+        {
+          "entity_id": "object_24",
+          "type": "popcorn_cart",
+          "bbox": [300, 350, 350, 400],
+          "confidence": 0.92,
+          "description": "Colorful popcorn cart with novelty buckets."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_24"],
+        "updated_entities": ["person_31"],
+        "removed_entities": ["object_23"]
+      },
+      "previous_frame_id": 65
+    },
+    {
+      "frame_id": 67,
+      "timestamp": "2025-01-01T07:01:06Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_24",
+          "type": "popcorn_cart",
+          "bbox": [300, 350, 350, 400],
+          "confidence": 0.92,
+          "description": "Popcorn flavors: caramel, matcha."
+        },
+        {
+          "entity_id": "person_32",
+          "type": "person",
+          "bbox": [400, 450, 440, 510],
+          "confidence": 0.93,
+          "description": "Visitor deciding on popcorn flavor."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_32"],
+        "updated_entities": ["object_24"],
+        "removed_entities": ["person_31"]
+      },
+      "previous_frame_id": 66
+    },
+    {
+      "frame_id": 68,
+      "timestamp": "2025-01-01T07:01:07Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_24",
+          "type": "popcorn_cart",
+          "bbox": [300, 350, 350, 400],
+          "confidence": 0.92,
+          "description": "Popcorn cart with long queue."
+        },
+        {
+          "entity_id": "person_32",
+          "type": "person",
+          "bbox": [400, 450, 440, 510],
+          "confidence": 0.93,
+          "description": "Visitor waiting in line."
+        },
+        {
+          "entity_id": "person_33",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.94,
+          "description": "Teenager wearing Hogwarts robe."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_33"],
+        "updated_entities": ["object_24", "person_32"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 67
+    },
+    {
+      "frame_id": 69,
+      "timestamp": "2025-01-01T07:01:08Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "person_33",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.94,
+          "description": "Fan headed to Wizarding World."
+        },
+        {
+          "entity_id": "object_25",
+          "type": "theme_ride",
+          "bbox": [220, 300, 400, 500],
+          "confidence": 0.92,
+          "description": "Roller coaster in motion."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_25"],
+        "updated_entities": ["person_33"],
+        "removed_entities": ["object_24", "person_32"]
+      },
+      "previous_frame_id": 68
+    },
+    {
+      "frame_id": 70,
+      "timestamp": "2025-01-01T07:01:09Z",
+      "environment": "universal_studios_japan",
+      "entities": [
+        {
+          "entity_id": "object_25",
+          "type": "theme_ride",
+          "bbox": [220, 300, 400, 500],
+          "confidence": 0.92,
+          "description": "Coaster whizzing by overhead."
+        },
+        {
+          "entity_id": "person_34",
+          "type": "person",
+          "bbox": [300, 200, 340, 250],
+          "confidence": 0.93,
+          "description": "Ride operator directing queue."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_34"],
+        "updated_entities": ["object_25"],
+        "removed_entities": ["person_33"]
+      },
+      "previous_frame_id": 69
+    },
+  
+    {
+      "frame_id": 71,
+      "timestamp": "2025-01-01T07:01:10Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "object_26",
+          "type": "memorial",
+          "bbox": [200, 50, 400, 250],
+          "confidence": 0.97,
+          "description": "Hiroshima Peace Memorial Cenotaph."
+        },
+        {
+          "entity_id": "person_35",
+          "type": "person",
+          "bbox": [100, 200, 140, 270],
+          "confidence": 0.95,
+          "description": "Visitor bowing in respect."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_26", "person_35"],
+        "updated_entities": [],
+        "removed_entities": ["object_25", "person_34"]
+      },
+      "previous_frame_id": 70
+    },
+    {
+      "frame_id": 72,
+      "timestamp": "2025-01-01T07:01:11Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "object_26",
+          "type": "memorial",
+          "bbox": [200, 50, 400, 250],
+          "confidence": 0.97,
+          "description": "Cenotaph framing the Peace Flame."
+        },
+        {
+          "entity_id": "person_35",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Visitor placing a flower."
+        },
+        {
+          "entity_id": "person_36",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Guide explaining historical significance."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_36"],
+        "updated_entities": ["object_26", "person_35"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 71
+    },
+    {
+      "frame_id": 73,
+      "timestamp": "2025-01-01T07:01:12Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "person_35",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Visitor reading plaque."
+        },
+        {
+          "entity_id": "person_36",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Guide pointing to monument."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_36",
+          "predicate": "explains_to",
+          "object": "person_35"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_35", "person_36"],
+        "removed_entities": ["object_26"]
+      },
+      "previous_frame_id": 72
+    },
+    {
+      "frame_id": 74,
+      "timestamp": "2025-01-01T07:01:13Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "object_27",
+          "type": "paper_crane_statue",
+          "bbox": [400, 200, 450, 300],
+          "confidence": 0.93,
+          "description": "Children's Peace Monument with paper cranes."
+        },
+        {
+          "entity_id": "person_36",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Guide waiting for group questions."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_27"],
+        "updated_entities": ["person_36"],
+        "removed_entities": ["person_35"]
+      },
+      "previous_frame_id": 73
+    },
+    {
+      "frame_id": 75,
+      "timestamp": "2025-01-01T07:01:14Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "object_27",
+          "type": "paper_crane_statue",
+          "bbox": [400, 200, 450, 300],
+          "confidence": 0.93,
+          "description": "Statue draped in origami cranes."
+        },
+        {
+          "entity_id": "person_37",
+          "type": "person",
+          "bbox": [150, 250, 190, 320],
+          "confidence": 0.94,
+          "description": "Student placing another crane."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_37"],
+        "updated_entities": ["object_27"],
+        "removed_entities": ["person_36"]
+      },
+      "previous_frame_id": 74
+    },
+    {
+      "frame_id": 76,
+      "timestamp": "2025-01-01T07:01:15Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "person_37",
+          "type": "person",
+          "bbox": [150, 250, 190, 320],
+          "confidence": 0.94,
+          "description": "Student bowing after placing crane."
+        },
+        {
+          "entity_id": "object_28",
+          "type": "sign",
+          "bbox": [300, 100, 360, 180],
+          "confidence": 0.92,
+          "description": "English explanation sign for monument."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_28"],
+        "updated_entities": ["person_37"],
+        "removed_entities": ["object_27"]
+      },
+      "previous_frame_id": 75
+    },
+    {
+      "frame_id": 77,
+      "timestamp": "2025-01-01T07:01:16Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "person_37",
+          "type": "person",
+          "bbox": [150, 250, 190, 320],
+          "confidence": 0.94,
+          "description": "Student quietly reflecting."
+        },
+        {
+          "entity_id": "object_28",
+          "type": "sign",
+          "bbox": [300, 100, 360, 180],
+          "confidence": 0.92,
+          "description": "Sign describing atomic bombing history."
+        },
+        {
+          "entity_id": "person_38",
+          "type": "person",
+          "bbox": [220, 280, 260, 340],
+          "confidence": 0.93,
+          "description": "Teacher calling the student over."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_38"],
+        "updated_entities": ["person_37", "object_28"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 76
+    },
+    {
+      "frame_id": 78,
+      "timestamp": "2025-01-01T07:01:17Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "person_38",
+          "type": "person",
+          "bbox": [220, 280, 260, 340],
+          "confidence": 0.93,
+          "description": "Teacher guiding student away."
+        },
+        {
+          "entity_id": "object_29",
+          "type": "museum_sign",
+          "bbox": [400, 200, 470, 270],
+          "confidence": 0.91,
+          "description": "Sign pointing to Peace Memorial Museum."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_29"],
+        "updated_entities": ["person_38"],
+        "removed_entities": ["person_37", "object_28"]
+      },
+      "previous_frame_id": 77
+    },
+    {
+      "frame_id": 79,
+      "timestamp": "2025-01-01T07:01:18Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "object_29",
+          "type": "museum_sign",
+          "bbox": [400, 200, 470, 270],
+          "confidence": 0.91,
+          "description": "Directional sign: Museum 200m ahead."
+        },
+        {
+          "entity_id": "person_39",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.93,
+          "description": "Visitor with camera bag."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_39"],
+        "updated_entities": ["object_29"],
+        "removed_entities": ["person_38"]
+      },
+      "previous_frame_id": 78
+    },
+    {
+      "frame_id": 80,
+      "timestamp": "2025-01-01T07:01:19Z",
+      "environment": "hiroshima_peace_park",
+      "entities": [
+        {
+          "entity_id": "person_39",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.93,
+          "description": "Visitor walking toward museum."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_39"],
+        "removed_entities": ["object_29"]
+      },
+      "previous_frame_id": 79
+    },
+  
+    {
+      "frame_id": 81,
+      "timestamp": "2025-01-01T07:01:20Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "object_30",
+          "type": "floating_torii",
+          "bbox": [300, 50, 550, 250],
+          "confidence": 0.97,
+          "description": "Iconic Itsukushima Shrine gate at high tide."
+        },
+        {
+          "entity_id": "person_40",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.95,
+          "description": "Tourist photographing the floating gate."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_30", "person_40"],
+        "updated_entities": [],
+        "removed_entities": ["person_39"]
+      },
+      "previous_frame_id": 80
+    },
+    {
+      "frame_id": 82,
+      "timestamp": "2025-01-01T07:01:21Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "object_30",
+          "type": "floating_torii",
+          "bbox": [300, 50, 550, 250],
+          "confidence": 0.97,
+          "description": "Vivid orange torii partially submerged."
+        },
+        {
+          "entity_id": "person_40",
+          "type": "person",
+          "bbox": [102, 202, 142, 262],
+          "confidence": 0.95,
+          "description": "Tourist kneeling for a lower shot."
+        },
+        {
+          "entity_id": "person_41",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local feeding deer near the shore."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_41"],
+        "updated_entities": ["object_30", "person_40"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 81
+    },
+    {
+      "frame_id": 83,
+      "timestamp": "2025-01-01T07:01:22Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "person_40",
+          "type": "person",
+          "bbox": [102, 202, 142, 262],
+          "confidence": 0.95,
+          "description": "Tourist adjusting camera lens."
+        },
+        {
+          "entity_id": "person_41",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local giggling as deer approaches."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_41",
+          "predicate": "pets",
+          "object": "deer_1"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_40", "person_41"],
+        "removed_entities": ["object_30"]
+      },
+      "previous_frame_id": 82
+    },
+    {
+      "frame_id": 84,
+      "timestamp": "2025-01-01T07:01:23Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "person_41",
+          "type": "person",
+          "bbox": [250, 320, 290, 380],
+          "confidence": 0.94,
+          "description": "Local offering food to deer."
+        },
+        {
+          "entity_id": "object_31",
+          "type": "vendor_stall",
+          "bbox": [350, 200, 400, 250],
+          "confidence": 0.92,
+          "description": "Miyajima momiji manju stall."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_31"],
+        "updated_entities": ["person_41"],
+        "removed_entities": ["person_40"]
+      },
+      "previous_frame_id": 83
+    },
+    {
+      "frame_id": 85,
+      "timestamp": "2025-01-01T07:01:24Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "object_31",
+          "type": "vendor_stall",
+          "bbox": [350, 200, 400, 250],
+          "confidence": 0.92,
+          "description": "Freshly made maple leaf pastries."
+        },
+        {
+          "entity_id": "person_42",
+          "type": "person",
+          "bbox": [200, 250, 240, 310],
+          "confidence": 0.93,
+          "description": "Vendor offering free samples."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_42"],
+        "updated_entities": ["object_31"],
+        "removed_entities": ["person_41"]
+      },
+      "previous_frame_id": 84
+    },
+    {
+      "frame_id": 86,
+      "timestamp": "2025-01-01T07:01:25Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "person_42",
+          "type": "person",
+          "bbox": [200, 250, 240, 310],
+          "confidence": 0.93,
+          "description": "Vendor chatting with a tourist."
+        },
+        {
+          "entity_id": "object_32",
+          "type": "shrine_path",
+          "bbox": [300, 320, 450, 420],
+          "confidence": 0.91,
+          "description": "Path leading to island shrine."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_32"],
+        "updated_entities": ["person_42"],
+        "removed_entities": ["object_31"]
+      },
+      "previous_frame_id": 85
+    },
+    {
+      "frame_id": 87,
+      "timestamp": "2025-01-01T07:01:26Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "object_32",
+          "type": "shrine_path",
+          "bbox": [300, 320, 450, 420],
+          "confidence": 0.91,
+          "description": "Wooden walkway around the shrine."
+        },
+        {
+          "entity_id": "person_43",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.92,
+          "description": "Visitor in kimono snapping photos."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_43"],
+        "updated_entities": ["object_32"],
+        "removed_entities": ["person_42"]
+      },
+      "previous_frame_id": 86
+    },
+    {
+      "frame_id": 88,
+      "timestamp": "2025-01-01T07:01:27Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "person_43",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.92,
+          "description": "Visitor adjusting hair accessory."
+        },
+        {
+          "entity_id": "object_33",
+          "type": "prayer_area",
+          "bbox": [450, 250, 500, 320],
+          "confidence": 0.91,
+          "description": "Area with hanging paper fortunes."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_33"],
+        "updated_entities": ["person_43"],
+        "removed_entities": ["object_32"]
+      },
+      "previous_frame_id": 87
+    },
+    {
+      "frame_id": 89,
+      "timestamp": "2025-01-01T07:01:28Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "object_33",
+          "type": "prayer_area",
+          "bbox": [450, 250, 500, 320],
+          "confidence": 0.91,
+          "description": "Omikuji fortunes tied to stands."
+        },
+        {
+          "entity_id": "person_44",
+          "type": "person",
+          "bbox": [200, 220, 250, 280],
+          "confidence": 0.92,
+          "description": "Tourist tying a paper fortune."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_44"],
+        "updated_entities": ["object_33"],
+        "removed_entities": ["person_43"]
+      },
+      "previous_frame_id": 88
+    },
+    {
+      "frame_id": 90,
+      "timestamp": "2025-01-01T07:01:29Z",
+      "environment": "miyajima_island",
+      "entities": [
+        {
+          "entity_id": "person_44",
+          "type": "person",
+          "bbox": [200, 220, 250, 280],
+          "confidence": 0.92,
+          "description": "Tourist stepping away from prayer area."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_44"],
+        "removed_entities": ["object_33"]
+      },
+      "previous_frame_id": 89
+    },
+  
+    {
+      "frame_id": 91,
+      "timestamp": "2025-01-01T07:01:30Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_34",
+          "type": "castle",
+          "bbox": [200, 50, 600, 300],
+          "confidence": 0.98,
+          "description": "Himeji Castle towering in white."
+        },
+        {
+          "entity_id": "person_45",
+          "type": "person",
+          "bbox": [100, 200, 140, 270],
+          "confidence": 0.95,
+          "description": "Tourist marveling at White Heron Castle."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_34", "person_45"],
+        "updated_entities": [],
+        "removed_entities": ["person_44"]
+      },
+      "previous_frame_id": 90
+    },
+    {
+      "frame_id": 92,
+      "timestamp": "2025-01-01T07:01:31Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_34",
+          "type": "castle",
+          "bbox": [200, 50, 600, 300],
+          "confidence": 0.98,
+          "description": "Elegant white fortress structure."
+        },
+        {
+          "entity_id": "person_45",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Tourist adjusting wide-brim hat."
+        },
+        {
+          "entity_id": "person_46",
+          "type": "person",
+          "bbox": [220, 320, 260, 380],
+          "confidence": 0.94,
+          "description": "Guide discussing castle's history."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_46"],
+        "updated_entities": ["object_34", "person_45"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 91
+    },
+    {
+      "frame_id": 93,
+      "timestamp": "2025-01-01T07:01:32Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "person_45",
+          "type": "person",
+          "bbox": [102, 202, 142, 272],
+          "confidence": 0.95,
+          "description": "Tourist checking castle ticket."
+        },
+        {
+          "entity_id": "person_46",
+          "type": "person",
+          "bbox": [220, 320, 260, 380],
+          "confidence": 0.94,
+          "description": "Guide handing out brochures."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_46",
+          "predicate": "gives_to",
+          "object": "person_45"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_45", "person_46"],
+        "removed_entities": ["object_34"]
+      },
+      "previous_frame_id": 92
+    },
+    {
+      "frame_id": 94,
+      "timestamp": "2025-01-01T07:01:33Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "person_45",
+          "type": "person",
+          "bbox": [105, 205, 145, 275],
+          "confidence": 0.95,
+          "description": "Tourist reading brochure intently."
+        },
+        {
+          "entity_id": "object_35",
+          "type": "castle_gate",
+          "bbox": [350, 150, 450, 300],
+          "confidence": 0.93,
+          "description": "Massive wooden gate leading inside."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_35"],
+        "updated_entities": ["person_45"],
+        "removed_entities": ["person_46"]
+      },
+      "previous_frame_id": 93
+    },
+    {
+      "frame_id": 95,
+      "timestamp": "2025-01-01T07:01:34Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_35",
+          "type": "castle_gate",
+          "bbox": [350, 150, 450, 300],
+          "confidence": 0.93,
+          "description": "Gate with iron spikes on door."
+        },
+        {
+          "entity_id": "person_47",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.94,
+          "description": "Visitor passing through gate."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_47"],
+        "updated_entities": ["object_35"],
+        "removed_entities": ["person_45"]
+      },
+      "previous_frame_id": 94
+    },
+    {
+      "frame_id": 96,
+      "timestamp": "2025-01-01T07:01:35Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "person_47",
+          "type": "person",
+          "bbox": [100, 220, 140, 280],
+          "confidence": 0.94,
+          "description": "Visitor looking up at watchtower."
+        },
+        {
+          "entity_id": "object_36",
+          "type": "stone_steps",
+          "bbox": [200, 300, 300, 370],
+          "confidence": 0.91,
+          "description": "Steep steps leading higher."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_36"],
+        "updated_entities": ["person_47"],
+        "removed_entities": ["object_35"]
+      },
+      "previous_frame_id": 95
+    },
+    {
+      "frame_id": 97,
+      "timestamp": "2025-01-01T07:01:36Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_36",
+          "type": "stone_steps",
+          "bbox": [200, 300, 300, 370],
+          "confidence": 0.91,
+          "description": "Well-worn castle steps."
+        },
+        {
+          "entity_id": "person_48",
+          "type": "person",
+          "bbox": [400, 350, 440, 410],
+          "confidence": 0.92,
+          "description": "Tourist carefully climbing stairs."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_48"],
+        "updated_entities": ["object_36"],
+        "removed_entities": ["person_47"]
+      },
+      "previous_frame_id": 96
+    },
+    {
+      "frame_id": 98,
+      "timestamp": "2025-01-01T07:01:37Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_36",
+          "type": "stone_steps",
+          "bbox": [200, 300, 300, 370],
+          "confidence": 0.91,
+          "description": "Steps leading to main keep interior."
+        },
+        {
+          "entity_id": "person_48",
+          "type": "person",
+          "bbox": [400, 350, 440, 410],
+          "confidence": 0.92,
+          "description": "Tourist taking a break halfway."
+        },
+        {
+          "entity_id": "person_49",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.93,
+          "description": "Castle staff guiding visitors."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_49"],
+        "updated_entities": ["object_36", "person_48"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 97
+    },
+    {
+      "frame_id": 99,
+      "timestamp": "2025-01-01T07:01:38Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "person_49",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.93,
+          "description": "Staff demonstrating samurai pose."
+        },
+        {
+          "entity_id": "object_37",
+          "type": "display_armor",
+          "bbox": [300, 300, 350, 400],
+          "confidence": 0.92,
+          "description": "Suit of samurai armor on display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_37"],
+        "updated_entities": ["person_49"],
+        "removed_entities": ["object_36", "person_48"]
+      },
+      "previous_frame_id": 98
+    },
+    {
+      "frame_id": 100,
+      "timestamp": "2025-01-01T07:01:39Z",
+      "environment": "himeji_castle",
+      "entities": [
+        {
+          "entity_id": "object_37",
+          "type": "display_armor",
+          "bbox": [300, 300, 350, 400],
+          "confidence": 0.92,
+          "description": "Elaborate samurai helmet with crest."
+        },
+        {
+          "entity_id": "person_50",
+          "type": "person",
+          "bbox": [200, 220, 240, 280],
+          "confidence": 0.93,
+          "description": "Visitor reading plaque about armor."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_50"],
+        "updated_entities": ["object_37"],
+        "removed_entities": ["person_49"]
+      },
+      "previous_frame_id": 99
+    },
+  
+    {
+      "frame_id": 101,
+      "timestamp": "2025-01-01T07:01:40Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "object_38",
+          "type": "restaurant_interior",
+          "bbox": [100, 100, 700, 400],
+          "confidence": 0.96,
+          "description": "Cozy ramen shop interior."
+        },
+        {
+          "entity_id": "person_51",
+          "type": "person",
+          "bbox": [150, 220, 190, 280],
+          "confidence": 0.94,
+          "description": "Chef behind the counter."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_38", "person_51"],
+        "updated_entities": [],
+        "removed_entities": ["object_37", "person_50"]
+      },
+      "previous_frame_id": 100
+    },
+    {
+      "frame_id": 102,
+      "timestamp": "2025-01-01T07:01:41Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "object_38",
+          "type": "restaurant_interior",
+          "bbox": [100, 100, 700, 400],
+          "confidence": 0.96,
+          "description": "Open kitchen layout, stools at counter."
+        },
+        {
+          "entity_id": "person_51",
+          "type": "person",
+          "bbox": [150, 220, 190, 280],
+          "confidence": 0.94,
+          "description": "Chef preparing noodles."
+        },
+        {
+          "entity_id": "person_52",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Diner waiting for order."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_52"],
+        "updated_entities": ["object_38", "person_51"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 101
+    },
+    {
+      "frame_id": 103,
+      "timestamp": "2025-01-01T07:01:42Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "person_51",
+          "type": "person",
+          "bbox": [150, 220, 190, 280],
+          "confidence": 0.94,
+          "description": "Chef adding toppings to bowl."
+        },
+        {
+          "entity_id": "person_52",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Diner sipping water, looking at phone."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_51",
+          "predicate": "serves_to",
+          "object": "person_52"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_51", "person_52"],
+        "removed_entities": ["object_38"]
+      },
+      "previous_frame_id": 102
+    },
+    {
+      "frame_id": 104,
+      "timestamp": "2025-01-01T07:01:43Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "person_52",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Diner tasting the hot ramen."
+        },
+        {
+          "entity_id": "object_39",
+          "type": "menu_board",
+          "bbox": [500, 100, 600, 200],
+          "confidence": 0.92,
+          "description": "Chalkboard menu with ramen specials."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_39"],
+        "updated_entities": ["person_52"],
+        "removed_entities": ["person_51"]
+      },
+      "previous_frame_id": 103
+    },
+    {
+      "frame_id": 105,
+      "timestamp": "2025-01-01T07:01:44Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "object_39",
+          "type": "menu_board",
+          "bbox": [500, 100, 600, 200],
+          "confidence": 0.92,
+          "description": "Menu featuring tonkotsu and shoyu ramen."
+        },
+        {
+          "entity_id": "person_53",
+          "type": "person",
+          "bbox": [200, 300, 240, 360],
+          "confidence": 0.93,
+          "description": "Server carrying extra napkins."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_53"],
+        "updated_entities": ["object_39"],
+        "removed_entities": ["person_52"]
+      },
+      "previous_frame_id": 104
+    },
+    {
+      "frame_id": 106,
+      "timestamp": "2025-01-01T07:01:45Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "person_53",
+          "type": "person",
+          "bbox": [200, 300, 240, 360],
+          "confidence": 0.93,
+          "description": "Server greeting new customers."
+        },
+        {
+          "entity_id": "object_40",
+          "type": "table",
+          "bbox": [300, 350, 400, 410],
+          "confidence": 0.91,
+          "description": "Small wooden table with condiments."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_40"],
+        "updated_entities": ["person_53"],
+        "removed_entities": ["object_39"]
+      },
+      "previous_frame_id": 105
+    },
+    {
+      "frame_id": 107,
+      "timestamp": "2025-01-01T07:01:46Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "object_40",
+          "type": "table",
+          "bbox": [300, 350, 400, 410],
+          "confidence": 0.91,
+          "description": "Table with soy sauce and chili oil."
+        },
+        {
+          "entity_id": "person_54",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.92,
+          "description": "Couple sitting down to order."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_54"],
+        "updated_entities": ["object_40"],
+        "removed_entities": ["person_53"]
+      },
+      "previous_frame_id": 106
+    },
+    {
+      "frame_id": 108,
+      "timestamp": "2025-01-01T07:01:47Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "object_40",
+          "type": "table",
+          "bbox": [300, 350, 400, 410],
+          "confidence": 0.91,
+          "description": "Wooden table, couple placing order."
+        },
+        {
+          "entity_id": "person_54",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.92,
+          "description": "Waiting for ramen bowls."
+        },
+        {
+          "entity_id": "person_55",
+          "type": "person",
+          "bbox": [400, 220, 440, 280],
+          "confidence": 0.93,
+          "description": "Chef announcing order ready."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_55"],
+        "updated_entities": ["object_40", "person_54"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 107
+    },
+    {
+      "frame_id": 109,
+      "timestamp": "2025-01-01T07:01:48Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "person_54",
+          "type": "person",
+          "bbox": [100, 200, 140, 260],
+          "confidence": 0.92,
+          "description": "Couple receiving ramen from chef."
+        },
+        {
+          "entity_id": "person_55",
+          "type": "person",
+          "bbox": [400, 220, 440, 280],
+          "confidence": 0.93,
+          "description": "Chef handing over steaming bowls."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_54", "person_55"],
+        "removed_entities": ["object_40"]
+      },
+      "previous_frame_id": 108
+    },
+    {
+      "frame_id": 110,
+      "timestamp": "2025-01-01T07:01:49Z",
+      "environment": "ramen_shop",
+      "entities": [
+        {
+          "entity_id": "person_55",
+          "type": "person",
+          "bbox": [400, 220, 440, 280],
+          "confidence": 0.93,
+          "description": "Chef returning to kitchen."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_55"],
+        "removed_entities": ["person_54"]
+      },
+      "previous_frame_id": 109
+    },
+  
+    {
+      "frame_id": 111,
+      "timestamp": "2025-01-01T07:01:50Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "object_41",
+          "type": "train_interior",
+          "bbox": [100, 100, 700, 400],
+          "confidence": 0.96,
+          "description": "Clean Shinkansen carriage with rows of seats."
+        },
+        {
+          "entity_id": "person_56",
+          "type": "person",
+          "bbox": [150, 220, 190, 280],
+          "confidence": 0.94,
+          "description": "Passenger finding reserved seat."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_41", "person_56"],
+        "updated_entities": [],
+        "removed_entities": ["person_55"]
+      },
+      "previous_frame_id": 110
+    },
+    {
+      "frame_id": 112,
+      "timestamp": "2025-01-01T07:01:51Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "object_41",
+          "type": "train_interior",
+          "bbox": [100, 100, 700, 400],
+          "confidence": 0.96,
+          "description": "Bullet train interior, overhead compartments."
+        },
+        {
+          "entity_id": "person_56",
+          "type": "person",
+          "bbox": [152, 222, 192, 282],
+          "confidence": 0.94,
+          "description": "Passenger stowing luggage overhead."
+        },
+        {
+          "entity_id": "person_57",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Train attendant greeting passengers."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_57"],
+        "updated_entities": ["object_41", "person_56"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 111
+    },
+    {
+      "frame_id": 113,
+      "timestamp": "2025-01-01T07:01:52Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "person_56",
+          "type": "person",
+          "bbox": [152, 222, 192, 282],
+          "confidence": 0.94,
+          "description": "Passenger settling into window seat."
+        },
+        {
+          "entity_id": "person_57",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Attendant offering hot towels."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_57",
+          "predicate": "hands_to",
+          "object": "person_56"
+        }
+      ],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_56", "person_57"],
+        "removed_entities": ["object_41"]
+      },
+      "previous_frame_id": 112
+    },
+    {
+      "frame_id": 114,
+      "timestamp": "2025-01-01T07:01:53Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "person_57",
+          "type": "person",
+          "bbox": [300, 250, 340, 310],
+          "confidence": 0.93,
+          "description": "Attendant moving to next row."
+        },
+        {
+          "entity_id": "object_42",
+          "type": "seat_tray",
+          "bbox": [150, 200, 200, 250],
+          "confidence": 0.91,
+          "description": "Folded tray table on seat back."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_42"],
+        "updated_entities": ["person_57"],
+        "removed_entities": ["person_56"]
+      },
+      "previous_frame_id": 113
+    },
+    {
+      "frame_id": 115,
+      "timestamp": "2025-01-01T07:01:54Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "object_42",
+          "type": "seat_tray",
+          "bbox": [150, 200, 200, 250],
+          "confidence": 0.91,
+          "description": "Tray table in use, with bento box."
+        },
+        {
+          "entity_id": "person_58",
+          "type": "person",
+          "bbox": [220, 280, 260, 330],
+          "confidence": 0.92,
+          "description": "Passenger enjoying ekiben meal."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_58"],
+        "updated_entities": ["object_42"],
+        "removed_entities": ["person_57"]
+      },
+      "previous_frame_id": 114
+    },
+    {
+      "frame_id": 116,
+      "timestamp": "2025-01-01T07:01:55Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "person_58",
+          "type": "person",
+          "bbox": [220, 280, 260, 330],
+          "confidence": 0.92,
+          "description": "Passenger reading newspaper with meal."
+        },
+        {
+          "entity_id": "object_43",
+          "type": "window_view",
+          "bbox": [400, 100, 500, 200],
+          "confidence": 0.91,
+          "description": "Passing countryside scenery."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_43"],
+        "updated_entities": ["person_58"],
+        "removed_entities": ["object_42"]
+      },
+      "previous_frame_id": 115
+    },
+    {
+      "frame_id": 117,
+      "timestamp": "2025-01-01T07:01:56Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "person_58",
+          "type": "person",
+          "bbox": [220, 280, 260, 330],
+          "confidence": 0.92,
+          "description": "Passenger glancing out window."
+        },
+        {
+          "entity_id": "object_43",
+          "type": "window_view",
+          "bbox": [400, 100, 500, 200],
+          "confidence": 0.91,
+          "description": "Farm fields and distant mountains."
+        },
+        {
+          "entity_id": "person_59",
+          "type": "person",
+          "bbox": [100, 320, 140, 370],
+          "confidence": 0.93,
+          "description": "Attendant pushing snack cart."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_59"],
+        "updated_entities": ["person_58", "object_43"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 116
+    },
+    {
+      "frame_id": 118,
+      "timestamp": "2025-01-01T07:01:57Z",
+      "environment": "shinkansen_train",
+      "entities": [
+        {
+          "entity_id": "person_59",
+          "type": "person",
+          "bbox": [100, 320, 140, 370],
+          "confidence": 0.93,
+          "description": "Attendant offering drinks."
+        },
+        {
+          "entity_id": "object_43",
+          "type": "window_view",
+          "bbox": [400, 100, 500, 200],
+          "confidence": 0.91,
+          "description": "Passing countryside scenery."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_59", "object_43"],
+        "removed_entities": ["person_58"]
+      },
+      "previous_frame_id": 117
+    },
+    {
+        "frame_id": 119,
+        "timestamp": "2025-01-01T07:01:58Z",
+        "environment": "shinkansen_train",
+        "entities": [
+          {
+            "entity_id": "person_59",
+            "type": "person",
+            "bbox": [100, 320, 140, 370],
+            "confidence": 0.93,
+            "description": "Attendant collecting trash from seats."
+          },
+          {
+            "entity_id": "object_43",
+            "type": "window_view",
+            "bbox": [400, 100, 500, 200],
+            "confidence": 0.91,
+            "description": "Countryside passing by at high speed."
+          },
+          {
+            "entity_id": "object_44",
+            "type": "overhead_display",
+            "bbox": [200, 50, 300, 100],
+            "confidence": 0.90,
+            "description": "Next stop: Tokyo, arrival in 30 minutes."
+          }
+        ],
+        "relationships": [],
+        "delta": {
+          "new_entities": ["object_44"],
+          "updated_entities": ["person_59", "object_43"],
+          "removed_entities": []
+        },
+        "previous_frame_id": 118
+      },
+      {
+        "frame_id": 120,
+        "timestamp": "2025-01-01T07:01:59Z",
+        "environment": "shinkansen_train",
+        "entities": [
+          {
+            "entity_id": "object_44",
+            "type": "overhead_display",
+            "bbox": [200, 50, 300, 100],
+            "confidence": 0.90,
+            "description": "Announcing upcoming station approach."
+          },
+          {
+            "entity_id": "person_59",
+            "type": "person",
+            "bbox": [100, 320, 140, 370],
+            "confidence": 0.93,
+            "description": "Attendant returning cart to storage."
+          },
+          {
+            "entity_id": "object_45",
+            "type": "luggage",
+            "bbox": [120, 180, 160, 220],
+            "confidence": 0.91,
+            "description": "Suitcase placed near exit door."
+          }
+        ],
+        "relationships": [],
+        "delta": {
+          "new_entities": ["object_45"],
+          "updated_entities": ["object_44", "person_59"],
+          "removed_entities": ["object_43"]
+        },
+        "previous_frame_id": 119
+      }
+    ]          
+         
+  

@@ -1,0 +1,2127 @@
+[
+    {
+      "frame_id": 1,
+      "timestamp": "2024-08-24T08:00:00Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [120, 210, 220, 410],
+          "confidence": 0.98,
+          "description": "Pedestrian, holding a phone."
+        },
+        {
+          "entity_id": "object_1",
+          "type": "car",
+          "bbox": [320, 510, 520, 710],
+          "confidence": 0.96,
+          "description": "Taxi, yellow, waiting at the crossing."
+        },
+        {
+          "entity_id": "object_2",
+          "type": "sign",
+          "bbox": [610, 120, 710, 220],
+          "confidence": 0.93,
+          "description": "Digital billboard advertising local shops."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_1",
+          "predicate": "crossing",
+          "object": "object_1"
+        },
+        {
+          "subject": "object_2",
+          "predicate": "above",
+          "object": "person_1"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_1", "object_1", "object_2"],
+        "updated_entities": [],
+        "removed_entities": []
+      },
+      "previous_frame_id": null
+    },
+    {
+      "frame_id": 2,
+      "timestamp": "2024-08-24T08:00:01Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [125, 215, 225, 415],
+          "confidence": 0.98,
+          "description": "Pedestrian, holding a phone."
+        },
+        {
+          "entity_id": "object_1",
+          "type": "car",
+          "bbox": [320, 510, 520, 710],
+          "confidence": 0.96,
+          "description": "Taxi, yellow, waiting at the crossing."
+        },
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [300, 400, 350, 500],
+          "confidence": 0.97,
+          "description": "Pedestrian, carrying a bag."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_1",
+          "predicate": "waiting_for",
+          "object": "object_1"
+        },
+        {
+          "subject": "person_2",
+          "predicate": "following",
+          "object": "person_1"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_2"],
+        "updated_entities": ["person_1", "object_1"],
+        "removed_entities": ["object_2"]
+      },
+      "previous_frame_id": 1
+    },
+    {
+      "frame_id": 3,
+      "timestamp": "2024-08-24T08:00:02Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_1",
+          "type": "person",
+          "bbox": [130, 220, 230, 420],
+          "confidence": 0.98,
+          "description": "Pedestrian, holding a phone."
+        },
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.97,
+          "description": "Pedestrian, carrying a bag."
+        },
+        {
+          "entity_id": "object_3",
+          "type": "bicycle",
+          "bbox": [400, 450, 450, 500],
+          "confidence": 0.95,
+          "description": "Bicycle parked at the curb."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_2",
+          "predicate": "glancing_at",
+          "object": "object_3"
+        }
+      ],
+      "delta": {
+        "new_entities": ["object_3"],
+        "updated_entities": ["person_1", "person_2"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 2
+    },
+    {
+      "frame_id": 4,
+      "timestamp": "2024-08-24T08:00:03Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_2",
+          "type": "person",
+          "bbox": [310, 410, 360, 510],
+          "confidence": 0.97,
+          "description": "Pedestrian, carrying a bag."
+        },
+        {
+          "entity_id": "object_3",
+          "type": "bicycle",
+          "bbox": [400, 450, 450, 500],
+          "confidence": 0.95,
+          "description": "Bicycle parked at the curb."
+        },
+        {
+          "entity_id": "object_4",
+          "type": "bus",
+          "bbox": [100, 300, 300, 500],
+          "confidence": 0.94,
+          "description": "Public bus, blue."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "object_4",
+          "predicate": "approaching",
+          "object": "person_2"
+        }
+      ],
+      "delta": {
+        "new_entities": ["object_4"],
+        "updated_entities": ["person_2", "object_3"],
+        "removed_entities": ["person_1"]
+      },
+      "previous_frame_id": 3
+    },
+    {
+      "frame_id": 5,
+      "timestamp": "2024-08-24T08:00:04Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "object_3",
+          "type": "bicycle",
+          "bbox": [400, 450, 450, 500],
+          "confidence": 0.95,
+          "description": "Bicycle parked at the curb."
+        },
+        {
+          "entity_id": "object_4",
+          "type": "bus",
+          "bbox": [100, 300, 300, 500],
+          "confidence": 0.94,
+          "description": "Public bus, blue."
+        },
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [220, 320, 270, 420],
+          "confidence": 0.96,
+          "description": "Pedestrian, looking at shop window."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_3",
+          "predicate": "observing",
+          "object": "object_4"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_3"],
+        "updated_entities": ["object_3", "object_4"],
+        "removed_entities": ["person_2"]
+      },
+      "previous_frame_id": 4
+    },
+    {
+      "frame_id": 6,
+      "timestamp": "2024-08-24T08:00:05Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "object_4",
+          "type": "bus",
+          "bbox": [105, 305, 305, 505],
+          "confidence": 0.94,
+          "description": "Public bus, blue."
+        },
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [225, 325, 275, 425],
+          "confidence": 0.96,
+          "description": "Pedestrian, looking at shop window."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_4", "person_3"],
+        "removed_entities": ["object_3"]
+      },
+      "previous_frame_id": 5
+    },
+    {
+      "frame_id": 7,
+      "timestamp": "2024-08-24T08:00:06Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [225, 325, 275, 425],
+          "confidence": 0.96,
+          "description": "Pedestrian, looking at shop window."
+        },
+        {
+          "entity_id": "object_4",
+          "type": "bus",
+          "bbox": [105, 305, 305, 505],
+          "confidence": 0.94,
+          "description": "Public bus, blue."
+        },
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [500, 600, 550, 700],
+          "confidence": 0.95,
+          "description": "Biker with helmet."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_4",
+          "predicate": "approaching",
+          "object": "object_4"
+        }
+      ],
+      "delta": {
+        "new_entities": ["person_4"],
+        "updated_entities": ["person_3", "object_4"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 6
+    },
+    {
+      "frame_id": 8,
+      "timestamp": "2024-08-24T08:00:07Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [225, 325, 275, 425],
+          "confidence": 0.96,
+          "description": "Pedestrian, looking at shop window."
+        },
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [505, 605, 555, 705],
+          "confidence": 0.95,
+          "description": "Biker with helmet."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_3", "person_4"],
+        "removed_entities": ["object_4"]
+      },
+      "previous_frame_id": 7
+    },
+    {
+      "frame_id": 9,
+      "timestamp": "2024-08-24T08:00:08Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_3",
+          "type": "person",
+          "bbox": [225, 325, 275, 425],
+          "confidence": 0.96,
+          "description": "Pedestrian, looking at shop window."
+        },
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [505, 605, 555, 705],
+          "confidence": 0.95,
+          "description": "Biker with helmet."
+        },
+        {
+          "entity_id": "object_5",
+          "type": "kiosk",
+          "bbox": [600, 400, 700, 500],
+          "confidence": 0.93,
+          "description": "Information kiosk."
+        }
+      ],
+      "relationships": [
+        {
+          "subject": "person_4",
+          "predicate": "looking_at",
+          "object": "object_5"
+        }
+      ],
+      "delta": {
+        "new_entities": ["object_5"],
+        "updated_entities": ["person_3", "person_4"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 8
+    },
+    {
+      "frame_id": 10,
+      "timestamp": "2024-08-24T08:00:09Z",
+      "environment": "shibuya_crossing",
+      "entities": [
+        {
+          "entity_id": "person_4",
+          "type": "person",
+          "bbox": [510, 610, 560, 710],
+          "confidence": 0.95,
+          "description": "Biker with helmet."
+        },
+        {
+          "entity_id": "object_5",
+          "type": "kiosk",
+          "bbox": [600, 400, 700, 500],
+          "confidence": 0.93,
+          "description": "Information kiosk."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_4", "object_5"],
+        "removed_entities": ["person_3"]
+      },
+      "previous_frame_id": 9
+    },
+    {
+      "frame_id": 11,
+      "timestamp": "2024-08-24T08:00:10Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [120, 200, 170, 300],
+          "confidence": 0.97,
+          "description": "Commuter, checking train schedule."
+        },
+        {
+          "entity_id": "object_6",
+          "type": "station_platform",
+          "bbox": [400, 500, 600, 700],
+          "confidence": 0.95,
+          "description": "Platform with electronic display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_5", "object_6"],
+        "updated_entities": [],
+        "removed_entities": ["person_4", "object_5"]
+      },
+      "previous_frame_id": 10
+    },
+    {
+      "frame_id": 12,
+      "timestamp": "2024-08-24T08:00:11Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_5",
+          "type": "person",
+          "bbox": [125, 205, 175, 305],
+          "confidence": 0.97,
+          "description": "Commuter, checking train schedule."
+        },
+        {
+          "entity_id": "object_6",
+          "type": "station_platform",
+          "bbox": [400, 500, 600, 700],
+          "confidence": 0.95,
+          "description": "Platform with electronic display."
+        },
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [300, 400, 350, 500],
+          "confidence": 0.96,
+          "description": "Traveler, looking at map."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_6"],
+        "updated_entities": ["person_5", "object_6"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 11
+    },
+    {
+      "frame_id": 13,
+      "timestamp": "2024-08-24T08:00:12Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "object_6",
+          "type": "station_platform",
+          "bbox": [400, 500, 600, 700],
+          "confidence": 0.95,
+          "description": "Platform with electronic display."
+        },
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Traveler, looking at map."
+        },
+        {
+          "entity_id": "object_7",
+          "type": "ticket_machine",
+          "bbox": [500, 300, 550, 350],
+          "confidence": 0.94,
+          "description": "Automated ticket vending machine."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_7"],
+        "updated_entities": ["person_6", "object_6"],
+        "removed_entities": ["person_5"]
+      },
+      "previous_frame_id": 12
+    },
+    {
+      "frame_id": 14,
+      "timestamp": "2024-08-24T08:00:13Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Traveler, looking at map."
+        },
+        {
+          "entity_id": "object_7",
+          "type": "ticket_machine",
+          "bbox": [500, 300, 550, 350],
+          "confidence": 0.94,
+          "description": "Automated ticket vending machine."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_6", "object_7"],
+        "removed_entities": ["object_6"]
+      },
+      "previous_frame_id": 13
+    },
+    {
+      "frame_id": 15,
+      "timestamp": "2024-08-24T08:00:14Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_6",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Traveler, looking at map."
+        },
+        {
+          "entity_id": "object_7",
+          "type": "ticket_machine",
+          "bbox": [500, 300, 550, 350],
+          "confidence": 0.94,
+          "description": "Automated ticket vending machine."
+        },
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [200, 250, 250, 350],
+          "confidence": 0.95,
+          "description": "Local, waiting for train."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_7"],
+        "updated_entities": ["person_6", "object_7"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 14
+    },
+    {
+      "frame_id": 16,
+      "timestamp": "2024-08-24T08:00:15Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "object_7",
+          "type": "ticket_machine",
+          "bbox": [500, 300, 550, 350],
+          "confidence": 0.94,
+          "description": "Automated ticket vending machine."
+        },
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [200, 250, 250, 350],
+          "confidence": 0.95,
+          "description": "Local, waiting for train."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_7", "person_7"],
+        "removed_entities": ["person_6"]
+      },
+      "previous_frame_id": 15
+    },
+    {
+      "frame_id": 17,
+      "timestamp": "2024-08-24T08:00:16Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [200, 250, 250, 350],
+          "confidence": 0.95,
+          "description": "Local, waiting for train."
+        },
+        {
+          "entity_id": "object_7",
+          "type": "ticket_machine",
+          "bbox": [500, 300, 550, 350],
+          "confidence": 0.94,
+          "description": "Automated ticket vending machine."
+        },
+        {
+          "entity_id": "object_8",
+          "type": "station_clock",
+          "bbox": [600, 100, 650, 150],
+          "confidence": 0.93,
+          "description": "Digital station clock."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_8"],
+        "updated_entities": ["person_7", "object_7"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 16
+    },
+    {
+      "frame_id": 18,
+      "timestamp": "2024-08-24T08:00:17Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [200, 250, 250, 350],
+          "confidence": 0.95,
+          "description": "Local, waiting for train."
+        },
+        {
+          "entity_id": "object_8",
+          "type": "station_clock",
+          "bbox": [600, 100, 650, 150],
+          "confidence": 0.93,
+          "description": "Digital station clock."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_7", "object_8"],
+        "removed_entities": ["object_7"]
+      },
+      "previous_frame_id": 17
+    },
+    {
+      "frame_id": 19,
+      "timestamp": "2024-08-24T08:00:18Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "person_7",
+          "type": "person",
+          "bbox": [200, 250, 250, 350],
+          "confidence": 0.95,
+          "description": "Local, waiting for train."
+        },
+        {
+          "entity_id": "object_8",
+          "type": "station_clock",
+          "bbox": [600, 100, 650, 150],
+          "confidence": 0.93,
+          "description": "Digital station clock."
+        },
+        {
+          "entity_id": "person_8",
+          "type": "person",
+          "bbox": [400, 450, 450, 550],
+          "confidence": 0.96,
+          "description": "Businessperson, briefcase in hand."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_8"],
+        "updated_entities": ["person_7", "object_8"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 18
+    },
+    {
+      "frame_id": 20,
+      "timestamp": "2024-08-24T08:00:19Z",
+      "environment": "shibuya_station",
+      "entities": [
+        {
+          "entity_id": "object_8",
+          "type": "station_clock",
+          "bbox": [600, 100, 650, 150],
+          "confidence": 0.93,
+          "description": "Digital station clock."
+        },
+        {
+          "entity_id": "person_8",
+          "type": "person",
+          "bbox": [405, 455, 455, 555],
+          "confidence": 0.96,
+          "description": "Businessperson, briefcase in hand."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_8", "object_8"],
+        "removed_entities": ["person_7"]
+      },
+      "previous_frame_id": 19
+    },
+    {
+      "frame_id": 21,
+      "timestamp": "2024-08-24T08:00:20Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [100, 150, 150, 200],
+          "confidence": 0.97,
+          "description": "Commuter, sitting by the window."
+        },
+        {
+          "entity_id": "object_9",
+          "type": "seat",
+          "bbox": [200, 250, 250, 300],
+          "confidence": 0.95,
+          "description": "Empty seat."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_9", "object_9"],
+        "updated_entities": [],
+        "removed_entities": ["person_8", "object_8"]
+      },
+      "previous_frame_id": 20
+    },
+    {
+      "frame_id": 22,
+      "timestamp": "2024-08-24T08:00:21Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [100, 150, 150, 200],
+          "confidence": 0.97,
+          "description": "Commuter, sitting by the window."
+        },
+        {
+          "entity_id": "object_9",
+          "type": "seat",
+          "bbox": [200, 250, 250, 300],
+          "confidence": 0.95,
+          "description": "Empty seat."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "window",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.94,
+          "description": "View of passing city."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_10"],
+        "updated_entities": ["person_9", "object_9"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 21
+    },
+    {
+      "frame_id": 23,
+      "timestamp": "2024-08-24T08:00:22Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [105, 155, 155, 205],
+          "confidence": 0.97,
+          "description": "Commuter, sitting by the window."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "window",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.94,
+          "description": "View of passing city."
+        },
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_10"],
+        "updated_entities": ["person_9", "object_10"],
+        "removed_entities": ["object_9"]
+      },
+      "previous_frame_id": 22
+    },
+    {
+      "frame_id": 24,
+      "timestamp": "2024-08-24T08:00:23Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_9",
+          "type": "person",
+          "bbox": [105, 155, 155, 205],
+          "confidence": 0.97,
+          "description": "Commuter, sitting by the window."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "window",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.94,
+          "description": "View of passing city."
+        },
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_9", "person_10", "object_10"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 23
+    },
+    {
+      "frame_id": 25,
+      "timestamp": "2024-08-24T08:00:24Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "window",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.94,
+          "description": "View of passing city."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_10", "object_10"],
+        "removed_entities": ["person_9"]
+      },
+      "previous_frame_id": 24
+    },
+    {
+      "frame_id": 26,
+      "timestamp": "2024-08-24T08:00:25Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        },
+        {
+          "entity_id": "object_10",
+          "type": "window",
+          "bbox": [300, 100, 400, 200],
+          "confidence": 0.94,
+          "description": "View of passing city."
+        },
+        {
+          "entity_id": "object_11",
+          "type": "newspaper",
+          "bbox": [150, 220, 200, 270],
+          "confidence": 0.92,
+          "description": "Folded newspaper on seat."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_11"],
+        "updated_entities": ["person_10", "object_10"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 25
+    },
+    {
+      "frame_id": 27,
+      "timestamp": "2024-08-24T08:00:26Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        },
+        {
+          "entity_id": "object_11",
+          "type": "newspaper",
+          "bbox": [150, 220, 200, 270],
+          "confidence": 0.92,
+          "description": "Folded newspaper on seat."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_10", "object_11"],
+        "removed_entities": ["object_10"]
+      },
+      "previous_frame_id": 26
+    },
+    {
+      "frame_id": 28,
+      "timestamp": "2024-08-24T08:00:27Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        },
+        {
+          "entity_id": "object_11",
+          "type": "newspaper",
+          "bbox": [150, 220, 200, 270],
+          "confidence": 0.92,
+          "description": "Folded newspaper on seat."
+        },
+        {
+          "entity_id": "person_11",
+          "type": "person",
+          "bbox": [250, 300, 300, 350],
+          "confidence": 0.96,
+          "description": "Student, reading a book."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_11"],
+        "updated_entities": ["person_10", "object_11"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 27
+    },
+    {
+      "frame_id": 29,
+      "timestamp": "2024-08-24T08:00:28Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "person_10",
+          "type": "person",
+          "bbox": [505, 605, 555, 655],
+          "confidence": 0.96,
+          "description": "Late arrival, boarding."
+        },
+        {
+          "entity_id": "object_11",
+          "type": "newspaper",
+          "bbox": [150, 220, 200, 270],
+          "confidence": 0.92,
+          "description": "Folded newspaper on seat."
+        },
+        {
+          "entity_id": "person_11",
+          "type": "person",
+          "bbox": [250, 300, 300, 350],
+          "confidence": 0.96,
+          "description": "Student, reading a book."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_10", "object_11", "person_11"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 28
+    },
+    {
+      "frame_id": 30,
+      "timestamp": "2024-08-24T08:00:29Z",
+      "environment": "yamanote_train",
+      "entities": [
+        {
+          "entity_id": "object_11",
+          "type": "newspaper",
+          "bbox": [150, 220, 200, 270],
+          "confidence": 0.92,
+          "description": "Folded newspaper on seat."
+        },
+        {
+          "entity_id": "person_11",
+          "type": "person",
+          "bbox": [250, 300, 300, 350],
+          "confidence": 0.96,
+          "description": "Student, reading a book."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_11", "person_11"],
+        "removed_entities": ["person_10"]
+      },
+      "previous_frame_id": 29
+    },
+    {
+      "frame_id": 31,
+      "timestamp": "2024-08-24T08:00:30Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_12",
+          "type": "person",
+          "bbox": [100, 150, 180, 250],
+          "confidence": 0.98,
+          "description": "Teenager, trendy outfit."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [200, 300, 300, 400],
+          "confidence": 0.97,
+          "description": "Group of friends, laughing."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_12", "object_12", "person_13"],
+        "updated_entities": [],
+        "removed_entities": ["object_11", "person_11"]
+      },
+      "previous_frame_id": 30
+    },
+    {
+      "frame_id": 32,
+      "timestamp": "2024-08-24T08:00:31Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_12",
+          "type": "person",
+          "bbox": [100, 150, 180, 250],
+          "confidence": 0.98,
+          "description": "Teenager, trendy outfit."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [200, 300, 300, 400],
+          "confidence": 0.97,
+          "description": "Group of friends, laughing."
+        },
+        {
+          "entity_id": "object_13",
+          "type": "bag",
+          "bbox": [550, 300, 600, 350],
+          "confidence": 0.93,
+          "description": "Designer handbag on display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_13"],
+        "updated_entities": ["person_12", "object_12", "person_13"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 31
+    },
+    {
+      "frame_id": 33,
+      "timestamp": "2024-08-24T08:00:32Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [200, 300, 300, 400],
+          "confidence": 0.97,
+          "description": "Group of friends, laughing."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "object_13",
+          "type": "bag",
+          "bbox": [550, 300, 600, 350],
+          "confidence": 0.93,
+          "description": "Designer handbag on display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_13", "object_12", "object_13"],
+        "removed_entities": ["person_12"]
+      },
+      "previous_frame_id": 32
+    },
+    {
+      "frame_id": 34,
+      "timestamp": "2024-08-24T08:00:33Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [200, 300, 300, 400],
+          "confidence": 0.97,
+          "description": "Group of friends, laughing."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "object_13",
+          "type": "bag",
+          "bbox": [550, 300, 600, 350],
+          "confidence": 0.93,
+          "description": "Designer handbag on display."
+        },
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [300, 400, 350, 500],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_14"],
+        "updated_entities": ["person_13", "object_12", "object_13"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 33
+    },
+    {
+      "frame_id": 35,
+      "timestamp": "2024-08-24T08:00:34Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_13",
+          "type": "person",
+          "bbox": [200, 300, 300, 400],
+          "confidence": 0.97,
+          "description": "Group of friends, laughing."
+        },
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_13", "object_12", "person_14"],
+        "removed_entities": ["object_13"]
+      },
+      "previous_frame_id": 34
+    },
+    {
+      "frame_id": 36,
+      "timestamp": "2024-08-24T08:00:35Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        },
+        {
+          "entity_id": "object_14",
+          "type": "scooter",
+          "bbox": [450, 500, 500, 550],
+          "confidence": 0.92,
+          "description": "Electric scooter parked by a shop."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_14"],
+        "updated_entities": ["object_12", "person_14"],
+        "removed_entities": ["person_13"]
+      },
+      "previous_frame_id": 35
+    },
+    {
+      "frame_id": 37,
+      "timestamp": "2024-08-24T08:00:36Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "object_12",
+          "type": "shop_sign",
+          "bbox": [400, 120, 500, 220],
+          "confidence": 0.94,
+          "description": "Colorful crepe shop sign."
+        },
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [305, 405, 355, 505],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        },
+        {
+          "entity_id": "object_14",
+          "type": "scooter",
+          "bbox": [450, 500, 500, 550],
+          "confidence": 0.92,
+          "description": "Electric scooter parked by a shop."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_12", "person_14", "object_14"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 36
+    },
+    {
+      "frame_id": 38,
+      "timestamp": "2024-08-24T08:00:37Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [310, 410, 360, 510],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        },
+        {
+          "entity_id": "object_14",
+          "type": "scooter",
+          "bbox": [450, 500, 500, 550],
+          "confidence": 0.92,
+          "description": "Electric scooter parked by a shop."
+        },
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.95,
+          "description": "Street performer, juggling."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_15"],
+        "updated_entities": ["person_14", "object_14"],
+        "removed_entities": ["object_12"]
+      },
+      "previous_frame_id": 37
+    },
+    {
+      "frame_id": 39,
+      "timestamp": "2024-08-24T08:00:38Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_14",
+          "type": "person",
+          "bbox": [310, 410, 360, 510],
+          "confidence": 0.96,
+          "description": "Fashion blogger, taking a selfie."
+        },
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [500, 600, 550, 650],
+          "confidence": 0.95,
+          "description": "Street performer, juggling."
+        },
+        {
+          "entity_id": "object_15",
+          "type": "camera",
+          "bbox": [300, 200, 350, 250],
+          "confidence": 0.93,
+          "description": "Vintage camera on display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_15"],
+        "updated_entities": ["person_14", "person_15"],
+        "removed_entities": ["object_14"]
+      },
+      "previous_frame_id": 38
+    },
+    {
+      "frame_id": 40,
+      "timestamp": "2024-08-24T08:00:39Z",
+      "environment": "harajuku_takeshita_street",
+      "entities": [
+        {
+          "entity_id": "person_15",
+          "type": "person",
+          "bbox": [505, 605, 555, 655],
+          "confidence": 0.95,
+          "description": "Street performer, juggling."
+        },
+        {
+          "entity_id": "object_15",
+          "type": "camera",
+          "bbox": [300, 200, 350, 250],
+          "confidence": 0.93,
+          "description": "Vintage camera on display."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_15", "object_15"],
+        "removed_entities": ["person_14"]
+      },
+      "previous_frame_id": 39
+    },
+    {
+      "frame_id": 41,
+      "timestamp": "2024-08-24T08:00:40Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [150, 240, 250, 440],
+          "confidence": 0.97,
+          "description": "Jogger, wearing headphones."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "tree",
+          "bbox": [700, 300, 800, 600],
+          "confidence": 0.99,
+          "description": "Cherry blossom tree in bloom."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_16", "object_16"],
+        "updated_entities": [],
+        "removed_entities": ["person_15", "object_15"]
+      },
+      "previous_frame_id": 40
+    },
+    {
+      "frame_id": 42,
+      "timestamp": "2024-08-24T08:00:41Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_16",
+          "type": "person",
+          "bbox": [150, 240, 250, 440],
+          "confidence": 0.97,
+          "description": "Jogger, wearing headphones."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "tree",
+          "bbox": [700, 300, 800, 600],
+          "confidence": 0.99,
+          "description": "Cherry blossom tree in bloom."
+        },
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [300, 350, 350, 450],
+          "confidence": 0.95,
+          "description": "Dog walker with small dog."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_17"],
+        "updated_entities": ["person_16", "object_16"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 41
+    },
+    {
+      "frame_id": 43,
+      "timestamp": "2024-08-24T08:00:42Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [300, 350, 350, 450],
+          "confidence": 0.95,
+          "description": "Dog walker with small dog."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "tree",
+          "bbox": [700, 300, 800, 600],
+          "confidence": 0.99,
+          "description": "Cherry blossom tree in bloom."
+        },
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_17"],
+        "updated_entities": ["person_17", "object_16"],
+        "removed_entities": ["person_16"]
+      },
+      "previous_frame_id": 42
+    },
+    {
+      "frame_id": 44,
+      "timestamp": "2024-08-24T08:00:43Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [300, 350, 350, 450],
+          "confidence": 0.95,
+          "description": "Dog walker with small dog."
+        },
+        {
+          "entity_id": "object_16",
+          "type": "tree",
+          "bbox": [700, 300, 800, 600],
+          "confidence": 0.99,
+          "description": "Cherry blossom tree in bloom."
+        },
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [100, 200, 150, 250],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_18"],
+        "updated_entities": ["person_17", "object_16", "object_17"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 43
+    },
+    {
+      "frame_id": 45,
+      "timestamp": "2024-08-24T08:00:44Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [300, 350, 350, 450],
+          "confidence": 0.95,
+          "description": "Dog walker with small dog."
+        },
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [100, 200, 150, 250],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_17", "object_17", "person_18"],
+        "removed_entities": ["object_16"]
+      },
+      "previous_frame_id": 44
+    },
+    {
+      "frame_id": 46,
+      "timestamp": "2024-08-24T08:00:45Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_17",
+          "type": "person",
+          "bbox": [300, 350, 350, 450],
+          "confidence": 0.95,
+          "description": "Dog walker with small dog."
+        },
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [100, 200, 150, 250],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        },
+        {
+          "entity_id": "object_18",
+          "type": "fountain",
+          "bbox": [600, 400, 650, 450],
+          "confidence": 0.93,
+          "description": "Small decorative fountain."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_18"],
+        "updated_entities": ["person_17", "object_17", "person_18"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 45
+    },
+    {
+      "frame_id": 47,
+      "timestamp": "2024-08-24T08:00:46Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [100, 200, 150, 250],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        },
+        {
+          "entity_id": "object_18",
+          "type": "fountain",
+          "bbox": [600, 400, 650, 450],
+          "confidence": 0.93,
+          "description": "Small decorative fountain."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_17", "person_18", "object_18"],
+        "removed_entities": ["person_17"]
+      },
+      "previous_frame_id": 46
+    },
+    {
+      "frame_id": 48,
+      "timestamp": "2024-08-24T08:00:47Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "object_17",
+          "type": "bench",
+          "bbox": [400, 500, 500, 600],
+          "confidence": 0.94,
+          "description": "Wooden park bench."
+        },
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [100, 200, 150, 250],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        },
+        {
+          "entity_id": "object_18",
+          "type": "fountain",
+          "bbox": [600, 400, 650, 450],
+          "confidence": 0.93,
+          "description": "Small decorative fountain."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["object_17", "person_18", "object_18"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 47
+    },
+    {
+      "frame_id": 49,
+      "timestamp": "2024-08-24T08:00:48Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [105, 205, 155, 255],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        },
+        {
+          "entity_id": "object_18",
+          "type": "fountain",
+          "bbox": [600, 400, 650, 450],
+          "confidence": 0.93,
+          "description": "Small decorative fountain."
+        },
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [500, 550, 550, 600],
+          "confidence": 0.95,
+          "description": "Runner, in sporty gear."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_19"],
+        "updated_entities": ["person_18", "object_18"],
+        "removed_entities": ["object_17"]
+      },
+      "previous_frame_id": 48
+    },
+    {
+      "frame_id": 50,
+      "timestamp": "2024-08-24T08:00:49Z",
+      "environment": "ueno_park",
+      "entities": [
+        {
+          "entity_id": "person_18",
+          "type": "person",
+          "bbox": [105, 205, 155, 255],
+          "confidence": 0.96,
+          "description": "Tourist, taking photos."
+        },
+        {
+          "entity_id": "object_18",
+          "type": "fountain",
+          "bbox": [600, 400, 650, 450],
+          "confidence": 0.93,
+          "description": "Small decorative fountain."
+        },
+        {
+          "entity_id": "person_19",
+          "type": "person",
+          "bbox": [505, 555, 555, 605],
+          "confidence": 0.95,
+          "description": "Runner, in sporty gear."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_18", "object_18", "person_19"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 49
+    },
+    {
+      "frame_id": 51,
+      "timestamp": "2024-08-24T08:00:50Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_20",
+          "type": "person",
+          "bbox": [100, 150, 180, 250],
+          "confidence": 0.98,
+          "description": "Tourist, admiring the tower."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_20", "object_19"],
+        "updated_entities": [],
+        "removed_entities": ["person_18", "object_18", "person_19"]
+      },
+      "previous_frame_id": 50
+    },
+    {
+      "frame_id": 52,
+      "timestamp": "2024-08-24T08:00:51Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_20",
+          "type": "person",
+          "bbox": [100, 150, 180, 250],
+          "confidence": 0.98,
+          "description": "Tourist, admiring the tower."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_21"],
+        "updated_entities": ["person_20", "object_19"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 51
+    },
+    {
+      "frame_id": 53,
+      "timestamp": "2024-08-24T08:00:52Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_20",
+          "type": "person",
+          "bbox": [100, 150, 180, 250],
+          "confidence": 0.98,
+          "description": "Tourist, admiring the tower."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "object_20",
+          "type": "info_booth",
+          "bbox": [350, 300, 450, 400],
+          "confidence": 0.94,
+          "description": "Information booth near base."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_20"],
+        "updated_entities": ["person_20", "person_21"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 52
+    },
+    {
+      "frame_id": 54,
+      "timestamp": "2024-08-24T08:00:53Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_20",
+          "type": "info_booth",
+          "bbox": [350, 300, 450, 400],
+          "confidence": 0.94,
+          "description": "Information booth near base."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_21", "object_19", "object_20"],
+        "removed_entities": ["person_20"]
+      },
+      "previous_frame_id": 53
+    },
+    {
+      "frame_id": 55,
+      "timestamp": "2024-08-24T08:00:54Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_20",
+          "type": "info_booth",
+          "bbox": [350, 300, 450, 400],
+          "confidence": 0.94,
+          "description": "Information booth near base."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [300, 250, 350, 300],
+          "confidence": 0.96,
+          "description": "Local, on phone."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_22"],
+        "updated_entities": ["person_21", "object_19", "object_20"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 54
+    },
+    {
+      "frame_id": 56,
+      "timestamp": "2024-08-24T08:00:55Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [300, 250, 350, 300],
+          "confidence": 0.96,
+          "description": "Local, on phone."
+        },
+        {
+          "entity_id": "object_21",
+          "type": "bench",
+          "bbox": [500, 400, 550, 450],
+          "confidence": 0.93,
+          "description": "Seating area near tower."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["object_21"],
+        "updated_entities": ["person_21", "person_22"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 55
+    },
+    {
+      "frame_id": 57,
+      "timestamp": "2024-08-24T08:00:56Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [300, 250, 350, 300],
+          "confidence": 0.96,
+          "description": "Local, on phone."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_21",
+          "type": "bench",
+          "bbox": [500, 400, 550, 450],
+          "confidence": 0.93,
+          "description": "Seating area near tower."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_21", "person_22", "object_19", "object_21"],
+        "removed_entities": ["object_20"]
+      },
+      "previous_frame_id": 56
+    },
+    {
+      "frame_id": 58,
+      "timestamp": "2024-08-24T08:00:57Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "person_22",
+          "type": "person",
+          "bbox": [300, 250, 350, 300],
+          "confidence": 0.96,
+          "description": "Local, on phone."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_21",
+          "type": "bench",
+          "bbox": [500, 400, 550, 450],
+          "confidence": 0.93,
+          "description": "Seating area near tower."
+        },
+        {
+          "entity_id": "person_23",
+          "type": "person",
+          "bbox": [600, 450, 650, 500],
+          "confidence": 0.95,
+          "description": "Vendor, selling souvenirs."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": ["person_23"],
+        "updated_entities": ["person_21", "person_22", "object_19", "object_21"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 57
+    },
+    {
+      "frame_id": 59,
+      "timestamp": "2024-08-24T08:00:58Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_21",
+          "type": "bench",
+          "bbox": [500, 400, 550, 450],
+          "confidence": 0.93,
+          "description": "Seating area near tower."
+        },
+        {
+          "entity_id": "person_23",
+          "type": "person",
+          "bbox": [600, 450, 650, 500],
+          "confidence": 0.95,
+          "description": "Vendor, selling souvenirs."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_21", "object_19", "object_21", "person_23"],
+        "removed_entities": ["person_22"]
+      },
+      "previous_frame_id": 58
+    },
+    {
+      "frame_id": 60,
+      "timestamp": "2024-08-24T08:00:59Z",
+      "environment": "tokyo_tower",
+      "entities": [
+        {
+          "entity_id": "person_21",
+          "type": "person",
+          "bbox": [250, 200, 300, 260],
+          "confidence": 0.97,
+          "description": "Photographer, with camera."
+        },
+        {
+          "entity_id": "object_19",
+          "type": "tower",
+          "bbox": [400, 50, 600, 250],
+          "confidence": 0.99,
+          "description": "Tokyo Tower illuminated."
+        },
+        {
+          "entity_id": "object_21",
+          "type": "bench",
+          "bbox": [500, 400, 550, 450],
+          "confidence": 0.93,
+          "description": "Seating area near tower."
+        },
+        {
+          "entity_id": "person_23",
+          "type": "person",
+          "bbox": [600, 450, 650, 500],
+          "confidence": 0.95,
+          "description": "Vendor, selling souvenirs."
+        }
+      ],
+      "relationships": [],
+      "delta": {
+        "new_entities": [],
+        "updated_entities": ["person_21", "object_19", "object_21", "person_23"],
+        "removed_entities": []
+      },
+      "previous_frame_id": 59
+    }
+  ]
+  

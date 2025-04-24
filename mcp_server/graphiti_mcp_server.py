@@ -31,7 +31,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-DEFAULT_LLM_MODEL = 'gpt-4o-mini'
+DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
 
 
 class Requirement(BaseModel):

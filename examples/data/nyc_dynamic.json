@@ -1,0 +1,3251 @@
+[
+  {
+    "frame_id": 0,
+    "timestamp": "2025-04-24T17:02:59.782150",
+    "environment": "unknown",
+    "entities": [
+      {
+        "entity_id": "person_0",
+        "type": "person",
+        "bbox": [
+          587.8714599609375,
+          739.0198974609375,
+          911.5064086914062,
+          1520.26904296875
+        ],
+        "confidence": 0.9397938251495361,
+        "description": "a man with a beard and headphones walking down the street"
+      },
+      {
+        "entity_id": "car_0",
+        "type": "car",
+        "bbox": [
+          0.3173750638961792,
+          719.0781860351562,
+          295.5185546875,
+          1134.0447998046875
+        ],
+        "confidence": 0.9347325563430786,
+        "description": "a bmw x5"
+      },
+      {
+        "entity_id": "person_1",
+        "type": "person",
+        "bbox": [
+          154.69744873046875,
+          873.1006469726562,
+          569.3462524414062,
+          1905.5723876953125
+        ],
+        "confidence": 0.9247684478759766,
+        "description": "a woman in a black coat and black hat carrying a large black bag"
+      },
+      {
+        "entity_id": "handbag_0",
+        "type": "handbag",
+        "bbox": [
+          79.61329650878906,
+          1045.28466796875,
+          376.5494079589844,
+          1609.1702880859375
+        ],
+        "confidence": 0.9178656339645386,
+        "description": "a bag"
+      },
+      {
+        "entity_id": "person_2",
+        "type": "person",
+        "bbox": [
+          568.8357543945312,
+          735.1397094726562,
+          654.4675903320312,
+          941.3330688476562
+        ],
+        "confidence": 0.8663581609725952,
+        "description": "a man in a green jacket and jeans"
+      },
+      {
+        "entity_id": "person_3",
+        "type": "person",
+        "bbox": [
+          261.2162780761719,
+          743.034912109375,
+          353.5079345703125,
+          1020.4713745117188
+        ],
+        "confidence": 0.8401116132736206,
+        "description": "a man in a yellow shirt and shorts"
+      },
+      {
+        "entity_id": "person_4",
+        "type": "person",
+        "bbox": [
+          366.7174987792969,
+          754.0827026367188,
+          462.6610412597656,
+          896.6844482421875
+        ],
+        "confidence": 0.8030067682266235,
+        "description": "a man in a black shirt and a black hat"
+      },
+      {
+        "entity_id": "person_5",
+        "type": "person",
+        "bbox": [
+          463.7026672363281,
+          728.2879028320312,
+          522.2008666992188,
+          925.7544555664062
+        ],
+        "confidence": 0.7292611598968506,
+        "description": "a man in a white shirt and black pants"
+      },
+      {
+        "entity_id": "person_6",
+        "type": "person",
+        "bbox": [
+          426.9374084472656,
+          752.1642456054688,
+          473.6811218261719,
+          868.3101196289062
+        ],
+        "confidence": 0.7061834931373596,
+        "description": "a man wearing a black shirt and a white hat"
+      },
+      {
+        "entity_id": "person_7",
+        "type": "person",
+        "bbox": [
+          319.7639465332031,
+          730.5999755859375,
+          389.7137756347656,
+          912.32861328125
+        ],
+        "confidence": 0.6501029133796692,
+        "description": "a man wearing a black shirt and black pants"
+      },
+      {
+        "entity_id": "car_1",
+        "type": "car",
+        "bbox": [
+          576.7423706054688,
+          833.47314453125,
+          1080.13525390625,
+          1120.66455078125
+        ],
+        "confidence": 0.611293375492096,
+        "description": "a man in a t shirt"
+      },
+      {
+        "entity_id": "person_8",
+        "type": "person",
+        "bbox": [
+          541.1666259765625,
+          753.5187377929688,
+          580.9418334960938,
+          850.7506713867188
+        ],
+        "confidence": 0.5919396877288818,
+        "description": "a red dress"
+      },
+      {
+        "entity_id": "car_2",
+        "type": "car",
+        "bbox": [
+          824.0111083984375,
+          836.0087890625,
+          1079.573974609375,
+          1118.7001953125
+        ],
+        "confidence": 0.5430738925933838,
+        "description": "a man in a t shirt and jeans"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "car_0"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_1"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "handbag_0"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_2"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_3"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_4"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_5"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "overlaps",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_1"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "handbag_0"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_2"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "next_to",
+        "object": "person_3"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_4"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_5"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_6"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_7"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "car_0",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "overlaps",
+        "object": "handbag_0"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_2"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_3"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_4"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_5"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_2"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_3"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_4"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_5"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_6"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_7"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "handbag_0",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "near",
+        "object": "person_3"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "next_to",
+        "object": "person_4"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "next_to",
+        "object": "person_5"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "next_to",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "near",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "next_to",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_2",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "next_to",
+        "object": "person_4"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "next_to",
+        "object": "person_5"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "next_to",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "overlaps",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_3",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "next_to",
+        "object": "person_5"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "overlaps",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "overlaps",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "next_to",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_4",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_5",
+        "predicate": "next_to",
+        "object": "person_6"
+      },
+      {
+        "subject": "person_5",
+        "predicate": "next_to",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_5",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_5",
+        "predicate": "next_to",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_5",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_6",
+        "predicate": "next_to",
+        "object": "person_7"
+      },
+      {
+        "subject": "person_6",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_6",
+        "predicate": "next_to",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_6",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_7",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_7",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "person_7",
+        "predicate": "near",
+        "object": "car_2"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_8"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "overlaps",
+        "object": "car_2"
+      },
+      {
+        "subject": "person_8",
+        "predicate": "near",
+        "object": "car_2"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "person_4",
+        "person_7",
+        "person_6",
+        "car_1",
+        "car_2",
+        "person_2",
+        "person_0",
+        "car_0",
+        "person_5",
+        "person_3",
+        "handbag_0",
+        "person_8",
+        "person_1"
+      ],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": -1
+  },
+  {
+    "frame_id": 60,
+    "timestamp": "2025-04-24T17:03:59.491934",
+    "environment": "unknown",
+    "entities": [
+      {
+        "entity_id": "person_9",
+        "type": "person",
+        "bbox": [
+          0.7363146543502808,
+          812.7858276367188,
+          253.13453674316406,
+          1910.2811279296875
+        ],
+        "confidence": 0.9519807696342468,
+        "description": "a person walking down the street"
+      },
+      {
+        "entity_id": "car_1",
+        "type": "car",
+        "bbox": [
+          569.5936889648438,
+          904.8207397460938,
+          1079.0220947265625,
+          1226.282470703125
+        ],
+        "confidence": 0.9487817287445068,
+        "description": "honda accord"
+      },
+      {
+        "entity_id": "person_10",
+        "type": "person",
+        "bbox": [
+          247.69020080566406,
+          795.6644287109375,
+          359.1610412597656,
+          1127.2803955078125
+        ],
+        "confidence": 0.9096562266349792,
+        "description": "a man in a brown shirt and shorts"
+      },
+      {
+        "entity_id": "person_11",
+        "type": "person",
+        "bbox": [
+          359.88330078125,
+          801.7869262695312,
+          504.29681396484375,
+          1184.8319091796875
+        ],
+        "confidence": 0.8970053195953369,
+        "description": "a man in black shorts and a black shirt walking down the street"
+      },
+      {
+        "entity_id": "person_12",
+        "type": "person",
+        "bbox": [
+          724.3634033203125,
+          819.3199462890625,
+          808.4378051757812,
+          973.3250732421875
+        ],
+        "confidence": 0.8816789388656616,
+        "description": "a woman wearing a beanie and a green sweater"
+      },
+      {
+        "entity_id": "person_13",
+        "type": "person",
+        "bbox": [
+          549.51220703125,
+          788.2172241210938,
+          651.8695678710938,
+          1054.9134521484375
+        ],
+        "confidence": 0.877700924873352,
+        "description": "a man in a green jacket and jeans is seen walking down the street"
+      },
+      {
+        "entity_id": "person_14",
+        "type": "person",
+        "bbox": [
+          346.68536376953125,
+          791.5730590820312,
+          428.8206787109375,
+          1085.6259765625
+        ],
+        "confidence": 0.7459416389465332,
+        "description": "a man in a black shirt and black pants"
+      },
+      {
+        "entity_id": "handbag_1",
+        "type": "handbag",
+        "bbox": [
+          321.1000061035156,
+          852.31005859375,
+          363.00933837890625,
+          984.420654296875
+        ],
+        "confidence": 0.6408255100250244,
+        "description": "a man in a suit holding a beer"
+      },
+      {
+        "entity_id": "person_15",
+        "type": "person",
+        "bbox": [
+          805.607421875,
+          817.5164794921875,
+          873.1836547851562,
+          955.34765625
+        ],
+        "confidence": 0.5793561339378357,
+        "description": "a man in a blue shirt and a woman in a red shirt"
+      },
+      {
+        "entity_id": "person_16",
+        "type": "person",
+        "bbox": [
+          192.79774475097656,
+          782.6512451171875,
+          246.5562286376953,
+          870.4036254882812
+        ],
+        "confidence": 0.5733885765075684,
+        "description": "a man with a beard and glasses"
+      },
+      {
+        "entity_id": "suitcase_0",
+        "type": "suitcase",
+        "bbox": [
+          465.20196533203125,
+          1014.6013793945312,
+          511.2650451660156,
+          1137.996337890625
+        ],
+        "confidence": 0.5730769038200378,
+        "description": "a woman in a white shirt"
+      },
+      {
+        "entity_id": "umbrella_0",
+        "type": "umbrella",
+        "bbox": [
+          169.9273223876953,
+          754.6112670898438,
+          271.0693359375,
+          793.6689453125
+        ],
+        "confidence": 0.5281208157539368,
+        "description": "a blue umbrella"
+      },
+      {
+        "entity_id": "handbag_2",
+        "type": "handbag",
+        "bbox": [
+          0.010561197996139526,
+          1210.3643798828125,
+          54.348388671875,
+          1456.345458984375
+        ],
+        "confidence": 0.516670823097229,
+        "description": "a black and white striped blanket"
+      },
+      {
+        "entity_id": "person_17",
+        "type": "person",
+        "bbox": [
+          241.63119506835938,
+          755.530517578125,
+          310.8132629394531,
+          888.880615234375
+        ],
+        "confidence": 0.5127866864204407,
+        "description": "a man in a brown shirt and a man in a blue shirt"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "car_1"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_10"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_11"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_12"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_13"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_14"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "next_to",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_9",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_10"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_11"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "next_to",
+        "object": "person_12"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_13"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_14"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "next_to",
+        "object": "person_15"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "car_1",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "next_to",
+        "object": "person_11"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "person_12"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "person_13"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "next_to",
+        "object": "person_14"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "overlaps",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "next_to",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_10",
+        "predicate": "overlaps",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_12"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_13"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "overlaps",
+        "object": "person_14"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "next_to",
+        "object": "person_13"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "person_14"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "next_to",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_12",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "person_14"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "next_to",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_13",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "next_to",
+        "object": "handbag_1"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "next_to",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_14",
+        "predicate": "next_to",
+        "object": "person_17"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "near",
+        "object": "person_15"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "next_to",
+        "object": "person_16"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "next_to",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "handbag_1",
+        "predicate": "next_to",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_15",
+        "predicate": "near",
+        "object": "person_16"
+      },
+      {
+        "subject": "person_15",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_15",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_15",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_15",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "person_16",
+        "predicate": "near",
+        "object": "suitcase_0"
+      },
+      {
+        "subject": "person_16",
+        "predicate": "next_to",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "person_16",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "person_16",
+        "predicate": "next_to",
+        "object": "person_17"
+      },
+      {
+        "subject": "suitcase_0",
+        "predicate": "near",
+        "object": "umbrella_0"
+      },
+      {
+        "subject": "suitcase_0",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "suitcase_0",
+        "predicate": "near",
+        "object": "person_17"
+      },
+      {
+        "subject": "umbrella_0",
+        "predicate": "near",
+        "object": "handbag_2"
+      },
+      {
+        "subject": "umbrella_0",
+        "predicate": "next_to",
+        "object": "person_17"
+      },
+      {
+        "subject": "handbag_2",
+        "predicate": "near",
+        "object": "person_17"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "person_13",
+        "person_11",
+        "handbag_1",
+        "person_16",
+        "person_15",
+        "person_12",
+        "suitcase_0",
+        "umbrella_0",
+        "person_14",
+        "person_17",
+        "person_10",
+        "handbag_2",
+        "person_9"
+      ],
+      "updated_entities": [
+        "car_1"
+      ],
+      "removed_entities": [
+        "person_4",
+        "person_7",
+        "person_6",
+        "car_2",
+        "person_2",
+        "person_0",
+        "car_0",
+        "person_5",
+        "person_3",
+        "handbag_0",
+        "person_8",
+        "person_1"
+      ]
+    },
+    "previous_frame_id": 59
+  },
+  {
+    "frame_id": 120,
+    "timestamp": "2025-04-24T17:04:43.742645",
+    "environment": "unknown",
+    "entities": [
+      {
+        "entity_id": "person_18",
+        "type": "person",
+        "bbox": [
+          553.6104736328125,
+          838.3980712890625,
+          745.6448364257812,
+          1430.222900390625
+        ],
+        "confidence": 0.9338025450706482,
+        "description": "a man in a black shirt and black shorts"
+      },
+      {
+        "entity_id": "car_3",
+        "type": "car",
+        "bbox": [
+          0.45743465423583984,
+          811.6424560546875,
+          316.6277160644531,
+          1334.9686279296875
+        ],
+        "confidence": 0.9165351390838623,
+        "description": "a black mercedes suv"
+      },
+      {
+        "entity_id": "person_11",
+        "type": "person",
+        "bbox": [
+          358.5374450683594,
+          844.2889404296875,
+          508.8006896972656,
+          1337.0887451171875
+        ],
+        "confidence": 0.9113144874572754,
+        "description": "a man in shorts and a t shirt walking down the street"
+      },
+      {
+        "entity_id": "car_4",
+        "type": "car",
+        "bbox": [
+          716.9723510742188,
+          976.9404296875,
+          1079.644287109375,
+          1370.8916015625
+        ],
+        "confidence": 0.9011896252632141,
+        "description": "honda accord"
+      },
+      {
+        "entity_id": "person_19",
+        "type": "person",
+        "bbox": [
+          499.30548095703125,
+          829.884765625,
+          605.0032958984375,
+          1277.2095947265625
+        ],
+        "confidence": 0.8808570504188538,
+        "description": "a man in a black shirt and black pants"
+      },
+      {
+        "entity_id": "person_20",
+        "type": "person",
+        "bbox": [
+          803.0201416015625,
+          875.5089721679688,
+          883.0665893554688,
+          1060.469970703125
+        ],
+        "confidence": 0.7986839413642883,
+        "description": "a man wearing a hat and a woman in a green sweater"
+      },
+      {
+        "entity_id": "person_21",
+        "type": "person",
+        "bbox": [
+          248.45639038085938,
+          853.7002563476562,
+          313.80963134765625,
+          975.4572143554688
+        ],
+        "confidence": 0.7480311393737793,
+        "description": "a man in a white shirt and black pants"
+      },
+      {
+        "entity_id": "handbag_3",
+        "type": "handbag",
+        "bbox": [
+          452.0934753417969,
+          924.0062866210938,
+          514.1600341796875,
+          1114.5506591796875
+        ],
+        "confidence": 0.7458838820457458,
+        "description": "a white bag"
+      },
+      {
+        "entity_id": "person_22",
+        "type": "person",
+        "bbox": [
+          284.095458984375,
+          940.2971801757812,
+          371.3569641113281,
+          1225.8309326171875
+        ],
+        "confidence": 0.7429674863815308,
+        "description": "a man in a blue shirt and a woman in a pink shirt"
+      },
+      {
+        "entity_id": "person_23",
+        "type": "person",
+        "bbox": [
+          332.9409484863281,
+          876.2976684570312,
+          394.6661682128906,
+          993.5569458007812
+        ],
+        "confidence": 0.742446780204773,
+        "description": "a woman in a pink shirt"
+      },
+      {
+        "entity_id": "person_24",
+        "type": "person",
+        "bbox": [
+          865.4063720703125,
+          867.521240234375,
+          943.5890502929688,
+          1056.4412841796875
+        ],
+        "confidence": 0.7223078012466431,
+        "description": "a man, woman, and child"
+      },
+      {
+        "entity_id": "person_25",
+        "type": "person",
+        "bbox": [
+          306.20587158203125,
+          821.970458984375,
+          380.3258056640625,
+          942.1744995117188
+        ],
+        "confidence": 0.6906773447990417,
+        "description": "a man in a black hat, a woman in a pink shirt, and a man in a black shirt"
+      },
+      {
+        "entity_id": "person_26",
+        "type": "person",
+        "bbox": [
+          485.1706237792969,
+          867.2081298828125,
+          543.8353881835938,
+          968.902099609375
+        ],
+        "confidence": 0.6307387948036194,
+        "description": "a woman in a red sari"
+      },
+      {
+        "entity_id": "umbrella_1",
+        "type": "umbrella",
+        "bbox": [
+          174.68528747558594,
+          819.7389526367188,
+          281.0125732421875,
+          858.7347412109375
+        ],
+        "confidence": 0.5441904664039612,
+        "description": "a blue umbrella"
+      },
+      {
+        "entity_id": "person_27",
+        "type": "person",
+        "bbox": [
+          447.0767822265625,
+          872.197509765625,
+          485.384521484375,
+          926.6521606445312
+        ],
+        "confidence": 0.52076655626297,
+        "description": "a man with a beard and a woman with a scarf"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "car_3"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_11"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "car_4"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "overlaps",
+        "object": "person_19"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_20"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_18",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_11"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "car_4"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_19"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_20"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_23"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "car_4"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_19"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_20"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "overlaps",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_11",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_19"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_20"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_23"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "car_4",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_20"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "next_to",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "next_to",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_19",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_21"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "overlaps",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_20",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "near",
+        "object": "handbag_3"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "next_to",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "next_to",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "next_to",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_21",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "next_to",
+        "object": "person_23"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "next_to",
+        "object": "person_25"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "next_to",
+        "object": "person_26"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "handbag_3",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "next_to",
+        "object": "person_23"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_22",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_23",
+        "predicate": "near",
+        "object": "person_24"
+      },
+      {
+        "subject": "person_23",
+        "predicate": "overlaps",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_23",
+        "predicate": "next_to",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_23",
+        "predicate": "next_to",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_23",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_24",
+        "predicate": "near",
+        "object": "person_25"
+      },
+      {
+        "subject": "person_24",
+        "predicate": "near",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_24",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_24",
+        "predicate": "near",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_25",
+        "predicate": "next_to",
+        "object": "person_26"
+      },
+      {
+        "subject": "person_25",
+        "predicate": "next_to",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_25",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "person_26",
+        "predicate": "near",
+        "object": "umbrella_1"
+      },
+      {
+        "subject": "person_26",
+        "predicate": "next_to",
+        "object": "person_27"
+      },
+      {
+        "subject": "umbrella_1",
+        "predicate": "near",
+        "object": "person_27"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "person_18",
+        "handbag_3",
+        "person_22",
+        "umbrella_1",
+        "person_20",
+        "car_3",
+        "person_21",
+        "person_23",
+        "car_4",
+        "person_24",
+        "person_25",
+        "person_26",
+        "person_19",
+        "person_27"
+      ],
+      "updated_entities": [
+        "person_11"
+      ],
+      "removed_entities": [
+        "person_13",
+        "handbag_1",
+        "person_16",
+        "car_1",
+        "person_15",
+        "person_12",
+        "suitcase_0",
+        "umbrella_0",
+        "person_14",
+        "person_17",
+        "person_10",
+        "handbag_2",
+        "person_9"
+      ]
+    },
+    "previous_frame_id": 119
+  },
+  {
+    "frame_id": 180,
+    "timestamp": "2025-04-24T17:05:31.317487",
+    "environment": "unknown",
+    "entities": [
+      {
+        "entity_id": "person_28",
+        "type": "person",
+        "bbox": [
+          797.0431518554688,
+          831.2449340820312,
+          1080.3216552734375,
+          1842.95068359375
+        ],
+        "confidence": 0.9541778564453125,
+        "description": "a man in a black shirt and black shorts"
+      },
+      {
+        "entity_id": "person_29",
+        "type": "person",
+        "bbox": [
+          441.061767578125,
+          829.4759521484375,
+          704.3548583984375,
+          1730.1839599609375
+        ],
+        "confidence": 0.94524085521698,
+        "description": "a man in shorts and a t-shirt"
+      },
+      {
+        "entity_id": "car_3",
+        "type": "car",
+        "bbox": [
+          0.10928928852081299,
+          867.0447387695312,
+          225.29966735839844,
+          1469.99560546875
+        ],
+        "confidence": 0.908115029335022,
+        "description": "a mercedes-benz s-class"
+      },
+      {
+        "entity_id": "person_30",
+        "type": "person",
+        "bbox": [
+          779.728515625,
+          822.2225341796875,
+          992.5122680664062,
+          1675.2738037109375
+        ],
+        "confidence": 0.9042391777038574,
+        "description": "a man in a white shirt and black shorts"
+      },
+      {
+        "entity_id": "person_31",
+        "type": "person",
+        "bbox": [
+          304.26507568359375,
+          998.1068725585938,
+          443.96539306640625,
+          1449.5245361328125
+        ],
+        "confidence": 0.8994795083999634,
+        "description": "a person wearing a blue sweater, gray pants, and black shoes"
+      },
+      {
+        "entity_id": "person_32",
+        "type": "person",
+        "bbox": [
+          646.1900024414062,
+          829.9588623046875,
+          813.404296875,
+          1579.840087890625
+        ],
+        "confidence": 0.8669409155845642,
+        "description": "person, person, person, person, person, person, person, person, person, person, person, person, pers..."
+      },
+      {
+        "entity_id": "person_33",
+        "type": "person",
+        "bbox": [
+          444.4376525878906,
+          880.5010375976562,
+          513.967041015625,
+          1007.2835693359375
+        ],
+        "confidence": 0.7481960654258728,
+        "description": "a man in a red shirt"
+      },
+      {
+        "entity_id": "person_34",
+        "type": "person",
+        "bbox": [
+          188.72645568847656,
+          878.0389404296875,
+          261.8202209472656,
+          1041.1298828125
+        ],
+        "confidence": 0.730230987071991,
+        "description": "a man with a beard and a white shirt"
+      },
+      {
+        "entity_id": "umbrella_2",
+        "type": "umbrella",
+        "bbox": [
+          75.29058074951172,
+          856.8123779296875,
+          205.60928344726562,
+          890.8873291015625
+        ],
+        "confidence": 0.6118534803390503,
+        "description": "a blue umbrella"
+      },
+      {
+        "entity_id": "handbag_4",
+        "type": "handbag",
+        "bbox": [
+          602.7174682617188,
+          964.1649780273438,
+          721.9217529296875,
+          1328.24609375
+        ],
+        "confidence": 0.6015365123748779,
+        "description": "a white paper bag"
+      },
+      {
+        "entity_id": "person_35",
+        "type": "person",
+        "bbox": [
+          368.4885559082031,
+          894.6876220703125,
+          427.66943359375,
+          1001.2427978515625
+        ],
+        "confidence": 0.5728258490562439,
+        "description": "a woman in a pink shirt and glasses"
+      },
+      {
+        "entity_id": "person_36",
+        "type": "person",
+        "bbox": [
+          798.8206787109375,
+          899.1488647460938,
+          858.63720703125,
+          996.017333984375
+        ],
+        "confidence": 0.5430037379264832,
+        "description": "a man wearing a white hat and a black jacket"
+      },
+      {
+        "entity_id": "person_37",
+        "type": "person",
+        "bbox": [
+          393.1174621582031,
+          937.2736206054688,
+          461.00457763671875,
+          1362.0595703125
+        ],
+        "confidence": 0.5059841275215149,
+        "description": "a person in a blue jacket"
+      },
+      {
+        "entity_id": "person_22",
+        "type": "person",
+        "bbox": [
+          276.02667236328125,
+          911.9288330078125,
+          392.5322265625,
+          1267.195556640625
+        ],
+        "confidence": 0.5017985105514526,
+        "description": "a man, woman, and child walking down the street"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_29"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "car_3"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "overlaps",
+        "object": "person_30"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_32"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "car_3"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_30"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "overlaps",
+        "object": "person_32"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "overlaps",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "next_to",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_30"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_32"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "car_3",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "next_to",
+        "object": "person_32"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_30",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_32"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "overlaps",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "overlaps",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_33"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "overlaps",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_32",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "person_34"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "next_to",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_33",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "next_to",
+        "object": "umbrella_2"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "next_to",
+        "object": "person_35"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_34",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "umbrella_2",
+        "predicate": "near",
+        "object": "handbag_4"
+      },
+      {
+        "subject": "umbrella_2",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "umbrella_2",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "umbrella_2",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "umbrella_2",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "handbag_4",
+        "predicate": "near",
+        "object": "person_35"
+      },
+      {
+        "subject": "handbag_4",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "handbag_4",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "handbag_4",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_35",
+        "predicate": "near",
+        "object": "person_36"
+      },
+      {
+        "subject": "person_35",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_35",
+        "predicate": "next_to",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_36",
+        "predicate": "near",
+        "object": "person_37"
+      },
+      {
+        "subject": "person_36",
+        "predicate": "near",
+        "object": "person_22"
+      },
+      {
+        "subject": "person_37",
+        "predicate": "next_to",
+        "object": "person_22"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "person_30",
+        "person_29",
+        "person_28",
+        "person_31",
+        "handbag_4",
+        "person_37",
+        "person_33",
+        "person_32",
+        "umbrella_2",
+        "person_35",
+        "person_34",
+        "person_36"
+      ],
+      "updated_entities": [
+        "person_22",
+        "car_3"
+      ],
+      "removed_entities": [
+        "person_18",
+        "person_11",
+        "handbag_3",
+        "umbrella_1",
+        "person_20",
+        "person_21",
+        "person_23",
+        "car_4",
+        "person_24",
+        "person_25",
+        "person_26",
+        "person_19",
+        "person_27"
+      ]
+    },
+    "previous_frame_id": 179
+  },
+  {
+    "frame_id": 240,
+    "timestamp": "2025-04-24T17:06:27.693852",
+    "environment": "unknown",
+    "entities": [
+      {
+        "entity_id": "person_28",
+        "type": "person",
+        "bbox": [
+          860.359130859375,
+          865.03271484375,
+          1079.7672119140625,
+          1912.3870849609375
+        ],
+        "confidence": 0.952411949634552,
+        "description": "a man in a grey shirt and jeans"
+      },
+      {
+        "entity_id": "person_38",
+        "type": "person",
+        "bbox": [
+          208.3870391845703,
+          999.7388305664062,
+          375.30877685546875,
+          1531.4603271484375
+        ],
+        "confidence": 0.9128925800323486,
+        "description": "a man in a red jacket and blue jeans"
+      },
+      {
+        "entity_id": "person_39",
+        "type": "person",
+        "bbox": [
+          636.7626953125,
+          946.5038452148438,
+          847.9283447265625,
+          1320.1474609375
+        ],
+        "confidence": 0.9055753350257874,
+        "description": "a man in a green jacket and black shirt with a boy in a black shirt and black pants"
+      },
+      {
+        "entity_id": "person_29",
+        "type": "person",
+        "bbox": [
+          455.7562255859375,
+          1030.8115234375,
+          696.793212890625,
+          1801.4063720703125
+        ],
+        "confidence": 0.9041274785995483,
+        "description": "a boy in a black shirt and blue jeans"
+      },
+      {
+        "entity_id": "person_40",
+        "type": "person",
+        "bbox": [
+          600.25048828125,
+          1187.699951171875,
+          921.8048095703125,
+          1914.7498779296875
+        ],
+        "confidence": 0.8957601189613342,
+        "description": "a boy in a blue hoodie"
+      },
+      {
+        "entity_id": "car_5",
+        "type": "car",
+        "bbox": [
+          0.027793049812316895,
+          994.8062744140625,
+          273.691650390625,
+          1895.49755859375
+        ],
+        "confidence": 0.8679265975952148,
+        "description": "bmw x6"
+      },
+      {
+        "entity_id": "person_41",
+        "type": "person",
+        "bbox": [
+          327.7519836425781,
+          1023.0145874023438,
+          556.1388549804688,
+          1590.3609619140625
+        ],
+        "confidence": 0.8429592847824097,
+        "description": "a woman in a pink shirt and black pants"
+      },
+      {
+        "entity_id": "person_31",
+        "type": "person",
+        "bbox": [
+          328.3965759277344,
+          931.4486083984375,
+          489.43499755859375,
+          1476.242919921875
+        ],
+        "confidence": 0.7308610677719116,
+        "description": "a woman in a pink shirt and blue jeans"
+      },
+      {
+        "entity_id": "person_42",
+        "type": "person",
+        "bbox": [
+          490.32379150390625,
+          964.9510498046875,
+          575.0533447265625,
+          1132.406494140625
+        ],
+        "confidence": 0.7086883783340454,
+        "description": "a person in a crowd"
+      },
+      {
+        "entity_id": "person_43",
+        "type": "person",
+        "bbox": [
+          313.30499267578125,
+          976.7010498046875,
+          364.0564270019531,
+          1081.9775390625
+        ],
+        "confidence": 0.6248562932014465,
+        "description": "a man with a beard and a white shirt"
+      },
+      {
+        "entity_id": "person_44",
+        "type": "person",
+        "bbox": [
+          158.54908752441406,
+          996.0428466796875,
+          249.5374755859375,
+          1111.7073974609375
+        ],
+        "confidence": 0.623215913772583,
+        "description": "a man with glasses and a beard"
+      },
+      {
+        "entity_id": "handbag_5",
+        "type": "handbag",
+        "bbox": [
+          408.1925048828125,
+          1103.0963134765625,
+          479.7122802734375,
+          1345.852783203125
+        ],
+        "confidence": 0.5469509363174438,
+        "description": "a woman in a pink shirt"
+      },
+      {
+        "entity_id": "person_45",
+        "type": "person",
+        "bbox": [
+          592.5364379882812,
+          990.5847778320312,
+          674.4384765625,
+          1065.4010009765625
+        ],
+        "confidence": 0.5118082165718079,
+        "description": "a man with his eyes closed"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_38"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_39"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_29"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "overlaps",
+        "object": "person_40"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "car_5"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_41"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_28",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_39"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_29"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_40"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "overlaps",
+        "object": "car_5"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "overlaps",
+        "object": "person_41"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "overlaps",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "next_to",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_38",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_29"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_40"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "car_5"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_41"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_39",
+        "predicate": "next_to",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "overlaps",
+        "object": "person_40"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "car_5"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "overlaps",
+        "object": "person_41"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_29",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "car_5"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_41"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_40",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_41"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_31"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "car_5",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "overlaps",
+        "object": "person_31"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "near",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "near",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "overlaps",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_41",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "next_to",
+        "object": "person_42"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "next_to",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "overlaps",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_31",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_42",
+        "predicate": "next_to",
+        "object": "person_43"
+      },
+      {
+        "subject": "person_42",
+        "predicate": "near",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_42",
+        "predicate": "next_to",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_42",
+        "predicate": "next_to",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_43",
+        "predicate": "next_to",
+        "object": "person_44"
+      },
+      {
+        "subject": "person_43",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_43",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "person_44",
+        "predicate": "near",
+        "object": "handbag_5"
+      },
+      {
+        "subject": "person_44",
+        "predicate": "near",
+        "object": "person_45"
+      },
+      {
+        "subject": "handbag_5",
+        "predicate": "near",
+        "object": "person_45"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "handbag_5",
+        "person_38",
+        "person_41",
+        "person_40",
+        "car_5",
+        "person_43",
+        "person_44",
+        "person_39",
+        "person_45",
+        "person_42"
+      ],
+      "updated_entities": [
+        "person_28",
+        "person_31",
+        "person_29"
+      ],
+      "removed_entities": [
+        "person_30",
+        "person_22",
+        "car_3",
+        "handbag_4",
+        "person_37",
+        "person_33",
+        "person_32",
+        "umbrella_2",
+        "person_35",
+        "person_34",
+        "person_36"
+      ]
+    },
+    "previous_frame_id": 239
+  }
+]

@@ -1,0 +1,259 @@
+[
+  {
+    "frame_id": 0,
+    "timestamp": "2025-04-24T18:25:33.733418",
+    "environment": "Tokyo Shunjuku",
+    "entities": [
+      {
+        "entity_id": "person_0",
+        "type": "person",
+        "bbox": [
+          981.5643310546875,
+          578.0769653320312,
+          1034.7132568359375,
+          633.6810913085938
+        ],
+        "confidence": 0.6278243064880371,
+        "description": "a black cat"
+      },
+      {
+        "entity_id": "person_1",
+        "type": "person",
+        "bbox": [
+          301.5551452636719,
+          589.2489013671875,
+          337.3753356933594,
+          633.9881591796875
+        ],
+        "confidence": 0.5444914102554321,
+        "description": "a person"
+      },
+      {
+        "entity_id": "person_2",
+        "type": "person",
+        "bbox": [
+          1075.4827880859375,
+          587.85595703125,
+          1133.7047119140625,
+          632.9502563476562
+        ],
+        "confidence": 0.509935736656189,
+        "description": "a black and white photo of a woman with a black hat and a white shirt"
+      }
+    ],
+    "relationships": [
+      {
+        "subject": "person_0",
+        "predicate": "near",
+        "object": "person_1"
+      },
+      {
+        "subject": "person_0",
+        "predicate": "next_to",
+        "object": "person_2"
+      },
+      {
+        "subject": "person_1",
+        "predicate": "near",
+        "object": "person_2"
+      }
+    ],
+    "delta": {
+      "new_entities": [
+        "person_2",
+        "person_0",
+        "person_1"
+      ],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": -1
+  },
+  {
+    "frame_id": 29,
+    "timestamp": "2025-04-24T18:26:04.812425",
+    "environment": "Tokyo Shunjuku",
+    "entities": [
+      {
+        "entity_id": "clock_0",
+        "type": "clock",
+        "bbox": [
+          769.653076171875,
+          301.7331237792969,
+          831.6729125976562,
+          350.0086975097656
+        ],
+        "confidence": 0.807557225227356,
+        "description": "a black sphere with white lights"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": [
+        "clock_0"
+      ],
+      "updated_entities": [],
+      "removed_entities": [
+        "person_2",
+        "person_0",
+        "person_1"
+      ]
+    },
+    "previous_frame_id": 28
+  },
+  {
+    "frame_id": 58,
+    "timestamp": "2025-04-24T18:26:06.109243",
+    "environment": "Tokyo Shunjuku",
+    "entities": [],
+    "relationships": [],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": [],
+      "removed_entities": [
+        "clock_0"
+      ]
+    },
+    "previous_frame_id": 57
+  },
+  {
+    "frame_id": 87,
+    "timestamp": "2025-04-24T18:26:05.261644",
+    "environment": "Tokyo Shunjuku",
+    "entities": [
+      {
+        "entity_id": "person_3",
+        "type": "person",
+        "bbox": [
+          1022.8195190429688,
+          503.3426513671875,
+          1210.9437255859375,
+          633.9301147460938
+        ],
+        "confidence": 0.776400625705719,
+        "description": "a person in a red shirt"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": [
+        "person_3"
+      ],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 86
+  },
+  {
+    "frame_id": 116,
+    "timestamp": "2025-04-24T18:26:06.202186",
+    "environment": "Tokyo Shunjuku",
+    "entities": [],
+    "relationships": [],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": [],
+      "removed_entities": [
+        "person_3"
+      ]
+    },
+    "previous_frame_id": 115
+  },
+  {
+    "frame_id": 145,
+    "timestamp": "2025-04-24T18:26:05.332816",
+    "environment": "Tokyo Shunjuku",
+    "entities": [],
+    "relationships": [],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 144
+  },
+  {
+    "frame_id": 174,
+    "timestamp": "2025-04-24T18:26:04.456845",
+    "environment": "Tokyo Shunjuku",
+    "entities": [],
+    "relationships": [],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 173
+  },
+  {
+    "frame_id": 203,
+    "timestamp": "2025-04-24T18:26:03.592709",
+    "environment": "Tokyo Shunjuku",
+    "entities": [
+      {
+        "entity_id": "clock_1",
+        "type": "clock",
+        "bbox": [
+          164.79525756835938,
+          365.1198425292969,
+          1070.1162109375,
+          510.9612121582031
+        ],
+        "confidence": 0.6855829954147339,
+        "description": "a neon sign"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": [
+        "clock_1"
+      ],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 202
+  },
+  {
+    "frame_id": 232,
+    "timestamp": "2025-04-24T18:26:03.951931",
+    "environment": "Tokyo Shunjuku",
+    "entities": [],
+    "relationships": [],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": [],
+      "removed_entities": [
+        "clock_1"
+      ]
+    },
+    "previous_frame_id": 231
+  },
+  {
+    "frame_id": 261,
+    "timestamp": "2025-04-24T18:26:03.081950",
+    "environment": "Tokyo Shunjuku",
+    "entities": [
+      {
+        "entity_id": "traffic light_0",
+        "type": "traffic light",
+        "bbox": [
+          1193.362548828125,
+          543.3523559570312,
+          1222.289794921875,
+          587.9613037109375
+        ],
+        "confidence": 0.549777626991272,
+        "description": "a green glowing object"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": [
+        "traffic light_0"
+      ],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 260
+  }
+]

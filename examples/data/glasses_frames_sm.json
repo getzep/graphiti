@@ -1,0 +1,533 @@
+[
+  {
+    "frame_id": 1,
+    "timestamp": "2024-08-24T09:00:00Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [100, 200, 300, 400],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [400, 500, 450, 550],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      },
+      {
+        "entity_id": "person_2",
+        "type": "person",
+        "bbox": [600, 700, 800, 900],
+        "confidence": 0.98,
+        "description": "Child, playing nearby."
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" },
+      { "subject": "person_2", "predicate": "near", "object": "object_1" }
+    ],
+    "delta": {
+      "new_entities": ["object_1", "object_2", "person_2"],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": null
+  },
+  {
+    "frame_id": 2,
+    "timestamp": "2024-08-24T09:00:01Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [102, 202, 302, 402],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [402, 502, 452, 552],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      },
+      {
+        "entity_id": "person_2",
+        "type": "person",
+        "bbox": [602, 702, 802, 902],
+        "confidence": 0.98,
+        "description": "Child, playing nearby."
+      },
+      {
+        "entity_id": "object_3",
+        "type": "table",
+        "bbox": [200, 300, 350, 400],
+        "confidence": 0.92,
+        "description": "Wooden coffee table."
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "on", "object": "object_3" },
+      { "subject": "object_2", "predicate": "on", "object": "object_3" },
+      { "subject": "person_2", "predicate": "near", "object": "object_3" }
+    ],
+    "delta": {
+      "new_entities": ["object_3"],
+      "updated_entities": ["object_1", "object_2", "person_2"],
+      "removed_entities": []
+    },
+    "previous_frame_id": 1
+  },
+  {
+    "frame_id": 3,
+    "timestamp": "2024-08-24T09:00:02Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [104, 204, 304, 404],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [404, 504, 454, 554],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      },
+      {
+        "entity_id": "object_3",
+        "type": "table",
+        "bbox": [202, 302, 352, 402],
+        "confidence": 0.92,
+        "description": "Wooden coffee table."
+      },
+      {
+        "entity_id": "object_4",
+        "type": "bag",
+        "bbox": [500, 600, 550, 650],
+        "confidence": 0.93,
+        "description": "Reusable shopping bag."
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "on", "object": "object_3" },
+      { "subject": "object_2", "predicate": "on", "object": "object_3" },
+      { "subject": "object_4", "predicate": "next_to", "object": "object_3" }
+    ],
+    "delta": {
+      "new_entities": ["object_4"],
+      "updated_entities": ["object_1", "object_2", "object_3"],
+      "removed_entities": ["person_2"]
+    },
+    "previous_frame_id": 2
+  },
+  {
+    "frame_id": 4,
+    "timestamp": "2024-08-24T09:00:03Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [506, 606, 706, 806],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [602, 702, 802, 902],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 3
+  },
+  {
+    "frame_id": 5,
+    "timestamp": "2024-08-24T09:00:04Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [508, 608, 708, 808],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [604, 704, 804, 904],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 4
+  },
+  {
+    "frame_id": 6,
+    "timestamp": "2024-08-24T09:00:05Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [510, 610, 710, 810],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [606, 706, 806, 906],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 5
+  },
+  {
+    "frame_id": 7,
+    "timestamp": "2024-08-24T09:00:06Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [512, 612, 712, 812],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [608, 708, 808, 908],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 6
+  },
+  {
+    "frame_id": 8,
+    "timestamp": "2024-08-24T09:00:07Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [514, 614, 714, 814],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [610, 710, 810, 910],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 7
+  },
+  {
+    "frame_id": 9,
+    "timestamp": "2024-08-24T09:00:08Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [516, 616, 716, 816],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [612, 712, 812, 912],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 8
+  },
+  {
+    "frame_id": 10,
+    "timestamp": "2024-08-24T09:00:09Z",
+    "environment": "home",
+    "entities": [
+      {
+        "entity_id": "object_1",
+        "type": "shoe",
+        "bbox": [520, 620, 720, 820],
+        "confidence": 0.97,
+        "description": "TinyBirds Wool Runners - Little Kids - Natural Black (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_2",
+        "type": "sock",
+        "bbox": [620, 720, 820, 920],
+        "confidence": 0.95,
+        "description": "Anytime No Show Sock - Rugged Beige"
+      }
+    ],
+    "relationships": [
+      { "subject": "object_1", "predicate": "next_to", "object": "object_2" }
+    ],
+    "delta": {
+      "new_entities": [],
+      "updated_entities": ["object_1"],
+      "removed_entities": ["object_2"]
+    },
+    "previous_frame_id": 9
+  },
+  {
+    "frame_id": 11,
+    "timestamp": "2024-08-24T10:00:00Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_3",
+        "type": "shoe",
+        "bbox": [700, 800, 900, 1000],
+        "confidence": 0.96,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "person_2",
+        "type": "person",
+        "bbox": [300, 400, 500, 600],
+        "confidence": 0.98,
+        "description": "Store clerk, wearing a name tag."
+      }
+    ],
+    "relationships": [
+      { "subject": "object_3", "predicate": "next_to", "object": "person_2" }
+    ],
+    "delta": {
+      "new_entities": ["object_3", "person_2"],
+      "updated_entities": [],
+      "removed_entities": []
+    },
+    "previous_frame_id": 10
+  },
+  {
+    "frame_id": 12,
+    "timestamp": "2024-08-24T10:00:01Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [702, 802, 902, 1002],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_4"],
+      "updated_entities": [],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 11
+  },
+  {
+    "frame_id": 13,
+    "timestamp": "2024-08-24T10:00:02Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [704, 804, 904, 1004],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_5",
+        "type": "shoe",
+        "bbox": [706, 806, 906, 1006],
+        "confidence": 0.94,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_5"],
+      "updated_entities": ["object_4"],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 12
+  },
+  {
+    "frame_id": 14,
+    "timestamp": "2024-08-24T10:00:03Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [706, 806, 906, 1006],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_5",
+        "type": "shoe",
+        "bbox": [708, 808, 908, 1008],
+        "confidence": 0.94,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_5"],
+      "updated_entities": ["object_4"],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 13
+  },
+  {
+    "frame_id": 15,
+    "timestamp": "2024-08-24T10:00:04Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [708, 808, 908, 1008],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_5",
+        "type": "shoe",
+        "bbox": [710, 810, 910, 1010],
+        "confidence": 0.94,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_5"],
+      "updated_entities": ["object_4"],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 14
+  },
+  {
+    "frame_id": 16,
+    "timestamp": "2024-08-24T10:00:05Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [710, 810, 910, 1010],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_5",
+        "type": "shoe",
+        "bbox": [712, 812, 912, 1012],
+        "confidence": 0.94,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_5"],
+      "updated_entities": ["object_4"],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 15
+  },
+  {
+    "frame_id": 17,
+    "timestamp": "2024-08-24T10:00:06Z",
+    "environment": "store",
+    "entities": [
+      {
+        "entity_id": "object_4",
+        "type": "shoe",
+        "bbox": [712, 812, 912, 1012],
+        "confidence": 0.95,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      },
+      {
+        "entity_id": "object_5",
+        "type": "shoe",
+        "bbox": [714, 814, 914, 1014],
+        "confidence": 0.94,
+        "description": "Men's Couriers - Natural Black/Basin Blue (Blizzard Sole)"
+      }
+    ],
+    "relationships": [],
+    "delta": {
+      "new_entities": ["object_5"],
+      "updated_entities": ["object_4"],
+      "removed_entities": ["object_3", "person_2"]
+    },
+    "previous_frame_id": 16
+  }
+]
