@@ -10,7 +10,6 @@ Graphiti
 <h2 align="center"> Build Real-Time Knowledge Graphs for AI Agents</h2>
 <div align="center">
 
-
 [![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg?style=flat)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
 [![Unit Tests](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/unit_tests.yml)
 [![MyPy Check](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml/badge.svg)](https://github.com/getzep/Graphiti/actions/workflows/typecheck.yml)
@@ -23,9 +22,15 @@ Graphiti
 <div align="center">
 
 <a href="https://trendshift.io/repositories/12986" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12986" alt="getzep%2Fgraphiti | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+
 </div>
+
 :star: _Help us reach more developers and grow the Graphiti community. Star this repo!_
+
 <br />
+
+> [!TIP]
+> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful Knowledge Graph-based memory.
 
 Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
 
@@ -159,12 +164,6 @@ For a complete working example, see the [Quickstart Example](./examples/quicksta
 
 The example is fully documented with clear explanations of each functionality and includes a comprehensive README with setup instructions and next steps.
 
-## Graph Service
-
-The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
-
-Please see the [server README](./server/README.md) for more information.
-
 ## MCP Server
 
 The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server allows AI assistants to interact with Graphiti's knowledge graph capabilities through the MCP protocol.
@@ -180,6 +179,12 @@ Key features of the MCP server include:
 The MCP server can be deployed using Docker with Neo4j, making it easy to integrate Graphiti into your AI assistant workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](./mcp_server/README.md).
+
+## REST Service
+
+The `server` directory contains an API service for interacting with the Graphiti API. It is built using FastAPI.
+
+Please see the [server README](./server/README.md) for more information.
 
 ## Optional Environment Variables
 
