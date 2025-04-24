@@ -22,6 +22,7 @@ from datetime import datetime
 import numpy as np
 from dotenv import load_dotenv
 from neo4j import time as neo4j_time
+from typing_extensions import LiteralString
 
 load_dotenv()
 
@@ -30,6 +31,10 @@ USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 1))
 DEFAULT_PAGE_LIMIT = 20
+
+RUNTIME_QUERY: LiteralString = (
+    'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+)
 
 
 def parse_db_date(neo_date: neo4j_time.DateTime | None) -> datetime | None:

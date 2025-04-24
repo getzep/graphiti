@@ -377,67 +377,9 @@ class Graphiti:
                 extracted_edges, uuid_map
             )
 
-            # Resolve extracted edges with related edges already in the graph
-            related_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            edge.source_node_uuid,
-                            edge.target_node_uuid,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-            logger.debug(
-                f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_list for e in edges_lst]}'
-            )
-
-            existing_source_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            edge.source_node_uuid,
-                            None,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-
-            existing_target_edges_list: list[list[EntityEdge]] = list(
-                await semaphore_gather(
-                    *[
-                        get_relevant_edges(
-                            self.driver,
-                            [edge],
-                            None,
-                            edge.target_node_uuid,
-                            RELEVANT_SCHEMA_LIMIT,
-                        )
-                        for edge in extracted_edges_with_resolved_pointers
-                    ]
-                )
-            )
-
-            existing_edges_list: list[list[EntityEdge]] = [
-                source_lst + target_lst
-                for source_lst, target_lst in zip(
-                    existing_source_edges_list, existing_target_edges_list, strict=False
-                )
-            ]
-
             resolved_edges, invalidated_edges = await resolve_extracted_edges(
-                self.llm_client,
+                self.clients,
                 extracted_edges_with_resolved_pointers,
-                related_edges_list,
-                existing_edges_list,
                 episode,
                 previous_episodes,
             )
