@@ -38,10 +38,10 @@ from graphiti_core.nodes import Node
 logger = logging.getLogger(__name__)
 
 ENTITY_EDGE_RETURN: LiteralString = """
-        RETURN DISTINCT
+        RETURN
             e.uuid AS uuid,
-            n.uuid AS source_node_uuid,
-            m.uuid AS target_node_uuid,
+            startNode(e).uuid AS source_node_uuid,
+            endNode(e).uuid AS target_node_uuid,
             e.created_at AS created_at,
             e.name AS name,
             e.group_id AS group_id,
@@ -154,11 +154,11 @@ class EpisodicEdge(Edge):
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        uuid_cursor: str | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            uuid_cursor: str | None = None,
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -284,11 +284,11 @@ class EntityEdge(Edge):
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        uuid_cursor: str | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            uuid_cursor: str | None = None,
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -320,10 +320,10 @@ class EntityEdge(Edge):
     @classmethod
     async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
         query: LiteralString = (
-            """
-            MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-            """
-            + ENTITY_EDGE_RETURN
+                """
+                MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                """
+                + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
             query, node_uuid=node_uuid, database_=DEFAULT_DATABASE, routing_='r'
@@ -395,11 +395,11 @@ class CommunityEdge(Edge):
 
     @classmethod
     async def get_by_group_ids(
-        cls,
-        driver: AsyncDriver,
-        group_ids: list[str],
-        limit: int | None = None,
-        uuid_cursor: str | None = None,
+            cls,
+            driver: AsyncDriver,
+            group_ids: list[str],
+            limit: int | None = None,
+            uuid_cursor: str | None = None,
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''

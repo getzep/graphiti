@@ -23,8 +23,8 @@ EPISODIC_EDGE_SAVE = """
 
 EPISODIC_EDGE_SAVE_BULK = """
     UNWIND $episodic_edges AS edge
-    MATCH (episode:Episodic {uuid: edge.source_node_uuid}) 
-    MATCH (node:Entity {uuid: edge.target_node_uuid}) 
+    MATCH (episode:Episodic {uuid: startNode(edge).uuid}) 
+    MATCH (node:Entity {uuid: endNode(edge).uuid}) 
     MERGE (episode)-[r:MENTIONS {uuid: edge.uuid}]->(node)
     SET r = {uuid: edge.uuid, group_id: edge.group_id, created_at: edge.created_at}
     RETURN r.uuid AS uuid
