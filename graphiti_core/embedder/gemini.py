@@ -66,3 +66,13 @@ class GeminiEmbedder(EmbedderClient):
         )
 
         return result.embeddings[0].values
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        # Generate embeddings
+        result = await self.client.aio.models.embed_content(
+            model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
+            contents=input_data_list,
+            config=types.EmbedContentConfig(output_dimensionality=self.config.embedding_dim),
+        )
+
+        return [embedding.values for embedding in result.embeddings]
