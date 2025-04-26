@@ -477,7 +477,7 @@ class Graphiti:
                 extracted_nodes,
                 extracted_edges,
                 episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.llm_client, episode_pairs)
+            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs)
 
             # Generate embeddings
             await semaphore_gather(
