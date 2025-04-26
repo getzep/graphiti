@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from typing_extensions import Any
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
@@ -135,11 +136,11 @@ async def add_nodes_and_edges_bulk_tx(
 
 
 async def extract_nodes_and_edges_bulk(
-    llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
+    clients: GraphitiClients, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await semaphore_gather(
         *[
-            extract_nodes(llm_client, episode, previous_episodes)
+            extract_nodes(clients, episode, previous_episodes)
             for episode, previous_episodes in episode_tuples
         ]
     )
@@ -152,7 +153,7 @@ async def extract_nodes_and_edges_bulk(
     extracted_edges_bulk = await semaphore_gather(
         *[
             extract_edges(
-                llm_client,
+                clients,
                 episode,
                 extracted_nodes_bulk[i],
                 previous_episodes_list[i],
@@ -191,7 +192,7 @@ async def dedupe_nodes_bulk(
 
     existing_nodes_chunks: list[list[EntityNode]] = list(
         await semaphore_gather(
-            *[get_relevant_nodes(driver, SearchFilters(), node_chunk) for node_chunk in node_chunks]
+            *[get_relevant_nodes(driver, node_chunk, SearchFilters()) for node_chunk in node_chunks]
         )
     )
 
@@ -225,7 +226,7 @@ async def dedupe_edges_bulk(
 
     relevant_edges_chunks: list[list[EntityEdge]] = list(
         await semaphore_gather(
-            *[get_relevant_edges(driver, edge_chunk, None, None) for edge_chunk in edge_chunks]
+            *[get_relevant_edges(driver, edge_chunk, SearchFilters()) for edge_chunk in edge_chunks]
         )
     )
 
