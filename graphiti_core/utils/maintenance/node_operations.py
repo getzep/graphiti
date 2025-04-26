@@ -22,6 +22,7 @@ from typing import Any
 import pydantic
 from pydantic import BaseModel
 
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
@@ -29,6 +30,8 @@ from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
+from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -116,12 +119,14 @@ async def extract_nodes_reflexion(
 
 
 async def extract_nodes(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
+    llm_client = clients.llm_client
+    embedder = clients.embedder
     extracted_node_names: list[str] = []
     custom_prompt = ''
     entities_missed = True
@@ -138,7 +143,6 @@ async def extract_nodes(
         elif episode.source == EpisodeType.json:
             extracted_node_names = await extract_json_nodes(llm_client, episode, custom_prompt)
 
-        reflexion_iterations += 1
         if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
             missing_entities = await extract_nodes_reflexion(
                 llm_client, episode, previous_episodes, extracted_node_names
@@ -149,6 +153,7 @@ async def extract_nodes(
             custom_prompt = 'The following entities were missed in a previous extraction: '
             for entity in missing_entities:
                 custom_prompt += f'\n{entity},'
+            reflexion_iterations += 1
 
     node_classification_context = {
         'episode_content': episode.content,
@@ -184,7 +189,7 @@ async def extract_nodes(
     end = time()
     logger.debug(f'Extracted new nodes: {extracted_node_names} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
-    new_nodes = []
+    extracted_nodes = []
     for name in extracted_node_names:
         entity_type = node_classifications.get(name)
         if entity_types is not None and entity_type not in entity_types:
@@ -203,10 +208,13 @@ async def extract_nodes(
             summary='',
             created_at=utc_now(),
         )
-        new_nodes.append(new_node)
+        extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
-    return new_nodes
+    await semaphore_gather(*[node.generate_name_embedding(embedder) for node in extracted_nodes])
+
+    logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+    return extracted_nodes
 
 
 async def dedupe_extracted_nodes(
@@ -260,13 +268,20 @@ async def dedupe_extracted_nodes(
 
 
 async def resolve_extracted_nodes(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
-    existing_nodes_lists: list[list[EntityNode]],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
+    llm_client = clients.llm_client
+    driver = clients.driver
+
+    # Find relevant nodes already in the graph
+    existing_nodes_lists: list[list[EntityNode]] = await get_relevant_nodes(
+        driver, extracted_nodes, SearchFilters(), 0.8
+    )
+
     uuid_map: dict[str, str] = {}
     resolved_nodes: list[EntityNode] = []
     results: list[tuple[EntityNode, dict[str, str]]] = list(
@@ -290,6 +305,8 @@ async def resolve_extracted_nodes(
     for result in results:
         uuid_map.update(result[1])
         resolved_nodes.append(result[0])
+
+    logger.debug(f'Resolved nodes: {[(n.name, n.uuid) for n in resolved_nodes]}')
 
     return resolved_nodes, uuid_map
 

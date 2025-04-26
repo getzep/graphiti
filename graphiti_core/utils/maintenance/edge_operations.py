@@ -19,12 +19,15 @@ from datetime import datetime
 from time import time
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
+from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
@@ -39,7 +42,7 @@ def build_episodic_edges(
     episode: EpisodicNode,
     created_at: datetime,
 ) -> list[EpisodicEdge]:
-    edges: list[EpisodicEdge] = [
+    episodic_edges: list[EpisodicEdge] = [
         EpisodicEdge(
             source_node_uuid=episode.uuid,
             target_node_uuid=node.uuid,
@@ -49,7 +52,9 @@ def build_episodic_edges(
         for node in entity_nodes
     ]
 
-    return edges
+    logger.debug(f'Built episodic edges: {episodic_edges}')
+
+    return episodic_edges
 
 
 def build_community_edges(
@@ -71,7 +76,7 @@ def build_community_edges(
 
 
 async def extract_edges(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     episode: EpisodicNode,
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
@@ -79,7 +84,9 @@ async def extract_edges(
 ) -> list[EntityEdge]:
     start = time()
 
-    EXTRACT_EDGES_MAX_TOKENS = 16384
+    extract_edges_max_tokens = 16384
+    llm_client = clients.llm_client
+    embedder = clients.embedder
 
     node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
 
@@ -97,7 +104,7 @@ async def extract_edges(
         llm_response = await llm_client.generate_response(
             prompt_library.extract_edges.edge(context),
             response_model=ExtractedEdges,
-            max_tokens=EXTRACT_EDGES_MAX_TOKENS,
+            max_tokens=extract_edges_max_tokens,
         )
         edges_data = llm_response.get('edges', [])
 
@@ -144,6 +151,11 @@ async def extract_edges(
         logger.debug(
             f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
         )
+
+    # calculate embeddings
+    await semaphore_gather(*[edge.generate_embedding(embedder) for edge in edges])
+
+    logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
 
     return edges
 
@@ -193,13 +205,26 @@ async def dedupe_extracted_edges(
 
 
 async def resolve_extracted_edges(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
-    related_edges_lists: list[list[EntityEdge]],
-    existing_edges_lists: list[list[EntityEdge]],
     current_episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
+    driver = clients.driver
+    llm_client = clients.llm_client
+
+    related_edges_lists: list[list[EntityEdge]] = await get_relevant_edges(
+        driver, extracted_edges, SearchFilters(), 0.8
+    )
+
+    logger.debug(
+        f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
+    )
+
+    edge_invalidation_candidates: list[list[EntityEdge]] = await get_edge_invalidation_candidates(
+        driver, extracted_edges, SearchFilters()
+    )
+
     # resolve edges with related edges in the graph, extract temporal information, and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
         await semaphore_gather(
@@ -213,7 +238,7 @@ async def resolve_extracted_edges(
                     previous_episodes,
                 )
                 for extracted_edge, related_edges, existing_edges in zip(
-                    extracted_edges, related_edges_lists, existing_edges_lists, strict=False
+                    extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=False
                 )
             ]
         )
@@ -227,6 +252,8 @@ async def resolve_extracted_edges(
 
         resolved_edges.append(resolved_edge)
         invalidated_edges.extend(invalidated_edge_chunk)
+
+    logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
     return resolved_edges, invalidated_edges
 

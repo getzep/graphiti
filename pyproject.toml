@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.10.5"
+version = "0.10.6"
 authors = [
     { "name" = "Paul Paliychuk", "email" = "paul@getzep.com" },
     { "name" = "Preston Rasmussen", "email" = "preston@getzep.com" },
