@@ -71,7 +71,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+        driver: AsyncDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -89,11 +89,11 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: AsyncDriver,
-    episodic_nodes: list[EpisodicNode],
-    episodic_edges: list[EpisodicEdge],
-    entity_nodes: list[EntityNode],
-    entity_edges: list[EntityEdge],
+        driver: AsyncDriver,
+        episodic_nodes: list[EpisodicNode],
+        episodic_edges: list[EpisodicEdge],
+        entity_nodes: list[EntityNode],
+        entity_edges: list[EntityEdge],
 ):
     async with driver.session(database=DEFAULT_DATABASE) as session:
         await session.execute_write(
@@ -102,11 +102,11 @@ async def add_nodes_and_edges_bulk(
 
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: AsyncManagedTransaction,
-    episodic_nodes: list[EpisodicNode],
-    episodic_edges: list[EpisodicEdge],
-    entity_nodes: list[EntityNode],
-    entity_edges: list[EntityEdge],
+        tx: AsyncManagedTransaction,
+        episodic_nodes: list[EpisodicNode],
+        episodic_edges: list[EpisodicEdge],
+        entity_nodes: list[EntityNode],
+        entity_edges: list[EntityEdge],
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -128,12 +128,14 @@ async def add_nodes_and_edges_bulk_tx(
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
-    await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[dict(edge) for edge in episodic_edges])
-    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[dict(edge) for edge in entity_edges])
+    await tx.run(
+        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
+    )
+    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[edge.model_dump() for edge in entity_edges])
 
 
 async def extract_nodes_and_edges_bulk(
-    llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
+        llm_client: LLMClient, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await semaphore_gather(
         *[
@@ -176,16 +178,16 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: AsyncDriver,
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
+        driver: AsyncDriver,
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
     nodes, uuid_map = node_name_match(extracted_nodes)
 
     compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
 
-    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
     existing_nodes_chunks: list[list[EntityNode]] = list(
         await semaphore_gather(
@@ -212,13 +214,13 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+        driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)
 
     edge_chunks = [
-        compressed_edges[i : i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
+        compressed_edges[i: i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
     ]
 
     relevant_edges_chunks: list[list[EntityEdge]] = list(
@@ -254,7 +256,7 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 
 
 async def compress_nodes(
-    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
+        llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
     if len(nodes) == 0:
@@ -375,9 +377,9 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
 
 
 async def extract_edge_dates_bulk(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
 ) -> list[EntityEdge]:
     edges: list[EntityEdge] = []
     # confirm that all of our edges have at least one episode

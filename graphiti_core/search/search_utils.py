@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                        YIELD node AS n, score
-                                        WHERE n:Entity
-                                        """
+                                            CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                            YIELD node AS n, score
+                                            WHERE n:Entity
+                                            """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -739,12 +739,25 @@ async def get_relevant_edges(
             """
         + filter_query
         + """
-            WITH n, m, e, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
-            WHERE score > $min_score"""
-        + ENTITY_EDGE_RETURN
-        + """
-        ORDER BY score DESC
-        LIMIT $limit
+            WITH e, edge, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
+            WHERE score > $min_score
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at
+                })[..$limit] AS matches
         """
     )
 
@@ -792,15 +805,29 @@ async def get_edge_invalidation_candidates(
             """
         + filter_query
         + """
-            WITH e, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
+            WITH edge, e, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
             WHERE score > $min_score
-            
-        ORDER BY score DESC
-        LIMIT $limit
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at
+                })[..$limit] AS matches
         """
     )
 
-    records_list, _, _ = await driver.execute_query(
+    results, _, _ = await driver.execute_query(
         query,
         query_params,
         edges=[edge.model_dump() for edge in edges],
@@ -809,11 +836,16 @@ async def get_edge_invalidation_candidates(
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    relevant_edges = [
-        [get_entity_edge_from_record(record) for record in records] for records in records_list
-    ]
+    invalidation_edges_dict: dict[str, list[EntityEdge]] = {
+        result['search_edge_uuid']: [
+            get_entity_edge_from_record(record) for record in result['matches']
+        ]
+        for result in results
+    }
 
-    return relevant_edges
+    invalidation_edges = [invalidation_edges_dict.get(edge.uuid, []) for edge in edges]
+
+    return invalidation_edges
 
 
 # takes in a list of rankings of uuids
