@@ -23,7 +23,7 @@ import numpy as np
 from neo4j import AsyncDriver, Query
 from typing_extensions import LiteralString
 
-from graphiti_core.edges import ENTITY_EDGE_RETURN, EntityEdge, get_entity_edge_from_record
+from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.helpers import (
     DEFAULT_DATABASE,
     RUNTIME_QUERY,
@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                            CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                            YIELD node AS n, score
-                                            WHERE n:Entity
-                                            """
+                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                YIELD node AS n, score
+                                                WHERE n:Entity
+                                                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -657,7 +657,6 @@ async def get_relevant_nodes(
     if len(nodes) == 0:
         return []
 
-    node_embeddings = [node.name_embedding for node in nodes]
     group_id = nodes[0].group_id
 
     # vector similarity search over entity names

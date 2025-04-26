@@ -22,7 +22,6 @@ from neo4j import AsyncDriver
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
-from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather

@@ -30,9 +30,6 @@ from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
 from graphiti_core.prompts.summarize_nodes import Summary
-from graphiti_core.search.search import search
-from graphiti_core.search.search_config import SearchResults
-from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now

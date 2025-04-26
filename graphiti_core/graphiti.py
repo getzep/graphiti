@@ -19,7 +19,7 @@ from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
-from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
@@ -43,7 +43,6 @@ from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
     get_mentioned_nodes,
     get_relevant_edges,
-    get_relevant_nodes,
 )
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
