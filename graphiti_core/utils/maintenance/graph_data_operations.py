@@ -113,11 +113,11 @@ async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
 
 
 async def retrieve_episodes(
-        driver: AsyncDriver,
-        reference_time: datetime,
-        last_n: int = EPISODE_WINDOW_LEN,
-        group_ids: list[str] | None = None,
-        source: EpisodeType | None = None,
+    driver: AsyncDriver,
+    reference_time: datetime,
+    last_n: int = EPISODE_WINDOW_LEN,
+    group_ids: list[str] | None = None,
+    source: EpisodeType | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -139,12 +139,12 @@ async def retrieve_episodes(
     source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
 
     query: LiteralString = (
-            """
+        """
                     MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
                     """
-            + group_id_filter
-            + source_filter
-            + """
+        + group_id_filter
+        + source_filter
+        + """
         RETURN e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
