@@ -103,7 +103,7 @@ async def build_graph(
 
 
 async def build_baseline_graph(multi_session_count: int, session_length: int):
-    # Use gpt-4o for graph building baseline
+    # Use gpt-4.1-mini for graph building baseline
     llm_client = OpenAIClient(config=LLMConfig(model='gpt-4.1-mini'))
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD, llm_client=llm_client)
 

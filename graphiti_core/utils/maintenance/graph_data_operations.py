@@ -140,8 +140,8 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                    MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                    """
+                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                        """
         + group_id_filter
         + source_filter
         + """
@@ -161,7 +161,7 @@ async def retrieve_episodes(
     result = await driver.execute_query(
         query,
         reference_time=reference_time,
-        source=source.name,
+        source=source.name if source is not None else None,
         num_episodes=last_n,
         group_ids=group_ids,
         database_=DEFAULT_DATABASE,
