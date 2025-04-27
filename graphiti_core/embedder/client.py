@@ -34,4 +34,4 @@ class EmbedderClient(ABC):
         pass
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
-        pass
+        raise NotImplementedError()
