@@ -59,4 +59,7 @@ class VoyageAIEmbedder(EmbedderClient):
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
         result = await self.client.embed(input_data_list, model=self.config.embedding_model)
-        return [embedding[: self.config.embedding_dim] for embedding in result.embeddings]
+        return [
+            [float(x) for x in embedding[: self.config.embedding_dim]]
+            for embedding in result.embeddings
+        ]
