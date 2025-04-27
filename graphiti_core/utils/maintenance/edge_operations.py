@@ -33,7 +33,7 @@ from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
-from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
     extract_edge_dates,
     get_edge_contradictions,
@@ -100,6 +100,7 @@ async def extract_edges(
         'episode_content': episode.content,
         'nodes': [node.name for node in nodes],
         'previous_episodes': [ep.content for ep in previous_episodes],
+        'reference_time': episode.valid_at,
         'custom_prompt': '',
     }
 
@@ -137,6 +138,27 @@ async def extract_edges(
     # Convert the extracted data into EntityEdge objects
     edges = []
     for edge_data in edges_data:
+        # Validate Edge Date information
+        valid_at = edge_data.get('valid_at', None)
+        invalid_at = edge_data.get('invalid_at', None)
+        valid_at_datetime = None
+        invalid_at_datetime = None
+
+        if valid_at:
+            try:
+                valid_at_datetime = ensure_utc(
+                    datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
+                )
+            except ValueError as e:
+                logger.warning(f'WARNING: Error parsing valid_at date: {e}. Input: {valid_at}')
+
+        if invalid_at:
+            try:
+                invalid_at_datetime = ensure_utc(
+                    datetime.fromisoformat(invalid_at.replace('Z', '+00:00'))
+                )
+            except ValueError as e:
+                logger.warning(f'WARNING: Error parsing invalid_at date: {e}. Input: {invalid_at}')
         edge = EntityEdge(
             source_node_uuid=node_uuids_by_name_map.get(
                 edge_data.get('source_entity_name', ''), ''
@@ -149,8 +171,8 @@ async def extract_edges(
             fact=edge_data.get('fact', ''),
             episodes=[episode.uuid],
             created_at=utc_now(),
-            valid_at=None,
-            invalid_at=None,
+            valid_at=valid_at_datetime,
+            invalid_at=invalid_at_datetime,
         )
         edges.append(edge)
         logger.debug(
@@ -217,9 +239,12 @@ async def resolve_extracted_edges(
     driver = clients.driver
     llm_client = clients.llm_client
 
-    related_edges_lists: list[list[EntityEdge]] = await get_relevant_edges(
-        driver, extracted_edges, SearchFilters()
+    search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
+        get_relevant_edges(driver, extracted_edges, SearchFilters()),
+        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters()),
     )
+
+    related_edges_lists, edge_invalidation_candidates = search_results
 
     logger.debug(
         f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
@@ -229,7 +254,7 @@ async def resolve_extracted_edges(
         driver, extracted_edges, SearchFilters()
     )
 
-    # resolve edges with related edges in the graph, extract temporal information, and find invalidation candidates
+    # resolve edges with related edges in the graph and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
         await semaphore_gather(
             *[
@@ -300,18 +325,14 @@ async def resolve_extracted_edge(
     current_episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
 ) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, (valid_at, invalid_at), invalidation_candidates = await semaphore_gather(
+    resolved_edge, invalidation_candidates = await semaphore_gather(
         dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
-        extract_edge_dates(llm_client, extracted_edge, current_episode, previous_episodes),
         get_edge_contradictions(llm_client, extracted_edge, existing_edges),
     )
 
     now = utc_now()
 
-    resolved_edge.valid_at = valid_at if valid_at else resolved_edge.valid_at
-    resolved_edge.invalid_at = invalid_at if invalid_at else resolved_edge.invalid_at
-
-    if invalid_at and not resolved_edge.expired_at:
+    if resolved_edge.invalid_at and not resolved_edge.expired_at:
         resolved_edge.expired_at = now
 
     # Determine if the new_edge needs to be expired
