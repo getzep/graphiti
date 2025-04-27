@@ -58,3 +58,9 @@ class OpenAIEmbedder(EmbedderClient):
             input=input_data, model=self.config.embedding_model
         )
         return result.data[0].embedding[: self.config.embedding_dim]
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        result = await self.client.embeddings.create(
+            input=input_data_list, model=self.config.embedding_model
+        )
+        return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]

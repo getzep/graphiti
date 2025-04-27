@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import EntityClassification, ExtractedNodes, MissedEntities
@@ -211,7 +211,7 @@ async def extract_nodes(
         extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
-    await semaphore_gather(*[node.generate_name_embedding(embedder) for node in extracted_nodes])
+    await create_entity_node_embeddings(embedder, extracted_nodes)
 
     logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
     return extracted_nodes
@@ -279,7 +279,7 @@ async def resolve_extracted_nodes(
 
     # Find relevant nodes already in the graph
     existing_nodes_lists: list[list[EntityNode]] = await get_relevant_nodes(
-        driver, extracted_nodes, SearchFilters(), 0.8
+        driver, extracted_nodes, SearchFilters()
     )
 
     uuid_map: dict[str, str] = {}

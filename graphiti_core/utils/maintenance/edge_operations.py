@@ -18,7 +18,12 @@ import logging
 from datetime import datetime
 from time import time
 
-from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
+from graphiti_core.edges import (
+    CommunityEdge,
+    EntityEdge,
+    EpisodicEdge,
+    create_entity_edge_embeddings,
+)
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
@@ -152,8 +157,7 @@ async def extract_edges(
             f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
         )
 
-    # calculate embeddings
-    await semaphore_gather(*[edge.generate_embedding(embedder) for edge in edges])
+    await create_entity_edge_embeddings(embedder, edges)
 
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
 
@@ -214,7 +218,7 @@ async def resolve_extracted_edges(
     llm_client = clients.llm_client
 
     related_edges_lists: list[list[EntityEdge]] = await get_relevant_edges(
-        driver, extracted_edges, SearchFilters(), 0.8
+        driver, extracted_edges, SearchFilters()
     )
 
     logger.debug(
