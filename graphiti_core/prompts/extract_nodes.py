@@ -58,6 +58,7 @@ class Prompt(Protocol):
     extract_text: PromptVersion
     reflexion: PromptVersion
     classify_nodes: PromptVersion
+    extract_attributes: PromptVersion
 
 
 class Versions(TypedDict):
@@ -66,6 +67,7 @@ class Versions(TypedDict):
     extract_text: PromptFunction
     reflexion: PromptFunction
     classify_nodes: PromptFunction
+    extract_attributes: PromptFunction
 
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
@@ -237,23 +239,18 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         {json.dumps(context['episode_content'], indent=2)}
         </MESSAGES>
 
-        Given the above MESSAGES and the following ENTITY, update any of the attributes based on the information provided
-        in MESSAGES.
+        Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
+        in MESSAGES. Use the provided attribute descriptions to better understand how each attribute should be determined.
 
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute should incorporate new information from MESSAGES, but the old information
             should also be preserved. Summaries must be no longer than 500 words.
-
+        
         <ENTITY>
         {context['node_name']}
         </ENTITY>
-
-
-        <ATTRIBUTES>
-        {json.dumps(context['attributes'], indent=2)}
-        </ATTRIBUTES>
         """,
         ),
     ]
@@ -265,4 +262,5 @@ versions: Versions = {
     'extract_text': extract_text,
     'reflexion': reflexion,
     'classify_nodes': classify_nodes,
+    'extract_attributes': extract_attributes,
 }

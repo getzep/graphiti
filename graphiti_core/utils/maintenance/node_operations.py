@@ -17,10 +17,10 @@ limitations under the License.
 import logging
 from contextlib import suppress
 from time import time
-from typing import Any
+from typing import Any, Optional
 
 import pydantic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
@@ -310,12 +310,21 @@ async def resolve_extracted_node(
 
 async def extract_attributes_from_nodes(
     llm_client: LLMClient,
-    node: EntityNode,
+    nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
-):
-    pass
+) -> list[EntityNode]:
+    updated_nodes: list[EntityNode] = await semaphore_gather(
+        *[
+            extract_attributes_from_node(
+                llm_client, node, episode, previous_episodes, entity_types.get(node.labels[-1])
+            )
+            for node in nodes
+        ]
+    )
+
+    return updated_nodes
 
 
 async def extract_attributes_from_node(
@@ -323,46 +332,48 @@ async def extract_attributes_from_node(
     node: EntityNode,
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
-):
+    entity_type: BaseModel | None = None,
+) -> EntityNode:
+    node_context: dict[str, Any] = {
+        'name': node.name,
+        'summary': node.summary,
+        'entity_type': node.labels[-1],
+        'attributes': node.attributes,
+    }
+
+    attributes_definitions: dict[str, Any] = {
+        'summary': (
+            str,
+            Field(
+                '',
+                description='Summary containing the important information about the entity. Under 500 words',
+            ),
+        )
+    }
+
+    if entity_type is not None:
+        for field_name, field_info in entity_type.model_fields.items():
+            attributes_definitions[field_name] = (
+                field_info.type,
+                Field(None, description=field_info.description),
+            )
+
+    entity_attributes_model = pydantic.create_model('EntityAttributes', **attributes_definitions)
+
     summary_context: dict[str, Any] = {
-        'node_name': node.name,
-        'node_summary': node.summary,
+        'node': node_context,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
     }
 
-    attributes: list[dict[str, str]] = []
-
     entity_type_classes: tuple[BaseModel, ...] = tuple()
-    if entity_types is not None:  # type: ignore
-        entity_type_classes = entity_type_classes + tuple(
-            filter(
-                lambda x: x is not None,  # type: ignore
-                [entity_types.get(entity_type) for entity_type in extracted_node.labels],  # type: ignore
-            )
-        )
-
-    for entity_type in entity_type_classes:
-        for field_name, field_info in entity_type.model_fields.items():
-            attributes.append(
-                {
-                    'attribute_name': field_name,
-                    'attribute_description': field_info.description or '',
-                }
-            )
 
     summary_context['attributes'] = attributes
 
-    entity_attributes_model = pydantic.create_model(  # type: ignore
-        'EntityAttributes',
-        __base__=entity_type_classes + (Summary,),  # type: ignore
-    )
-
     llm_response = await llm_client.generate_response(
-        prompt_library.summarize_nodes.summarize_context(summary_context),
+        prompt_library.extract_nodes.extract_attributes(summary_context),
         response_model=entity_attributes_model,
     )
 
