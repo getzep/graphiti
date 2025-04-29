@@ -35,7 +35,6 @@ from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
-    extract_edge_dates,
     get_edge_contradictions,
 )
 
@@ -106,7 +105,7 @@ async def extract_edges(
 
     facts_missed = True
     reflexion_iterations = 0
-    while facts_missed and reflexion_iterations < MAX_REFLEXION_ITERATIONS:
+    while facts_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
         llm_response = await llm_client.generate_response(
             prompt_library.extract_edges.edge(context),
             response_model=ExtractedEdges,
@@ -119,7 +118,9 @@ async def extract_edges(
         reflexion_iterations += 1
         if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
             reflexion_response = await llm_client.generate_response(
-                prompt_library.extract_edges.reflexion(context), response_model=MissingFacts
+                prompt_library.extract_edges.reflexion(context),
+                response_model=MissingFacts,
+                max_tokens=extract_edges_max_tokens,
             )
 
             missing_facts = reflexion_response.get('missing_facts', [])
