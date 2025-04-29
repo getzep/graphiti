@@ -234,7 +234,7 @@ async def resolve_extracted_nodes(
                     existing_nodes,
                     episode,
                     previous_episodes,
-                    entity_types,
+                    entity_types.get(extracted_node.labels[-1]),
                 )
                 for extracted_node, existing_nodes in zip(
                     extracted_nodes, existing_nodes_lists, strict=True
@@ -267,7 +267,7 @@ async def resolve_extracted_node(
     existing_nodes_context = [
         {
             **{
-                'id': id,
+                'id': i,
                 'name': node.name,
                 'entity_type': node.labels[-1],
                 'summary': node.summary,
@@ -280,12 +280,12 @@ async def resolve_extracted_node(
     extracted_node_context = {
         'name': extracted_node.name,
         'entity_type': extracted_node.labels[-1],
-        'entity_type_description': entity_type.model_fields,
+        'entity_type_description': entity_type.__doc__,
     }
 
     context = {
         'existing_nodes': existing_nodes_context,
-        'extracted_nodes': extracted_node_context,
+        'extracted_node': extracted_node_context,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
@@ -345,7 +345,6 @@ async def extract_attributes_from_node(
         'summary': (
             str,
             Field(
-                '',
                 description='Summary containing the important information about the entity. Under 500 words',
             ),
         )
@@ -355,7 +354,7 @@ async def extract_attributes_from_node(
         for field_name, field_info in entity_type.model_fields.items():
             attributes_definitions[field_name] = (
                 field_info.annotation,
-                Field(None, description=field_info.description),
+                Field(description=field_info.description),
             )
 
     entity_attributes_model = pydantic.create_model('EntityAttributes', **attributes_definitions)
@@ -380,6 +379,8 @@ async def extract_attributes_from_node(
         del node_attributes['summary']
 
     node.attributes.update(node_attributes)
+
+    return node
 
 
 async def dedupe_node_list(

@@ -249,7 +249,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             should also be preserved. Summaries must be no longer than 500 words.
         
         <ENTITY>
-        {context['node_name']}
+        {context['node']}
         </ENTITY>
         """,
         ),

@@ -136,6 +136,9 @@ async def extract_edges(
     end = time()
     logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
 
+    if len(edges_data) == 0:
+        return []
+
     # Convert the extracted data into EntityEdge objects
     edges = []
     for edge_data in edges_data:

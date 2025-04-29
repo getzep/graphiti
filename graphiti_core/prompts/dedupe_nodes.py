@@ -63,7 +63,7 @@ def node(context: dict[str, Any]) -> list[Message]:
         is a duplicate entity of one of the EXISTING NODES.
 
         <NEW NODE>
-        {json.dumps(context['extracted_nodes'], indent=2)}
+        {json.dumps(context['extracted_node'], indent=2)}
         </NEW NODE>
         Task:
         If the NEW NODE represents the same entity as any node in EXISTING NODES, set duplicate_node_id to the
