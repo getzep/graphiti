@@ -74,10 +74,9 @@ async def get_edge_contradictions(
     start = time()
     existing_edge_map = {edge.uuid: edge for edge in existing_edges}
 
-    new_edge_context = {'uuid': new_edge.uuid, 'name': new_edge.name, 'fact': new_edge.fact}
+    new_edge_context = {'fact': new_edge.fact}
     existing_edge_context = [
-        {'uuid': existing_edge.uuid, 'name': existing_edge.name, 'fact': existing_edge.fact}
-        for existing_edge in existing_edges
+        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
     ]
 
     context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}

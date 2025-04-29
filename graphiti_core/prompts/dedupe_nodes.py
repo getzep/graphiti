@@ -25,7 +25,7 @@ from .models import Message, PromptFunction, PromptVersion
 class NodeDuplicate(BaseModel):
     duplicate_node_id: int = Field(
         ...,
-        description='Node ID of the duplicate node. If no duplicate nodes are found, default to -1.',
+        description='id of the duplicate node. If no duplicate nodes are found, default to -1.',
     )
 
 
