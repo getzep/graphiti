@@ -354,7 +354,7 @@ async def extract_attributes_from_node(
     if entity_type is not None:
         for field_name, field_info in entity_type.model_fields.items():
             attributes_definitions[field_name] = (
-                field_info.type,
+                field_info.annotation,
                 Field(None, description=field_info.description),
             )
 
@@ -368,20 +368,13 @@ async def extract_attributes_from_node(
         else [],
     }
 
-    entity_type_classes: tuple[BaseModel, ...] = tuple()
-
-    summary_context['attributes'] = attributes
-
     llm_response = await llm_client.generate_response(
         prompt_library.extract_nodes.extract_attributes(summary_context),
         response_model=entity_attributes_model,
     )
 
     node.summary = llm_response.get('summary', '')
-    node_attributes = {
-        key: value if (value != 'None' or key == 'summary') else None
-        for key, value in llm_response.items()
-    }
+    node_attributes = {key: value for key, value in llm_response.items()}
 
     with suppress(KeyError):
         del node_attributes['summary']
