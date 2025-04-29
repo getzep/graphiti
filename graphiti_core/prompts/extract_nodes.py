@@ -222,6 +222,43 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def extract_attributes(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts entity properties from the provided text.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+
+        <MESSAGES>
+        {json.dumps(context['previous_episodes'], indent=2)}
+        {json.dumps(context['episode_content'], indent=2)}
+        </MESSAGES>
+
+        Given the above MESSAGES and the following ENTITY, update any of the attributes based on the information provided
+        in MESSAGES.
+
+        Guidelines:
+        1. Do not hallucinate entity property values if they cannot be found in the current context.
+        2. Only use the provided MESSAGES and ENTITY to set attribute values.
+        3. The summary attribute should incorporate new information from MESSAGES, but the old information
+            should also be preserved. Summaries must be no longer than 500 words.
+
+        <ENTITY>
+        {context['node_name']}
+        </ENTITY>
+
+
+        <ATTRIBUTES>
+        {json.dumps(context['attributes'], indent=2)}
+        </ATTRIBUTES>
+        """,
+        ),
+    ]
+
+
 versions: Versions = {
     'extract_message': extract_message,
     'extract_json': extract_json,

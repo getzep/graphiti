@@ -234,8 +234,6 @@ async def dedupe_extracted_edges(
 async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
-    current_episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
@@ -260,8 +258,6 @@ async def resolve_extracted_edges(
                     extracted_edge,
                     related_edges,
                     existing_edges,
-                    current_episode,
-                    previous_episodes,
                 )
                 for extracted_edge, related_edges, existing_edges in zip(
                     extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=True
@@ -287,6 +283,9 @@ async def resolve_extracted_edges(
 def resolve_edge_contradictions(
     resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
+    if len(invalidation_candidates) == 0:
+        return []
+
     # Determine which contradictory edges need to be expired
     invalidated_edges: list[EntityEdge] = []
     for edge in invalidation_candidates:
@@ -355,6 +354,9 @@ async def resolve_extracted_edge(
 async def dedupe_extracted_edge(
     llm_client: LLMClient, extracted_edge: EntityEdge, related_edges: list[EntityEdge]
 ) -> EntityEdge:
+    if len(related_edges) == 0:
+        return extracted_edge
+
     start = time()
 
     # Prepare context for LLM
