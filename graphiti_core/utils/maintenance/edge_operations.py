@@ -251,10 +251,6 @@ async def resolve_extracted_edges(
         f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
     )
 
-    edge_invalidation_candidates: list[list[EntityEdge]] = await get_edge_invalidation_candidates(
-        driver, extracted_edges, SearchFilters()
-    )
-
     # resolve edges with related edges in the graph and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
         await semaphore_gather(
@@ -268,7 +264,7 @@ async def resolve_extracted_edges(
                     previous_episodes,
                 )
                 for extracted_edge, related_edges, existing_edges in zip(
-                    extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=False
+                    extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=True
                 )
             ]
         )
@@ -323,8 +319,6 @@ async def resolve_extracted_edge(
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
-    current_episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
 ) -> tuple[EntityEdge, list[EntityEdge]]:
     resolved_edge, invalidation_candidates = await semaphore_gather(
         dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
@@ -365,12 +359,10 @@ async def dedupe_extracted_edge(
 
     # Prepare context for LLM
     related_edges_context = [
-        {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in related_edges
+        {'id': edge.uuid, 'fact': edge.fact} for i, edge in enumerate(related_edges)
     ]
 
     extracted_edge_context = {
-        'uuid': extracted_edge.uuid,
-        'name': extracted_edge.name,
         'fact': extracted_edge.fact,
     }
 

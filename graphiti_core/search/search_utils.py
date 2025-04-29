@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                YIELD node AS n, score
-                                                WHERE n:Entity
-                                                """
+                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                YIELD node AS n, score
+                WHERE n:Entity
+                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -674,7 +674,9 @@ async def get_relevant_nodes(
         + """
             WITH node, n, vector.similarity.cosine(n.name_embedding, node.name_embedding) AS score
             WHERE score > $min_score
-            WITH node, n, score
+            CALL db.index.fulltext.queryNodes("node_name_and_summary", node.name, {limit: $limit}) 
+            YIELD node AS m
+            WITH node, n, m, score
             ORDER BY score DESC
         RETURN node.uuid AS search_node_uuid,
            collect({
@@ -686,7 +688,17 @@ async def get_relevant_nodes(
                summary: n.summary,
                labels: labels(n),
                attributes: properties(n)
-           })[..$limit] AS matches
+           })[..$limit] AS vector_matches,
+           collect({
+                uuid: m.uuid, 
+               name: m.name,
+               name_embedding: m.name_embedding,
+               group_id: m.group_id,
+               created_at: m.created_at,
+               summary: m.summary,
+               labels: labels(m),
+               attributes: properties(m)
+           }) AS fulltext_matches
         """
     )
 
@@ -706,8 +718,9 @@ async def get_relevant_nodes(
 
     relevant_nodes_dict: dict[str, list[EntityNode]] = {
         result['search_node_uuid']: [
-            get_entity_node_from_record(record) for record in result['matches']
+            get_entity_node_from_record(record) for record in result['vector_matches']
         ]
+        + [get_entity_node_from_record(record) for record in result['fulltext_matches']]
         for result in results
     }
 

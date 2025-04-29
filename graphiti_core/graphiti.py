@@ -370,13 +370,11 @@ class Graphiti:
                 extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
             )
 
-            extracted_edges_with_resolved_pointers = resolve_edge_pointers(
-                extracted_edges, uuid_map
-            )
+            edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
             resolved_edges, invalidated_edges = await resolve_extracted_edges(
                 self.clients,
-                extracted_edges_with_resolved_pointers,
+                edges,
                 episode,
                 previous_episodes,
             )
