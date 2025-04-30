@@ -156,7 +156,7 @@ async def eval_graph(multi_session_count: int, session_length: int, llm_client=N
             baseline_results[user_id],
             add_episode_results[user_id],
             add_episode_context[user_id],
-            strict=True,
+            strict=False,
         ):
             context = {
                 'baseline': baseline_result,

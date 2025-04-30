@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                        YIELD node AS n, score
-                        WHERE n:Entity
-                        """
+                            CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                            YIELD node AS n, score
+                            WHERE n:Entity
+                            """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -676,7 +676,7 @@ async def get_relevant_nodes(
         WHERE score > $min_score
         WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
         
-        CALL db.index.fulltext.queryNodes("node_name_and_summary", node.name, {limit: $limit}) 
+        CALL db.index.fulltext.queryNodes("node_name_and_summary", node.name + 'AND group_id: ' + $group_id, {limit: $limit}) 
         YIELD node AS m
         WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
         

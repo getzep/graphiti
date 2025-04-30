@@ -382,7 +382,11 @@ async def dedupe_extracted_edge(
 
     duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
 
-    edge = related_edges[duplicate_fact_id] if duplicate_fact_id >= 0 else extracted_edge
+    edge = (
+        related_edges[duplicate_fact_id]
+        if 0 <= duplicate_fact_id < len(related_edges)
+        else extracted_edge
+    )
 
     end = time()
     logger.debug(

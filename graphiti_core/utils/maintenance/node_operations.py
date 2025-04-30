@@ -241,7 +241,9 @@ async def resolve_extracted_nodes(
                 previous_episodes,
                 entity_types.get(
                     next((item for item in extracted_node.labels if item != 'Entity'), '')
-                ),
+                )
+                if entity_types is not None
+                else None,
             )
             for extracted_node, existing_nodes in zip(
                 extracted_nodes, existing_nodes_lists, strict=True
@@ -333,7 +335,9 @@ async def extract_attributes_from_nodes(
                 node,
                 episode,
                 previous_episodes,
-                entity_types.get(next((item for item in node.labels if item != 'Entity'), '')),
+                entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
+                if entity_types is not None
+                else None,
             )
             for node in nodes
         ]
