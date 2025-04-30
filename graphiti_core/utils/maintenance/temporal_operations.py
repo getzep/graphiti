@@ -72,12 +72,10 @@ async def get_edge_contradictions(
     llm_client: LLMClient, new_edge: EntityEdge, existing_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     start = time()
-    existing_edge_map = {edge.uuid: edge for edge in existing_edges}
 
-    new_edge_context = {'uuid': new_edge.uuid, 'name': new_edge.name, 'fact': new_edge.fact}
+    new_edge_context = {'fact': new_edge.fact}
     existing_edge_context = [
-        {'uuid': existing_edge.uuid, 'name': existing_edge.name, 'fact': existing_edge.fact}
-        for existing_edge in existing_edges
+        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
     ]
 
     context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
@@ -86,14 +84,9 @@ async def get_edge_contradictions(
         prompt_library.invalidate_edges.v2(context), response_model=InvalidatedEdges
     )
 
-    contradicted_edge_data = llm_response.get('invalidated_edges', [])
+    contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
 
-    contradicted_edges: list[EntityEdge] = []
-    for edge_data in contradicted_edge_data:
-        if edge_data['uuid'] in existing_edge_map:
-            contradicted_edge = existing_edge_map[edge_data['uuid']]
-            contradicted_edge.fact = edge_data['fact']
-            contradicted_edges.append(contradicted_edge)
+    contradicted_edges: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
 
     end = time()
     logger.debug(

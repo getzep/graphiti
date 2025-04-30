@@ -23,14 +23,9 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class NodeDuplicate(BaseModel):
-    is_duplicate: bool = Field(..., description='true or false')
-    uuid: str | None = Field(
-        None,
-        description="uuid of the existing node like '5d643020624c42fa9de13f97b1b3fa39' or null",
-    )
-    name: str = Field(
+    duplicate_node_id: int = Field(
         ...,
-        description="Updated name of the new node (use the best name between the new node's name, an existing duplicate name, or a combination of both)",
+        description='id of the duplicate node. If no duplicate nodes are found, default to -1.',
     )
 
 
@@ -64,28 +59,20 @@ def node(context: dict[str, Any]) -> list[Message]:
         {json.dumps(context['existing_nodes'], indent=2)}
         </EXISTING NODES>
         
-        Given the above EXISTING NODES and their attributes, MESSAGE, and PREVIOUS MESSAGES. Determine if the NEW NODE extracted from the conversation
+        Given the above EXISTING NODES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW NODE extracted from the conversation
         is a duplicate entity of one of the EXISTING NODES.
 
         <NEW NODE>
-        {json.dumps(context['extracted_nodes'], indent=2)}
+        {json.dumps(context['extracted_node'], indent=2)}
         </NEW NODE>
         Task:
-        1. If the New Node represents the same entity as any node in Existing Nodes, return 'is_duplicate: true' in the 
-            response. Otherwise, return 'is_duplicate: false'
-        2. If is_duplicate is true, also return the uuid of the existing node in the response
-        3. If is_duplicate is true, return a name for the node that is the most complete full name.
+        If the NEW NODE is a duplicate of any node in EXISTING NODES, set duplicate_node_id to the
+        id of the EXISTING NODE that is the duplicate. If the NEW NODE is not a duplicate of any of the EXISTING NODES,
+        duplicate_node_id should be set to -1.
 
         Guidelines:
-        1. Use both the name and summary of nodes to determine if the entities are duplicates, 
+        1. Use the name, summary, and attributes of nodes to determine if the entities are duplicates, 
             duplicate nodes may have different names
-
-        Respond with a JSON object in the following format:
-            {{
-                "is_duplicate": true or false,
-                "uuid": "uuid of the existing node like 5d643020624c42fa9de13f97b1b3fa39 or null",
-                "name": "Updated name of the new node (use the best name between the new node's name, an existing duplicate name, or a combination of both)"
-            }}
         """,
         ),
     ]

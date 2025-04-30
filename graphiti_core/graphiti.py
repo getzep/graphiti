@@ -72,7 +72,11 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     build_indices_and_constraints,
     retrieve_episodes,
 )
-from graphiti_core.utils.maintenance.node_operations import extract_nodes, resolve_extracted_nodes
+from graphiti_core.utils.maintenance.node_operations import (
+    extract_attributes_from_nodes,
+    extract_nodes,
+    resolve_extracted_nodes,
+)
 from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
@@ -370,15 +374,16 @@ class Graphiti:
                 extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
             )
 
-            extracted_edges_with_resolved_pointers = resolve_edge_pointers(
-                extracted_edges, uuid_map
-            )
+            edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
-            resolved_edges, invalidated_edges = await resolve_extracted_edges(
-                self.clients,
-                extracted_edges_with_resolved_pointers,
-                episode,
-                previous_episodes,
+            (resolved_edges, invalidated_edges), hydrated_nodes = await semaphore_gather(
+                resolve_extracted_edges(
+                    self.clients,
+                    edges,
+                ),
+                extract_attributes_from_nodes(
+                    self.clients, nodes, episode, previous_episodes, entity_types
+                ),
             )
 
             entity_edges = resolved_edges + invalidated_edges
