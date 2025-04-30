@@ -164,7 +164,6 @@ async def eval_graph(multi_session_count: int, session_length: int, llm_client=N
                 'message': episodes[0],
                 'previous_messages': episodes[1:],
             }
-            print(context)
 
             llm_response = await llm_client.generate_response(
                 prompt_library.eval.eval_add_episode_results(context),

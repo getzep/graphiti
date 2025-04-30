@@ -25,12 +25,8 @@ from .models import Message, PromptFunction, PromptVersion
 
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
-    source_entity_name: str = Field(
-        ..., description='The name of the source entity of the fact.'
-    )
-    target_entity_name: str = Field(
-        ..., description='The name of the target entity of the fact.'
-    )
+    source_entity_name: str = Field(..., description='The name of the source entity of the fact.')
+    target_entity_name: str = Field(..., description='The name of the target entity of the fact.')
     fact: str = Field(..., description='')
     valid_at: str | None = Field(
         None,
@@ -65,8 +61,8 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are an expert fact extractor that extracts fact triples from text. '
-                    '1. Extracted fact triples should also be extracted with relevant date information.'
-                    '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
+            '1. Extracted fact triples should also be extracted with relevant date information.'
+            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
         ),
         Message(
             role='user',
