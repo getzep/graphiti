@@ -102,6 +102,7 @@ async def extract_nodes(
         'previous_episodes': [ep.content for ep in previous_episodes],
         'custom_prompt': custom_prompt,
         'entity_types': entity_types_context,
+        'source_description': episode.source_description,
     }
 
     while entities_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
