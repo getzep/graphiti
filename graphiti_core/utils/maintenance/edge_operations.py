@@ -380,7 +380,7 @@ async def dedupe_extracted_edge(
         prompt_library.dedupe_edges.edge(context), response_model=EdgeDuplicate
     )
 
-    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', False)
+    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
 
     edge = related_edges[duplicate_fact_id] if duplicate_fact_id >= 0 else extracted_edge
 

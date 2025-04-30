@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from contextlib import suppress
 from time import time
-from typing import Any, Optional
+from typing import Any
 
 import pydantic
 from pydantic import BaseModel, Field
@@ -29,12 +29,10 @@ from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_en
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
 from graphiti_core.prompts.extract_nodes import (
-    EntityClassification,
     ExtractedEntities,
     ExtractedEntity,
     MissedEntities,
 )
-from graphiti_core.prompts.summarize_nodes import Summary
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now
@@ -77,14 +75,22 @@ async def extract_nodes(
     entities_missed = True
     reflexion_iterations = 0
 
-    entity_types_context = (
+    entity_types_context = [
+        {
+            'entity_type_id': 0,
+            'entity_type_name': 'Entity',
+            'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.',
+        }
+    ]
+
+    entity_types_context += (
         [
             {
-                'entity_type_id': i,
+                'entity_type_id': i + 1,
                 'entity_type_name': type_name,
-                'entity_type_description': values.model_json_schema().get('description'),
+                'entity_type_description': type_model.__doc__,
             }
-            for i, (type_name, values) in enumerate(entity_types.items())
+            for i, (type_name, type_model) in enumerate(entity_types.items())
         ]
         if entity_types is not None
         else []
@@ -141,7 +147,7 @@ async def extract_nodes(
     for extracted_entity in extracted_entities:
         entity_type = entity_types_context[extracted_entity.entity_type_id].get('entity_type_name')
 
-        labels = ['Entity'] if entity_type is None else ['Entity', entity_type]
+        labels: list[str] = list({'Entity', entity_type})
 
         new_node = EntityNode(
             name=extracted_entity.name,
@@ -225,22 +231,22 @@ async def resolve_extracted_nodes(
     )
 
     uuid_map: dict[str, str] = {}
-    resolved_nodes: list[EntityNode] = list(
-        await semaphore_gather(
-            *[
-                resolve_extracted_node(
-                    llm_client,
-                    extracted_node,
-                    existing_nodes,
-                    episode,
-                    previous_episodes,
-                    entity_types.get(extracted_node.labels[-1]),
-                )
-                for extracted_node, existing_nodes in zip(
-                    extracted_nodes, existing_nodes_lists, strict=True
-                )
-            ]
-        )
+    resolved_nodes: list[EntityNode] = await semaphore_gather(
+        *[
+            resolve_extracted_node(
+                llm_client,
+                extracted_node,
+                existing_nodes,
+                episode,
+                previous_episodes,
+                entity_types.get(
+                    next((item for item in extracted_node.labels if item != 'Entity'), '')
+                ),
+            )
+            for extracted_node, existing_nodes in zip(
+                extracted_nodes, existing_nodes_lists, strict=True
+            )
+        ]
     )
 
     for extracted_node, resolved_node in zip(extracted_nodes, resolved_nodes, strict=True):
@@ -269,7 +275,7 @@ async def resolve_extracted_node(
             **{
                 'id': i,
                 'name': node.name,
-                'entity_type': node.labels[-1],
+                'entity_types': node.labels,
                 'summary': node.summary,
             },
             **node.attributes,
@@ -279,8 +285,10 @@ async def resolve_extracted_node(
 
     extracted_node_context = {
         'name': extracted_node.name,
-        'entity_type': extracted_node.labels[-1],
-        'entity_type_description': entity_type.__doc__,
+        'entity_type': entity_type.__name__ if entity_type is not None else 'Entity',
+        'entity_type_description': entity_type.__doc__
+        if entity_type is not None
+        else 'Default Entity Type',
     }
 
     context = {
@@ -296,7 +304,7 @@ async def resolve_extracted_node(
         prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
     )
 
-    duplicate_id: int = llm_response.get('duplicate_id', -1)
+    duplicate_id: int = llm_response.get('duplicate_node_id', -1)
 
     node = existing_nodes[duplicate_id] if duplicate_id >= 0 else extracted_node
 
@@ -309,20 +317,29 @@ async def resolve_extracted_node(
 
 
 async def extract_attributes_from_nodes(
-    llm_client: LLMClient,
+    clients: GraphitiClients,
     nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
+    llm_client = clients.llm_client
+    embedder = clients.embedder
+
     updated_nodes: list[EntityNode] = await semaphore_gather(
         *[
             extract_attributes_from_node(
-                llm_client, node, episode, previous_episodes, entity_types.get(node.labels[-1])
+                llm_client,
+                node,
+                episode,
+                previous_episodes,
+                entity_types.get(next((item for item in node.labels if item != 'Entity'), '')),
             )
             for node in nodes
         ]
     )
+
+    await create_entity_node_embeddings(embedder, updated_nodes)
 
     return updated_nodes
 
@@ -337,7 +354,7 @@ async def extract_attributes_from_node(
     node_context: dict[str, Any] = {
         'name': node.name,
         'summary': node.summary,
-        'entity_type': node.labels[-1],
+        'entity_types': node.labels,
         'attributes': node.attributes,
     }
 
@@ -347,7 +364,11 @@ async def extract_attributes_from_node(
             Field(
                 description='Summary containing the important information about the entity. Under 500 words',
             ),
-        )
+        ),
+        'name': (
+            str,
+            Field(description='Name of the extracted entity. Use the most complete name possible.'),
+        ),
     }
 
     if entity_type is not None:
@@ -372,11 +393,13 @@ async def extract_attributes_from_node(
         response_model=entity_attributes_model,
     )
 
-    node.summary = llm_response.get('summary', '')
+    node.summary = llm_response.get('summary', node.summary)
+    node.name = llm_response.get('name', node.name)
     node_attributes = {key: value for key, value in llm_response.items()}
 
     with suppress(KeyError):
         del node_attributes['summary']
+        del node_attributes['name']
 
     node.attributes.update(node_attributes)
 

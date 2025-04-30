@@ -26,7 +26,7 @@ class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
         description='ID of the classified entity type. '
-        'Must be one of the provided entity type IDs or -1. Default is -1',
+        'Must be one of the provided entity_type_id integers.',
     )
 
 
@@ -86,9 +86,8 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 </ENTITY TYPES>
 
 Given the above conversation, extract entities from the CURRENT MESSAGE that are explicitly or implicitly mentioned.
-For each entity extracted, also determine if it should be classified as one of the listed entity types.
-Set the entity_type_id to the id of the classified entity, or -1 if the entity does not fit any of the listed types.
-
+For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
+Indicate the classified entity type by providing its entity_type_id.
 {context['custom_prompt']}
 
 Guidelines:
@@ -123,9 +122,8 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
 {context['custom_prompt']}
 
 Given the above source description and JSON, extract relevant entities from the provided JSON.
-For each entity extracted, also determine if it should be classified as one of the listed entity types.
-Set the entity_type_id to the id of the classified entity, or -1 if the entity does not fit any of the listed types.
-
+For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
+Indicate the classified entity type by providing its entity_type_id.
 
 Guidelines:
 1. Always try to extract an entities that the JSON represents. This will often be something like a "name" or "user field
@@ -150,9 +148,8 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
 </ENTITY TYPES>
 
 Given the above text, extract entities from the TEXT that are explicitly or implicitly mentioned.
-For each entity extracted, also determine if it should be classified as one of the listed entity types.
-Set the entity_type_id to the id of the classified entity, or -1 if the entity does not fit any of the listed types.
-
+For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
+Indicate the classified entity type by providing its entity_type_id.
 
 {context['custom_prompt']}
 

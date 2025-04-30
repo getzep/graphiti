@@ -382,7 +382,7 @@ class Graphiti:
                     edges,
                 ),
                 extract_attributes_from_nodes(
-                    self.llm_client, nodes, episode, previous_episodes, entity_types
+                    self.clients, nodes, episode, previous_episodes, entity_types
                 ),
             )
 
