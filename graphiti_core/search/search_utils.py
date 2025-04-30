@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                YIELD node AS n, score
-                                WHERE n:Entity
-                                """
+                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                    YIELD node AS n, score
+                                    WHERE n:Entity
+                                    """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -709,10 +709,14 @@ async def get_relevant_nodes(
         query,
         query_params,
         nodes=[
-            {'uuid': node.uuid, 'name': node.name, 'name_embedding': node.name_embedding}
+            {
+                'uuid': node.uuid,
+                'name': lucene_sanitize(node.name),
+                'name_embedding': node.name_embedding,
+            }
             for node in nodes
         ],
-        group_id=group_id,
+        group_id=lucene_sanitize(group_id),
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
