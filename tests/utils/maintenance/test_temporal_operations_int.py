@@ -25,7 +25,6 @@ from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
-    extract_edge_dates,
     get_edge_contradictions,
 )
 
