@@ -26,7 +26,7 @@ class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
         description='ID of the classified entity type. '
-        'Must be one of the provided entity_type_id integers.',
+                    'Must be one of the provided entity_type_id integers.',
     )
 
 
@@ -75,28 +75,42 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
+Inputs:
 <PREVIOUS MESSAGES>
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
+
 <CURRENT MESSAGE>
 {context['episode_content']}
 </CURRENT MESSAGE>
+
 <ENTITY TYPES>
 {context['entity_types']}
 </ENTITY TYPES>
 
-Given the above conversation, extract entities from the CURRENT MESSAGE that are explicitly or implicitly mentioned.
-For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
-Indicate the classified entity type by providing its entity_type_id.
-{context['custom_prompt']}
+Instructions:
 
-Guidelines:
-1. ALWAYS extract the speaker/actor as the first node. The speaker is the part before the colon in each line of dialogue.
-2. Extract other significant entities, concepts, or actors mentioned in the CURRENT MESSAGE.
-3. DO NOT create nodes for relationships or actions.
-4. DO NOT create nodes for temporal information like dates, times or years (these will be added to edges later).
-5. Be as explicit as possible in your node names, using full names.
-6. DO NOT extract entities mentioned only in PREVIOUS MESSAGES, those messages are only to provide context.
+You are given a conversation context and a CURRENT MESSAGE. Your task is to extract **entity nodes** mentioned **explicitly or implicitly** in the CURRENT MESSAGE.
+
+1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
+   - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
+
+2. **Entity Identification**:
+   - Extract all significant entities, concepts, or actors that are **explicitly or implicitly** mentioned in the CURRENT MESSAGE.
+   - **Exclude** entities mentioned only in the PREVIOUS MESSAGES (they are for context only).
+
+3. **Entity Classification**:
+   - Use the descriptions in ENTITY TYPES to classify each extracted entity.
+   - Assign the appropriate `entity_type_id` for each one.
+
+4. **Exclusions**:
+   - Do NOT extract entities representing relationships or actions.
+   - Do NOT extract dates, times, or other temporal information—these will be handled separately.
+
+5. **Formatting**:
+   - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
+
+{context['custom_prompt']}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -242,8 +256,8 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
-        3. The summary attribute should incorporate new information from MESSAGES, but the old information
-            should also be preserved. Summaries must be no longer than 500 words.
+        3. The summary attribute should incorporate new information from MESSAGES only as it pertains to the ENTITY, but the old information
+            about the ENTITY should also be preserved. Summaries must be no longer than 500 words.
         
         <ENTITY>
         {context['node']}

@@ -26,10 +26,10 @@ from .models import Message, PromptFunction, PromptVersion
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
     source_entity_name: str = Field(
-        ..., description='The name of the Entity that is the subject of the fact.'
+        ..., description='The name of the source entity of the fact.'
     )
     target_entity_name: str = Field(
-        ..., description='The name of the entity that is the Object of the fact.'
+        ..., description='The name of the target entity of the fact.'
     )
     fact: str = Field(..., description='')
     valid_at: str | None = Field(
@@ -65,8 +65,8 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are an expert fact extractor that extracts fact triples from text. '
-            '1. Extracted fact triples should also be extracted with relevant date information.'
-            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
+                    '1. Extracted fact triples should also be extracted with relevant date information.'
+                    '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
         ),
         Message(
             role='user',
@@ -93,9 +93,9 @@ def edge(context: dict[str, Any]) -> list[Message]:
         
         
         Fact Extraction Guidelines:
-        1. Extract facts only between the provided entities.
-        2. Each fact should represent a clear relationship between two DISTINCT nodes.
-        3. The relation_type should be a SCREAMING_SNAKE_CASE predicate of the fact, excluding the object (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
+        1. Extract facts only between the provided ENTITIES.
+        2. Each fact should represent a clear relationship between two DISTINCT ENTITIES.
+        3. The relation_type should be a SCREAMING_SNAKE_CASE predicate of the fact (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
         4. Provide a more detailed fact containing all relevant information.
         5. Consider temporal aspects of relationships when relevant.
 
