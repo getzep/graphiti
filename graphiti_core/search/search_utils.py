@@ -341,10 +341,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                    YIELD node AS n, score
-                                    WHERE n:Entity
-                                    """
+                                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                        YIELD node AS n, score
+                                        WHERE n:Entity
+                                        """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -676,7 +676,7 @@ async def get_relevant_nodes(
         WHERE score > $min_score
         WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
         
-        CALL db.index.fulltext.queryNodes("node_name_and_summary", 'group_id:"' + $group_id + '" AND ' + node.name, {limit: $limit}) 
+        CALL db.index.fulltext.queryNodes("node_name_and_summary", node.fulltext_query, {limit: $limit}) 
         YIELD node AS m
         WHERE m.group_id = $group_id
         WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
@@ -705,18 +705,21 @@ async def get_relevant_nodes(
         """
     )
 
+    query_nodes = [
+        {
+            'uuid': node.uuid,
+            'name': node.name,
+            'name_embedding': node.name_embedding,
+            'fulltext_query': fulltext_query(node.name, [node.group_id]),
+        }
+        for node in nodes
+    ]
+
     results, _, _ = await driver.execute_query(
         query,
         query_params,
-        nodes=[
-            {
-                'uuid': node.uuid,
-                'name': lucene_sanitize(node.name),
-                'name_embedding': node.name_embedding,
-            }
-            for node in nodes
-        ],
-        group_id=lucene_sanitize(group_id),
+        nodes=query_nodes,
+        group_id=group_id,
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
