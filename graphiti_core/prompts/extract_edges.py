@@ -71,45 +71,52 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-        <PREVIOUS MESSAGES>
-        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
-        </PREVIOUS MESSAGES>
-        <CURRENT MESSAGE>
-        {context['episode_content']}
-        </CURRENT MESSAGE>
-        
-        <CURRENT TIME>
-        {context['reference_time']}
-        </CURRENT TIME>
-        
-        <ENTITIES>
-        {context['nodes']}
-        </ENTITIES>
-        
-        {context['custom_prompt']}
+<PREVIOUS_MESSAGES>
+{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+</PREVIOUS_MESSAGES>
 
-        Given the above MESSAGES and ENTITIES, extract all facts pertaining to the listed ENTITIES from the CURRENT MESSAGE.
-        For each fact, make sure to provide information on all relevant fields, including datetimes like valid_at and invalid_at.
-        
-        
-        Fact Extraction Guidelines:
-        1. Extract facts only between the provided ENTITIES.
-        2. Each fact should represent a clear relationship between two DISTINCT ENTITIES.
-        3. The relation_type should be a SCREAMING_SNAKE_CASE predicate of the fact (e.g., LOVES, IS_FRIENDS_WITH, WORKS_FOR).
-        4. Provide a more detailed fact containing all relevant information.
-        5. Consider temporal aspects of relationships when relevant.
+<CURRENT_MESSAGE>
+{context['episode_content']}
+</CURRENT_MESSAGE>
 
-        Datetime Extraction Guidelines:
-        1. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ) for datetimes.
-        2. Use the CURRENT TIME when determining the valid_at and invalid_at dates.
-        3. If the fact is written in the present tense, use the CURRENT TIME for the valid_at date
-        4. If no temporal information is found that establishes or changes the relationship, leave the fields as null.
-        5. Do not infer dates from related events. Only use dates that are directly stated to establish or change the relationship.
-        6. For relative time mentions directly related to the relationship, calculate the actual datetime based on the CURRENT TIME.
-        7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
-        8. If only year is mentioned, use January 1st of that year at 00:00:00.
-        9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
-        10. A fact discussing that something is no longer true should have a valid_at according to when the negated fact became true.
+<ENTITIES>
+{context['nodes']}  # Each has: id, label (e.g., Person, Org), name, aliases
+</ENTITIES>
+
+<REFERENCE_TIME>
+{context['reference_time']}  # ISO 8601 (UTC); used to resolve relative time mentions
+</REFERENCE_TIME>
+
+# TASK
+Extract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.
+Only extract facts that:
+- involve two DISTINCT ENTITIES from the ENTITIES list,
+- are clearly stated or unambiguously implied in the CURRENT MESSAGE,
+- and can be represented as edges in a knowledge graph.
+
+You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
+
+
+{context['custom_prompt']}
+
+# EXTRACTION RULES
+
+1. Only emit facts where both the subject and object match IDs in ENTITIES.
+2. Each fact must involve two **distinct** entities.
+3. Use a SCREAMING_SNAKE_CASE string as the `relation_type` (e.g., FOUNDED, WORKS_AT).
+4. Do not emit duplicate or semantically redundant facts.
+5. The `fact_text` should quote or closely paraphrase the original source sentence(s).
+6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
+7. Do **not** hallucinate or infer temporal bounds from unrelated events.
+
+# DATETIME RULES
+
+- Use ISO 8601 with “Z” suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
+- If the fact is ongoing (present tense), set `valid_at` to REFERENCE_TIME.
+- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.
+- Leave both fields `null` if no explicit or resolvable time is stated.
+- If only a date is mentioned (no time), assume 00:00:00.
+- If only a year is mentioned, use January 1st at 00:00:00.
         """,
         ),
     ]

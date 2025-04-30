@@ -366,12 +366,13 @@ async def extract_attributes_from_node(
         'summary': (
             str,
             Field(
-                description='Summary containing the important information about the entity. Under 500 words',
+                description='Summary containing the important information about the entity. Under 200 words',
             ),
         ),
         'name': (
             str,
-            Field(description='Name of the extracted entity. Use the most complete name possible.'),
+            Field(
+                description='Name of the ENTITY'),
         ),
     }
 

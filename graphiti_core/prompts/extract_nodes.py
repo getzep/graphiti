@@ -75,7 +75,6 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
-Inputs:
 <PREVIOUS MESSAGES>
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
@@ -256,8 +255,8 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
-        3. The summary attribute should incorporate new information from MESSAGES only as it pertains to the ENTITY, but the old information
-            about the ENTITY should also be preserved. Summaries must be no longer than 500 words.
+        3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
+            Summaries must be no longer than 200 words.
         
         <ENTITY>
         {context['node']}
