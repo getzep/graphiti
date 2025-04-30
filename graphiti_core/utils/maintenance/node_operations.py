@@ -104,7 +104,6 @@ async def extract_nodes(
         'entity_types': entity_types_context,
     }
 
-    extracted_entities: list[ExtractedEntity] = []
     while entities_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
         if episode.source == EpisodeType.message:
             llm_response = await llm_client.generate_response(
@@ -145,9 +144,11 @@ async def extract_nodes(
     # Convert the extracted data into EntityNode objects
     extracted_nodes = []
     for extracted_entity in extracted_entities:
-        entity_type = entity_types_context[extracted_entity.entity_type_id].get('entity_type_name')
+        entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
+            'entity_type_name'
+        )
 
-        labels: list[str] = list({'Entity', entity_type})
+        labels: list[str] = list({'Entity', str(entity_type_name)})
 
         new_node = EntityNode(
             name=extracted_entity.name,
@@ -287,7 +288,7 @@ async def resolve_extracted_node(
 
     extracted_node_context = {
         'name': extracted_node.name,
-        'entity_type': entity_type.__name__ if entity_type is not None else 'Entity',
+        'entity_type': entity_type.__name__ if entity_type is not None else 'Entity',  # type: ignore
         'entity_type_description': entity_type.__doc__
         if entity_type is not None
         else 'Default Entity Type',
