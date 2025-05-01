@@ -140,11 +140,12 @@ async def extract_nodes(
             for entity in missing_entities:
                 custom_prompt += f'\n{entity},'
 
+    filtered_extracted_entities = [entity for entity in extracted_entities if entity.name.strip()]
     end = time()
-    logger.debug(f'Extracted new nodes: {extracted_entities} in {(end - start) * 1000} ms')
+    logger.debug(f'Extracted new nodes: {filtered_extracted_entities} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
     extracted_nodes = []
-    for extracted_entity in extracted_entities:
+    for extracted_entity in filtered_extracted_entities:
         entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
             'entity_type_name'
         )
