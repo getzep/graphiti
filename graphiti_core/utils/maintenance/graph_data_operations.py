@@ -117,6 +117,7 @@ async def retrieve_episodes(
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
+    source: EpisodeType | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -132,13 +133,17 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    group_id_filter: LiteralString = 'AND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+    group_id_filter: LiteralString = (
+        '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+    )
+    source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
 
     query: LiteralString = (
         """
-        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-        """
+                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                        """
         + group_id_filter
+        + source_filter
         + """
         RETURN e.content AS content,
             e.created_at AS created_at,
@@ -156,6 +161,7 @@ async def retrieve_episodes(
     result = await driver.execute_query(
         query,
         reference_time=reference_time,
+        source=source.name if source is not None else None,
         num_episodes=last_n,
         group_ids=group_ids,
         database_=DEFAULT_DATABASE,

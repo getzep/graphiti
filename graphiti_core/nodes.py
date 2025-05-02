@@ -332,8 +332,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-                            MATCH (n:Entity {uuid: $uuid})
-                            """
+                                    MATCH (n:Entity {uuid: $uuid})
+                                    """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -560,3 +560,9 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
     )
+
+
+async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
+    name_embeddings = await embedder.create_batch([node.name for node in nodes])
+    for node, name_embedding in zip(nodes, name_embeddings, strict=True):
+        node.name_embedding = name_embedding

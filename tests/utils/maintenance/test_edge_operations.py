@@ -103,15 +103,11 @@ async def test_resolve_extracted_edge_no_changes(
 ):
     # Mock the function calls
     dedupe_mock = AsyncMock(return_value=mock_extracted_edge)
-    extract_dates_mock = AsyncMock(return_value=(None, None))
     get_contradictions_mock = AsyncMock(return_value=[])
 
     # Patch the function calls
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.edge_operations.dedupe_extracted_edge', dedupe_mock
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.edge_operations.extract_edge_dates', extract_dates_mock
     )
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.edge_operations.get_edge_contradictions',
@@ -123,60 +119,12 @@ async def test_resolve_extracted_edge_no_changes(
         mock_extracted_edge,
         mock_related_edges,
         mock_existing_edges,
-        mock_current_episode,
-        mock_previous_episodes,
     )
 
     assert resolved_edge.uuid == mock_extracted_edge.uuid
     assert invalidated_edges == []
     dedupe_mock.assert_called_once()
-    extract_dates_mock.assert_called_once()
     get_contradictions_mock.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_resolve_extracted_edge_with_dates(
-    mock_llm_client,
-    mock_extracted_edge,
-    mock_related_edges,
-    mock_existing_edges,
-    mock_current_episode,
-    mock_previous_episodes,
-    monkeypatch: MonkeyPatch,
-):
-    valid_at = datetime.now(timezone.utc) - timedelta(days=1)
-    invalid_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-    # Mock the function calls
-    dedupe_mock = AsyncMock(return_value=mock_extracted_edge)
-    extract_dates_mock = AsyncMock(return_value=(valid_at, invalid_at))
-    get_contradictions_mock = AsyncMock(return_value=[])
-
-    # Patch the function calls
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.edge_operations.dedupe_extracted_edge', dedupe_mock
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.edge_operations.extract_edge_dates', extract_dates_mock
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.edge_operations.get_edge_contradictions',
-        get_contradictions_mock,
-    )
-
-    resolved_edge, invalidated_edges = await resolve_extracted_edge(
-        mock_llm_client,
-        mock_extracted_edge,
-        mock_related_edges,
-        mock_existing_edges,
-        mock_current_episode,
-        mock_previous_episodes,
-    )
-
-    assert resolved_edge.valid_at == valid_at
-    assert resolved_edge.invalid_at == invalid_at
-    assert resolved_edge.expired_at is not None
-    assert invalidated_edges == []
 
 
 @pytest.mark.asyncio
@@ -206,15 +154,11 @@ async def test_resolve_extracted_edge_with_invalidation(
 
     # Mock the function calls
     dedupe_mock = AsyncMock(return_value=mock_extracted_edge)
-    extract_dates_mock = AsyncMock(return_value=(None, None))
     get_contradictions_mock = AsyncMock(return_value=[invalidation_candidate])
 
     # Patch the function calls
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.edge_operations.dedupe_extracted_edge', dedupe_mock
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.edge_operations.extract_edge_dates', extract_dates_mock
     )
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.edge_operations.get_edge_contradictions',
@@ -226,8 +170,6 @@ async def test_resolve_extracted_edge_with_invalidation(
         mock_extracted_edge,
         mock_related_edges,
         mock_existing_edges,
-        mock_current_episode,
-        mock_previous_episodes,
     )
 
     assert resolved_edge.uuid == mock_extracted_edge.uuid
