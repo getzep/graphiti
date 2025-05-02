@@ -20,6 +20,7 @@ from time import time
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.extract_edge_dates import EdgeDates
@@ -81,7 +82,9 @@ async def get_edge_contradictions(
     context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
 
     llm_response = await llm_client.generate_response(
-        prompt_library.invalidate_edges.v2(context), response_model=InvalidatedEdges
+        prompt_library.invalidate_edges.v2(context),
+        response_model=InvalidatedEdges,
+        model_size=ModelSize.small,
     )
 
     contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
