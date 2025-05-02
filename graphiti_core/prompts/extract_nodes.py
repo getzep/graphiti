@@ -256,7 +256,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
-            Summaries must be no longer than 200 words.
+            Summaries must be no longer than 500 words.
         
         <ENTITY>
         {context['node']}

@@ -27,6 +27,7 @@ from graphiti_core.edges import (
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
@@ -377,7 +378,9 @@ async def dedupe_extracted_edge(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_edges.edge(context), response_model=EdgeDuplicate
+        prompt_library.dedupe_edges.edge(context),
+        response_model=EdgeDuplicate,
+        model_size=ModelSize.small,
     )
 
     duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)

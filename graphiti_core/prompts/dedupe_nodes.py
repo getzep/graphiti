@@ -27,6 +27,7 @@ class NodeDuplicate(BaseModel):
         ...,
         description='id of the duplicate node. If no duplicate nodes are found, default to -1.',
     )
+    name: str = Field(..., description='Name of the entity.')
 
 
 class Prompt(Protocol):
@@ -43,7 +44,7 @@ def node(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
+            content='You are a helpful assistant that de-duplicates entities from entity lists.',
         ),
         Message(
             role='user',
@@ -54,25 +55,33 @@ def node(context: dict[str, Any]) -> list[Message]:
         <CURRENT MESSAGE>
         {context['episode_content']}
         </CURRENT MESSAGE>
-
-        <EXISTING NODES>
-        {json.dumps(context['existing_nodes'], indent=2)}
-        </EXISTING NODES>
-        
-        Given the above EXISTING NODES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW NODE extracted from the conversation
-        is a duplicate entity of one of the EXISTING NODES.
-
-        <NEW NODE>
+        <NEW ENTITY>
         {json.dumps(context['extracted_node'], indent=2)}
-        </NEW NODE>
+        </NEW ENTITY>
+        <ENTITY TYPE DESCRIPTION>
+        {json.dumps(context['entity_type_description'], indent=2)}
+        </ENTITY TYPE DESCRIPTION>
+
+        <EXISTING ENTITIES>
+        {json.dumps(context['existing_nodes'], indent=2)}
+        </EXISTING ENTITIES>
+        
+        Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
+        is a duplicate entity of one of the EXISTING ENTITIES.
+        
+        The ENTITY TYPE DESCRIPTION gives more insight into what the entity type means for the NEW ENTITY.
+
         Task:
-        If the NEW NODE is a duplicate of any node in EXISTING NODES, set duplicate_node_id to the
-        id of the EXISTING NODE that is the duplicate. If the NEW NODE is not a duplicate of any of the EXISTING NODES,
-        duplicate_node_id should be set to -1.
+        If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
+        id of the EXISTING ENTITY that is the duplicate. If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
+        duplicate_entity_id should be set to -1.
+        
+        Also return the most complete name for the entity.
 
         Guidelines:
-        1. Use the name, summary, and attributes of nodes to determine if the entities are duplicates, 
-            duplicate nodes may have different names
+        1. Entities with the same name should be considered duplicates
+        2. Duplicate entities may refer to the same real-world entity even if names differ. Use context clues from the MESSAGES
+            to determine if the NEW ENTITY represents a duplicate entity of one of the EXISTING ENTITIES.
         """,
         ),
     ]

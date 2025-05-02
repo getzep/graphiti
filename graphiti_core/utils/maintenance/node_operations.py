@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
@@ -281,7 +282,6 @@ async def resolve_extracted_node(
                 'id': i,
                 'name': node.name,
                 'entity_types': node.labels,
-                'summary': node.summary,
             },
             **node.attributes,
         }
@@ -291,14 +291,14 @@ async def resolve_extracted_node(
     extracted_node_context = {
         'name': extracted_node.name,
         'entity_type': entity_type.__name__ if entity_type is not None else 'Entity',  # type: ignore
-        'entity_type_description': entity_type.__doc__
-        if entity_type is not None
-        else 'Default Entity Type',
     }
 
     context = {
         'existing_nodes': existing_nodes_context,
         'extracted_node': extracted_node_context,
+        'entity_type_description': entity_type.__doc__
+        if entity_type is not None
+        else 'Default Entity Type',
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
@@ -306,7 +306,9 @@ async def resolve_extracted_node(
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_nodes.node(context), response_model=NodeDuplicate
+        prompt_library.dedupe_nodes.node(context),
+        response_model=NodeDuplicate,
+        model_size=ModelSize.small,
     )
 
     duplicate_id: int = llm_response.get('duplicate_node_id', -1)
@@ -314,6 +316,8 @@ async def resolve_extracted_node(
     node = (
         existing_nodes[duplicate_id] if 0 <= duplicate_id < len(existing_nodes) else extracted_node
     )
+
+    node.name = llm_response.get('name', '')
 
     end = time()
     logger.debug(
@@ -371,13 +375,9 @@ async def extract_attributes_from_node(
         'summary': (
             str,
             Field(
-                description='Summary containing the important information about the entity. Under 200 words',
+                description='Summary containing the important information about the entity. Under 500 words',
             ),
-        ),
-        'name': (
-            str,
-            Field(description='Name of the ENTITY'),
-        ),
+        )
     }
 
     if entity_type is not None:

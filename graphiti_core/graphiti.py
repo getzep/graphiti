@@ -396,7 +396,7 @@ class Graphiti:
                 episode.content = ''
 
             await add_nodes_and_edges_bulk(
-                self.driver, [episode], episodic_edges, nodes, entity_edges
+                self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges
             )
 
             # Update any communities
