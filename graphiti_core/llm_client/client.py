@@ -103,9 +103,10 @@ class LLMClient(ABC):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages, response_model, max_tokens)
+            return await self._generate_response(messages, response_model, max_tokens, model_size)
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
