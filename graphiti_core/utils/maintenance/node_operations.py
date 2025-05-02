@@ -34,8 +34,10 @@ from graphiti_core.prompts.extract_nodes import (
     ExtractedEntity,
     MissedEntities,
 )
+from graphiti_core.search.search import search
+from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_relevant_nodes
 from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -227,12 +229,22 @@ async def resolve_extracted_nodes(
     entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     llm_client = clients.llm_client
-    driver = clients.driver
 
-    # Find relevant nodes already in the graph
-    existing_nodes_lists: list[list[EntityNode]] = await get_relevant_nodes(
-        driver, extracted_nodes, SearchFilters()
+    search_results: list[SearchResults] = await semaphore_gather(
+        *[
+            search(
+                clients=clients,
+                query=node.name,
+                query_vector=node.name_embedding,
+                group_ids=[node.group_id],
+                search_filter=SearchFilters(),
+                config=NODE_HYBRID_SEARCH_RRF,
+            )
+            for node in extracted_nodes
+        ]
     )
+
+    existing_nodes_lists: list[list[EntityNode]] = [result.nodes for result in search_results]
 
     resolved_nodes: list[EntityNode] = await semaphore_gather(
         *[
@@ -282,6 +294,7 @@ async def resolve_extracted_node(
                 'id': i,
                 'name': node.name,
                 'entity_types': node.labels,
+                'summary': node.summary,
             },
             **node.attributes,
         }

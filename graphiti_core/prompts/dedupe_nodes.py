@@ -77,11 +77,6 @@ def node(context: dict[str, Any]) -> list[Message]:
         duplicate_entity_id should be set to -1.
         
         Also return the most complete name for the entity.
-
-        Guidelines:
-        1. Entities with the same name should be considered duplicates
-        2. Duplicate entities may refer to the same real-world entity even if names differ. Use context clues from the MESSAGES
-            to determine if the NEW ENTITY represents a duplicate entity of one of the EXISTING ENTITIES.
         """,
         ),
     ]
