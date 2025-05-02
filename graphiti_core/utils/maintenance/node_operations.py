@@ -41,10 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_nodes_reflexion(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-    node_names: list[str],
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        node_names: list[str],
 ) -> list[str]:
     # Prepare context for LLM
     context = {
@@ -62,10 +62,10 @@ async def extract_nodes_reflexion(
 
 
 async def extract_nodes(
-    clients: GraphitiClients,
-    episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-    entity_types: dict[str, BaseModel] | None = None,
+        clients: GraphitiClients,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
@@ -169,9 +169,9 @@ async def extract_nodes(
 
 
 async def dedupe_extracted_nodes(
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
-    existing_nodes: list[EntityNode],
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
+        existing_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 
@@ -219,11 +219,11 @@ async def dedupe_extracted_nodes(
 
 
 async def resolve_extracted_nodes(
-    clients: GraphitiClients,
-    extracted_nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+        clients: GraphitiClients,
+        extracted_nodes: list[EntityNode],
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str]]:
     llm_client = clients.llm_client
     driver = clients.driver
@@ -263,12 +263,12 @@ async def resolve_extracted_nodes(
 
 
 async def resolve_extracted_node(
-    llm_client: LLMClient,
-    extracted_node: EntityNode,
-    existing_nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_type: BaseModel | None = None,
+        llm_client: LLMClient,
+        extracted_node: EntityNode,
+        existing_nodes: list[EntityNode],
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_type: BaseModel | None = None,
 ) -> EntityNode:
     start = time()
     if len(existing_nodes) == 0:
@@ -291,14 +291,14 @@ async def resolve_extracted_node(
     extracted_node_context = {
         'name': extracted_node.name,
         'entity_type': entity_type.__name__ if entity_type is not None else 'Entity',  # type: ignore
-        'entity_type_description': entity_type.__doc__
-        if entity_type is not None
-        else 'Default Entity Type',
     }
 
     context = {
         'existing_nodes': existing_nodes_context,
         'extracted_node': extracted_node_context,
+        'entity_type_description': entity_type.__doc__
+        if entity_type is not None
+        else 'Default Entity Type',
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
@@ -315,6 +315,8 @@ async def resolve_extracted_node(
         existing_nodes[duplicate_id] if 0 <= duplicate_id < len(existing_nodes) else extracted_node
     )
 
+    node.name = llm_response.get('name', '')
+
     end = time()
     logger.debug(
         f'Resolved node: {extracted_node.name} is {node.name}, in {(end - start) * 1000} ms'
@@ -324,11 +326,11 @@ async def resolve_extracted_node(
 
 
 async def extract_attributes_from_nodes(
-    clients: GraphitiClients,
-    nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+        clients: GraphitiClients,
+        nodes: list[EntityNode],
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -354,11 +356,11 @@ async def extract_attributes_from_nodes(
 
 
 async def extract_attributes_from_node(
-    llm_client: LLMClient,
-    node: EntityNode,
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_type: BaseModel | None = None,
+        llm_client: LLMClient,
+        node: EntityNode,
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_type: BaseModel | None = None,
 ) -> EntityNode:
     node_context: dict[str, Any] = {
         'name': node.name,
@@ -373,11 +375,7 @@ async def extract_attributes_from_node(
             Field(
                 description='Summary containing the important information about the entity. Under 200 words',
             ),
-        ),
-        'name': (
-            str,
-            Field(description='Name of the ENTITY'),
-        ),
+        )
     }
 
     if entity_type is not None:
@@ -416,8 +414,8 @@ async def extract_attributes_from_node(
 
 
 async def dedupe_node_list(
-    llm_client: LLMClient,
-    nodes: list[EntityNode],
+        llm_client: LLMClient,
+        nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     start = time()
 
