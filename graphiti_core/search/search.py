@@ -22,8 +22,8 @@ from neo4j import AsyncDriver
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
-from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import SearchRerankerError
+from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.search.search_config import (
@@ -62,17 +62,21 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
-    embedder: EmbedderClient,
-    cross_encoder: CrossEncoderClient,
+    clients: GraphitiClients,
     query: str,
     group_ids: list[str] | None,
     config: SearchConfig,
     search_filter: SearchFilters,
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
+    query_vector: list[float] | None = None,
 ) -> SearchResults:
     start = time()
+
+    driver = clients.driver
+    embedder = clients.embedder
+    cross_encoder = clients.cross_encoder
+
     if query.strip() == '':
         return SearchResults(
             edges=[],
@@ -80,7 +84,11 @@ async def search(
             episodes=[],
             communities=[],
         )
-    query_vector = await embedder.create(input_data=[query.replace('\n', ' ')])
+    query_vector = (
+        query_vector
+        if query_vector is not None
+        else await embedder.create(input_data=[query.replace('\n', ' ')])
+    )
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids else None

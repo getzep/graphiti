@@ -23,10 +23,9 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class EdgeDuplicate(BaseModel):
-    is_duplicate: bool = Field(..., description='true or false')
-    uuid: str | None = Field(
-        None,
-        description="uuid of the existing edge like '5d643020624c42fa9de13f97b1b3fa39' or null",
+    duplicate_fact_id: int = Field(
+        ...,
+        description='id of the duplicate fact. If no duplicate facts are found, default to -1.',
     )
 
 
@@ -69,9 +68,8 @@ def edge(context: dict[str, Any]) -> list[Message]:
         </NEW EDGE>
         
         Task:
-        1. If the New Edges represents the same factual information as any edge in Existing Edges, return 'is_duplicate: true' in the 
-            response. Otherwise, return 'is_duplicate: false'
-        2. If is_duplicate is true, also return the uuid of the existing edge in the response
+        If the New Edges represents the same factual information as any edge in Existing Edges, return the id of the duplicate fact.
+        If the NEW EDGE is not a duplicate of any of the EXISTING EDGES, return -1.
 
         Guidelines:
         1. The facts do not need to be completely identical to be duplicates, they just need to express the same information.

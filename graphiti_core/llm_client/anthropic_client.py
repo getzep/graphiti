@@ -28,7 +28,7 @@ from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig
+from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
@@ -173,6 +173,7 @@ class AnthropicClient(LLMClient):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
@@ -263,6 +264,7 @@ class AnthropicClient(LLMClient):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -289,7 +291,9 @@ class AnthropicClient(LLMClient):
 
         while retry_count <= max_retries:
             try:
-                response = await self._generate_response(messages, response_model, max_tokens)
+                response = await self._generate_response(
+                    messages, response_model, max_tokens, model_size
+                )
 
                 # If we have a response_model, attempt to validate the response
                 if response_model is not None:

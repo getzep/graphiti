@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import LLMConfig
+from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class GroqClient(LLMClient):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         msgs: list[ChatCompletionMessageParam] = []
         for m in messages:

@@ -10,11 +10,10 @@ async def main():
     )
 
     parser.add_argument(
-        '--multi-session',
+        '--multi-session-count',
         type=int,
-        nargs='+',
         required=True,
-        help='List of integers representing multi-session values (e.g., 1 2 3)',
+        help='Integer representing multi-session count',
     )
     parser.add_argument('--session-length', type=int, required=True, help='Length of each session')
     parser.add_argument(
@@ -27,11 +26,13 @@ async def main():
     if args.build_baseline:
         print('Running build_baseline_graph...')
         await build_baseline_graph(
-            multi_session=args.multi_session, session_length=args.session_length
+            multi_session_count=args.multi_session_count, session_length=args.session_length
         )
 
     # Always call eval_graph
-    result = await eval_graph(multi_session=args.multi_session, session_length=args.session_length)
+    result = await eval_graph(
+        multi_session_count=args.multi_session_count, session_length=args.session_length
+    )
     print('Result of eval_graph:', result)
 
 

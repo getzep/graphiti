@@ -21,14 +21,10 @@ from pydantic import BaseModel, Field
 from .models import Message, PromptFunction, PromptVersion
 
 
-class InvalidatedEdge(BaseModel):
-    uuid: str = Field(..., description='The UUID of the edge to be invalidated')
-    fact: str = Field(..., description='Updated fact of the edge')
-
-
 class InvalidatedEdges(BaseModel):
-    invalidated_edges: list[InvalidatedEdge] = Field(
-        ..., description='List of edges that should be invalidated'
+    contradicted_facts: list[int] = Field(
+        ...,
+        description='List of ids of facts that be should invalidated. If no facts should be invalidated, the list should be empty.',
     )
 
 
@@ -78,18 +74,22 @@ def v2(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
+            content='You are an AI assistant that determines which facts contradict each other.',
         ),
         Message(
             role='user',
             content=f"""
-               Based on the provided Existing Edges and a New Edge, determine which existing edges, if any, should be marked as invalidated due to invalidations with the New Edge.
+               Based on the provided EXISTING FACTS and a NEW FACT, determine which existing facts the new fact contradicts.
+               Return a list containing all ids of the facts that are contradicted by the NEW FACT.
+               If there are no contradicted facts, return an empty list.
 
-                Existing Edges:
+                <EXISTING FACTS>
                 {context['existing_edges']}
+                </EXISTING FACTS>
 
-                New Edge:
+                <NEW FACT>
                 {context['new_edge']}
+                </NEW FACT>
             """,
         ),
     ]

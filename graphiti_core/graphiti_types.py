@@ -14,24 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from neo4j import AsyncDriver
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, Field
-
-EMBEDDING_DIM = 1024
-
-
-class EmbedderConfig(BaseModel):
-    embedding_dim: int = Field(default=EMBEDDING_DIM, frozen=True)
+from graphiti_core.cross_encoder import CrossEncoderClient
+from graphiti_core.embedder import EmbedderClient
+from graphiti_core.llm_client import LLMClient
 
 
-class EmbedderClient(ABC):
-    @abstractmethod
-    async def create(
-        self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
-    ) -> list[float]:
-        pass
+class GraphitiClients(BaseModel):
+    driver: AsyncDriver
+    llm_client: LLMClient
+    embedder: EmbedderClient
+    cross_encoder: CrossEncoderClient
 
-    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
-        raise NotImplementedError()
+    model_config = ConfigDict(arbitrary_types_allowed=True)

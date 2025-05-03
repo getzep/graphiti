@@ -47,7 +47,7 @@ ENTITY_EDGE_SAVE_BULK = """
     SET r = {uuid: edge.uuid, name: edge.name, group_id: edge.group_id, fact: edge.fact, episodes: edge.episodes, 
     created_at: edge.created_at, expired_at: edge.expired_at, valid_at: edge.valid_at, invalid_at: edge.invalid_at}
     WITH r, edge CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", edge.fact_embedding)
-    RETURN r.uuid AS uuid
+    RETURN edge.uuid AS uuid
 """
 
 COMMUNITY_EDGE_SAVE = """

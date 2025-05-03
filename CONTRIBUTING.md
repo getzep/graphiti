@@ -32,13 +32,13 @@ Sometimes the most valuable contribution isn't code. If you're using our project
 
 ### Help Others in Discord
 
-Join our [Discord server](https://discord.gg/2JbGZQZT) community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
+Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and pitch in at the helpdesk. Answering questions and helping troubleshoot issues is an incredibly valuable contribution that benefits everyone. The knowledge you share today saves someone hours of frustration tomorrow.
 
 ## What happens next?
 
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
-1. Share your approach in the issue discussion or [Discord](https://discord.gg/2JbGZQZT) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
+1. Share your approach in the issue discussion or [Discord](https://discord.com/invite/W8Kw6bsgXQ) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
 
 2. Fork the repo, make your changes in a branch, and submit a PR. We've included more detailed technical instructions below; be open to feedback during review.
 
@@ -128,6 +128,6 @@ This command will format your code, run linting checks, and execute tests.
 
 # Questions?
 
-Stuck on a contribution or have a half-formed idea? Come say hello in our [Discord server](https://discord.gg/2JbGZQZT). Whether you're ready to contribute or just want to learn more, we're happy to have you! It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
+Stuck on a contribution or have a half-formed idea? Come say hello in our [Discord server](https://discord.com/invite/W8Kw6bsgXQ). Whether you're ready to contribute or just want to learn more, we're happy to have you! It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
 
 Thank you for contributing to Graphiti!
