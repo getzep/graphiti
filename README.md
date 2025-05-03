@@ -141,6 +141,26 @@ pip install graphiti-core[google-genai]
 pip install graphiti-core[anthropic,groq,google-genai]
 ```
 
+### CLI Tool (Optional)
+
+Graphiti includes an optional command-line interface that allows you to interact with the knowledge graph directly from the terminal. To install the CLI:
+
+```bash
+# Install with CLI support
+pip install graphiti-core[cli]
+
+# Install with CLI and other providers
+pip install graphiti-core[cli,anthropic,groq]
+```
+
+The CLI provides commands for:
+- Adding JSON data as episodes
+- Searching nodes and relationships
+- Managing episodes and entity edges
+- Testing connections to Neo4j
+
+For CLI usage and examples, see the [CLI documentation](./cli/README.md).
+
 ## Quick Start
 
 > [!IMPORTANT]

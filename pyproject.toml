@@ -12,7 +12,6 @@ license = "Apache-2.0"
 requires-python = ">=3.10,<4"
 packages = [
     { include = "graphiti_core", from = "." },
-    { include = "cli", from = "." },
 ]
 dependencies = [
     "pydantic>=2.8.2",
@@ -23,8 +22,6 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
     "graph-service (>=1.0.0.7,<2.0.0.0)",
-    "typer>=0.15.0",
-    "rich>=13.7.0",
 ]
 
 [project.scripts]
@@ -36,6 +33,10 @@ Repository = "https://github.com/getzep/graphiti"
 Documentation = "https://help.getzep.com/graphiti/cli/overview"
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.15.0",
+    "rich>=13.7.0",
+]
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
@@ -46,6 +47,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 requires-poetry = ">=2.0"
+
+[tool.poetry.group.cli.dependencies]
+typer = ">=0.15.0"
+rich = ">=13.7.0"
 
 [tool.poetry.scripts]
 graphiti = "cli.main:app"
