@@ -139,15 +139,11 @@ class AnthropicClient(LLMClient):
             A list containing a single tool definition for use with the Anthropic API.
         """
         if response_model is not None:
-            # temporary debug log
-            logger.info(f'Creating tool for response_model: {response_model}')
             # Use the response_model to define the tool
             model_schema = response_model.model_json_schema()
             tool_name = response_model.__name__
             description = model_schema.get('description', f'Extract {tool_name} information')
         else:
-            # temporary debug log
-            logger.info('Creating generic JSON output tool')
             # Create a generic JSON output tool
             tool_name = 'generic_json_output'
             description = 'Output data in JSON format'
@@ -205,8 +201,6 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
-            # temporary debug log
-            logger.info(f'using model: {self.model} with max_tokens: {self.max_tokens}')
             result = await self.client.messages.create(
                 system=system_message.content,
                 max_tokens=max_creation_tokens,
@@ -227,13 +221,6 @@ class AnthropicClient(LLMClient):
                     return tool_args
 
             # If we didn't get a proper tool_use response, try to extract from text
-            # logger.debug(
-            #     f'Did not get a tool_use response, trying to extract json from text. Result: {result.content}'
-            # )
-            # temporary debug log
-            logger.info(
-                f'Did not get a tool_use response, trying to extract json from text. Result: {result.content}'
-            )
             for content_item in result.content:
                 if content_item.type == 'text':
                     return self._extract_json_from_text(content_item.text)

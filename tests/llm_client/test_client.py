@@ -18,7 +18,7 @@ from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
 
 
-class TestLLMClient(LLMClient):
+class MockLLMClient(LLMClient):
     """Concrete implementation of LLMClient for testing"""
 
     async def _generate_response(self, messages, response_model=None):
@@ -26,7 +26,7 @@ class TestLLMClient(LLMClient):
 
 
 def test_clean_input():
-    client = TestLLMClient(LLMConfig())
+    client = MockLLMClient(LLMConfig())
 
     test_cases = [
         # Basic text should remain unchanged
