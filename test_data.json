@@ -1,0 +1,10 @@
+{
+  "test_id": "TEST_SAFE_TO_DELETE_1745433685",
+  "name": "TEST_SAFE_TO_DELETE Test Object",
+  "description": "This is a test object created by the CLI test script",
+  "test_date": "2025-04-23T14:41:25-04:00",
+  "properties": {
+    "safe_to_delete": true,
+    "purpose": "automated testing"
+  }
+}
