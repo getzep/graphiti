@@ -123,7 +123,34 @@ async def add_nodes_and_edges_bulk_tx(
             'created_at': node.created_at,
         }
 
-        entity_data.update(node.attributes or {})
+        # Filter attributes to include only Neo4j-compatible primitive types or lists of primitives
+        primitive_attributes: dict[str, Any] = {}
+        PRIMITIVE_TYPES = (str, int, float, bool, type(None))
+        if node.attributes:
+            for key, value in node.attributes.items():
+                if isinstance(value, PRIMITIVE_TYPES):
+                    primitive_attributes[key] = value
+                elif isinstance(value, list):
+                    # Check if all elements in the list are primitive
+                    if all(isinstance(item, PRIMITIVE_TYPES) for item in value):
+                        primitive_attributes[key] = value
+                    else:
+                        # Log as debug since skipping might be expected behavior
+                        logger.debug(
+                            f"Skipping list attribute '{key}' with non-primitive elements for node {node.uuid}: {value}"
+                        )
+                elif isinstance(value, dict):
+                    # Log dictionaries specifically
+                    logger.debug(
+                        f"Skipping dictionary attribute '{key}' for node {node.uuid}: {value}"
+                    )
+                else:
+                    # Log other non-primitive types
+                    logger.debug(
+                        f"Skipping non-primitive attribute '{key}' for node {node.uuid}: type={type(value)}"
+                    )
+
+        entity_data.update(primitive_attributes)  # Update with filtered attributes
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         nodes.append(entity_data)
 
