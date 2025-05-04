@@ -715,20 +715,11 @@ wheels = [
 ]
 
 [[package]]
-name = "graph-service"
-version = "1.0.0.7"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/68/c94b57ddc6bd38b50a3f7357793f8c6a0e9d039af02dadac02b50b05746c/graph_service-1.0.0.7-py3-none-any.whl", hash = "sha256:d34cd38529ff0704b83fa4e8692b4f8fcf1524dce7110f89d4ee33423eeff0bd", size = 6392 },
-]
-
-[[package]]
 name = "graphiti-core"
 version = "0.11.5"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
-    { name = "graph-service" },
     { name = "neo4j" },
     { name = "numpy" },
     { name = "openai" },
@@ -775,7 +766,6 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.8.0" },
-    { name = "graph-service", specifier = ">=1.0.0.7,<2.0.0.0" },
     { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
     { name = "neo4j", specifier = ">=5.23.0" },
     { name = "numpy", specifier = ">=1.0.0" },

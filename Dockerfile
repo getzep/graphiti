@@ -1,43 +1,44 @@
-# Build stage
-FROM python:3.12-slim as builder
-
+# Build stage – create an isolated venv with uv
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
+# uv performance toggles
+ENV UV_COMPILE_BYTECODE=1  \
+    UV_LINK_MODE=copy
 
-# Copy only the files needed for installation
-COPY ./pyproject.toml ./poetry.lock* ./README.md /app/
-COPY ./graphiti_core /app/graphiti_core
-COPY ./server/pyproject.toml ./server/poetry.lock* /app/server/
+# Copy all source code and manifests
+COPY pyproject.toml uv.lock README.md ./
+COPY graphiti_core ./graphiti_core
+COPY server ./server
 
-RUN poetry config virtualenvs.create false 
+# Create and activate virtual environment
+RUN uv venv /app/.venv
+ENV VIRTUAL_ENV=/app/.venv PATH="/app/.venv/bin:$PATH"
 
-# Install the local package
-RUN poetry build && pip install dist/*.whl
+# Install graphiti-core (editable)
+RUN uv pip install --no-cache --editable .
 
-# Install server dependencies
-WORKDIR /app/server
-RUN poetry install --no-interaction --no-ansi --only main --no-root
+# Install the FastAPI server package and its specific dependencies
+RUN uv pip install --no-cache ./server
 
+# Runtime stage – copy the ready venv into a minimal image
 FROM python:3.12-slim
-
-# Copy only the necessary files from the builder stage
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-
-# Create the app directory and copy server files
+ARG UID=10001
+RUN adduser --disabled-password --gecos "" --uid "$UID" appuser
 WORKDIR /app
-COPY ./server /app
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
-# Command to run the application
+# Copy the virtual‑env and the necessary server code
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder --chown=appuser:appuser /app/server/graph_service /app/graph_service
 
-CMD uvicorn graph_service.main:app --host 0.0.0.0 --port $PORT
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000
+
+USER appuser
+CMD ["uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
