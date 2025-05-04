@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .bge_reranker_client import BGERerankerClient
 from .client import CrossEncoderClient
 from .openai_reranker_client import OpenAIRerankerClient
 
-__all__ = ['CrossEncoderClient', 'OpenAIRerankerClient', 'BGERerankerClient']
+__all__ = ['CrossEncoderClient', 'OpenAIRerankerClient']
