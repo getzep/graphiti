@@ -2,17 +2,17 @@
 
 # Define variables
 PYTHON = python3
-POETRY = poetry
-PYTEST = $(POETRY) run pytest
-RUFF = $(POETRY) run ruff
-MYPY = $(POETRY) run mypy
+UV = uv
+PYTEST = $(UV) run pytest
+RUFF = $(UV) run ruff
+MYPY = $(UV) run mypy
 
 # Default target
 all: format lint test
 
 # Install dependencies
 install:
-	$(POETRY) install --with dev
+	$(UV) sync --group dev
 
 # Format code
 format:
