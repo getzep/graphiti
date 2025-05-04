@@ -131,6 +131,11 @@ or
 poetry add graphiti-core
 ```
 
+or
+```bash
+uv add graphiti-core
+```
+
 You can also install optional LLM providers as extras:
 
 ```bash

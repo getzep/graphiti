@@ -53,7 +53,7 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 3. Set up your development environment:
 
     - Ensure you have Python 3.10+ installed.
-    - Install Poetry: https://python-poetry.org/docs/#installation
+    - Install uv: https://docs.astral.sh/uv/getting-started/installation/
     - Install project dependencies:
         ```
         make install
