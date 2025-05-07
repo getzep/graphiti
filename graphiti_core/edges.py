@@ -334,8 +334,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                """
+                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                    """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -483,6 +483,8 @@ def get_community_edge_from_record(record: Any):
 
 
 async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[EntityEdge]):
+    if len(edges) == 0:
+        return
     fact_embeddings = await embedder.create_batch([edge.fact for edge in edges])
     for edge, fact_embedding in zip(edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

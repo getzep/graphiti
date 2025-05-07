@@ -346,8 +346,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-                                                MATCH (n:Entity {uuid: $uuid})
-                                                """
+                                                    MATCH (n:Entity {uuid: $uuid})
+                                                    """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -559,7 +559,6 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
-        name_embedding=record['name_embedding'],
         labels=record['labels'],
         created_at=record['created_at'].to_native(),
         summary=record['summary'],
