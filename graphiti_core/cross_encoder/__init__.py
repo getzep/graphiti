@@ -18,3 +18,11 @@ from .client import CrossEncoderClient
 from .openai_reranker_client import OpenAIRerankerClient
 
 __all__ = ['CrossEncoderClient', 'OpenAIRerankerClient']
+
+# Optional: BGERerankerClient
+try:
+    from .bge_reranker_client import BGERerankerClient
+
+    __all__.append('BGERerankerClient')
+except ImportError:
+    BGERerankerClient = None
