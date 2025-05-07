@@ -1876,14 +1876,14 @@ orjson = ">=3.10.1"
 
 [[package]]
 name = "langsmith"
-version = "0.3.37"
+version = "0.3.42"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "langsmith-0.3.37-py3-none-any.whl", hash = "sha256:bdecca4eb48ba1799e821a33dbdca318ab202faa71a5bfa7d2358be6c3fd7eeb"},
-    {file = "langsmith-0.3.37.tar.gz", hash = "sha256:d49d9a12d24d3984d5b3e2b5915b525b4a29a4706ea9cadde43c980fba43fab0"},
+    {file = "langsmith-0.3.42-py3-none-any.whl", hash = "sha256:18114327f3364385dae4026ebfd57d1c1cb46d8f80931098f0f10abe533475ff"},
+    {file = "langsmith-0.3.42.tar.gz", hash = "sha256:2b5cbc450ab808b992362aac6943bb1d285579aa68a3a8be901d30a393458f25"},
 ]
 
 [package.dependencies]
