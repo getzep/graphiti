@@ -1,8 +1,9 @@
-version: '3.8'
+version: "3.8"
 
 services:
   graph:
-    image: zepai/graphiti:latest
+    build:
+      context: .
     ports:
       - "8000:8000"
     healthcheck:
@@ -26,7 +27,7 @@ services:
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - PORT=8000
   neo4j:
-    image: neo4j:5.22.0
+    image: neo4j:5.26.2
     healthcheck:
       test: wget "http://localhost:${NEO4J_PORT}" || exit 1
       interval: 1s
@@ -34,8 +35,8 @@ services:
       retries: 20
       start_period: 3s
     ports:
-      - "7474:7474"  # HTTP
-      - "${NEO4J_PORT}:${NEO4J_PORT}"  # Bolt
+      - "7474:7474" # HTTP
+      - "${NEO4J_PORT}:${NEO4J_PORT}" # Bolt
     volumes:
       - neo4j_data:/data
     environment:
