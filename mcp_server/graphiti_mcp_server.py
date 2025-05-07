@@ -13,11 +13,23 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
 
+from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from openai import AsyncAzureOpenAI
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
+from openai import AsyncAzureOpenAI, APIError, APITimeoutError, RateLimitError
 from pydantic import BaseModel, Field
+
+from .utils import (
+    CircuitBreakerError,
+    PermanentError,
+    RetryableError,
+    RETRYABLE_NETWORK_ERRORS,
+    with_circuit_breaker,
+    with_logging,
+    with_retry,
+)
 
 from graphiti_core import Graphiti
 from graphiti_core.cross_encoder.client import CrossEncoderClient
@@ -536,57 +548,136 @@ mcp = FastMCP(
 graphiti_client: Graphiti | None = None
 
 
+class GraphitiInitError(Exception):
+    """Base class for Graphiti initialization errors."""
+    pass
+
+class ConfigurationError(GraphitiInitError, PermanentError):
+    """Error in configuration values."""
+    pass
+
+class DatabaseConnectionError(GraphitiInitError, RetryableError):
+    """Error connecting to Neo4j database."""
+    pass
+
+class LLMServiceError(GraphitiInitError, RetryableError):
+    """Error initializing LLM service."""
+    pass
+
+@with_retry(
+    max_attempts=5,
+    base_delay=1.0,
+    max_delay=30.0,
+    retryable_exceptions=(
+        DatabaseConnectionError,
+        LLMServiceError,
+        *RETRYABLE_NETWORK_ERRORS,
+    ),
+)
+@with_logging(include_args=False)  # Don't log args as they contain credentials
 async def initialize_graphiti():
-    """Initialize the Graphiti client with the configured settings."""
+    """Initialize the Graphiti client with the configured settings.
+    
+    This function implements retry logic for transient failures and
+    graceful degradation for non-critical service failures.
+    
+    Raises:
+        ConfigurationError: If required configuration is missing
+        DatabaseConnectionError: If Neo4j connection fails
+        LLMServiceError: If LLM service initialization fails
+        GraphitiInitError: For other initialization errors
+    """
     global graphiti_client, config
 
     try:
-        # Create LLM client if possible
-        llm_client = config.llm.create_client()
-        if not llm_client and config.use_custom_entities:
-            # If custom entities are enabled, we must have an LLM client
-            raise ValueError('OPENAI_API_KEY must be set when custom entities are enabled')
-
-        # Validate Neo4j configuration
+        # Validate Neo4j configuration first
         if not config.neo4j.uri or not config.neo4j.user or not config.neo4j.password:
-            raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
+            raise ConfigurationError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
-        embedder_client = config.embedder.create_client()
-        cross_encoder_client = config.llm.create_cross_encoder_client()
+        # Initialize services with graceful degradation
+        llm_client = None
+        embedder_client = None
+        cross_encoder_client = None
 
-        # Initialize Graphiti client
-        graphiti_client = Graphiti(
-            uri=config.neo4j.uri,
-            user=config.neo4j.user,
-            password=config.neo4j.password,
-            llm_client=llm_client,
-            embedder=embedder_client,
-            cross_encoder=cross_encoder_client,
-        )
+        # Try to initialize LLM client
+        try:
+            llm_client = config.llm.create_client()
+            if llm_client:
+                logger.info(f'LLM client initialized with model: {config.llm.model}')
+            elif config.use_custom_entities:
+                # Only raise error if custom entities are required
+                raise ConfigurationError('OPENAI_API_KEY must be set when custom entities are enabled')
+            else:
+                logger.warning('No LLM client configured - entity extraction will be limited')
+        except (APIError, APITimeoutError, RateLimitError, AzureError) as e:
+            if config.use_custom_entities:
+                raise LLMServiceError(f'Failed to initialize LLM client: {str(e)}') from e
+            logger.warning(f'Failed to initialize LLM client, continuing with limited functionality: {str(e)}')
+
+        # Try to initialize embedder client
+        try:
+            embedder_client = config.embedder.create_client()
+            if embedder_client:
+                logger.info('Embedder client initialized successfully')
+            else:
+                logger.warning('No embedder client configured - search functionality will be limited')
+        except (APIError, APITimeoutError, RateLimitError, AzureError) as e:
+            logger.warning(f'Failed to initialize embedder client, continuing with limited functionality: {str(e)}')
+
+        # Try to initialize cross-encoder client
+        try:
+            cross_encoder_client = config.llm.create_cross_encoder_client()
+            if cross_encoder_client:
+                logger.info('Cross-encoder client initialized successfully')
+            else:
+                logger.warning('No cross-encoder client configured - search reranking will be disabled')
+        except (APIError, APITimeoutError, RateLimitError, AzureError) as e:
+            logger.warning(f'Failed to initialize cross-encoder client, continuing without reranking: {str(e)}')
+
+        # Initialize Graphiti client with Neo4j connection
+        try:
+            graphiti_client = Graphiti(
+                uri=config.neo4j.uri,
+                user=config.neo4j.user,
+                password=config.neo4j.password,
+                llm_client=llm_client,
+                embedder=embedder_client,
+                cross_encoder=cross_encoder_client,
+            )
+        except (ServiceUnavailable, SessionExpired) as e:
+            raise DatabaseConnectionError(f'Failed to connect to Neo4j: {str(e)}') from e
+        except Exception as e:
+            raise GraphitiInitError(f'Failed to initialize Graphiti client: {str(e)}') from e
 
         # Destroy graph if requested
         if config.destroy_graph:
             logger.info('Destroying graph...')
-            await clear_data(graphiti_client.driver)
+            try:
+                await clear_data(graphiti_client.driver)
+            except Exception as e:
+                logger.error(f'Failed to clear graph data: {str(e)}')
+                # Continue with initialization even if clear fails
 
         # Initialize the graph database with Graphiti's indices
-        await graphiti_client.build_indices_and_constraints()
-        logger.info('Graphiti client initialized successfully')
+        try:
+            await graphiti_client.build_indices_and_constraints()
+            logger.info('Graph indices and constraints initialized successfully')
+        except Exception as e:
+            raise DatabaseConnectionError(f'Failed to initialize graph indices: {str(e)}') from e
 
-        # Log configuration details for transparency
-        if llm_client:
-            logger.info(f'Using OpenAI model: {config.llm.model}')
-            logger.info(f'Using temperature: {config.llm.temperature}')
-        else:
-            logger.info('No LLM client configured - entity extraction will be limited')
-
+        # Log final configuration state
         logger.info(f'Using group_id: {config.group_id}')
         logger.info(
             f'Custom entity extraction: {"enabled" if config.use_custom_entities else "disabled"}'
         )
+        logger.info('Graphiti client initialized successfully')
 
-    except Exception as e:
-        logger.error(f'Failed to initialize Graphiti: {str(e)}')
+        # Return success to signal retry decorator
+        return True
+
+    except (ConfigurationError, GraphitiInitError) as e:
+        # Log with full context and re-raise
+        logger.error('Graphiti initialization failed', exc_info=True)
         raise
 
 
@@ -616,41 +707,158 @@ episode_queues: dict[str, asyncio.Queue] = {}
 queue_workers: dict[str, bool] = {}
 
 
+class EpisodeProcessingError(RetryableError):
+    """Error processing an episode that may be retryable."""
+    pass
+
+class EpisodeValidationError(PermanentError):
+    """Error validating episode data that cannot be retried."""
+    pass
+
+@with_circuit_breaker(failure_threshold=5, reset_timeout=300.0)
+@with_retry(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=10.0,
+    retryable_exceptions=(EpisodeProcessingError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def process_episode_queue(group_id: str):
     """Process episodes for a specific group_id sequentially.
 
     This function runs as a long-lived task that processes episodes
-    from the queue one at a time.
+    from the queue one at a time. It implements:
+    - Circuit breaker to prevent overwhelming failing systems
+    - Retry logic for transient failures
+    - Detailed logging of operations
+    - Error classification and handling
     """
     global queue_workers
 
     logger.info(f'Starting episode queue worker for group_id: {group_id}')
     queue_workers[group_id] = True
+    
+    # Track queue metrics
+    queue_size = episode_queues[group_id].qsize()
+    logger.info(f'Current queue size for group_id {group_id}: {queue_size}')
 
     try:
         while True:
             # Get the next episode processing function from the queue
             # This will wait if the queue is empty
             process_func = await episode_queues[group_id].get()
+            
+            # Log queue metrics after getting item
+            new_size = episode_queues[group_id].qsize()
+            if new_size != queue_size:
+                queue_size = new_size
+                logger.info(f'Queue size for group_id {group_id} changed to: {queue_size}')
 
             try:
-                # Process the episode
-                await process_func()
+                start_time = time.time()
+                
+                # Process the episode with timeout
+                try:
+                    async with asyncio.timeout(30):  # 30 second timeout
+                        await process_func()
+                except asyncio.TimeoutError:
+                    raise EpisodeProcessingError("Episode processing timed out")
+                
+                # Log processing time
+                duration = time.time() - start_time
+                logger.info(
+                    f'Episode processed successfully',
+                    extra={
+                        'group_id': group_id,
+                        'duration': f'{duration:.3f}s',
+                        'queue_size': queue_size
+                    }
+                )
+                
+            except (ServiceUnavailable, SessionExpired) as e:
+                # Database connection issues - retryable
+                logger.warning(
+                    f'Database error processing episode',
+                    extra={
+                        'group_id': group_id,
+                        'error': str(e),
+                        'error_type': e.__class__.__name__
+                    }
+                )
+                raise EpisodeProcessingError(f"Database error: {str(e)}") from e
+                
+            except (APIError, APITimeoutError, RateLimitError) as e:
+                # LLM service issues - retryable
+                logger.warning(
+                    f'LLM service error processing episode',
+                    extra={
+                        'group_id': group_id,
+                        'error': str(e),
+                        'error_type': e.__class__.__name__
+                    }
+                )
+                raise EpisodeProcessingError(f"LLM service error: {str(e)}") from e
+                
+            except ValueError as e:
+                # Validation errors - not retryable
+                logger.error(
+                    f'Validation error processing episode',
+                    extra={
+                        'group_id': group_id,
+                        'error': str(e),
+                        'error_type': e.__class__.__name__
+                    }
+                )
+                # Don't retry validation errors
+                
             except Exception as e:
-                logger.error(f'Error processing queued episode for group_id {group_id}: {str(e)}')
+                # Unexpected errors - log with full context
+                logger.error(
+                    f'Unexpected error processing episode',
+                    extra={
+                        'group_id': group_id,
+                        'error': str(e),
+                        'error_type': e.__class__.__name__
+                    },
+                    exc_info=True
+                )
+                # Treat unexpected errors as retryable
+                raise EpisodeProcessingError(f"Unexpected error: {str(e)}") from e
+                
             finally:
                 # Mark the task as done regardless of success/failure
                 episode_queues[group_id].task_done()
+                
     except asyncio.CancelledError:
         logger.info(f'Episode queue worker for group_id {group_id} was cancelled')
+        
+    except CircuitBreakerError as e:
+        logger.error(
+            f'Circuit breaker opened for group_id {group_id}',
+            extra={'error': str(e)}
+        )
+        # Allow circuit breaker errors to propagate
+        raise
+        
     except Exception as e:
-        logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
+        logger.error(
+            f'Fatal error in queue worker',
+            extra={
+                'group_id': group_id,
+                'error': str(e),
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        raise
+        
     finally:
         queue_workers[group_id] = False
         logger.info(f'Stopped episode queue worker for group_id: {group_id}')
 
 
 @mcp.tool()
+@with_logging(truncate_length=2000)  # Truncate long episode bodies in logs
 async def add_episode(
     name: str,
     episode_body: str,
@@ -716,16 +924,53 @@ async def add_episode(
     """
     global graphiti_client, episode_queues, queue_workers
 
+    # Generate a request ID for tracking this operation
+    request_id = str(uuid.uuid4())
+    logger.info(
+        f"Received add_episode request",
+        extra={
+            'request_id': request_id,
+            'name': name,
+            'source': source,
+            'group_id': group_id,
+            'body_length': len(episode_body),
+        }
+    )
+
     if graphiti_client is None:
+        logger.error(
+            "Add episode failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if not name or not name.strip():
+            raise EpisodeValidationError("Episode name cannot be empty")
+        
+        if not episode_body or not episode_body.strip():
+            raise EpisodeValidationError("Episode body cannot be empty")
+            
+        # Validate source type
+        source = source.lower()
+        if source not in ('text', 'json', 'message'):
+            raise EpisodeValidationError(
+                f"Invalid source type '{source}'. Must be one of: text, json, message"
+            )
+
         # Map string source to EpisodeType enum
         source_type = EpisodeType.text
-        if source.lower() == 'message':
+        if source == 'message':
             source_type = EpisodeType.message
-        elif source.lower() == 'json':
+        elif source == 'json':
             source_type = EpisodeType.json
+            # Validate JSON if source type is json
+            try:
+                import json
+                json.loads(episode_body)
+            except json.JSONDecodeError as e:
+                raise EpisodeValidationError(f"Invalid JSON in episode_body: {str(e)}")
 
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id if group_id is not None else config.group_id
@@ -741,41 +986,160 @@ async def add_episode(
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Define the episode processing function
+        # Define the episode processing function with request tracking
         async def process_episode():
             try:
-                logger.info(f"Processing queued episode '{name}' for group_id: {group_id_str}")
+                logger.info(
+                    f"Processing queued episode",
+                    extra={
+                        'request_id': request_id,
+                        'name': name,
+                        'group_id': group_id_str
+                    }
+                )
+                
                 # Use all entity types if use_custom_entities is enabled, otherwise use empty dict
                 entity_types = ENTITY_TYPES if config.use_custom_entities else {}
 
-                await client.add_episode(
-                    name=name,
-                    episode_body=episode_body,
-                    source=source_type,
-                    source_description=source_description,
-                    group_id=group_id_str,  # Using the string version of group_id
-                    uuid=uuid,
-                    reference_time=datetime.now(timezone.utc),
-                    entity_types=entity_types,
+                # Process with timeout
+                async with asyncio.timeout(30):  # 30 second timeout
+                    await client.add_episode(
+                        name=name,
+                        episode_body=episode_body,
+                        source=source_type,
+                        source_description=source_description,
+                        group_id=group_id_str,  # Using the string version of group_id
+                        uuid=uuid,
+                        reference_time=datetime.now(timezone.utc),
+                        entity_types=entity_types,
+                    )
+                    
+                logger.info(
+                    f"Episode processed successfully",
+                    extra={
+                        'request_id': request_id,
+                        'name': name,
+                        'group_id': group_id_str
+                    }
                 )
-                logger.info(f"Episode '{name}' added successfully")
 
-                logger.info(f"Building communities after episode '{name}'")
-                await client.build_communities()
-
-                logger.info(f"Episode '{name}' processed successfully")
-            except Exception as e:
-                error_msg = str(e)
+                # Build communities after successful episode addition
+                try:
+                    logger.info(
+                        f"Building communities",
+                        extra={
+                            'request_id': request_id,
+                            'name': name,
+                            'group_id': group_id_str
+                        }
+                    )
+                    await client.build_communities()
+                except Exception as e:
+                    # Log but don't fail the operation if community building fails
+                    logger.warning(
+                        f"Failed to build communities",
+                        extra={
+                            'request_id': request_id,
+                            'name': name,
+                            'group_id': group_id_str,
+                            'error': str(e),
+                            'error_type': e.__class__.__name__
+                        }
+                    )
+                
+            except asyncio.TimeoutError:
                 logger.error(
-                    f"Error processing episode '{name}' for group_id {group_id_str}: {error_msg}"
+                    f"Episode processing timed out",
+                    extra={
+                        'request_id': request_id,
+                        'name': name,
+                        'group_id': group_id_str
+                    }
                 )
+                raise EpisodeProcessingError("Episode processing timed out")
+                
+            except Exception as e:
+                logger.error(
+                    f"Error processing episode",
+                    extra={
+                        'request_id': request_id,
+                        'name': name,
+                        'group_id': group_id_str,
+                        'error': str(e),
+                        'error_type': e.__class__.__name__
+                    },
+                    exc_info=True
+                )
+                raise
 
         # Initialize queue for this group_id if it doesn't exist
         if group_id_str not in episode_queues:
             episode_queues[group_id_str] = asyncio.Queue()
+            logger.info(
+                f"Created new episode queue",
+                extra={
+                    'request_id': request_id,
+                    'group_id': group_id_str
+                }
+            )
 
-        # Add the episode processing function to the queue
+        # Add the processing function to the queue
         await episode_queues[group_id_str].put(process_episode)
+        queue_size = episode_queues[group_id_str].qsize()
+        logger.info(
+            f"Added episode to queue",
+            extra={
+                'request_id': request_id,
+                'group_id': group_id_str,
+                'queue_size': queue_size
+            }
+        )
+
+        # Start queue worker if not already running
+        if not queue_workers.get(group_id_str, False):
+            logger.info(
+                f"Starting new queue worker",
+                extra={
+                    'request_id': request_id,
+                    'group_id': group_id_str
+                }
+            )
+            asyncio.create_task(process_episode_queue(group_id_str))
+
+        return {
+            'message': (
+                f"Episode '{name}' queued successfully. "
+                f"Current queue size: {queue_size}"
+            )
+        }
+
+    except EpisodeValidationError as e:
+        error_msg = f"Episode validation failed: {str(e)}"
+        logger.error(
+            error_msg,
+            extra={
+                'request_id': request_id,
+                'name': name,
+                'source': source,
+                'error_type': 'EpisodeValidationError'
+            }
+        )
+        return {'error': error_msg}
+
+    except Exception as e:
+        error_msg = f"Failed to queue episode: {str(e)}"
+        logger.error(
+            error_msg,
+            extra={
+                'request_id': request_id,
+                'name': name,
+                'source': source,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        return {'error': error_msg}
+
 
         # Start a worker for this queue if one isn't already running
         if not queue_workers.get(group_id_str, False):
@@ -791,7 +1155,18 @@ async def add_episode(
         return {'error': f'Error queuing episode task: {error_msg}'}
 
 
+class SearchError(RetryableError):
+    """Error during search operations that may be retryable."""
+    pass
+
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(SearchError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def search_nodes(
     query: str,
     group_ids: list[str] | None = None,
@@ -813,10 +1188,27 @@ async def search_nodes(
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Search nodes failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return ErrorResponse(error='Graphiti client not initialized')
 
     try:
+        # Input validation
+        if not query or not query.strip():
+            raise ValueError("Search query cannot be empty")
+
+        if max_nodes < 1:
+            raise ValueError("max_nodes must be greater than 0")
+
+        if entity and entity not in ('Preference', 'Procedure'):
+            raise ValueError("entity must be either 'Preference' or 'Procedure' if provided")
+
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             group_ids if group_ids is not None else [config.group_id] if config.group_id else []
@@ -839,16 +1231,56 @@ async def search_nodes(
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Perform the search using the _search method
-        search_results = await client._search(
-            query=query,
-            config=search_config,
-            group_ids=effective_group_ids,
-            center_node_uuid=center_node_uuid,
-            search_filter=filters,
+        logger.info(
+            f"Performing node search",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'group_ids': effective_group_ids,
+                'max_nodes': max_nodes,
+                'center_node_uuid': center_node_uuid,
+                'entity': entity
+            }
         )
 
+        try:
+            # Perform the search using the _search method with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                search_results = await client._search(
+                    query=query,
+                    config=search_config,
+                    group_ids=effective_group_ids,
+                    center_node_uuid=center_node_uuid,
+                    search_filter=filters,
+                )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Search operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'query': query
+                }
+            )
+            raise SearchError("Search operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during search",
+                extra={
+                    'request_id': request_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise SearchError(f"Database error: {str(e)}") from e
+
         if not search_results.nodes:
+            logger.info(
+                f"No nodes found matching search criteria",
+                extra={
+                    'request_id': request_id,
+                    'query': query
+                }
+            )
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
         # Format the node results
@@ -865,14 +1297,58 @@ async def search_nodes(
             for node in search_results.nodes
         ]
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=formatted_nodes)
-    except Exception as e:
+        logger.info(
+            f"Search completed successfully",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'nodes_found': len(formatted_nodes)
+            }
+        )
+
+        return NodeSearchResponse(
+            message=f'Found {len(formatted_nodes)} relevant nodes',
+            nodes=formatted_nodes
+        )
+
+    except ValueError as e:
+        # Input validation errors - not retryable
         error_msg = str(e)
-        logger.error(f'Error searching nodes: {error_msg}')
-        return ErrorResponse(error=f'Error searching nodes: {error_msg}')
+        logger.error(
+            f"Invalid search parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return ErrorResponse(error=f'Invalid search parameters: {error_msg}')
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during search",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise SearchError(f"Unexpected error: {error_msg}") from e
 
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(SearchError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def search_facts(
     query: str,
     group_ids: list[str] | None = None,
@@ -889,10 +1365,24 @@ async def search_facts(
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Search facts failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if not query or not query.strip():
+            raise ValueError("Search query cannot be empty")
+
+        if max_facts < 1:
+            raise ValueError("max_facts must be greater than 0")
+
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             group_ids if group_ids is not None else [config.group_id] if config.group_id else []
@@ -904,25 +1394,127 @@ async def search_facts(
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
-            query=query,
-            num_results=max_facts,
-            center_node_uuid=center_node_uuid,
+        logger.info(
+            f"Performing fact search",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'group_ids': effective_group_ids,
+                'max_facts': max_facts,
+                'center_node_uuid': center_node_uuid
+            }
         )
 
+        try:
+            # Perform the search with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                relevant_edges = await client.search(
+                    group_ids=effective_group_ids,
+                    query=query,
+                    num_results=max_facts,
+                    center_node_uuid=center_node_uuid,
+                )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Search operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'query': query
+                }
+            )
+            raise SearchError("Search operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during search",
+                extra={
+                    'request_id': request_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise SearchError(f"Database error: {str(e)}") from e
+
         if not relevant_edges:
+            logger.info(
+                f"No facts found matching search criteria",
+                extra={
+                    'request_id': request_id,
+                    'query': query
+                }
+            )
             return {'message': 'No relevant facts found', 'facts': []}
 
-        facts = [format_fact_result(edge) for edge in relevant_edges]
-        return {'message': 'Facts retrieved successfully', 'facts': facts}
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f'Error searching facts: {error_msg}')
-        return {'error': f'Error searching facts: {error_msg}'}
+        # Format the results
+        try:
+            facts = [format_fact_result(edge) for edge in relevant_edges]
+        except Exception as e:
+            logger.error(
+                f"Error formatting search results",
+                extra={
+                    'request_id': request_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                },
+                exc_info=True
+            )
+            raise SearchError(f"Error formatting results: {str(e)}") from e
 
+        logger.info(
+            f"Search completed successfully",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'facts_found': len(facts)
+            }
+        )
+
+        return {
+            'message': f'Found {len(facts)} relevant facts',
+            'facts': facts
+        }
+
+    except ValueError as e:
+        # Input validation errors - not retryable
+        error_msg = str(e)
+        logger.error(
+            f"Invalid search parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return {'error': f'Invalid search parameters: {error_msg}'}
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during search",
+            extra={
+                'request_id': request_id,
+                'query': query,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise SearchError(f"Unexpected error: {error_msg}") from e
+
+
+class DeleteError(RetryableError):
+    """Error during delete operations that may be retryable."""
+    pass
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(DeleteError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete an entity edge from the Graphiti knowledge graph.
 
@@ -931,28 +1523,122 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Delete entity edge failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if not uuid or not uuid.strip():
+            raise ValueError("UUID cannot be empty")
+
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
 
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
-        # Delete the edge using its delete method
-        await entity_edge.delete(client.driver)
+        logger.info(
+            f"Deleting entity edge",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
+
+        try:
+            # Get and delete the entity edge with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                # Get the entity edge by UUID
+                entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+                if entity_edge is None:
+                    logger.warning(
+                        f"Entity edge not found",
+                        extra={
+                            'request_id': request_id,
+                            'uuid': uuid
+                        }
+                    )
+                    return {'error': f'Entity edge with UUID {uuid} not found'}
+
+                # Delete the edge using its delete method
+                await entity_edge.delete(client.driver)
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Delete operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid
+                }
+            )
+            raise DeleteError("Delete operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during delete",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise DeleteError(f"Database error: {str(e)}") from e
+
+        logger.info(
+            f"Entity edge deleted successfully",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
+
         return {'message': f'Entity edge with UUID {uuid} deleted successfully'}
-    except Exception as e:
+
+    except ValueError as e:
+        # Input validation errors - not retryable
         error_msg = str(e)
-        logger.error(f'Error deleting entity edge: {error_msg}')
-        return {'error': f'Error deleting entity edge: {error_msg}'}
+        logger.error(
+            f"Invalid delete parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return {'error': f'Invalid delete parameters: {error_msg}'}
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during delete",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise DeleteError(f"Unexpected error: {error_msg}") from e
 
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(DeleteError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete an episode from the Graphiti knowledge graph.
 
@@ -961,28 +1647,126 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Delete episode failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if not uuid or not uuid.strip():
+            raise ValueError("UUID cannot be empty")
+
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
 
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Get the episodic node by UUID - EpisodicNode is already imported at the top
-        episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
-        # Delete the node using its delete method
-        await episodic_node.delete(client.driver)
-        return {'message': f'Episode with UUID {uuid} deleted successfully'}
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f'Error deleting episode: {error_msg}')
-        return {'error': f'Error deleting episode: {error_msg}'}
+        logger.info(
+            f"Deleting episode",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
 
+        try:
+            # Get and delete the episode with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                # Get the episodic node by UUID
+                episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
+                if episodic_node is None:
+                    logger.warning(
+                        f"Episode not found",
+                        extra={
+                            'request_id': request_id,
+                            'uuid': uuid
+                        }
+                    )
+                    return {'error': f'Episode with UUID {uuid} not found'}
+
+                # Delete the node using its delete method
+                await episodic_node.delete(client.driver)
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Delete operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid
+                }
+            )
+            raise DeleteError("Delete operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during delete",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise DeleteError(f"Database error: {str(e)}") from e
+
+        logger.info(
+            f"Episode deleted successfully",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
+
+        return {'message': f'Episode with UUID {uuid} deleted successfully'}
+
+    except ValueError as e:
+        # Input validation errors - not retryable
+        error_msg = str(e)
+        logger.error(
+            f"Invalid delete parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return {'error': f'Invalid delete parameters: {error_msg}'}
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during delete",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise DeleteError(f"Unexpected error: {error_msg}") from e
+
+
+class GetError(RetryableError):
+    """Error during get operations that may be retryable."""
+    pass
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(GetError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     """Get an entity edge from the Graphiti knowledge graph by its UUID.
 
@@ -991,29 +1775,123 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Get entity edge failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if not uuid or not uuid.strip():
+            raise ValueError("UUID cannot be empty")
+
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
 
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        logger.info(
+            f"Getting entity edge",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
 
-        # Use the format_fact_result function to serialize the edge
+        try:
+            # Get the entity edge with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                # Get the entity edge directly using the EntityEdge class method
+                entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+                if entity_edge is None:
+                    logger.warning(
+                        f"Entity edge not found",
+                        extra={
+                            'request_id': request_id,
+                            'uuid': uuid
+                        }
+                    )
+                    return {'error': f'Entity edge with UUID {uuid} not found'}
+
+                # Use the format_fact_result function to serialize the edge
+                result = format_fact_result(entity_edge)
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Get operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid
+                }
+            )
+            raise GetError("Get operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during get",
+                extra={
+                    'request_id': request_id,
+                    'uuid': uuid,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise GetError(f"Database error: {str(e)}") from e
+
+        logger.info(
+            f"Entity edge retrieved successfully",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid
+            }
+        )
+
         # Return the Python dict directly - MCP will handle serialization
-        return format_fact_result(entity_edge)
-    except Exception as e:
+        return result
+
+    except ValueError as e:
+        # Input validation errors - not retryable
         error_msg = str(e)
-        logger.error(f'Error getting entity edge: {error_msg}')
-        return {'error': f'Error getting entity edge: {error_msg}'}
+        logger.error(
+            f"Invalid get parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return {'error': f'Invalid get parameters: {error_msg}'}
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during get",
+            extra={
+                'request_id': request_id,
+                'uuid': uuid,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise GetError(f"Unexpected error: {error_msg}") from e
 
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(GetError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def get_episodes(
     group_id: str | None = None, last_n: int = 10
 ) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
@@ -1025,15 +1903,26 @@ async def get_episodes(
     """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Get episodes failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
+        # Input validation
+        if last_n < 1:
+            raise ValueError("last_n must be greater than 0")
+
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id if group_id is not None else config.group_id
 
         if not isinstance(effective_group_id, str):
-            return {'error': 'Group ID must be a string'}
+            raise ValueError('Group ID must be a string')
 
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -1041,34 +1930,151 @@ async def get_episodes(
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        episodes = await client.retrieve_episodes(
-            group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
+        logger.info(
+            f"Getting episodes",
+            extra={
+                'request_id': request_id,
+                'group_id': effective_group_id,
+                'last_n': last_n
+            }
         )
 
-        if not episodes:
-            return {'message': f'No episodes found for group {effective_group_id}', 'episodes': []}
+        try:
+            # Get episodes with timeout
+            async with asyncio.timeout(10):  # 10 second timeout
+                episodes = await client.retrieve_episodes(
+                    group_ids=[effective_group_id],
+                    last_n=last_n,
+                    reference_time=datetime.now(timezone.utc)
+                )
 
-        # Use Pydantic's model_dump method for EpisodicNode serialization
-        formatted_episodes = [
-            # Use mode='json' to handle datetime serialization
-            episode.model_dump(mode='json')
-            for episode in episodes
-        ]
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Get operation timed out",
+                extra={
+                    'request_id': request_id,
+                    'group_id': effective_group_id
+                }
+            )
+            raise GetError("Get operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during get",
+                extra={
+                    'request_id': request_id,
+                    'group_id': effective_group_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise GetError(f"Database error: {str(e)}") from e
+
+        if not episodes:
+            logger.info(
+                f"No episodes found",
+                extra={
+                    'request_id': request_id,
+                    'group_id': effective_group_id
+                }
+            )
+            return {
+                'message': f'No episodes found for group {effective_group_id}',
+                'episodes': []
+            }
+
+        try:
+            # Use Pydantic's model_dump method for EpisodicNode serialization
+            formatted_episodes = [
+                # Use mode='json' to handle datetime serialization
+                episode.model_dump(mode='json')
+                for episode in episodes
+            ]
+        except Exception as e:
+            logger.error(
+                f"Error formatting episodes",
+                extra={
+                    'request_id': request_id,
+                    'group_id': effective_group_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                },
+                exc_info=True
+            )
+            raise GetError(f"Error formatting episodes: {str(e)}") from e
+
+        logger.info(
+            f"Episodes retrieved successfully",
+            extra={
+                'request_id': request_id,
+                'group_id': effective_group_id,
+                'episodes_found': len(formatted_episodes)
+            }
+        )
 
         # Return the Python list directly - MCP will handle serialization
         return formatted_episodes
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f'Error getting episodes: {error_msg}')
-        return {'error': f'Error getting episodes: {error_msg}'}
 
+    except ValueError as e:
+        # Input validation errors - not retryable
+        error_msg = str(e)
+        logger.error(
+            f"Invalid get parameters",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': 'ValueError'
+            }
+        )
+        return {'error': f'Invalid get parameters: {error_msg}'}
+
+    except Exception as e:
+        # Unexpected errors - log with full context
+        error_msg = str(e)
+        logger.error(
+            f"Unexpected error during get",
+            extra={
+                'request_id': request_id,
+                'group_id': effective_group_id if effective_group_id else 'None',
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        # Treat unexpected errors as retryable
+        raise GetError(f"Unexpected error: {error_msg}") from e
+
+
+class ClearGraphError(RetryableError):
+    """Error during graph clearing operations that may be retryable."""
+    pass
 
 @mcp.tool()
+@with_retry(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=10.0,
+    retryable_exceptions=(ClearGraphError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def clear_graph() -> SuccessResponse | ErrorResponse:
-    """Clear all data from the Graphiti knowledge graph and rebuild indices."""
+    """Clear all data from the Graphiti knowledge graph and rebuild indices.
+    
+    This is a potentially destructive operation that will:
+    1. Clear all data from the graph
+    2. Rebuild all indices and constraints
+    
+    The operation is retried up to 3 times in case of transient failures.
+    """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
+        logger.error(
+            "Clear graph failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
         return {'error': 'Graphiti client not initialized'}
 
     try:
@@ -1078,23 +2084,101 @@ async def clear_graph() -> SuccessResponse | ErrorResponse:
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # clear_data is already imported at the top
-        await clear_data(client.driver)
-        await client.build_indices_and_constraints()
-        return {'message': 'Graph cleared successfully and indices rebuilt'}
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f'Error clearing graph: {error_msg}')
-        return {'error': f'Error clearing graph: {error_msg}'}
+        logger.info(
+            f"Starting graph clear operation",
+            extra={'request_id': request_id}
+        )
 
+        try:
+            # Clear data with timeout
+            async with asyncio.timeout(30):  # 30 second timeout for potentially large operation
+                # clear_data is already imported at the top
+                await clear_data(client.driver)
+
+                logger.info(
+                    f"Graph data cleared, rebuilding indices",
+                    extra={'request_id': request_id}
+                )
+
+                # Rebuild indices
+                await client.build_indices_and_constraints()
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Clear operation timed out",
+                extra={'request_id': request_id}
+            )
+            raise ClearGraphError("Clear operation timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            logger.error(
+                f"Database error during clear",
+                extra={
+                    'request_id': request_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise ClearGraphError(f"Database error: {str(e)}") from e
+
+        logger.info(
+            f"Graph cleared and indices rebuilt successfully",
+            extra={'request_id': request_id}
+        )
+
+        return {'message': 'Graph cleared successfully and indices rebuilt'}
+
+    except Exception as e:
+        # All errors in clear_graph are potentially retryable
+        error_msg = str(e)
+        logger.error(
+            f"Error during graph clear",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
+        raise ClearGraphError(f"Error clearing graph: {error_msg}") from e
+
+
+class StatusError(RetryableError):
+    """Error during status check operations that may be retryable."""
+    pass
 
 @mcp.resource('http://graphiti/status')
+@with_retry(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=5.0,
+    retryable_exceptions=(StatusError, *RETRYABLE_NETWORK_ERRORS),
+)
+@with_logging()
 async def get_status() -> StatusResponse:
-    """Get the status of the Graphiti MCP server and Neo4j connection."""
+    """Get the status of the Graphiti MCP server and Neo4j connection.
+    
+    This endpoint performs several health checks:
+    1. Verifies Graphiti client is initialized
+    2. Tests Neo4j database connectivity
+    3. Checks LLM client status if configured
+    4. Checks embedder client status if configured
+    
+    The operation is retried up to 3 times in case of transient failures.
+    """
     global graphiti_client
 
+    # Generate request ID for tracking
+    request_id = str(uuid.uuid4())
+
     if graphiti_client is None:
-        return {'status': 'error', 'message': 'Graphiti client not initialized'}
+        logger.error(
+            "Status check failed - Graphiti client not initialized",
+            extra={'request_id': request_id}
+        )
+        return {
+            'status': 'error',
+            'message': 'Graphiti client not initialized'
+        }
 
     try:
         # We've already checked that graphiti_client is not None above
@@ -1103,15 +2187,95 @@ async def get_status() -> StatusResponse:
         # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Test Neo4j connection
-        await client.driver.verify_connectivity()
-        return {'status': 'ok', 'message': 'Graphiti MCP server is running and connected to Neo4j'}
+        logger.info(
+            f"Starting status check",
+            extra={'request_id': request_id}
+        )
+
+        status_details = []
+        has_errors = False
+
+        try:
+            # Test Neo4j connection with timeout
+            async with asyncio.timeout(5):  # 5 second timeout
+                await client.driver.verify_connectivity()
+                status_details.append("Neo4j connection: OK")
+        except asyncio.TimeoutError:
+            has_errors = True
+            status_details.append("Neo4j connection: TIMEOUT")
+            logger.error(
+                f"Neo4j connection check timed out",
+                extra={'request_id': request_id}
+            )
+            raise StatusError("Neo4j connection check timed out")
+        except (ServiceUnavailable, SessionExpired) as e:
+            has_errors = True
+            status_details.append(f"Neo4j connection: ERROR - {str(e)}")
+            logger.error(
+                f"Neo4j connection error",
+                extra={
+                    'request_id': request_id,
+                    'error': str(e),
+                    'error_type': e.__class__.__name__
+                }
+            )
+            raise StatusError(f"Neo4j connection error: {str(e)}") from e
+
+        # Check LLM client status
+        if client.llm_client:
+            status_details.append(
+                f"LLM client: OK (model: {config.llm.model})"
+            )
+        else:
+            status_details.append("LLM client: NOT CONFIGURED")
+
+        # Check embedder status
+        if client.embedder:
+            status_details.append(
+                f"Embedder client: OK (model: {config.embedder.model})"
+            )
+        else:
+            status_details.append("Embedder client: NOT CONFIGURED")
+
+        # Check cross-encoder status
+        if client.cross_encoder:
+            status_details.append("Cross-encoder client: OK")
+        else:
+            status_details.append("Cross-encoder client: NOT CONFIGURED")
+
+        # Log final status
+        status = 'error' if has_errors else 'ok'
+        message = 'Graphiti MCP server status:\n' + '\n'.join(status_details)
+
+        logger.info(
+            f"Status check completed",
+            extra={
+                'request_id': request_id,
+                'status': status,
+                'details': status_details
+            }
+        )
+
+        return {
+            'status': status,
+            'message': message
+        }
+
     except Exception as e:
+        # Unexpected errors - log with full context
         error_msg = str(e)
-        logger.error(f'Error checking Neo4j connection: {error_msg}')
+        logger.error(
+            f"Unexpected error during status check",
+            extra={
+                'request_id': request_id,
+                'error': error_msg,
+                'error_type': e.__class__.__name__
+            },
+            exc_info=True
+        )
         return {
             'status': 'error',
-            'message': f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
+            'message': f'Status check failed: {error_msg}'
         }
 
 
