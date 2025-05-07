@@ -101,7 +101,6 @@ async def get_mentioned_nodes(
             n.uuid As uuid, 
             n.group_id AS group_id,
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.created_at AS created_at, 
             n.summary AS summary,
             labels(n) AS labels,
@@ -128,7 +127,6 @@ async def get_communities_by_nodes(
         c.uuid As uuid, 
         c.group_id AS group_id,
         c.name AS name,
-        c.name_embedding AS name_embedding
         c.created_at AS created_at, 
         c.summary AS summary
     """,
@@ -172,7 +170,6 @@ async def edge_fulltext_search(
                      r.created_at AS created_at,
                      r.name AS name,
                      r.fact AS fact,
-                     r.fact_embedding AS fact_embedding,
                      r.episodes AS episodes,
                      r.expired_at AS expired_at,
                      r.valid_at AS valid_at,
@@ -242,7 +239,6 @@ async def edge_similarity_search(
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
-                    r.fact_embedding AS fact_embedding,
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
@@ -301,7 +297,6 @@ async def edge_bfs_search(
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
-                    r.fact_embedding AS fact_embedding,
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
@@ -341,10 +336,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                        YIELD node AS n, score
-                                        WHERE n:Entity
-                                        """
+                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                YIELD node AS n, score
+                                                WHERE n:Entity
+                                                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -510,7 +505,6 @@ async def community_fulltext_search(
             comm.uuid AS uuid,
             comm.group_id AS group_id, 
             comm.name AS name, 
-            comm.name_embedding AS name_embedding,
             comm.created_at AS created_at, 
             comm.summary AS summary
         ORDER BY score DESC
@@ -555,7 +549,6 @@ async def community_similarity_search(
                comm.uuid As uuid,
                comm.group_id AS group_id,
                comm.name AS name, 
-               comm.name_embedding AS name_embedding,
                comm.created_at AS created_at, 
                comm.summary AS summary
            ORDER BY score DESC

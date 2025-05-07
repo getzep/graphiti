@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
@@ -42,7 +43,6 @@ ENTITY_NODE_RETURN: LiteralString = """
         RETURN
             n.uuid As uuid, 
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary,
@@ -305,6 +305,20 @@ class EntityNode(Node):
 
         return self.name_embedding
 
+    async def load_name_embedding(self, driver: AsyncDriver):
+        query: LiteralString = """
+            MATCH (n:Entity {uuid: $uuid})
+            RETURN n.name_embedding AS name_embedding
+        """
+        records, _, _ = await driver.execute_query(
+            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
+        )
+
+        if len(records) == 0:
+            raise NodeNotFoundError(self.uuid)
+
+        self.name_embedding = records[0]['name_embedding']
+
     async def save(self, driver: AsyncDriver):
         entity_data: dict[str, Any] = {
             'uuid': self.uuid,
@@ -332,8 +346,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-                                    MATCH (n:Entity {uuid: $uuid})
-                                    """
+                                                MATCH (n:Entity {uuid: $uuid})
+                                                """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -428,6 +442,20 @@ class CommunityNode(Node):
 
         return self.name_embedding
 
+    async def load_name_embedding(self, driver: AsyncDriver):
+        query: LiteralString = """
+            MATCH (c:Community {uuid: $uuid})
+            RETURN c.name_embedding AS name_embedding
+        """
+        records, _, _ = await driver.execute_query(
+            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
+        )
+
+        if len(records) == 0:
+            raise NodeNotFoundError(self.uuid)
+
+        self.name_embedding = records[0]['name_embedding']
+
     @classmethod
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         records, _, _ = await driver.execute_query(
@@ -436,7 +464,6 @@ class CommunityNode(Node):
         RETURN
             n.uuid As uuid, 
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
@@ -461,7 +488,6 @@ class CommunityNode(Node):
         RETURN
             n.uuid As uuid, 
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
@@ -495,7 +521,6 @@ class CommunityNode(Node):
         RETURN
             n.uuid As uuid, 
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.group_id AS group_id,
             n.created_at AS created_at, 
             n.summary AS summary
