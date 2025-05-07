@@ -2,9 +2,9 @@ import asyncio
 import logging
 from collections import defaultdict
 
-from neo4j import AsyncDriver
 from pydantic import BaseModel
 
+from graphiti_core.driver import Driver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import DEFAULT_DATABASE
@@ -30,7 +30,7 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: AsyncDriver, group_ids: list[str] | None
+    driver: Driver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -44,7 +44,7 @@ async def get_community_clusters(
             database_=DEFAULT_DATABASE,
         )
 
-        group_ids = group_id_values[0]['group_ids']
+        group_ids = group_id_values[0]["group_ids"]
 
     for group_id in group_ids:
         projection: dict[str, list[Neighbor]] = {}
@@ -64,7 +64,8 @@ async def get_community_clusters(
             )
 
             projection[node.uuid] = [
-                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
+                Neighbor(node_uuid=record["uuid"], edge_count=record["count"])
+                for record in records
             ]
 
         cluster_uuids = label_propagation(projection)
@@ -72,7 +73,10 @@ async def get_community_clusters(
         community_clusters.extend(
             list(
                 await asyncio.gather(
-                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
+                    *[
+                        EntityNode.get_by_uuids(driver, cluster)
+                        for cluster in cluster_uuids
+                    ]
                 )
             )
         )
@@ -98,7 +102,9 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
-                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
+                community_candidates[
+                    community_map[neighbor.node_uuid]
+                ] += neighbor.edge_count
 
             community_lst = [
                 (count, community) for community, count in community_candidates.items()
@@ -129,26 +135,26 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
     # Prepare context for LLM
-    context = {'node_summaries': [{'summary': summary} for summary in summary_pair]}
+    context = {"node_summaries": [{"summary": summary} for summary in summary_pair]}
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
     )
 
-    pair_summary = llm_response.get('summary', '')
+    pair_summary = llm_response.get("summary", "")
 
     return pair_summary
 
 
 async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
-    context = {'summary': summary}
+    context = {"summary": summary}
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),
         response_model=SummaryDescription,
     )
 
-    description = llm_response.get('description', '')
+    description = llm_response.get("description", "")
 
     return description
 
@@ -184,7 +190,7 @@ async def build_community(
     community_node = CommunityNode(
         name=name,
         group_id=community_cluster[0].group_id,
-        labels=['Community'],
+        labels=["Community"],
         created_at=now,
         summary=summary,
     )
@@ -196,7 +202,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
+    driver: Driver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -207,7 +213,9 @@ async def build_communities(
             return await build_community(llm_client, cluster)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
-        await asyncio.gather(*[limited_build_community(cluster) for cluster in community_clusters])
+        await asyncio.gather(
+            *[limited_build_community(cluster) for cluster in community_clusters]
+        )
     )
 
     community_nodes: list[CommunityNode] = []
@@ -219,7 +227,7 @@ async def build_communities(
     return community_nodes, community_edges
 
 
-async def remove_communities(driver: AsyncDriver):
+async def remove_communities(driver: Driver):
     await driver.execute_query(
         """
     MATCH (c:Community)
@@ -230,7 +238,7 @@ async def remove_communities(driver: AsyncDriver):
 
 
 async def determine_entity_community(
-    driver: AsyncDriver, entity: EntityNode
+    driver: Driver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
@@ -293,7 +301,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
+    driver: Driver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 

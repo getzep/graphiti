@@ -32,13 +32,13 @@ from graphiti_core.search.search_config_recipes import (
 
 pytestmark = pytest.mark.integration
 
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
 
 load_dotenv()
 
-NEO4J_URI = os.getenv('NEO4J_URI')
-NEO4j_USER = os.getenv('NEO4J_USER')
-NEO4j_PASSWORD = os.getenv('NEO4J_PASSWORD')
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4j_USER = os.getenv("NEO4J_USER")
+NEO4j_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 
 def setup_logging():
@@ -51,7 +51,9 @@ def setup_logging():
     console_handler.setLevel(logging.INFO)
 
     # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Add formatter to console handler
     console_handler.setFormatter(formatter)
@@ -67,16 +69,18 @@ async def test_graphiti_init():
     logger = setup_logging()
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
+    await graphiti.build_indices_and_constraints()
+
     results = await graphiti._search(
-        'My name is Alice',
+        "My name is Alice",
         COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-        group_ids=['test'],
+        group_ids=["test"],
     )
 
     pretty_results = {
-        'edges': [edge.fact for edge in results.edges],
-        'nodes': [node.name for node in results.nodes],
-        'communities': [community.name for community in results.communities],
+        "edges": [edge.fact for edge in results.edges],
+        "nodes": [node.name for node in results.nodes],
+        "communities": [community.name for community in results.communities],
     }
 
     logger.info(pretty_results)
@@ -90,45 +94,53 @@ async def test_graph_integration():
     embedder = client.embedder
     driver = client.driver
 
+    await client.build_indices_and_constraints()
+
     now = datetime.now(timezone.utc)
     episode = EpisodicNode(
-        name='test_episode',
+        name="test_episode",
         labels=[],
         created_at=now,
         valid_at=now,
-        source='message',
-        source_description='conversation message',
-        content='Alice likes Bob',
+        source="message",
+        source_description="conversation message",
+        content="Alice likes Bob",
         entity_edges=[],
+        group_id="test",
     )
 
     alice_node = EntityNode(
-        name='Alice',
+        name="Alice",
         labels=[],
         created_at=now,
-        summary='Alice summary',
+        summary="Alice summary",
+        group_id="test",
     )
 
-    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary')
+    bob_node = EntityNode(name="Bob", labels=[], created_at=now, summary="Bob summary", group_id="test")
+
+    await alice_node.generate_name_embedding(embedder)
+    await bob_node.generate_name_embedding(embedder)
 
     episodic_edge_1 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now, group_id="test"
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now, group_id="test"
     )
 
     entity_edge = EntityEdge(
         source_node_uuid=alice_node.uuid,
         target_node_uuid=bob_node.uuid,
         created_at=now,
-        name='likes',
-        fact='Alice likes Bob',
+        name="likes",
+        fact="Alice likes Bob",
         episodes=[],
         expired_at=now,
         valid_at=now,
         invalid_at=now,
+        group_id="test"
     )
 
     await entity_edge.generate_embedding(embedder)

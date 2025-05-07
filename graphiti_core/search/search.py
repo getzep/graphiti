@@ -19,8 +19,7 @@ import logging
 from collections import defaultdict
 from time import time
 
-from neo4j import AsyncDriver
-
+from graphiti_core.driver import Driver
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder import EmbedderClient
@@ -58,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search(
-    driver: AsyncDriver,
+    driver: Driver,
     embedder: EmbedderClient,
     cross_encoder: CrossEncoderClient,
     query: str,
@@ -127,7 +126,7 @@ async def search(
 
 
 async def edge_search(
-    driver: AsyncDriver,
+    driver: Driver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -212,7 +211,7 @@ async def edge_search(
 
 
 async def node_search(
-    driver: AsyncDriver,
+    driver: Driver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -282,7 +281,7 @@ async def node_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
+    driver: Driver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],

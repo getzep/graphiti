@@ -21,10 +21,10 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
+from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
@@ -46,9 +46,9 @@ class Edge(BaseModel, ABC):
     created_at: datetime
 
     @abstractmethod
-    async def save(self, driver: AsyncDriver): ...
+    async def save(self, driver: Driver): ...
 
-    async def delete(self, driver: AsyncDriver):
+    async def delete(self, driver: Driver):
         result = await driver.execute_query(
             """
         MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER {uuid: $uuid}]->(m)
@@ -71,11 +71,11 @@ class Edge(BaseModel, ABC):
         return False
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
+    async def get_by_uuid(cls, driver: Driver, uuid: str): ...
 
 
 class EpisodicEdge(Edge):
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             EPISODIC_EDGE_SAVE,
             episode_uuid=self.source_node_uuid,
@@ -91,7 +91,7 @@ class EpisodicEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
@@ -114,7 +114,7 @@ class EpisodicEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
@@ -140,7 +140,7 @@ class EpisodicEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,
@@ -207,7 +207,7 @@ class EntityEdge(Edge):
 
         return self.fact_embedding
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             ENTITY_EDGE_SAVE,
             source_uuid=self.source_node_uuid,
@@ -230,7 +230,7 @@ class EntityEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
@@ -260,7 +260,7 @@ class EntityEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
@@ -293,7 +293,7 @@ class EntityEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,
@@ -339,7 +339,7 @@ class EntityEdge(Edge):
 
 
 class CommunityEdge(Edge):
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             COMMUNITY_EDGE_SAVE,
             community_uuid=self.source_node_uuid,
@@ -355,7 +355,7 @@ class CommunityEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER {uuid: $uuid}]->(m:Entity | Community)
@@ -376,7 +376,7 @@ class CommunityEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
@@ -400,7 +400,7 @@ class CommunityEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,

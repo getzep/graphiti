@@ -21,6 +21,7 @@ openai = "^1.53.0"
 tenacity = "9.0.0"
 numpy = ">=1.0.0"
 python-dotenv = "^1.0.1"
+falkordb = "^1.0.10"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.3"

@@ -21,10 +21,10 @@ from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
-from neo4j import AsyncDriver, AsyncManagedTransaction
 from numpy import dot, sqrt
 from pydantic import BaseModel
 
+from graphiti_core.driver import Driver, GraphClientSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
@@ -69,7 +69,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: Driver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await asyncio.gather(
         *[
@@ -87,7 +87,7 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: AsyncDriver,
+    driver: Driver,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
@@ -100,7 +100,7 @@ async def add_nodes_and_edges_bulk(
 
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: AsyncManagedTransaction,
+    tx: GraphClientSession,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
@@ -159,7 +159,7 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: AsyncDriver,
+    driver: Driver,
     llm_client: LLMClient,
     extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
@@ -195,7 +195,7 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+    driver: Driver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)

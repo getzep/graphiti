@@ -22,10 +22,10 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from neo4j import AsyncDriver
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
+from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE
@@ -83,9 +83,9 @@ class Node(BaseModel, ABC):
     created_at: datetime = Field(default_factory=lambda: utc_now())
 
     @abstractmethod
-    async def save(self, driver: AsyncDriver): ...
+    async def save(self, driver: Driver): ...
 
-    async def delete(self, driver: AsyncDriver):
+    async def delete(self, driver: Driver):
         result = await driver.execute_query(
             """
         MATCH (n:Entity|Episodic|Community {uuid: $uuid})
@@ -108,7 +108,7 @@ class Node(BaseModel, ABC):
         return False
 
     @classmethod
-    async def delete_by_group_id(cls, driver: AsyncDriver, group_id: str):
+    async def delete_by_group_id(cls, driver: Driver, group_id: str):
         await driver.execute_query(
             """
         MATCH (n:Entity|Episodic|Community {group_id: $group_id})
@@ -121,10 +121,10 @@ class Node(BaseModel, ABC):
         return 'SUCCESS'
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str): ...
+    async def get_by_uuid(cls, driver: Driver, uuid: str): ...
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]): ...
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]): ...
 
 
 class EpisodicNode(Node):
@@ -139,7 +139,7 @@ class EpisodicNode(Node):
         default_factory=list,
     )
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             EPISODIC_NODE_SAVE,
             uuid=self.uuid,
@@ -159,7 +159,7 @@ class EpisodicNode(Node):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic {uuid: $uuid})
@@ -185,7 +185,7 @@ class EpisodicNode(Node):
         return episodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.uuid IN $uuids
@@ -211,7 +211,7 @@ class EpisodicNode(Node):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,
@@ -262,7 +262,7 @@ class EntityNode(Node):
 
         return self.name_embedding
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
             uuid=self.uuid,
@@ -279,7 +279,7 @@ class EntityNode(Node):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity {uuid: $uuid})
@@ -304,7 +304,7 @@ class EntityNode(Node):
         return nodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.uuid IN $uuids
@@ -328,7 +328,7 @@ class EntityNode(Node):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,
@@ -368,7 +368,7 @@ class CommunityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             COMMUNITY_NODE_SAVE,
             uuid=self.uuid,
@@ -394,7 +394,7 @@ class CommunityNode(Node):
         return self.name_embedding
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community {uuid: $uuid})
@@ -419,7 +419,7 @@ class CommunityNode(Node):
         return nodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community) WHERE n.uuid IN $uuids
@@ -443,7 +443,7 @@ class CommunityNode(Node):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: AsyncDriver,
+        driver: Driver,
         group_ids: list[str],
         limit: int | None = None,
         created_at: datetime | None = None,

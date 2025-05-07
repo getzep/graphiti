@@ -20,9 +20,10 @@ from collections import defaultdict
 from time import time
 
 import numpy as np
-from neo4j import AsyncDriver, Query
+from neo4j import Query
 from typing_extensions import LiteralString
 
+from graphiti_core.driver import Driver
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.helpers import (
     DEFAULT_DATABASE,
@@ -49,26 +50,28 @@ MAX_QUERY_LENGTH = 32
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
-        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids]
+        if group_ids is not None
+        else []
     )
-    group_ids_filter = ''
+    group_ids_filter = ""
     for f in group_ids_filter_list:
-        group_ids_filter += f if not group_ids_filter else f'OR {f}'
+        group_ids_filter += f if not group_ids_filter else f"OR {f}"
 
-    group_ids_filter += ' AND ' if group_ids_filter else ''
+    group_ids_filter += " AND " if group_ids_filter else ""
 
     lucene_query = lucene_sanitize(query)
     # If the lucene query is too long return no query
-    if len(lucene_query.split(' ')) + len(group_ids or '') >= MAX_QUERY_LENGTH:
-        return ''
+    if len(lucene_query.split(" ")) + len(group_ids or "") >= MAX_QUERY_LENGTH:
+        return ""
 
-    full_query = group_ids_filter + '(' + lucene_query + ')'
+    full_query = group_ids_filter + "(" + lucene_query + ")"
 
     return full_query
 
 
 async def get_episodes_by_mentions(
-    driver: AsyncDriver,
+    driver: Driver,
     nodes: list[EntityNode],
     edges: list[EntityEdge],
     limit: int = RELEVANT_SCHEMA_LIMIT,
@@ -83,7 +86,7 @@ async def get_episodes_by_mentions(
 
 
 async def get_mentioned_nodes(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: Driver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
     records, _, _ = await driver.execute_query(
@@ -99,7 +102,7 @@ async def get_mentioned_nodes(
         """,
         uuids=episode_uuids,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
 
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -108,7 +111,7 @@ async def get_mentioned_nodes(
 
 
 async def get_communities_by_nodes(
-    driver: AsyncDriver, nodes: list[EntityNode]
+    driver: Driver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
     records, _, _ = await driver.execute_query(
@@ -124,7 +127,7 @@ async def get_communities_by_nodes(
     """,
         uuids=node_uuids,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
 
     communities = [get_community_node_from_record(record) for record in records]
@@ -133,17 +136,18 @@ async def get_communities_by_nodes(
 
 
 async def edge_fulltext_search(
-    driver: AsyncDriver,
+    driver: Driver,
     query: str,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == '':
+    if fuzzy_query == "":
         return []
 
-    cypher_query = Query("""
+    cypher_query = Query(
+        """
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
               YIELD relationship AS r, score
               WITH r, score, startNode(r) AS n, endNode(r) AS m
@@ -161,7 +165,8 @@ async def edge_fulltext_search(
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
                 ORDER BY score DESC LIMIT $limit
-                """)
+                """
+    )
 
     records, _, _ = await driver.execute_query(
         cypher_query,
@@ -169,7 +174,7 @@ async def edge_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -178,7 +183,7 @@ async def edge_fulltext_search(
 
 
 async def edge_similarity_search(
-    driver: AsyncDriver,
+    driver: Driver,
     search_vector: list[float],
     source_node_uuid: str | None,
     target_node_uuid: str | None,
@@ -188,7 +193,9 @@ async def edge_similarity_search(
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     runtime_query: LiteralString = (
-        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+        "CYPHER runtime = parallel parallelRuntimeSupport=all\n"
+        if USE_PARALLEL_RUNTIME
+        else ""
     )
 
     query: LiteralString = """
@@ -224,7 +231,7 @@ async def edge_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -233,7 +240,7 @@ async def edge_similarity_search(
 
 
 async def edge_bfs_search(
-    driver: AsyncDriver,
+    driver: Driver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
     limit: int,
@@ -242,7 +249,8 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
-    query = Query("""
+    query = Query(
+        """
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
                 UNWIND relationships(path) AS rel
@@ -261,7 +269,8 @@ async def edge_bfs_search(
                     r.valid_at AS valid_at,
                     r.invalid_at AS invalid_at
                 LIMIT $limit
-        """)
+        """
+    )
 
     records, _, _ = await driver.execute_query(
         query,
@@ -269,7 +278,7 @@ async def edge_bfs_search(
         depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -278,14 +287,14 @@ async def edge_bfs_search(
 
 
 async def node_fulltext_search(
-    driver: AsyncDriver,
+    driver: Driver,
     query: str,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == '':
+    if fuzzy_query == "":
         return []
 
     records, _, _ = await driver.execute_query(
@@ -306,7 +315,7 @@ async def node_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -314,7 +323,7 @@ async def node_fulltext_search(
 
 
 async def node_similarity_search(
-    driver: AsyncDriver,
+    driver: Driver,
     search_vector: list[float],
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
@@ -322,7 +331,9 @@ async def node_similarity_search(
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     runtime_query: LiteralString = (
-        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+        "CYPHER runtime = parallel parallelRuntimeSupport=all\n"
+        if USE_PARALLEL_RUNTIME
+        else ""
     )
 
     records, _, _ = await driver.execute_query(
@@ -347,7 +358,7 @@ async def node_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -355,7 +366,7 @@ async def node_similarity_search(
 
 
 async def node_bfs_search(
-    driver: AsyncDriver,
+    driver: Driver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
     limit: int,
@@ -381,7 +392,7 @@ async def node_bfs_search(
         depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -389,14 +400,14 @@ async def node_bfs_search(
 
 
 async def community_fulltext_search(
-    driver: AsyncDriver,
+    driver: Driver,
     query: str,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == '':
+    if fuzzy_query == "":
         return []
 
     records, _, _ = await driver.execute_query(
@@ -417,7 +428,7 @@ async def community_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -425,7 +436,7 @@ async def community_fulltext_search(
 
 
 async def community_similarity_search(
-    driver: AsyncDriver,
+    driver: Driver,
     search_vector: list[float],
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
@@ -433,7 +444,9 @@ async def community_similarity_search(
 ) -> list[CommunityNode]:
     # vector similarity search over entity names
     runtime_query: LiteralString = (
-        'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
+        "CYPHER runtime = parallel parallelRuntimeSupport=all\n"
+        if USE_PARALLEL_RUNTIME
+        else ""
     )
 
     records, _, _ = await driver.execute_query(
@@ -458,7 +471,7 @@ async def community_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_='r',
+        routing_="r",
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -468,7 +481,7 @@ async def community_similarity_search(
 async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
-    driver: AsyncDriver,
+    driver: Driver,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
@@ -484,7 +497,7 @@ async def hybrid_node_search(
         A list of text queries to search for.
     embeddings : list[list[float]]
         A list of embedding vectors corresponding to the queries. If empty only fulltext search is performed.
-    driver : AsyncDriver
+    driver : Driver
         The Neo4j driver instance for database operations.
     group_ids : list[str] | None, optional
         The list of group ids to retrieve nodes from.
@@ -514,7 +527,10 @@ async def hybrid_node_search(
     results: list[list[EntityNode]] = list(
         await asyncio.gather(
             *[node_fulltext_search(driver, q, group_ids, 2 * limit) for q in queries],
-            *[node_similarity_search(driver, e, group_ids, 2 * limit) for e in embeddings],
+            *[
+                node_similarity_search(driver, e, group_ids, 2 * limit)
+                for e in embeddings
+            ],
         )
     )
 
@@ -528,12 +544,12 @@ async def hybrid_node_search(
     relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
 
     end = time()
-    logger.debug(f'Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms')
+    logger.debug(f"Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms")
     return relevant_nodes
 
 
 async def get_relevant_nodes(
-    driver: AsyncDriver,
+    driver: Driver,
     nodes: list[EntityNode],
 ) -> list[EntityNode]:
     """
@@ -546,7 +562,7 @@ async def get_relevant_nodes(
     ----------
     nodes : list[EntityNode]
         A list of EntityNode objects to use as the basis for the search.
-    driver : AsyncDriver
+    driver : Driver
         The Neo4j driver instance for database operations.
 
     Returns
@@ -572,7 +588,7 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    driver: AsyncDriver,
+    driver: Driver,
     edges: list[EntityEdge],
     source_node_uuid: str | None,
     target_node_uuid: str | None,
@@ -606,7 +622,9 @@ async def get_relevant_edges(
             relevant_edges.append(edge)
 
     end = time()
-    logger.debug(f'Found relevant edges: {relevant_edge_uuids} in {(end - start) * 1000} ms')
+    logger.debug(
+        f"Found relevant edges: {relevant_edge_uuids} in {(end - start) * 1000} ms"
+    )
 
     return relevant_edges
 
@@ -627,18 +645,22 @@ def rrf(results: list[list[str]], rank_const=1) -> list[str]:
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver, node_uuids: list[str], center_node_uuid: str
+    driver: Driver, node_uuids: list[str], center_node_uuid: str
 ) -> list[str]:
     # filter out node_uuid center node node uuid
-    filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
+    filtered_uuids = list(
+        filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids)
+    )
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
     # Find the shortest path to center node
-    query = Query("""
+    query = Query(
+        """
         UNWIND $node_uuids AS node_uuid
         MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: node_uuid})
         RETURN length(p) AS score, node_uuid AS uuid
-        """)
+        """
+    )
 
     path_results, _, _ = await driver.execute_query(
         query,
@@ -648,13 +670,13 @@ async def node_distance_reranker(
     )
 
     for result in path_results:
-        uuid = result['uuid']
-        score = result['score']
+        uuid = result["uuid"]
+        score = result["score"]
         scores[uuid] = score
 
     for uuid in filtered_uuids:
         if uuid not in scores:
-            scores[uuid] = float('inf')
+            scores[uuid] = float("inf")
 
     # rerank on shortest distance
     filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
@@ -665,17 +687,21 @@ async def node_distance_reranker(
     return filtered_uuids
 
 
-async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[str]]) -> list[str]:
+async def episode_mentions_reranker(
+    driver: Driver, node_uuids: list[list[str]]
+) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(node_uuids)
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
-    query = Query("""
+    query = Query(
+        """
         UNWIND $node_uuids AS node_uuid 
         MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
         RETURN count(*) AS score, n.uuid AS uuid
-        """)
+        """
+    )
 
     results, _, _ = await driver.execute_query(
         query,
@@ -684,7 +710,7 @@ async def episode_mentions_reranker(driver: AsyncDriver, node_uuids: list[list[s
     )
 
     for result in results:
-        scores[result['uuid']] = result['score']
+        scores[result["uuid"]] = result["score"]
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
@@ -699,8 +725,12 @@ def maximal_marginal_relevance(
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
-        max_sim = max([np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates])
-        mmr = mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
+        max_sim = max(
+            [np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates]
+        )
+        mmr = (
+            mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
+        )
         candidates_with_mmr.append((candidate[0], mmr))
 
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])

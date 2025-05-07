@@ -18,9 +18,9 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
+from graphiti_core.driver import Driver
 from graphiti_core.helpers import DEFAULT_DATABASE
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
@@ -29,81 +29,196 @@ EPISODE_WINDOW_LEN = 3
 logger = logging.getLogger(__name__)
 
 
-async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
+async def build_indices_and_constraints(driver: Driver, delete_existing: bool = False):
     if delete_existing:
-        records, _, _ = await driver.execute_query(
-            """
-        SHOW INDEXES YIELD name
-        """,
-            database_=DEFAULT_DATABASE,
-        )
-        index_names = [record['name'] for record in records]
-        await asyncio.gather(
-            *[
-                driver.execute_query(
-                    """DROP INDEX $name""",
-                    name=name,
-                    _database=DEFAULT_DATABASE,
-                )
-                for name in index_names
-            ]
-        )
+        await asyncio.gather(*driver.delete_all_indexes(DEFAULT_DATABASE))
 
-    range_indices: list[LiteralString] = [
-        'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
-        'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
-        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
-        'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
-        'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
-        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
-        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
-        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
-        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
-        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
-        'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
-        'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
-        'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
-        'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
-        'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
-        'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
-        'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
-        'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
-        'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
+    range_indices = [
+        {"type": "node", "name": "entity_uuid", "label": "Entity", "property": "uuid"},
+        {
+            "type": "node",
+            "name": "episode_uuid",
+            "label": "Episodic",
+            "property": "uuid",
+        },
+        {
+            "type": "node",
+            "name": "community_uuid",
+            "label": "Community",
+            "property": "uuid",
+        },
+        {
+            "type": "relationship",
+            "name": "relation_uuid",
+            "label": "RELATES_TO",
+            "property": "uuid",
+        },
+        {
+            "type": "relationship",
+            "name": "mention_uuid",
+            "label": "MENTIONS",
+            "property": "uuid",
+        },
+        {
+            "type": "relationship",
+            "name": "has_member_uuid",
+            "label": "HAS_MEMBER",
+            "property": "uuid",
+        },
+        {
+            "type": "node",
+            "name": "entity_group_id",
+            "label": "Entity",
+            "property": "group_id",
+        },
+        {
+            "type": "node",
+            "name": "episode_group_id",
+            "label": "Episodic",
+            "property": "group_id",
+        },
+        {
+            "type": "relationship",
+            "name": "relation_group_id",
+            "label": "RELATES_TO",
+            "property": "group_id",
+        },
+        {
+            "type": "relationship",
+            "name": "mention_group_id",
+            "label": "MENTIONS",
+            "property": "group_id",
+        },
+        {
+            "type": "node",
+            "name": "name_entity_index",
+            "label": "Entity",
+            "property": "name",
+        },
+        {
+            "type": "node",
+            "name": "created_at_entity_index",
+            "label": "Entity",
+            "property": "created_at",
+        },
+        {
+            "type": "node",
+            "name": "created_at_episodic_index",
+            "label": "Episodic",
+            "property": "created_at",
+        },
+        {
+            "type": "node",
+            "name": "valid_at_episodic_index",
+            "label": "Episodic",
+            "property": "valid_at",
+        },
+        {
+            "type": "relationship",
+            "name": "name_edge_index",
+            "label": "RELATES_TO",
+            "property": "name",
+        },
+        {
+            "type": "relationship",
+            "name": "created_at_edge_index",
+            "label": "RELATES_TO",
+            "property": "created_at",
+        },
+        {
+            "type": "relationship",
+            "name": "expired_at_edge_index",
+            "label": "RELATES_TO",
+            "property": "expired_at",
+        },
+        {
+            "type": "relationship",
+            "name": "valid_at_edge_index",
+            "label": "RELATES_TO",
+            "property": "valid_at",
+        },
+        {
+            "type": "relationship",
+            "name": "invalid_at_edge_index",
+            "label": "RELATES_TO",
+            "property": "invalid_at",
+        },
     ]
 
-    fulltext_indices: list[LiteralString] = [
-        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
-        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
-        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
-        FOR (n:Community) ON EACH [n.name, n.group_id]""",
-        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
-        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
+    fulltext_indices = [
+        {
+            "type": "node_fulltext",
+            "name": "node_name_and_summary",
+            "label": "Entity",
+            "properties": ["name", "summary", "group_id"],
+        },
+        {
+            "type": "node_fulltext",
+            "name": "community_name",
+            "label": "Community",
+            "properties": ["name", "group_id"],
+        },
+        {
+            "type": "relationship_fulltext",
+            "name": "edge_name_and_fact",
+            "label": "RELATES_TO",
+            "properties": ["name", "fact", "group_id"],
+        },
     ]
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
     await asyncio.gather(
         *[
-            driver.execute_query(
-                query,
-                _database=DEFAULT_DATABASE,
+            (
+                driver.create_node_fulltext_index(
+                    label=index["label"],
+                    properties=index["properties"],
+                    index_name=index["name"],
+                    database_=DEFAULT_DATABASE,
+                )
+                if index["type"] == "node_fulltext"
+                else (
+                    driver.create_relationship_fulltext_index(
+                        label=index["label"],
+                        properties=index["properties"],
+                        index_name=index["name"],
+                        database_=DEFAULT_DATABASE,
+                    )
+                    if index["type"] == "relationship_fulltext"
+                    else (
+                        driver.create_node_index(
+                            label=index["label"],
+                            property=index["property"],
+                            index_name=index["name"],
+                            database_=DEFAULT_DATABASE,
+                        )
+                        if index["type"] == "node"
+                        else driver.create_relationship_index(
+                            label=index["label"],
+                            property=index["property"],
+                            index_name=index["name"],
+                            database_=DEFAULT_DATABASE,
+                        )
+                    )
+                )
             )
-            for query in index_queries
+            for index in index_queries
         ]
     )
 
 
-async def clear_data(driver: AsyncDriver):
+async def clear_data(driver: Driver):
     async with driver.session() as session:
 
         async def delete_all(tx):
-            await tx.run('MATCH (n) DETACH DELETE n')
+            await tx.run("MATCH (n) DETACH DELETE n")
 
         await session.execute_write(delete_all)
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver,
+    driver: Driver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
@@ -112,7 +227,7 @@ async def retrieve_episodes(
     Retrieve the last n episodic nodes from the graph.
 
     Args:
-        driver (AsyncDriver): The Neo4j driver instance.
+        driver (Driver): The Neo4j driver instance.
         reference_time (datetime): The reference time to filter episodes. Only episodes with a valid_at timestamp
                                    less than or equal to this reference_time will be retrieved. This allows for
                                    querying the graph's state at a specific point in time.
@@ -144,16 +259,16 @@ async def retrieve_episodes(
     )
     episodes = [
         EpisodicNode(
-            content=record['content'],
+            content=record["content"],
             created_at=datetime.fromtimestamp(
-                record['created_at'].to_native().timestamp(), timezone.utc
+                record["created_at"].to_native().timestamp(), timezone.utc
             ),
-            valid_at=(record['valid_at'].to_native()),
-            uuid=record['uuid'],
-            group_id=record['group_id'],
-            source=EpisodeType.from_str(record['source']),
-            name=record['name'],
-            source_description=record['source_description'],
+            valid_at=(record["valid_at"].to_native()),
+            uuid=record["uuid"],
+            group_id=record["group_id"],
+            source=EpisodeType.from_str(record["source"]),
+            name=record["name"],
+            source_description=record["source_description"],
         )
         for record in result.records
     ]
