@@ -221,7 +221,7 @@ class EntityEdge(Edge):
 
         return self.fact_embedding
 
-    async def load_name_embedding(self, driver: AsyncDriver):
+    async def load_fact_embedding(self, driver: AsyncDriver):
         query: LiteralString = """
             MATCH (n:Entity)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
