@@ -26,7 +26,7 @@ class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
         description='ID of the classified entity type. '
-        'Must be one of the provided entity_type_id integers.',
+                    'Must be one of the provided entity_type_id integers.',
     )
 
 
@@ -256,7 +256,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
-            Summaries must be no longer than 500 words.
+            Summaries must be no longer than 250 words.
         
         <ENTITY>
         {context['node']}
