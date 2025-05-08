@@ -380,6 +380,7 @@ class Graphiti:
                 resolve_extracted_edges(
                     self.clients,
                     edges,
+                    episode,
                 ),
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
@@ -682,7 +683,11 @@ class Graphiti:
 
         related_edges = await get_relevant_edges(self.driver, [updated_edge], SearchFilters(), 0.8)
 
-        resolved_edge = await dedupe_extracted_edge(self.llm_client, updated_edge, related_edges[0])
+        resolved_edge = await dedupe_extracted_edge(
+            self.llm_client,
+            updated_edge,
+            related_edges[0],
+        )
 
         contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges[0])
         invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)

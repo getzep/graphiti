@@ -235,6 +235,7 @@ async def dedupe_extracted_edges(
 async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
+    episode: EpisodicNode,
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
@@ -258,10 +259,7 @@ async def resolve_extracted_edges(
         await semaphore_gather(
             *[
                 resolve_extracted_edge(
-                    llm_client,
-                    extracted_edge,
-                    related_edges,
-                    existing_edges,
+                    llm_client, extracted_edge, related_edges, existing_edges, episode
                 )
                 for extracted_edge, related_edges, existing_edges in zip(
                     extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=True
@@ -322,9 +320,10 @@ async def resolve_extracted_edge(
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
+    episode: EpisodicNode,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
     resolved_edge, invalidation_candidates = await semaphore_gather(
-        dedupe_extracted_edge(llm_client, extracted_edge, related_edges),
+        dedupe_extracted_edge(llm_client, extracted_edge, related_edges, episode),
         get_edge_contradictions(llm_client, extracted_edge, existing_edges),
     )
 
@@ -356,7 +355,10 @@ async def resolve_extracted_edge(
 
 
 async def dedupe_extracted_edge(
-    llm_client: LLMClient, extracted_edge: EntityEdge, related_edges: list[EntityEdge]
+    llm_client: LLMClient,
+    extracted_edge: EntityEdge,
+    related_edges: list[EntityEdge],
+    episode: EpisodicNode | None = None,
 ) -> EntityEdge:
     if len(related_edges) == 0:
         return extracted_edge
@@ -390,6 +392,9 @@ async def dedupe_extracted_edge(
         if 0 <= duplicate_fact_id < len(related_edges)
         else extracted_edge
     )
+
+    if duplicate_fact_id >= 0 and episode is not None:
+        edge.episodes += episode.uuid
 
     end = time()
     logger.debug(

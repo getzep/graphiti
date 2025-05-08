@@ -437,7 +437,7 @@ async def dedupe_node_list(
 
     # Prepare context for LLM
     nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary}.update(node.attributes)
+        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary, **node.attributes}
         for node in nodes
     ]
 
