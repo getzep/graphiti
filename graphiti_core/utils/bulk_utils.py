@@ -96,10 +96,16 @@ async def add_nodes_and_edges_bulk(
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
 ):
     async with driver.session(database=DEFAULT_DATABASE) as session:
         await session.execute_write(
-            add_nodes_and_edges_bulk_tx, episodic_nodes, episodic_edges, entity_nodes, entity_edges
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
         )
 
 

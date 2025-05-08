@@ -397,7 +397,7 @@ class Graphiti:
                 episode.content = ''
 
             await add_nodes_and_edges_bulk(
-                self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges
+                self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges, self.embedder
             )
 
             # Update any communities
@@ -693,7 +693,7 @@ class Graphiti:
         invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
 
         await add_nodes_and_edges_bulk(
-            self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges
+            self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges, self.embedder
         )
 
     async def remove_episode(self, episode_uuid: str):
