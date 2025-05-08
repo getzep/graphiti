@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from typing_extensions import Any
 
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
@@ -108,12 +109,15 @@ async def add_nodes_and_edges_bulk_tx(
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
     nodes: list[dict[str, Any]] = []
     for node in entity_nodes:
+        if node.name_embedding is None:
+            await node.generate_name_embedding(embedder)
         entity_data: dict[str, Any] = {
             'uuid': node.uuid,
             'name': node.name,
@@ -126,6 +130,10 @@ async def add_nodes_and_edges_bulk_tx(
         entity_data.update(node.attributes or {})
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         nodes.append(entity_data)
+
+    for edge in entity_edges:
+        if edge.fact_embedding is None:
+            await edge.generate_name_fact(embedder)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
