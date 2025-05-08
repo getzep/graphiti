@@ -223,7 +223,7 @@ class EntityEdge(Edge):
 
     async def load_fact_embedding(self, driver: AsyncDriver):
         query: LiteralString = """
-            MATCH (n:Entity)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
+            MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
         """
         records, _, _ = await driver.execute_query(
@@ -334,8 +334,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                    """
+                                        MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                        """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
