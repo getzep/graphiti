@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
@@ -346,8 +345,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
         query = (
             """
-                                                    MATCH (n:Entity {uuid: $uuid})
-                                                    """
+                                                        MATCH (n:Entity {uuid: $uuid})
+                                                        """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
