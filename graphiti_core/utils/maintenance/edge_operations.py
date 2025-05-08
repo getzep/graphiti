@@ -279,6 +279,11 @@ async def resolve_extracted_edges(
 
     logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
 
+    await semaphore_gather(
+        create_entity_edge_embeddings(embedder, extracted_edges),
+        create_entity_edge_embeddings(embedder, invalidated_edges),
+    )
+
     return resolved_edges, invalidated_edges
 
 
