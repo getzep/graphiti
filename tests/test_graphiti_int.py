@@ -26,7 +26,6 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import EntityNode, EpisodicNode
-from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_MMR
 from graphiti_core.search.search_helpers import search_results_to_context_string
 
 pytestmark = pytest.mark.integration
@@ -67,9 +66,7 @@ async def test_graphiti_init():
     graphiti = Graphiti(NEO4J_URI, NEO4j_USER, NEO4j_PASSWORD)
 
     results = await graphiti.search_(
-        query='Who is the Tania?',
-        group_ids=['98602bec-2c05-4f34-876e-741b39fe6ae8'],
-        config=COMBINED_HYBRID_SEARCH_MMR,
+        query='Who is the user?',
     )
 
     pretty_results = search_results_to_context_string(results)
