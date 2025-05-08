@@ -290,7 +290,6 @@ async def resolve_extracted_node(
                 'id': i,
                 'name': node.name,
                 'entity_types': node.labels,
-                'summary': node.summary,
             },
             **node.attributes,
         }
@@ -436,10 +435,7 @@ async def dedupe_node_list(
         node_map[node.uuid] = node
 
     # Prepare context for LLM
-    nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary, **node.attributes}
-        for node in nodes
-    ]
+    nodes_context = [{'uuid': node.uuid, 'name': node.name, **node.attributes} for node in nodes]
 
     context = {
         'nodes': nodes_context,

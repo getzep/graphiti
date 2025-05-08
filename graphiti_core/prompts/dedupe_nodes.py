@@ -44,7 +44,7 @@ def node(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates entities from entity lists.',
+            content='You are a helpful assistant that determines whether or not a NEW ENTITY is a duplicate of any EXISTING ENTITIES.',
         ),
         Message(
             role='user',
@@ -69,14 +69,21 @@ def node(context: dict[str, Any]) -> list[Message]:
         Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
         is a duplicate entity of one of the EXISTING ENTITIES.
         
-        The ENTITY TYPE DESCRIPTION gives more insight into what the entity type means for the NEW ENTITY.
+        Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+
+        Do NOT mark entities as duplicates if:
+        - They are related but distinct.
+        - They have similar names or purposes but refer to separate instances or concepts.
 
         Task:
         If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
-        id of the EXISTING ENTITY that is the duplicate. If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
+        id of the EXISTING ENTITY that is the duplicate. 
+        
+        If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
         duplicate_entity_id should be set to -1.
         
-        Also return the most complete name for the entity.
+        Also return the name that best describes the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
+        is a duplicate of, or a combination of the two).
         """,
         ),
     ]
