@@ -139,7 +139,7 @@ async def add_nodes_and_edges_bulk_tx(
 
     for edge in entity_edges:
         if edge.fact_embedding is None:
-            await edge.generate_name_fact(embedder)
+            await edge.generate_embedding(embedder)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
