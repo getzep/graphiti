@@ -46,7 +46,6 @@ ENTITY_EDGE_RETURN: LiteralString = """
             e.name AS name,
             e.group_id AS group_id,
             e.fact AS fact,
-            e.fact_embedding AS fact_embedding,
             e.episodes AS episodes,
             e.expired_at AS expired_at,
             e.valid_at AS valid_at,
@@ -222,6 +221,20 @@ class EntityEdge(Edge):
 
         return self.fact_embedding
 
+    async def load_fact_embedding(self, driver: AsyncDriver):
+        query: LiteralString = """
+            MATCH (n:Entity)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
+            RETURN e.fact_embedding AS fact_embedding
+        """
+        records, _, _ = await driver.execute_query(
+            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
+        )
+
+        if len(records) == 0:
+            raise EdgeNotFoundError(self.uuid)
+
+        self.fact_embedding = records[0]['fact_embedding']
+
     async def save(self, driver: AsyncDriver):
         result = await driver.execute_query(
             ENTITY_EDGE_SAVE,
@@ -321,8 +334,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
         query: LiteralString = (
             """
-                        MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                        """
+                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                    """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -452,7 +465,6 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         name=record['name'],
         group_id=record['group_id'],
         episodes=record['episodes'],
-        fact_embedding=record['fact_embedding'],
         created_at=record['created_at'].to_native(),
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
@@ -471,6 +483,8 @@ def get_community_edge_from_record(record: Any):
 
 
 async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[EntityEdge]):
+    if len(edges) == 0:
+        return
     fact_embeddings = await embedder.create_batch([edge.fact for edge in edges])
     for edge, fact_embedding in zip(edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

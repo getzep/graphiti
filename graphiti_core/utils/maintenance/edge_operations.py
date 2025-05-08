@@ -91,7 +91,6 @@ async def extract_edges(
 
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
-    embedder = clients.embedder
 
     node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
 
@@ -184,8 +183,6 @@ async def extract_edges(
             f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
         )
 
-    await create_entity_edge_embeddings(embedder, edges)
-
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
 
     return edges
@@ -241,6 +238,9 @@ async def resolve_extracted_edges(
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
+    embedder = clients.embedder
+
+    await create_entity_edge_embeddings(embedder, extracted_edges)
 
     search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
         get_relevant_edges(driver, extracted_edges, SearchFilters()),

@@ -209,6 +209,9 @@ async def edge_search(
 
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == EdgeReranker.mmr:
+        await semaphore_gather(
+            *[edge.load_fact_embedding(driver) for result in search_results for edge in result]
+        )
         search_result_uuids_and_vectors = [
             (edge.uuid, edge.fact_embedding if edge.fact_embedding is not None else [0.0] * 1024)
             for result in search_results
@@ -308,6 +311,9 @@ async def node_search(
     if config.reranker == NodeReranker.rrf:
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == NodeReranker.mmr:
+        await semaphore_gather(
+            *[node.load_name_embedding(driver) for result in search_results for node in result]
+        )
         search_result_uuids_and_vectors = [
             (node.uuid, node.name_embedding if node.name_embedding is not None else [0.0] * 1024)
             for result in search_results
@@ -431,6 +437,13 @@ async def community_search(
     if config.reranker == CommunityReranker.rrf:
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == CommunityReranker.mmr:
+        await semaphore_gather(
+            *[
+                community.load_name_embedding(driver)
+                for result in search_results
+                for community in result
+            ]
+        )
         search_result_uuids_and_vectors = [
             (
                 community.uuid,
