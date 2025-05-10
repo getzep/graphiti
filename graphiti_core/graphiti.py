@@ -274,6 +274,7 @@ class Graphiti:
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
         previous_episode_uuids: list[str] | None = None,
+        custom_entity_types_only: bool = False,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -302,6 +303,9 @@ class Graphiti:
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
+        custom_entity_types_only : bool, optional
+            Whether to only include custom entity types and filter out default entities.
+            Defaults to False.
 
         Returns
         -------
@@ -357,9 +361,12 @@ class Graphiti:
             )
 
             # Extract entities as nodes
-
             extracted_nodes = await extract_nodes(
-                self.clients, episode, previous_episodes, entity_types
+                self.clients, 
+                episode, 
+                previous_episodes, 
+                entity_types,
+                custom_entity_types_only
             )
 
             # Extract edges and resolve nodes
