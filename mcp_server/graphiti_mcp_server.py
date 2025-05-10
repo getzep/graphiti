@@ -1133,9 +1133,7 @@ async def initialize_server() -> MCPConfig:
     global config
 
     # DEBUG: Check if .env is loaded correctly for GRAPHITI_DEFAULT_GROUP_ID
-    logger.info(
-        f'DEBUG: Value of GRAPHITI_DEFAULT_GROUP_ID from env: {os.environ.get("GRAPHITI_DEFAULT_GROUP_ID")}'
-    )
+    # logger.info(f"DEBUG: Value of GRAPHITI_DEFAULT_GROUP_ID from env: {os.environ.get('GRAPHITI_DEFAULT_GROUP_ID')}") # REMOVED DEBUG LINE
 
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with optional LLM client'
