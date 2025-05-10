@@ -458,11 +458,18 @@ class GraphitiConfig(BaseModel):
         # Start with environment configuration
         config = cls.from_env()
 
-        # Apply CLI overrides
+        # Determine group_id with precedence: CLI > Environment Variable > Fallback default
         if args.group_id:
             config.group_id = args.group_id
+            # Logging moved to initialize_server to use the global logger after it's set up
         else:
-            config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
+            env_group_id = os.environ.get('GRAPHITI_DEFAULT_GROUP_ID')
+            if env_group_id:
+                config.group_id = env_group_id
+            else:
+                # Fallback to 'graphiti-default' to match current observed default behavior
+                # or use f'graph_{{uuid.uuid4().hex[:8]}}' for a random default.
+                config.group_id = 'graphiti-default'
 
         config.use_custom_entities = args.use_custom_entities
         config.destroy_graph = args.destroy_graph
@@ -1125,6 +1132,11 @@ async def initialize_server() -> MCPConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config
 
+    # DEBUG: Check if .env is loaded correctly for GRAPHITI_DEFAULT_GROUP_ID
+    logger.info(
+        f'DEBUG: Value of GRAPHITI_DEFAULT_GROUP_ID from env: {os.environ.get("GRAPHITI_DEFAULT_GROUP_ID")}'
+    )
+
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with optional LLM client'
     )
@@ -1159,11 +1171,15 @@ async def initialize_server() -> MCPConfig:
     # Build configuration from CLI arguments and environment variables
     config = GraphitiConfig.from_cli_and_env(args)
 
-    # Log the group ID configuration
+    # Log the group ID configuration based on how it was set
     if args.group_id:
-        logger.info(f'Using provided group_id: {config.group_id}')
+        logger.info(f'Using group_id from CLI: {config.group_id}')
+    elif os.environ.get('GRAPHITI_DEFAULT_GROUP_ID'):
+        logger.info(f'Using group_id from GRAPHITI_DEFAULT_GROUP_ID env var: {config.group_id}')
     else:
-        logger.info(f'Generated random group_id: {config.group_id}')
+        logger.info(
+            f'No CLI --group-id or GRAPHITI_DEFAULT_GROUP_ID env var. Using default: {config.group_id}'
+        )
 
     # Log entity extraction configuration
     if config.use_custom_entities:
