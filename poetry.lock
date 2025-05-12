@@ -4221,14 +4221,14 @@ win32 = ["pywin32 ; sys_platform == \"win32\""]
 
 [[package]]
 name = "sentence-transformers"
-version = "4.0.2"
+version = "4.1.0"
 description = "Embeddings, Retrieval, and Reranking"
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "sentence_transformers-4.0.2-py3-none-any.whl", hash = "sha256:25f5086d0746c22177f9fb7d431f3eebe6375f3afe1dc7c341c4ca9061e98771"},
-    {file = "sentence_transformers-4.0.2.tar.gz", hash = "sha256:d33d0c5a69ae0d682115c90e74fc1dc24c4786aeea78e26f5889b037e5921880"},
+    {file = "sentence_transformers-4.1.0-py3-none-any.whl", hash = "sha256:382a7f6be1244a100ce40495fb7523dbe8d71b3c10b299f81e6b735092b3b8ca"},
+    {file = "sentence_transformers-4.1.0.tar.gz", hash = "sha256:f125ffd1c727533e0eca5d4567de72f84728de8f7482834de442fd90c2c3d50b"},
 ]
 
 [package.dependencies]
