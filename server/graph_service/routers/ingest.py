@@ -58,7 +58,7 @@ async def add_messages(
             uuid=m.uuid,
             group_id=request.group_id,
             name=m.name,
-            episode_body=f"{m.role or ''}({m.role_type}): {m.content}",
+            episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
             reference_time=m.timestamp,
             source=EpisodeType.message,
             source_description=m.source_description,

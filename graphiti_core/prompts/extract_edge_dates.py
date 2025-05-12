@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Optional, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -22,11 +22,11 @@ from .models import Message, PromptFunction, PromptVersion
 
 
 class EdgeDates(BaseModel):
-    valid_at: Optional[str] = Field(
+    valid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact became true or was established. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
     )
-    invalid_at: Optional[str] = Field(
+    invalid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact stopped being true or ended. YYYY-MM-DDTHH:MM:SS.SSSSSSZ or null.',
     )
@@ -53,7 +53,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             {context['previous_episodes']}
             </PREVIOUS MESSAGES>
             <CURRENT MESSAGE>
-            {context["current_episode"]}
+            {context['current_episode']}
             </CURRENT MESSAGE>
             <REFERENCE TIMESTAMP>
             {context['reference_timestamp']}
@@ -82,6 +82,7 @@ def v1(context: dict[str, Any]) -> list[Message]:
             7. If only a date is mentioned without a specific time, use 00:00:00 (midnight) for that date.
             8. If only year is mentioned, use January 1st of that year at 00:00:00.
             9. Always include the time zone offset (use Z for UTC if no specific time zone is mentioned).
+            10. A fact discussing that something is no longer true should have a valid_at according to when the negated fact became true.
             """,
         ),
     ]

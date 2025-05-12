@@ -9,7 +9,7 @@ packages = [{ include = "graph_service" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-fastapi = "^0.112.2"
+fastapi = "^0.115.0"
 graphiti-core = { path = "../" }
 pydantic-settings = "^2.4.0"
 uvicorn = "^0.30.6"

@@ -7,13 +7,9 @@ from pydantic import BaseModel
 from graphiti_core.driver import Driver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import (
-    CommunityNode,
-    EntityNode,
-    get_community_node_from_record,
-)
+from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
 from graphiti_core.utils.datetime_utils import utc_now
@@ -72,11 +68,8 @@ async def get_community_clusters(
 
         community_clusters.extend(
             list(
-                await asyncio.gather(
-                    *[
-                        EntityNode.get_by_uuids(driver, cluster)
-                        for cluster in cluster_uuids
-                    ]
+                await semaphore_gather(
+                    *[EntityNode.get_by_uuids(driver, cluster) for cluster in cluster_uuids]
                 )
             )
         )
@@ -111,9 +104,11 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             ]
 
             community_lst.sort(reverse=True)
-            community_candidate = community_lst[0][1] if len(community_lst) > 0 else -1
-
-            new_community = max(community_candidate, curr_community)
+            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
+            if community_candidate != -1 and candidate_rank > 1:
+                new_community = community_candidate
+            else:
+                new_community = max(community_candidate, curr_community)
 
             new_community_map[uuid] = new_community
 
@@ -170,11 +165,11 @@ async def build_community(
             odd_one_out = summaries.pop()
             length -= 1
         new_summaries: list[str] = list(
-            await asyncio.gather(
+            await semaphore_gather(
                 *[
                     summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
-                        summaries[: int(length / 2)], summaries[int(length / 2) :]
+                        summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
                 ]
             )
@@ -213,7 +208,7 @@ async def build_communities(
             return await build_community(llm_client, cluster)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
-        await asyncio.gather(
+        await semaphore_gather(
             *[limited_build_community(cluster) for cluster in community_clusters]
         )
     )

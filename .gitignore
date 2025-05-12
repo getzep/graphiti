@@ -164,3 +164,6 @@ cython_debug/
 ## Other
 # Cache files
 cache.db*
+
+# All DS_Store files
+.DS_Store

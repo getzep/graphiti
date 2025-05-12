@@ -25,13 +25,13 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import LLMClient
-from .config import LLMConfig
+from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4o-mini'
+DEFAULT_MODEL = 'gpt-4.1-mini'
 
 
 class OpenAIGenericClient(LLMClient):
@@ -85,7 +85,11 @@ class OpenAIGenericClient(LLMClient):
             self.client = client
 
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -111,8 +115,15 @@ class OpenAIGenericClient(LLMClient):
             raise
 
     async def generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
         retry_count = 0
         last_error = None
 
@@ -124,9 +135,14 @@ class OpenAIGenericClient(LLMClient):
                 f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
             )
 
+        # Add multilingual extraction instructions
+        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+
         while retry_count <= self.MAX_RETRIES:
             try:
-                response = await self._generate_response(messages, response_model)
+                response = await self._generate_response(
+                    messages, response_model, max_tokens=max_tokens, model_size=model_size
+                )
                 return response
             except (RateLimitError, RefusalError):
                 # These errors should not trigger retries

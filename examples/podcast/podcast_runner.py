@@ -18,8 +18,10 @@ import asyncio
 import logging
 import os
 import sys
+from uuid import uuid4
 
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
@@ -53,20 +55,36 @@ def setup_logging():
     return logger
 
 
+class Person(BaseModel):
+    """A human person, fictional or nonfictional."""
+
+    first_name: str | None = Field(..., description='First name')
+    last_name: str | None = Field(..., description='Last name')
+    occupation: str | None = Field(..., description="The person's work occupation")
+
+
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
+    group_id = str(uuid4())
 
     for i, message in enumerate(messages[3:14]):
+        episodes = await client.retrieve_episodes(
+            message.actual_timestamp, 3, group_ids=['podcast']
+        )
+        episode_uuids = [episode.uuid for episode in episodes]
+
         await client.add_episode(
             name=f'Message {i}',
             episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
             reference_time=message.actual_timestamp,
             source_description='Podcast Transcript',
-            group_id='podcast',
+            group_id=group_id,
+            entity_types={'Person': Person},
+            previous_episode_uuids=episode_uuids,
         )
 
 

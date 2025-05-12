@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import LLMConfig
+from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,11 @@ class GroqClient(LLMClient):
         self.client = AsyncGroq(api_key=config.api_key)
 
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         msgs: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -58,7 +62,7 @@ class GroqClient(LLMClient):
                 model=self.model or DEFAULT_MODEL,
                 messages=msgs,
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens or self.max_tokens,
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''

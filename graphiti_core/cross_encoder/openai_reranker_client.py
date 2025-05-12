@@ -14,43 +14,47 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from typing import Any
 
+import numpy as np
 import openai
-from openai import AsyncOpenAI
-from pydantic import BaseModel
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
+from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
 from ..prompts import Message
 from .client import CrossEncoderClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4o-mini'
-
-
-class BooleanClassifier(BaseModel):
-    isTrue: bool
+DEFAULT_MODEL = 'gpt-4.1-nano'
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(
+        self,
+        config: LLMConfig | None = None,
+        client: AsyncOpenAI | AsyncAzureOpenAI | None = None,
+    ):
         """
-        Initialize the OpenAIClient with the provided configuration, cache setting, and client.
+        Initialize the OpenAIRerankerClient with the provided configuration and client.
+
+        This reranker uses the OpenAI API to run a simple boolean classifier prompt concurrently
+        for each passage. Log-probabilities are used to rank the passages.
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
-            cache (bool): Whether to use caching for responses. Defaults to False.
-            client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
-
+            client (AsyncOpenAI | AsyncAzureOpenAI | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
         """
         if config is None:
             config = LLMConfig()
 
         self.config = config
-        self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        if client is None:
+            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+        else:
+            self.client = client
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         openai_messages_list: Any = [
@@ -62,7 +66,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                 Message(
                     role='user',
                     content=f"""
-                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise. 
+                           Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
                            <PASSAGE>
                            {passage}
                            </PASSAGE>
@@ -75,7 +79,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
             for passage in passages
         ]
         try:
-            responses = await asyncio.gather(
+            responses = await semaphore_gather(
                 *[
                     self.client.chat.completions.create(
                         model=DEFAULT_MODEL,
@@ -99,11 +103,15 @@ class OpenAIRerankerClient(CrossEncoderClient):
             ]
             scores: list[float] = []
             for top_logprobs in responses_top_logprobs:
-                for logprob in top_logprobs:
-                    if bool(logprob.token):
-                        scores.append(logprob.logprob)
+                if len(top_logprobs) == 0:
+                    continue
+                norm_logprobs = np.exp(top_logprobs[0].logprob)
+                if bool(top_logprobs[0].token):
+                    scores.append(norm_logprobs)
+                else:
+                    scores.append(1 - norm_logprobs)
 
-            results = [(passage, score) for passage, score in zip(passages, scores)]
+            results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
             results.sort(reverse=True, key=lambda x: x[1])
             return results
         except openai.RateLimitError as e:

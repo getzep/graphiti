@@ -26,17 +26,21 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
-from .config import LLMConfig
+from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
+MULTILINGUAL_EXTRACTION_RESPONSES = (
+    '\n\nAny extracted information should be returned in the same language as it was written in.'
+)
+
 logger = logging.getLogger(__name__)
 
 
 def is_server_or_retry_error(exception):
-    if isinstance(exception, (RateLimitError, json.decoder.JSONDecodeError)):
+    if isinstance(exception, RateLimitError | json.decoder.JSONDecodeError):
         return True
 
     return (
@@ -51,12 +55,16 @@ class LLMClient(ABC):
 
         self.config = config
         self.model = config.model
+        self.small_model = config.small_model
         self.temperature = config.temperature
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
-        self.cache_dir = Cache(DEFAULT_CACHE_DIR)  # Create a cache directory
+        self.cache_dir = None
 
-    
+        # Only create the cache directory if caching is enabled
+        if self.cache_enabled:
+            self.cache_dir = Cache(DEFAULT_CACHE_DIR)
+
     def _clean_input(self, input: str) -> str:
         """Clean input string of invalid unicode and control characters.
 
@@ -91,16 +99,24 @@ class LLMClient(ABC):
         reraise=True,
     )
     async def _generate_response_with_retry(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages, response_model)
+            return await self._generate_response(messages, response_model, max_tokens, model_size)
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
     @abstractmethod
     async def _generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         pass
 
@@ -111,8 +127,15 @@ class LLMClient(ABC):
         return hashlib.md5(key_str.encode()).hexdigest()
 
     async def generate_response(
-        self, messages: list[Message], response_model: type[BaseModel] | None = None
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
         if response_model is not None:
             serialized_model = json.dumps(response_model.model_json_schema())
             messages[
@@ -121,7 +144,10 @@ class LLMClient(ABC):
                 f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
             )
 
-        if self.cache_enabled:
+        # Add multilingual extraction instructions
+        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+
+        if self.cache_enabled and self.cache_dir is not None:
             cache_key = self._get_cache_key(messages)
 
             cached_response = self.cache_dir.get(cache_key)
@@ -132,9 +158,12 @@ class LLMClient(ABC):
         for message in messages:
             message.content = self._clean_input(message.content)
 
-        response = await self._generate_response_with_retry(messages, response_model)
+        response = await self._generate_response_with_retry(
+            messages, response_model, max_tokens, model_size
+        )
 
-        if self.cache_enabled:
+        if self.cache_enabled and self.cache_dir is not None:
+            cache_key = self._get_cache_key(messages)
             self.cache_dir.set(cache_key, response)
 
         return response

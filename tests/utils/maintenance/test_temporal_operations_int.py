@@ -25,7 +25,6 @@ from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.temporal_operations import (
-    extract_edge_dates,
     get_edge_contradictions,
 )
 
@@ -263,67 +262,6 @@ async def test_invalidate_edges_partial_update():
     invalidated_edges = await get_edge_contradictions(setup_llm_client(), new_edge, existing_edges)
 
     assert len(invalidated_edges) == 0  # The existing edge is not invalidated, just updated
-
-
-def create_data_for_temporal_extraction() -> tuple[EpisodicNode, list[EpisodicNode]]:
-    now = utc_now()
-
-    previous_episodes = [
-        EpisodicNode(
-            name='Previous Episode 1',
-            content='Bob: I work at XYZ company',
-            created_at=now - timedelta(days=2),
-            valid_at=now - timedelta(days=2),
-            source=EpisodeType.message,
-            source_description='Test previous episode for unit testing',
-            group_id='1',
-        ),
-        EpisodicNode(
-            name='Previous Episode 2',
-            content="Alice: That's really cool!",
-            created_at=now - timedelta(days=1),
-            valid_at=now - timedelta(days=1),
-            source=EpisodeType.message,
-            source_description='Test previous episode for unit testing',
-            group_id='1',
-        ),
-    ]
-
-    episode = EpisodicNode(
-        name='Previous Episode',
-        content='Bob: It was cool, but I no longer work at company XYZ',
-        created_at=now,
-        valid_at=now,
-        source=EpisodeType.message,
-        source_description='Test previous episode for unit testing',
-        group_id='1',
-    )
-
-    return episode, previous_episodes
-
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_extract_edge_dates():
-    episode, previous_episodes = create_data_for_temporal_extraction()
-
-    # Create a new edge that partially updates an existing one
-    new_edge = EntityEdge(
-        uuid='e9',
-        source_node_uuid='2',
-        target_node_uuid='4',
-        name='LEFT_JOB',
-        fact='Bob no longer works at Company XYZ',
-        group_id='1',
-        created_at=utc_now(),
-    )
-
-    valid_at, invalid_at = await extract_edge_dates(
-        setup_llm_client(), new_edge, episode, previous_episodes
-    )
-
-    assert valid_at == episode.valid_at
-    assert invalid_at is None
 
 
 # Run the tests

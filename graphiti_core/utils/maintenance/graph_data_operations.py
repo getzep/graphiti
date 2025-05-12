@@ -14,14 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
 
-from graphiti_core.driver import Driver
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -31,190 +29,86 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: Driver, delete_existing: bool = False):
     if delete_existing:
-        await asyncio.gather(*driver.delete_all_indexes(DEFAULT_DATABASE))
+        records, _, _ = await driver.execute_query(
+            """
+        SHOW INDEXES YIELD name
+        """,
+            database_=DEFAULT_DATABASE,
+        )
+        index_names = [record['name'] for record in records]
+        await semaphore_gather(
+            *[
+                driver.execute_query(
+                    """DROP INDEX $name""",
+                    name=name,
+                    database_=DEFAULT_DATABASE,
+                )
+                for name in index_names
+            ]
+        )
 
-    range_indices = [
-        {"type": "node", "name": "entity_uuid", "label": "Entity", "property": "uuid"},
-        {
-            "type": "node",
-            "name": "episode_uuid",
-            "label": "Episodic",
-            "property": "uuid",
-        },
-        {
-            "type": "node",
-            "name": "community_uuid",
-            "label": "Community",
-            "property": "uuid",
-        },
-        {
-            "type": "relationship",
-            "name": "relation_uuid",
-            "label": "RELATES_TO",
-            "property": "uuid",
-        },
-        {
-            "type": "relationship",
-            "name": "mention_uuid",
-            "label": "MENTIONS",
-            "property": "uuid",
-        },
-        {
-            "type": "relationship",
-            "name": "has_member_uuid",
-            "label": "HAS_MEMBER",
-            "property": "uuid",
-        },
-        {
-            "type": "node",
-            "name": "entity_group_id",
-            "label": "Entity",
-            "property": "group_id",
-        },
-        {
-            "type": "node",
-            "name": "episode_group_id",
-            "label": "Episodic",
-            "property": "group_id",
-        },
-        {
-            "type": "relationship",
-            "name": "relation_group_id",
-            "label": "RELATES_TO",
-            "property": "group_id",
-        },
-        {
-            "type": "relationship",
-            "name": "mention_group_id",
-            "label": "MENTIONS",
-            "property": "group_id",
-        },
-        {
-            "type": "node",
-            "name": "name_entity_index",
-            "label": "Entity",
-            "property": "name",
-        },
-        {
-            "type": "node",
-            "name": "created_at_entity_index",
-            "label": "Entity",
-            "property": "created_at",
-        },
-        {
-            "type": "node",
-            "name": "created_at_episodic_index",
-            "label": "Episodic",
-            "property": "created_at",
-        },
-        {
-            "type": "node",
-            "name": "valid_at_episodic_index",
-            "label": "Episodic",
-            "property": "valid_at",
-        },
-        {
-            "type": "relationship",
-            "name": "name_edge_index",
-            "label": "RELATES_TO",
-            "property": "name",
-        },
-        {
-            "type": "relationship",
-            "name": "created_at_edge_index",
-            "label": "RELATES_TO",
-            "property": "created_at",
-        },
-        {
-            "type": "relationship",
-            "name": "expired_at_edge_index",
-            "label": "RELATES_TO",
-            "property": "expired_at",
-        },
-        {
-            "type": "relationship",
-            "name": "valid_at_edge_index",
-            "label": "RELATES_TO",
-            "property": "valid_at",
-        },
-        {
-            "type": "relationship",
-            "name": "invalid_at_edge_index",
-            "label": "RELATES_TO",
-            "property": "invalid_at",
-        },
+    range_indices: list[LiteralString] = [
+        'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
+        'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
+        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
+        'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
+        'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
+        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
+        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
+        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
+        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
+        'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
+        'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
+        'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
+        'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
+        'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
+        'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
+        'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
+        'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
+        'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
     ]
 
-    fulltext_indices = [
-        {
-            "type": "node_fulltext",
-            "name": "node_name_and_summary",
-            "label": "Entity",
-            "properties": ["name", "summary", "group_id"],
-        },
-        {
-            "type": "node_fulltext",
-            "name": "community_name",
-            "label": "Community",
-            "properties": ["name", "group_id"],
-        },
-        {
-            "type": "relationship_fulltext",
-            "name": "edge_name_and_fact",
-            "label": "RELATES_TO",
-            "properties": ["name", "fact", "group_id"],
-        },
+    fulltext_indices: list[LiteralString] = [
+        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
+        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
+        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
+        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
+        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
+        FOR (n:Community) ON EACH [n.name, n.group_id]""",
+        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
+        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
-    await asyncio.gather(
+    await semaphore_gather(
         *[
-            (
-                driver.create_node_fulltext_index(
-                    label=index["label"],
-                    properties=index["properties"],
-                    index_name=index["name"],
-                    database_=DEFAULT_DATABASE,
-                )
-                if index["type"] == "node_fulltext"
-                else (
-                    driver.create_relationship_fulltext_index(
-                        label=index["label"],
-                        properties=index["properties"],
-                        index_name=index["name"],
-                        database_=DEFAULT_DATABASE,
-                    )
-                    if index["type"] == "relationship_fulltext"
-                    else (
-                        driver.create_node_index(
-                            label=index["label"],
-                            property=index["property"],
-                            index_name=index["name"],
-                            database_=DEFAULT_DATABASE,
-                        )
-                        if index["type"] == "node"
-                        else driver.create_relationship_index(
-                            label=index["label"],
-                            property=index["property"],
-                            index_name=index["name"],
-                            database_=DEFAULT_DATABASE,
-                        )
-                    )
-                )
+            driver.execute_query(
+                query,
+                database_=DEFAULT_DATABASE,
             )
-            for index in index_queries
+            for query in index_queries
         ]
     )
 
 
-async def clear_data(driver: Driver):
-    async with driver.session() as session:
+async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
+    async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
-            await tx.run("MATCH (n) DETACH DELETE n")
+            await tx.run('MATCH (n) DETACH DELETE n')
 
-        await session.execute_write(delete_all)
+        async def delete_group_ids(tx):
+            await tx.run(
+                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                group_ids=group_ids,
+            )
+
+        if group_ids is None:
+            await session.execute_write(delete_all)
+        else:
+            await session.execute_write(delete_group_ids)
 
 
 async def retrieve_episodes(
@@ -222,6 +116,7 @@ async def retrieve_episodes(
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
+    source: EpisodeType | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -237,10 +132,18 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    result = await driver.execute_query(
+    group_id_filter: LiteralString = (
+        '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+    )
+    source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
+
+    query: LiteralString = (
         """
-        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time 
-        AND ($group_ids IS NULL) OR e.group_id in $group_ids
+                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                        """
+        + group_id_filter
+        + source_filter
+        + """
         RETURN e.content AS content,
             e.created_at AS created_at,
             e.valid_at AS valid_at,
@@ -249,13 +152,18 @@ async def retrieve_episodes(
             e.name AS name,
             e.source_description AS source_description,
             e.source AS source
-        ORDER BY e.created_at DESC
+        ORDER BY e.valid_at DESC
         LIMIT $num_episodes
-        """,
+        """
+    )
+
+    result = await driver.execute_query(
+        query,
         reference_time=reference_time,
+        source=source.name if source is not None else None,
         num_episodes=last_n,
         group_ids=group_ids,
-        _database=DEFAULT_DATABASE,
+        database_=DEFAULT_DATABASE,
     )
     episodes = [
         EpisodicNode(
