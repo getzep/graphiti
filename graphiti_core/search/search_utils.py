@@ -337,10 +337,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                                YIELD node AS n, score
-                                                                WHERE n:Entity
-                                                                """
+                                                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                    YIELD node AS n, score
+                                                                    WHERE n:Entity
+                                                                    """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -957,6 +957,7 @@ def maximal_marginal_relevance(
     query_vector: list[float],
     candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
+    min_score: float = -2.0,
 ) -> list[str]:
     start = time()
     query_array = NDArray(query_vector)
@@ -988,7 +989,7 @@ def maximal_marginal_relevance(
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
-    return uuids
+    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
 
 
 async def get_embeddings_for_nodes(
