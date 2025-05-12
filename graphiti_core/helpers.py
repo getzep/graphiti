@@ -95,7 +95,7 @@ def normalize_l2(embedding: list[float]):
 async def semaphore_gather(
     *coroutines: Coroutine,
     max_coroutines: int = SEMAPHORE_LIMIT,
-) -> list[Any]:
+):
     semaphore = asyncio.Semaphore(max_coroutines)
 
     async def _wrap(coro: Coroutine) -> Any:
