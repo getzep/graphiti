@@ -18,6 +18,7 @@ import logging
 from contextlib import suppress
 from time import time
 from typing import Any
+from uuid import uuid4
 
 import pydantic
 from pydantic import BaseModel, Field
@@ -395,7 +396,8 @@ async def extract_attributes_from_node(
                 Field(description=field_info.description),
             )
 
-    entity_attributes_model = pydantic.create_model('EntityAttributes', **attributes_definitions)
+    unique_model_name = f'EntityAttributes_{uuid4().hex}'
+    entity_attributes_model = pydantic.create_model(unique_model_name, **attributes_definitions)
 
     summary_context: dict[str, Any] = {
         'node': node_context,
@@ -411,12 +413,10 @@ async def extract_attributes_from_node(
     )
 
     node.summary = llm_response.get('summary', node.summary)
-    node.name = llm_response.get('name', node.name)
     node_attributes = {key: value for key, value in llm_response.items()}
 
     with suppress(KeyError):
         del node_attributes['summary']
-        del node_attributes['name']
 
     node.attributes.update(node_attributes)
 

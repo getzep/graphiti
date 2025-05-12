@@ -458,14 +458,10 @@ async def community_search(
             config.mmr_lambda,
         )
     elif config.reranker == CommunityReranker.cross_encoder:
-        summary_to_uuid_map = {
-            node.summary: node.uuid for result in search_results for node in result
-        }
-        reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
+        name_to_uuid_map = {node.name: node.uuid for result in search_results for node in result}
+        reranked_nodes = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
         reranked_uuids = [
-            summary_to_uuid_map[fact]
-            for fact, score in reranked_summaries
-            if score >= reranker_min_score
+            name_to_uuid_map[name] for name, score in reranked_nodes if score >= reranker_min_score
         ]
 
     reranked_communities = [community_uuid_map[uuid] for uuid in reranked_uuids]
