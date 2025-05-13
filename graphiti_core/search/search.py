@@ -50,6 +50,9 @@ from graphiti_core.search.search_utils import (
     edge_similarity_search,
     episode_fulltext_search,
     episode_mentions_reranker,
+    get_embeddings_for_communities,
+    get_embeddings_for_edges,
+    get_embeddings_for_nodes,
     maximal_marginal_relevance,
     node_bfs_search,
     node_distance_reranker,
@@ -209,26 +212,17 @@ async def edge_search(
 
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == EdgeReranker.mmr:
-        await semaphore_gather(
-            *[edge.load_fact_embedding(driver) for result in search_results for edge in result]
+        search_result_uuids_and_vectors = await get_embeddings_for_edges(
+            driver, list(edge_uuid_map.values())
         )
-        search_result_uuids_and_vectors = [
-            (edge.uuid, edge.fact_embedding if edge.fact_embedding is not None else [0.0] * 1024)
-            for result in search_results
-            for edge in result
-        ]
         reranked_uuids = maximal_marginal_relevance(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
+            reranker_min_score,
         )
     elif config.reranker == EdgeReranker.cross_encoder:
-        search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
-
-        rrf_result_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
-        rrf_edges = [edge_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
-
-        fact_to_uuid_map = {edge.fact: edge.uuid for edge in rrf_edges}
+        fact_to_uuid_map = {edge.fact: edge.uuid for edge in list(edge_uuid_map.values())[:limit]}
         reranked_facts = await cross_encoder.rank(query, list(fact_to_uuid_map.keys()))
         reranked_uuids = [
             fact_to_uuid_map[fact] for fact, score in reranked_facts if score >= reranker_min_score
@@ -311,30 +305,23 @@ async def node_search(
     if config.reranker == NodeReranker.rrf:
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == NodeReranker.mmr:
-        await semaphore_gather(
-            *[node.load_name_embedding(driver) for result in search_results for node in result]
+        search_result_uuids_and_vectors = await get_embeddings_for_nodes(
+            driver, list(node_uuid_map.values())
         )
-        search_result_uuids_and_vectors = [
-            (node.uuid, node.name_embedding if node.name_embedding is not None else [0.0] * 1024)
-            for result in search_results
-            for node in result
-        ]
+
         reranked_uuids = maximal_marginal_relevance(
             query_vector,
             search_result_uuids_and_vectors,
             config.mmr_lambda,
+            reranker_min_score,
         )
     elif config.reranker == NodeReranker.cross_encoder:
-        # use rrf as a preliminary reranker
-        rrf_result_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
-        rrf_results = [node_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
+        name_to_uuid_map = {node.name: node.uuid for node in list(node_uuid_map.values())}
 
-        summary_to_uuid_map = {node.summary: node.uuid for node in rrf_results}
-
-        reranked_summaries = await cross_encoder.rank(query, list(summary_to_uuid_map.keys()))
+        reranked_node_names = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
         reranked_uuids = [
-            summary_to_uuid_map[fact]
-            for fact, score in reranked_summaries
+            name_to_uuid_map[name]
+            for name, score in reranked_node_names
             if score >= reranker_min_score
         ]
     elif config.reranker == NodeReranker.episode_mentions:
@@ -437,25 +424,12 @@ async def community_search(
     if config.reranker == CommunityReranker.rrf:
         reranked_uuids = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == CommunityReranker.mmr:
-        await semaphore_gather(
-            *[
-                community.load_name_embedding(driver)
-                for result in search_results
-                for community in result
-            ]
+        search_result_uuids_and_vectors = await get_embeddings_for_communities(
+            driver, list(community_uuid_map.values())
         )
-        search_result_uuids_and_vectors = [
-            (
-                community.uuid,
-                community.name_embedding if community.name_embedding is not None else [0.0] * 1024,
-            )
-            for result in search_results
-            for community in result
-        ]
+
         reranked_uuids = maximal_marginal_relevance(
-            query_vector,
-            search_result_uuids_and_vectors,
-            config.mmr_lambda,
+            query_vector, search_result_uuids_and_vectors, config.mmr_lambda, reranker_min_score
         )
     elif config.reranker == CommunityReranker.cross_encoder:
         name_to_uuid_map = {node.name: node.uuid for result in search_results for node in result}

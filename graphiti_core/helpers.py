@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 from neo4j import time as neo4j_time
+from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
 load_dotenv()
@@ -79,16 +80,10 @@ def lucene_sanitize(query: str) -> str:
     return sanitized
 
 
-def normalize_l2(embedding: list[float]):
+def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
-    if embedding_array.ndim == 1:
-        norm = np.linalg.norm(embedding_array)
-        if norm == 0:
-            return [0.0] * len(embedding)
-        return (embedding_array / norm).tolist()
-    else:
-        norm = np.linalg.norm(embedding_array, 2, axis=1, keepdims=True)
-        return (np.where(norm == 0, embedding_array, embedding_array / norm)).tolist()
+    norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)
+    return np.where(norm == 0, embedding_array, embedding_array / norm)
 
 
 # Use this instead of asyncio.gather() to bound coroutines
