@@ -337,10 +337,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                                            CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                                            YIELD node AS n, score
-                                                                            WHERE n:Entity
-                                                                            """
+                                                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                                YIELD node AS n, score
+                                                                                WHERE n:Entity
+                                                                                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -980,14 +980,13 @@ def maximal_marginal_relevance(
 
     mmr_scores: dict[str, float] = {}
     for i, uuid in enumerate(uuids):
-        max_sim = max(similarity_matrix[i, :])
+        max_sim = np.max(similarity_matrix[i, :])
         mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
         mmr_scores[uuid] = mmr
 
     uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
 
     end = time()
-    duration_ms = (end - start) * 1000
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
     return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]

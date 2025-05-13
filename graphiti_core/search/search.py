@@ -318,9 +318,11 @@ async def node_search(
     elif config.reranker == NodeReranker.cross_encoder:
         name_to_uuid_map = {node.name: node.uuid for node in list(node_uuid_map.values())}
 
-        reranked_nodes = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
+        reranked_node_names = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
         reranked_uuids = [
-            name_to_uuid_map[name] for name, score in reranked_nodes if score >= reranker_min_score
+            name_to_uuid_map[name]
+            for name, score in reranked_node_names
+            if score >= reranker_min_score
         ]
     elif config.reranker == NodeReranker.episode_mentions:
         reranked_uuids = await episode_mentions_reranker(
