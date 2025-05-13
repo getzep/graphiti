@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
@@ -735,10 +734,7 @@ async def add_episode(
             source_type = EpisodeType.json
 
         # Use the provided group_id or fall back to the default from config
-        if group_id == '':
-            effective_group_id = config.group_id
-        else:
-            effective_group_id = group_id
+        effective_group_id = config.group_id if group_id == '' else group_id
 
         # Cast group_id to str to satisfy type checker
         # The Graphiti client expects a str for group_id, not Optional[str]
@@ -804,7 +800,7 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: list[str] = Field(default_factory=list),
+    group_ids: list[str] = Field(default_factory=list),  # noqa: B008
     max_nodes: int = 10,
     center_node_uuid: str | None = None,
     entity: str = '',
@@ -885,7 +881,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: list[str] = Field(default_factory=list),
+    group_ids: list[str] = Field(default_factory=list),  # noqa: B008
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
@@ -1040,10 +1036,7 @@ async def get_episodes(
 
     try:
         # Use the provided group_id or fall back to the default from config
-        if group_id == '':
-            effective_group_id = config.group_id
-        else:
-            effective_group_id = group_id
+        effective_group_id = config.group_id if group_id == '' else group_id
 
         if not isinstance(effective_group_id, str):
             return {'error': 'Group ID must be a string'}
