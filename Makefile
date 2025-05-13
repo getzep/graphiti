@@ -26,7 +26,7 @@ lint:
 
 # Run tests
 test:
-	$(PYTEST)
+	$(POETRY) run python -c "from dotenv import load_dotenv; load_dotenv('.env.test', override=True)" && $(PYTEST)
 
 # Run format, lint, and test
 check: format lint test
