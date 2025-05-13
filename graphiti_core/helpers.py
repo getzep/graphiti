@@ -82,7 +82,7 @@ def lucene_sanitize(query: str) -> str:
 
 def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
-    norm = np.linalg.norm(embedding_array, 2, axis=1, keepdims=True)
+    norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)
     return np.where(norm == 0, embedding_array, embedding_array / norm)
 
 

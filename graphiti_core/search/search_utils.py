@@ -337,10 +337,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                                    YIELD node AS n, score
-                                                                    WHERE n:Entity
-                                                                    """
+                                                                            CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                            YIELD node AS n, score
+                                                                            WHERE n:Entity
+                                                                            """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -960,7 +960,7 @@ def maximal_marginal_relevance(
     min_score: float = -2.0,
 ) -> list[str]:
     start = time()
-    query_array = NDArray(query_vector)
+    query_array = np.array(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
     for uuid, embedding in candidates.items():
         candidate_arrays[uuid] = normalize_l2(embedding)
@@ -987,6 +987,7 @@ def maximal_marginal_relevance(
     uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
 
     end = time()
+    duration_ms = (end - start) * 1000
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
     return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
@@ -998,7 +999,7 @@ async def get_embeddings_for_nodes(
     query: LiteralString = """MATCH (n:Entity)
                               WHERE n.uuid IN $node_uuids
                               RETURN DISTINCT
-                                n.uuid AS uuid
+                                n.uuid AS uuid,
                                 n.name_embedding AS name_embedding
                     """
 
@@ -1022,7 +1023,7 @@ async def get_embeddings_for_communities(
     query: LiteralString = """MATCH (c:Community)
                               WHERE c.uuid IN $community_uuids
                               RETURN DISTINCT
-                                c.uuid AS uuid
+                                c.uuid AS uuid,
                                 c.name_embedding AS name_embedding
                     """
 
@@ -1049,13 +1050,13 @@ async def get_embeddings_for_edges(
     query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
                               WHERE e.uuid IN $edge_uuids
                               RETURN DISTINCT
-                                e.uuid AS uuid
+                                e.uuid AS uuid,
                                 e.fact_embedding AS fact_embedding
                     """
 
     results, _, _ = await driver.execute_query(
         query,
-        community_uuids=[edge.uuid for edge in edges],
+        edge_uuids=[edge.uuid for edge in edges],
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
