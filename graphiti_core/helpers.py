@@ -18,10 +18,12 @@ import asyncio
 import os
 from collections.abc import Coroutine
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
 from neo4j import time as neo4j_time
+from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
 load_dotenv()
@@ -78,24 +80,34 @@ def lucene_sanitize(query: str) -> str:
     return sanitized
 
 
-def normalize_l2(embedding: list[float]):
+def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
-    if embedding_array.ndim == 1:
-        norm = np.linalg.norm(embedding_array)
-        if norm == 0:
-            return [0.0] * len(embedding)
-        return (embedding_array / norm).tolist()
-    else:
-        norm = np.linalg.norm(embedding_array, 2, axis=1, keepdims=True)
-        return (np.where(norm == 0, embedding_array, embedding_array / norm)).tolist()
+    norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)
+    return np.where(norm == 0, embedding_array, embedding_array / norm)
 
 
 # Use this instead of asyncio.gather() to bound coroutines
-async def semaphore_gather(*coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT):
+async def semaphore_gather(
+    *coroutines: Coroutine,
+    max_coroutines: int = SEMAPHORE_LIMIT,
+):
     semaphore = asyncio.Semaphore(max_coroutines)
 
-    async def _wrap_coroutine(coroutine):
+    async def _wrap(coro: Coroutine) -> Any:
         async with semaphore:
-            return await coroutine
+            return await coro
 
-    return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
+    results = []
+    batch = []
+    for coroutine in coroutines:
+        batch.append(_wrap(coroutine))
+        # once we hit max_coroutines, gather and clear the batch
+        if len(batch) >= max_coroutines:
+            results.extend(await asyncio.gather(*batch))
+            batch.clear()
+
+    # gather any remaining coroutines in the final batch
+    if batch:
+        results.extend(await asyncio.gather(*batch))
+
+    return results

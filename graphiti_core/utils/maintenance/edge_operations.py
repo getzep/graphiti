@@ -399,7 +399,7 @@ async def dedupe_extracted_edge(
     )
 
     if duplicate_fact_id >= 0 and episode is not None:
-        edge.episodes += episode.uuid
+        edge.episodes.append(episode.uuid)
 
     end = time()
     logger.debug(
