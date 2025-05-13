@@ -242,7 +242,7 @@ class GraphitiLLMConfig(BaseModel):
         return cls(
             azure_openai_use_managed_identity=azure_openai_use_managed_identity,
             azure_openai_endpoint=azure_openai_endpoint,
-            api_key=os.environ.get('OPENAI_API_KEY'),
+            api_key=api_key,
             azure_openai_api_version=azure_openai_api_version,
             azure_openai_deployment_name=azure_openai_deployment_name,
             temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
