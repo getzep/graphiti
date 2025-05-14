@@ -332,6 +332,54 @@ async def resolve_extracted_edge(
         get_edge_contradictions(llm_client, extracted_edge, existing_edges),
     )
 
+    if len(related_edges) == 0 and len(invalidation_candidates) == 0:
+        return extracted_edge, []
+
+    start = time()
+
+    # Prepare context for LLM
+    related_edges_context = [
+        {'id': edge.uuid, 'fact': edge.fact} for i, edge in enumerate(related_edges)
+    ]
+
+    invalidation_edge_candidates_context = [
+        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
+    ]
+
+    context = {
+        'existing_edges': related_edges_context,
+        'new_edge': extracted_edge.fact,
+        'edge_invalidation_candidates': invalidation_edge_candidates_context,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.resolve_edge(context),
+        response_model=EdgeDuplicate,
+        model_size=ModelSize.small,
+    )
+
+    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
+
+    edge = (
+        related_edges[duplicate_fact_id]
+        if 0 <= duplicate_fact_id < len(related_edges)
+        else extracted_edge
+    )
+
+    if duplicate_fact_id >= 0 and episode is not None:
+        edge.episodes.append(episode.uuid)
+
+    contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
+
+    invalidation_candidates: list[EntityEdge] = [
+        invalidation_candidates[i] for i in contradicted_facts
+    ]
+
+    end = time()
+    logger.debug(
+        f'Resolved Edge: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
+    )
+
     now = utc_now()
 
     if resolved_edge.invalid_at and not resolved_edge.expired_at:
