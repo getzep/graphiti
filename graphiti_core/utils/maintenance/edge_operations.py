@@ -325,14 +325,9 @@ async def resolve_extracted_edge(
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
-    episode: EpisodicNode,
+    episode: EpisodicNode | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, invalidation_candidates = await semaphore_gather(
-        dedupe_extracted_edge(llm_client, extracted_edge, related_edges, episode),
-        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
-    )
-
-    if len(related_edges) == 0 and len(invalidation_candidates) == 0:
+    if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, []
 
     start = time()
@@ -360,24 +355,22 @@ async def resolve_extracted_edge(
 
     duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
 
-    edge = (
+    resolved_edge = (
         related_edges[duplicate_fact_id]
         if 0 <= duplicate_fact_id < len(related_edges)
         else extracted_edge
     )
 
     if duplicate_fact_id >= 0 and episode is not None:
-        edge.episodes.append(episode.uuid)
+        resolved_edge.episodes.append(episode.uuid)
 
     contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
 
-    invalidation_candidates: list[EntityEdge] = [
-        invalidation_candidates[i] for i in contradicted_facts
-    ]
+    invalidation_candidates: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
 
     end = time()
     logger.debug(
-        f'Resolved Edge: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
+        f'Resolved Edge: {extracted_edge.name} is {resolved_edge.name}, in {(end - start) * 1000} ms'
     )
 
     now = utc_now()
