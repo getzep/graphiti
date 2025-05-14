@@ -93,21 +93,8 @@ async def semaphore_gather(
 ):
     semaphore = asyncio.Semaphore(max_coroutines)
 
-    async def _wrap(coro: Coroutine) -> Any:
+    async def _wrap_coroutine(coroutine):
         async with semaphore:
-            return await coro
+            return await coroutine
 
-    results = []
-    batch = []
-    for coroutine in coroutines:
-        batch.append(_wrap(coroutine))
-        # once we hit max_coroutines, gather and clear the batch
-        if len(batch) >= max_coroutines:
-            results.extend(await asyncio.gather(*batch))
-            batch.clear()
-
-    # gather any remaining coroutines in the final batch
-    if batch:
-        results.extend(await asyncio.gather(*batch))
-
-    return results
+    return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
