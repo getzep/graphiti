@@ -29,7 +29,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.prompts import prompt_library
-from graphiti_core.prompts.dedupe_nodes import NodeDuplicate
+from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
     ExtractedEntities,
     ExtractedEntity,
@@ -243,28 +243,64 @@ async def resolve_extracted_nodes(
 
     existing_nodes_lists: list[list[EntityNode]] = [result.nodes for result in search_results]
 
-    resolved_nodes: list[EntityNode] = await semaphore_gather(
-        *[
-            resolve_extracted_node(
-                llm_client,
-                extracted_node,
-                existing_nodes,
-                episode,
-                previous_episodes,
-                entity_types.get(
-                    next((item for item in extracted_node.labels if item != 'Entity'), '')
-                )
-                if entity_types is not None
-                else None,
-            )
-            for extracted_node, existing_nodes in zip(
-                extracted_nodes, existing_nodes_lists, strict=True
-            )
-        ]
+    # Prepare context for LLM
+    extracted_nodes_context = [
+        {
+            'id': i,
+            'name': node.name,
+            'entity_type': node.labels,
+            'entity_type_description': entity_types.get(
+                next((item for item in node.labels if item != 'Entity'), '')
+            ).__doc__
+            or 'Default Entity Type',
+            'duplication_candidates': [
+                {
+                    **{
+                        'idx': j,
+                        'name': candidate.name,
+                        'entity_types': candidate.labels,
+                    },
+                    **candidate.attributes,
+                }
+                for j, candidate in enumerate(existing_nodes_lists[i])
+            ],
+        }
+        for i, node in enumerate(extracted_nodes)
+        if len(existing_nodes_lists[i]) > 0
+    ]
+
+    context = {
+        'extracted_nodes': extracted_nodes_context,
+        'episode_content': episode.content if episode is not None else '',
+        'previous_episodes': [ep.content for ep in previous_episodes]
+        if previous_episodes is not None
+        else [],
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_nodes.nodes(context),
+        response_model=NodeResolutions,
     )
 
+    node_resolutions: list[NodeDuplicate] = llm_response.get('entity_resolutions', [])
+
+    resolved_nodes: list[EntityNode] = []
     uuid_map: dict[str, str] = {}
-    for extracted_node, resolved_node in zip(extracted_nodes, resolved_nodes, strict=True):
+    for resolution in node_resolutions:
+        resolution_id = resolution.id
+        duplicate_idx = resolution.duplicate_idx
+
+        extracted_node = extracted_nodes[resolution_id]
+
+        resolved_node = (
+            existing_nodes_lists[resolution_id][duplicate_idx]
+            if 0 <= duplicate_idx < len(existing_nodes_lists[resolution_id])
+            else extracted_node
+        )
+
+        resolved_node.name = resolution.name
+
+        resolved_nodes.append(resolved_node)
         uuid_map[extracted_node.uuid] = resolved_node.uuid
 
     logger.debug(f'Resolved nodes: {[(n.name, n.uuid) for n in resolved_nodes]}')
