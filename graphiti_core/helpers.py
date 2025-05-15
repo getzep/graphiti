@@ -18,7 +18,6 @@ import asyncio
 import os
 from collections.abc import Coroutine
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -88,8 +87,8 @@ def normalize_l2(embedding: list[float]) -> NDArray:
 
 # Use this instead of asyncio.gather() to bound coroutines
 async def semaphore_gather(
-    *coroutines: Coroutine,
-    max_coroutines: int = SEMAPHORE_LIMIT,
+        *coroutines: Coroutine,
+        max_coroutines: int = SEMAPHORE_LIMIT,
 ):
     semaphore = asyncio.Semaphore(max_coroutines)
 
