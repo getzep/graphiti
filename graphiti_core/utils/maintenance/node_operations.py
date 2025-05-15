@@ -243,8 +243,7 @@ async def resolve_extracted_nodes(
 
     existing_nodes_lists: list[list[EntityNode]] = [result.nodes for result in search_results]
 
-    if entity_types is None:
-        entity_types: dict[str, BaseModel] = {}
+    entity_types_dict: dict[str, BaseModel] = entity_types if entity_types is not None else {}
 
     # Prepare context for LLM
     extracted_nodes_context = [
@@ -252,7 +251,7 @@ async def resolve_extracted_nodes(
             'id': i,
             'name': node.name,
             'entity_type': node.labels,
-            'entity_type_description': entity_types.get(
+            'entity_type_description': entity_types_dict.get(
                 next((item for item in node.labels if item != 'Entity'), '')
             ).__doc__
             or 'Default Entity Type',
