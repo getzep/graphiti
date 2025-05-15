@@ -63,9 +63,7 @@ from graphiti_core.utils.maintenance.community_operations import (
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
-    dedupe_extracted_edge,
     extract_edges,
-    resolve_edge_contradictions,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -79,7 +77,6 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
 logger = logging.getLogger(__name__)

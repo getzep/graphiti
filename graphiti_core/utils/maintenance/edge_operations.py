@@ -35,9 +35,6 @@ from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
-from graphiti_core.utils.maintenance.temporal_operations import (
-    get_edge_contradictions,
-)
 
 logger = logging.getLogger(__name__)
 

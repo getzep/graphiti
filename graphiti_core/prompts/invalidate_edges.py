@@ -24,7 +24,7 @@ from .models import Message, PromptFunction, PromptVersion
 class InvalidatedEdges(BaseModel):
     contradicted_facts: list[int] = Field(
         ...,
-        description='List of ids of facts that be should invalidated. If no facts should be invalidated, the list should be empty.',
+        description='List of ids of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
     )
 
 
