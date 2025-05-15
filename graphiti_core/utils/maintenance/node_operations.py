@@ -70,6 +70,7 @@ async def extract_nodes(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, BaseModel] | None = None,
+    custom_entity_types_only: bool = False,
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
@@ -144,6 +145,18 @@ async def extract_nodes(
                 custom_prompt += f'\n{entity},'
 
     filtered_extracted_entities = [entity for entity in extracted_entities if entity.name.strip()]
+    
+    # Add filtering logic for custom entities only
+    if custom_entity_types_only:
+        # Only keep entities that match custom entity types (non-default)
+        filtered_extracted_entities = [
+            entity for entity in filtered_extracted_entities 
+            if entity.entity_type_id != 0  # Filter out default "Entity" type
+        ]
+        
+        # Log the filtered entities
+        logger.debug(f'Filtered to custom entity types only. Keeping {len(filtered_extracted_entities)} entities')
+    
     end = time()
     logger.debug(f'Extracted new nodes: {filtered_extracted_entities} in {(end - start) * 1000} ms')
     # Convert the extracted data into EntityNode objects
