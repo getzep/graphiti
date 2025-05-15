@@ -89,6 +89,55 @@ def node(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def nodes(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that determines whether or not a NEW ENTITY is a duplicate of any EXISTING ENTITIES.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+        <PREVIOUS MESSAGES>
+        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+        </PREVIOUS MESSAGES>
+        <CURRENT MESSAGE>
+        {context['episode_content']}
+        </CURRENT MESSAGE>
+        <NEW ENTITY>
+        {json.dumps(context['extracted_node'], indent=2)}
+        </NEW ENTITY>
+        <ENTITY TYPE DESCRIPTION>
+        {json.dumps(context['entity_type_description'], indent=2)}
+        </ENTITY TYPE DESCRIPTION>
+
+        <EXISTING ENTITIES>
+        {json.dumps(context['existing_nodes'], indent=2)}
+        </EXISTING ENTITIES>
+
+        Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
+        is a duplicate entity of one of the EXISTING ENTITIES.
+
+        Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+
+        Do NOT mark entities as duplicates if:
+        - They are related but distinct.
+        - They have similar names or purposes but refer to separate instances or concepts.
+
+        Task:
+        If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
+        id of the EXISTING ENTITY that is the duplicate. 
+
+        If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
+        duplicate_entity_id should be set to -1.
+
+        Also return the name that best describes the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
+        is a duplicate of, or a combination of the two).
+        """,
+        ),
+    ]
+
+
 def node_list(context: dict[str, Any]) -> list[Message]:
     return [
         Message(

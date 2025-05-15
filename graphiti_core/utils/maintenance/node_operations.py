@@ -410,6 +410,7 @@ async def extract_attributes_from_node(
     llm_response = await llm_client.generate_response(
         prompt_library.extract_nodes.extract_attributes(summary_context),
         response_model=entity_attributes_model,
+        model_size=ModelSize.small,
     )
 
     node.summary = llm_response.get('summary', node.summary)
