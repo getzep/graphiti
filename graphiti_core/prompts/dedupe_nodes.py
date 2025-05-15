@@ -149,7 +149,7 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         Task:
         Your response will be a list called entity_resolutions which contains one entry for each entity.
         
-        For each entity, return the id of the entity as id, the name of the entity as name as name, and the duplicate_idx
+        For each entity, return the id of the entity as id, the name of the entity as name, and the duplicate_idx
         as an integer.
         
         - If an entity is a duplicate of one of its duplication_candidates, return the idx of the candidate it is a 
