@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-from pytest import MonkeyPatch
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodicNode
-from graphiti_core.utils.maintenance.edge_operations import resolve_extracted_edge
 
 
 @pytest.fixture
