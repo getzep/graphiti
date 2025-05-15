@@ -27,6 +27,10 @@ class EdgeDuplicate(BaseModel):
         ...,
         description='id of the duplicate fact. If no duplicate facts are found, default to -1.',
     )
+    contradicted_facts: list[int] = Field(
+        ...,
+        description='List of ids of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
+    )
 
 
 class UniqueFact(BaseModel):
@@ -41,11 +45,13 @@ class UniqueFacts(BaseModel):
 class Prompt(Protocol):
     edge: PromptVersion
     edge_list: PromptVersion
+    resolve_edge: PromptVersion
 
 
 class Versions(TypedDict):
     edge: PromptFunction
     edge_list: PromptFunction
+    resolve_edge: PromptFunction
 
 
 def edge(context: dict[str, Any]) -> list[Message]:
@@ -106,4 +112,41 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'edge': edge, 'edge_list': edge_list}
+def resolve_edge(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that de-duplicates facts from fact lists and determines which existing '
+            'facts are contradicted by the new fact.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+        <NEW FACT>
+        {context['new_edge']}
+        </NEW FACT>
+        
+        <EXISTING FACTS>
+        {context['existing_edges']}
+        </EXISTING FACTS>
+        <FACT INVALIDATION CANDIDATES>
+        {context['edge_invalidation_candidates']}
+        </FACT INVALIDATION CANDIDATES>
+        
+
+        Task:
+        If the NEW FACT represents the same factual information as any fact in EXISTING FACTS, return the idx of the duplicate fact.
+        If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return -1.
+        
+        Based on the provided FACT INVALIDATION CANDIDATES and NEW FACT, determine which existing facts the new fact contradicts.
+        Return a list containing all idx's of the facts that are contradicted by the NEW FACT.
+        If there are no contradicted facts, return an empty list.
+
+        Guidelines:
+        1. The facts do not need to be completely identical to be duplicates, they just need to express the same information.
+        """,
+        ),
+    ]
+
+
+versions: Versions = {'edge': edge, 'edge_list': edge_list, 'resolve_edge': resolve_edge}

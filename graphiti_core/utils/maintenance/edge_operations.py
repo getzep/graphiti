@@ -35,9 +35,6 @@ from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
-from graphiti_core.utils.maintenance.temporal_operations import (
-    get_edge_contradictions,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +242,7 @@ async def resolve_extracted_edges(
 
     search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
         get_relevant_edges(driver, extracted_edges, SearchFilters()),
-        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters()),
+        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
     )
 
     related_edges_lists, edge_invalidation_candidates = search_results
@@ -325,11 +322,52 @@ async def resolve_extracted_edge(
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
-    episode: EpisodicNode,
+    episode: EpisodicNode | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, invalidation_candidates = await semaphore_gather(
-        dedupe_extracted_edge(llm_client, extracted_edge, related_edges, episode),
-        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
+    if len(related_edges) == 0 and len(existing_edges) == 0:
+        return extracted_edge, []
+
+    start = time()
+
+    # Prepare context for LLM
+    related_edges_context = [
+        {'id': edge.uuid, 'fact': edge.fact} for i, edge in enumerate(related_edges)
+    ]
+
+    invalidation_edge_candidates_context = [
+        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
+    ]
+
+    context = {
+        'existing_edges': related_edges_context,
+        'new_edge': extracted_edge.fact,
+        'edge_invalidation_candidates': invalidation_edge_candidates_context,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.resolve_edge(context),
+        response_model=EdgeDuplicate,
+        model_size=ModelSize.small,
+    )
+
+    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
+
+    resolved_edge = (
+        related_edges[duplicate_fact_id]
+        if 0 <= duplicate_fact_id < len(related_edges)
+        else extracted_edge
+    )
+
+    if duplicate_fact_id >= 0 and episode is not None:
+        resolved_edge.episodes.append(episode.uuid)
+
+    contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
+
+    invalidation_candidates: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
+
+    end = time()
+    logger.debug(
+        f'Resolved Edge: {extracted_edge.name} is {resolved_edge.name}, in {(end - start) * 1000} ms'
     )
 
     now = utc_now()
