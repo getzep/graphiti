@@ -408,7 +408,7 @@ class GraphitiEmbedderConfig(BaseModel):
             if not self.api_key:
                 return None
 
-            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, model=self.model)
+            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, embedding_model=self.model)
 
             return OpenAIEmbedder(config=embedder_config)
 
