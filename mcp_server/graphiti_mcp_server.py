@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
@@ -458,11 +457,18 @@ class GraphitiConfig(BaseModel):
         # Start with environment configuration
         config = cls.from_env()
 
-        # Apply CLI overrides
+        # Determine group_id with precedence: CLI > Environment Variable > Fallback default
         if args.group_id:
             config.group_id = args.group_id
+            # Logging moved to initialize_server to use the global logger after it's set up
         else:
-            config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
+            env_group_id = os.environ.get('GRAPHITI_DEFAULT_GROUP_ID')
+            if env_group_id:
+                config.group_id = env_group_id
+            else:
+                # Fallback to 'graphiti-default' to match current observed default behavior
+                # or use f'graph_{{uuid.uuid4().hex[:8]}}' for a random default.
+                config.group_id = 'graphiti-default'
 
         config.use_custom_entities = args.use_custom_entities
         config.destroy_graph = args.destroy_graph
@@ -654,7 +660,7 @@ async def process_episode_queue(group_id: str):
 async def add_episode(
     name: str,
     episode_body: str,
-    group_id: str | None = None,
+    group_id: str = '',
     source: str = 'text',
     source_description: str = '',
     uuid: str | None = None,
@@ -728,7 +734,7 @@ async def add_episode(
             source_type = EpisodeType.json
 
         # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        effective_group_id = config.group_id if group_id == '' else group_id
 
         # Cast group_id to str to satisfy type checker
         # The Graphiti client expects a str for group_id, not Optional[str]
@@ -794,10 +800,10 @@ async def add_episode(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: list[str] = Field(default_factory=list),  # noqa: B008
     max_nodes: int = 10,
     center_node_uuid: str | None = None,
-    entity: str = '',  # cursor seems to break with None
+    entity: str = '',
 ) -> NodeSearchResponse | ErrorResponse:
     """Search the Graphiti knowledge graph for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
@@ -819,7 +825,7 @@ async def search_nodes(
     try:
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+            group_ids if group_ids else [config.group_id] if config.group_id else []
         )
 
         # Configure the search
@@ -875,7 +881,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_facts(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: list[str] = Field(default_factory=list),  # noqa: B008
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
@@ -883,7 +889,7 @@ async def search_facts(
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional list of group IDs to filter results. If empty or not provided, uses default.
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
@@ -895,7 +901,7 @@ async def search_facts(
     try:
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+            group_ids if group_ids else [config.group_id] if config.group_id else []
         )
 
         # We've already checked that graphiti_client is not None above
@@ -1015,12 +1021,12 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 @mcp.tool()
 async def get_episodes(
-    group_id: str | None = None, last_n: int = 10
+    group_id: str = '', last_n: int = 10
 ) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
     """Get the most recent episodes for a specific group.
 
     Args:
-        group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
+        group_id: ID of the group to retrieve episodes from. If not provided (i.e. empty string), uses the default group_id.
         last_n: Number of most recent episodes to retrieve (default: 10)
     """
     global graphiti_client
@@ -1030,7 +1036,7 @@ async def get_episodes(
 
     try:
         # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        effective_group_id = config.group_id if group_id == '' else group_id
 
         if not isinstance(effective_group_id, str):
             return {'error': 'Group ID must be a string'}
@@ -1119,6 +1125,9 @@ async def initialize_server() -> MCPConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config
 
+    # DEBUG: Check if .env is loaded correctly for GRAPHITI_DEFAULT_GROUP_ID
+    # logger.info(f"DEBUG: Value of GRAPHITI_DEFAULT_GROUP_ID from env: {os.environ.get('GRAPHITI_DEFAULT_GROUP_ID')}") # REMOVED DEBUG LINE
+
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with optional LLM client'
     )
@@ -1153,11 +1162,15 @@ async def initialize_server() -> MCPConfig:
     # Build configuration from CLI arguments and environment variables
     config = GraphitiConfig.from_cli_and_env(args)
 
-    # Log the group ID configuration
+    # Log the group ID configuration based on how it was set
     if args.group_id:
-        logger.info(f'Using provided group_id: {config.group_id}')
+        logger.info(f'Using group_id from CLI: {config.group_id}')
+    elif os.environ.get('GRAPHITI_DEFAULT_GROUP_ID'):
+        logger.info(f'Using group_id from GRAPHITI_DEFAULT_GROUP_ID env var: {config.group_id}')
     else:
-        logger.info(f'Generated random group_id: {config.group_id}')
+        logger.info(
+            f'No CLI --group-id or GRAPHITI_DEFAULT_GROUP_ID env var. Using default: {config.group_id}'
+        )
 
     # Log entity extraction configuration
     if config.use_custom_entities:

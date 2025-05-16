@@ -623,6 +623,21 @@ files = [
 ]
 
 [[package]]
+name = "click"
+version = "8.1.8"
+description = "Composable command line interface toolkit"
+optional = false
+python-versions = ">=3.7"
+groups = ["main", "dev"]
+files = [
+    {file = "click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2"},
+    {file = "click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 description = "Cross-platform colored terminal text."
@@ -3442,14 +3457,33 @@ version = "1.1.0"
 description = "Read key-value pairs from a .env file and set them as environment variables"
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "python_dotenv-1.1.0-py3-none-any.whl", hash = "sha256:d7c01d9e2293916c18baf562d95698754b0dbbb5e74d457c45d4f6561fb9d55d"},
     {file = "python_dotenv-1.1.0.tar.gz", hash = "sha256:41f90bc6f5f177fb41f53e87666db362025010eb28f60a01c9143bfa33a2b2d5"},
 ]
 
+[package.dependencies]
+click = {version = ">=5.0", optional = true, markers = "extra == \"cli\""}
+
 [package.extras]
 cli = ["click (>=5.0)"]
+
+[[package]]
+name = "python-dotenv-run"
+version = "0.1.4"
+description = "Run command with environment populated by the .env file."
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "python-dotenv-run-0.1.4.tar.gz", hash = "sha256:423a16442499726f7ecacd079d3f5dad43cfec181d39b7dd522ae58d08c58687"},
+    {file = "python_dotenv_run-0.1.4-py2.py3-none-any.whl", hash = "sha256:792391893aaf5236a1a0364f14e42d2d3d9175fa2b3f30b3d8ffee316e6f3005"},
+]
+
+[package.dependencies]
+click = "*"
+python-dotenv = ">=0.7.0"
 
 [[package]]
 name = "python-json-logger"
@@ -5357,4 +5391,4 @@ groq = ["groq"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "4ffa68a8953cb18a1d2a43335cf2187e609659cd414bcd7f65ab285971ba72aa"
+content-hash = "26aed4f9e9cd824fffd91875556a08fe08c7eacd7e8a1cbb497b84cd4acd72ad"
