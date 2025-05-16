@@ -14,13 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 import typing
 from collections import defaultdict
 from datetime import datetime
+from enum import Enum
 from math import ceil
 
+import numpy as np
 from neo4j import AsyncDriver, AsyncManagedTransaction
+from neo4j.time import Date, DateTime, Duration, Time
 from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
@@ -62,6 +66,21 @@ from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dat
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 10
+
+# Types that Neo4j supports as property values
+PRIMITIVE_TYPES = (
+    str,
+    int,
+    float,
+    bool,
+    type(None),
+    bytes,
+    bytearray,
+    DateTime,
+    Date,
+    Time,
+    Duration,
+)
 
 
 class RawEpisode(BaseModel):
@@ -133,7 +152,26 @@ async def add_nodes_and_edges_bulk_tx(
             'created_at': node.created_at,
         }
 
-        entity_data.update(node.attributes or {})
+        # Filter attributes to include only Neo4j-compatible primitive types
+        # or lists of primitives. Make conversion if possible.
+        primitive_attributes: dict[str, Any] = {}
+        if node.attributes:
+            for key, raw_val in node.attributes.items():
+                val = to_neo4j_value(raw_val)
+
+                # Check if value is compatible with Neo4j
+                if (
+                    isinstance(val, PRIMITIVE_TYPES)
+                    or isinstance(val, list)
+                    and all(isinstance(item, PRIMITIVE_TYPES) for item in val)
+                ):
+                    primitive_attributes[key] = val
+                else:
+                    logger.warning(
+                        f"Skipping attribute '{key}' for node {node.uuid}: incompatible type: {type(val)}"
+                    )
+
+        entity_data.update(primitive_attributes)  # Update with filtered attributes
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         nodes.append(entity_data)
 
@@ -449,3 +487,47 @@ def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
     edge_chunks = [chunk for chunk in edge_chunk_map.values()]
 
     return edge_chunks
+
+
+def to_neo4j_value(val: Any) -> Any:
+    """
+    Convert Python values to Neo4j-compatible property values.
+
+    Neo4j properties can only store primitive types or homogeneous arrays.
+    This function performs appropriate conversions to ensure values are compatible:
+    - datetime → Neo4j DateTime
+    - NumPy scalars → Python native types
+    - NumPy arrays → Python lists
+    - Enum values → Strings
+    - Tuples → Lists
+    - Dictionaries → JSON strings
+
+    Args:
+        val: The Python value to convert
+
+    Returns:
+        A Neo4j-compatible representation of the value
+    """
+    # Temporal types
+    if isinstance(val, datetime):
+        return DateTime.from_native(val)
+
+    # NumPy scalar types
+    if isinstance(val, np.generic):
+        return val.item()
+
+    # NumPy arrays
+    if isinstance(val, np.ndarray):
+        return [to_neo4j_value(x) for x in val.tolist()]
+
+    # Enum types
+    if isinstance(val, Enum):
+        return str(val.value)
+
+    # Tuples to lists
+
+    # Dictionaries to JSON strings
+    if isinstance(val, dict):
+        return json.dumps(val, ensure_ascii=False)
+
+    return val
