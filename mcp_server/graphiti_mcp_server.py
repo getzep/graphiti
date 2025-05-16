@@ -301,7 +301,7 @@ class GraphitiLLMConfig(BaseModel):
         if not self.api_key:
             return None
 
-        llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+        llm_client_config = LLMConfig(api_key=self.api_key, model=self.model, small_model=self.model)
 
         # Set temperature
         llm_client_config.temperature = self.temperature
