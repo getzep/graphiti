@@ -79,6 +79,8 @@ from graphiti_core.utils.maintenance.node_operations import (
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
+from openai import AsyncAzureOpenAI
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -145,7 +147,7 @@ class Graphiti:
         else:
             self.llm_client = OpenAIClient()
         if embedder:
-            self.embedder = embedder
+            self.embedder = OpenAIEmbedder(client=embedder)
         else:
             self.embedder = OpenAIEmbedder()
         if cross_encoder:
