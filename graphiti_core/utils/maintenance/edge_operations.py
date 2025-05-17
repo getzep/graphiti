@@ -348,7 +348,6 @@ async def resolve_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode | None = None,
     edge_types: dict[str, BaseModel] | None = None,
-    edge_type_map: dict[tuple[str, str], list[str]] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, []
@@ -412,7 +411,7 @@ async def resolve_extracted_edge(
         edge_attributes_context = {}
 
         edge_attributes_response = await llm_client.generate_response(
-            prompt_library.extract_edges.edge_attributes(edge_attributes_context),
+            prompt_library.extract_edges.extract_attributes(edge_attributes_context),
             response_model=edge_types.get(fact_type),
             model_size=ModelSize.small,
         )
