@@ -273,6 +273,8 @@ class Graphiti:
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
         previous_episode_uuids: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -370,7 +372,9 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                 ),
-                extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
+                extract_edges(
+                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                ),
             )
 
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -380,6 +384,8 @@ class Graphiti:
                     self.clients,
                     edges,
                     episode,
+                    edge_types,
+                    edge_type_map,
                 ),
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types

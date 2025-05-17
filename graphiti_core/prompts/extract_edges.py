@@ -82,12 +82,18 @@ def edge(context: dict[str, Any]) -> list[Message]:
 {context['reference_time']}  # ISO 8601 (UTC); used to resolve relative time mentions
 </REFERENCE_TIME>
 
+<FACT TYPES>
+{context['edge_types']}
+</FACT TYPES>
+
 # TASK
 Extract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.
 Only extract facts that:
 - involve two DISTINCT ENTITIES from the ENTITIES list,
 - are clearly stated or unambiguously implied in the CURRENT MESSAGE,
-- and can be represented as edges in a knowledge graph.
+    and can be represented as edges in a knowledge graph.
+- The FACT TYPES provide a list of the most important types of facts, make sure to extract any facts that
+    could be classified into one of the provided fact types
 
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 

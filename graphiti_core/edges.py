@@ -49,7 +49,9 @@ ENTITY_EDGE_RETURN: LiteralString = """
             e.episodes AS episodes,
             e.expired_at AS expired_at,
             e.valid_at AS valid_at,
-            e.invalid_at AS invalid_at"""
+            e.invalid_at AS invalid_at,
+            properties(e) AS attributes
+            """
 
 
 class Edge(BaseModel, ABC):
@@ -209,6 +211,9 @@ class EntityEdge(Edge):
     invalid_at: datetime | None = Field(
         default=None, description='datetime of when the fact stopped being true'
     )
+    attributes: dict[str, Any] = Field(
+        default={}, description='Additional attributes of the edge. Dependent on edge name'
+    )
 
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
@@ -236,20 +241,26 @@ class EntityEdge(Edge):
         self.fact_embedding = records[0]['fact_embedding']
 
     async def save(self, driver: AsyncDriver):
+        edge_data: dict[str, Any] = {
+            'source_uuid': self.source_node_uuid,
+            'target_uuid': self.target_node_uuid,
+            'uuid': self.uuid,
+            'name': self.name,
+            'group_id': self.group_id,
+            'fact': self.fact,
+            'fact_embedding': self.fact_embedding,
+            'episodes': self.episodes,
+            'created_at': self.created_at,
+            'expired_at': self.expired_at,
+            'valid_at': self.valid_at,
+            'invalid_at': self.invalid_at,
+        }
+
+        edge_data.update(self.attributes or {})
+
         result = await driver.execute_query(
             ENTITY_EDGE_SAVE,
-            source_uuid=self.source_node_uuid,
-            target_uuid=self.target_node_uuid,
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            fact=self.fact,
-            fact_embedding=self.fact_embedding,
-            episodes=self.episodes,
-            created_at=self.created_at,
-            expired_at=self.expired_at,
-            valid_at=self.valid_at,
-            invalid_at=self.invalid_at,
+            edge_data=edge_data,
             database_=DEFAULT_DATABASE,
         )
 
@@ -334,8 +345,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                        MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                        """
+                                            MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                            """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -457,7 +468,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
 
 
 def get_entity_edge_from_record(record: Any) -> EntityEdge:
-    return EntityEdge(
+    edge = EntityEdge(
         uuid=record['uuid'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
@@ -469,7 +480,22 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
+        attributes=record['attributes'],
     )
+
+    edge.attributes.pop('uuid', None)
+    edge.attributes.pop('source_node_uuid', None)
+    edge.attributes.pop('target_node_uuid', None)
+    edge.attributes.pop('fact', None)
+    edge.attributes.pop('name', None)
+    edge.attributes.pop('group_id', None)
+    edge.attributes.pop('episodes', None)
+    edge.attributes.pop('created_at', None)
+    edge.attributes.pop('expired_at', None)
+    edge.attributes.pop('valid_at', None)
+    edge.attributes.pop('invalid_at', None)
+
+    return edge
 
 
 def get_community_edge_from_record(record: Any):
