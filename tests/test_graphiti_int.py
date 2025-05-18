@@ -30,13 +30,13 @@ from graphiti_core.search.search_helpers import search_results_to_context_string
 
 pytestmark = pytest.mark.integration
 
-pytest_plugins = ("pytest_asyncio",)
+pytest_plugins = ('pytest_asyncio',)
 
 load_dotenv()
 
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4j_USER = os.getenv("NEO4J_USER")
-NEO4j_PASSWORD = os.getenv("NEO4J_PASSWORD")
+NEO4J_URI = os.getenv('NEO4J_URI')
+NEO4j_USER = os.getenv('NEO4J_USER')
+NEO4j_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
 
 def setup_logging():
@@ -88,26 +88,26 @@ async def test_graph_integration():
 
     now = datetime.now(timezone.utc)
     episode = EpisodicNode(
-        name="test_episode",
+        name='test_episode',
         labels=[],
         created_at=now,
         valid_at=now,
-        source="message",
-        source_description="conversation message",
-        content="Alice likes Bob",
+        source='message',
+        source_description='conversation message',
+        content='Alice likes Bob',
         entity_edges=[],
-        group_id="test",
+        group_id='test',
     )
 
     alice_node = EntityNode(
-        name="Alice",
+        name='Alice',
         labels=[],
         created_at=now,
-        summary="Alice summary",
-        group_id="test",
+        summary='Alice summary',
+        group_id='test',
     )
 
-    bob_node = EntityNode(name="Bob", labels=[], created_at=now, summary="Bob summary", group_id="test")
+    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary', group_id='test')
 
     await alice_node.generate_name_embedding(embedder)
     await bob_node.generate_name_embedding(embedder)
@@ -117,20 +117,20 @@ async def test_graph_integration():
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now, group_id="test"
+        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now, group_id='test'
     )
 
     entity_edge = EntityEdge(
         source_node_uuid=alice_node.uuid,
         target_node_uuid=bob_node.uuid,
         created_at=now,
-        name="likes",
-        fact="Alice likes Bob",
+        name='likes',
+        fact='Alice likes Bob',
         episodes=[],
         expired_at=now,
         valid_at=now,
         invalid_at=now,
-        group_id="test"
+        group_id='test'
     )
 
     await entity_edge.generate_embedding(embedder)

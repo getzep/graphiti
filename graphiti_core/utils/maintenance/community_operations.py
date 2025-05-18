@@ -40,7 +40,7 @@ async def get_community_clusters(
             database_=DEFAULT_DATABASE,
         )
 
-        group_ids = group_id_values[0]["group_ids"]
+        group_ids = group_id_values[0]['group_ids']
 
     for group_id in group_ids:
         projection: dict[str, list[Neighbor]] = {}
@@ -130,26 +130,26 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
     # Prepare context for LLM
-    context = {"node_summaries": [{"summary": summary} for summary in summary_pair]}
+    context = {'node_summaries': [{'summary': summary} for summary in summary_pair]}
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
     )
 
-    pair_summary = llm_response.get("summary", "")
+    pair_summary = llm_response.get('summary', '')
 
     return pair_summary
 
 
 async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
-    context = {"summary": summary}
+    context = {'summary': summary}
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),
         response_model=SummaryDescription,
     )
 
-    description = llm_response.get("description", "")
+    description = llm_response.get('description', '')
 
     return description
 
@@ -185,7 +185,7 @@ async def build_community(
     community_node = CommunityNode(
         name=name,
         group_id=community_cluster[0].group_id,
-        labels=["Community"],
+        labels=['Community'],
         created_at=now,
         summary=summary,
     )

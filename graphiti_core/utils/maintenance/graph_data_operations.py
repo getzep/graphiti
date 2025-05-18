@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
+from graphiti_core.driver import Driver
 
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -93,7 +94,7 @@ async def build_indices_and_constraints(driver: Driver, delete_existing: bool = 
     )
 
 
-async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
+async def clear_data(driver: Driver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
@@ -167,16 +168,16 @@ async def retrieve_episodes(
     )
     episodes = [
         EpisodicNode(
-            content=record["content"],
+            content=record['content'],
             created_at=datetime.fromtimestamp(
-                record["created_at"].to_native().timestamp(), timezone.utc
+                record['created_at'].to_native().timestamp(), timezone.utc
             ),
-            valid_at=(record["valid_at"].to_native()),
-            uuid=record["uuid"],
-            group_id=record["group_id"],
-            source=EpisodeType.from_str(record["source"]),
-            name=record["name"],
-            source_description=record["source_description"],
+            valid_at=(record['valid_at'].to_native()),
+            uuid=record['uuid'],
+            group_id=record['group_id'],
+            source=EpisodeType.from_str(record['source']),
+            name=record['name'],
+            source_description=record['source_description'],
         )
         for record in result.records
     ]

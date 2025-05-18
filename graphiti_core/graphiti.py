@@ -269,7 +269,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str = "",
+        group_id: str = '',
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
@@ -393,7 +393,7 @@ class Graphiti:
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
             if not self.store_raw_episode_content:
-                episode.content = ""
+                episode.content = ''
 
             await add_nodes_and_edges_bulk(
                 self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges
@@ -410,7 +410,7 @@ class Graphiti:
                     ]
                 )
             end = time()
-            logger.info(f"Completed add_episode in {(end - start) * 1000} ms")
+            logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
             return AddEpisodeResults(episode=episode, nodes=nodes, edges=entity_edges)
 
@@ -520,7 +520,7 @@ class Graphiti:
             edges = await dedupe_edges_bulk(
                 self.driver, self.llm_client, extracted_edges_with_resolved_pointers
             )
-            logger.debug(f"extracted edge length: {len(edges)}")
+            logger.debug(f'extracted edge length: {len(edges)}')
 
             # invalidate edges
 
@@ -528,7 +528,7 @@ class Graphiti:
             await semaphore_gather(*[edge.save(self.driver) for edge in edges])
 
             end = time()
-            logger.info(f"Completed add_episode_bulk in {(end - start) * 1000} ms")
+            logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
 
         except Exception as e:
             raise e

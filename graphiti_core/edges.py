@@ -263,7 +263,7 @@ class EntityEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: AsyncDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
         if len(uuids) == 0:
             return []
 
@@ -318,7 +318,7 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_node_uuid(cls, driver: AsyncDriver, node_uuid: str):
+    async def get_by_node_uuid(cls, driver: Driver, node_uuid: str):
         query: LiteralString = (
             """
                         MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)

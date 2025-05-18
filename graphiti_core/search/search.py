@@ -350,7 +350,7 @@ async def node_search(
 
 
 async def episode_search(
-    driver: AsyncDriver,
+    driver: Driver,
     cross_encoder: CrossEncoderClient,
     query: str,
     _query_vector: list[float],
@@ -398,7 +398,7 @@ async def episode_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
+    driver: Driver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],

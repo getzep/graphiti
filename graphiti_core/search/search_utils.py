@@ -58,22 +58,20 @@ MAX_QUERY_LENGTH = 32
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
-        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids]
-        if group_ids is not None
-        else []
+        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
     )
-    group_ids_filter = ""
+    group_ids_filter = ''
     for f in group_ids_filter_list:
-        group_ids_filter += f if not group_ids_filter else f"OR {f}"
+        group_ids_filter += f if not group_ids_filter else f'OR {f}'
 
-    group_ids_filter += " AND " if group_ids_filter else ""
+    group_ids_filter += ' AND ' if group_ids_filter else ''
 
     lucene_query = lucene_sanitize(query)
     # If the lucene query is too long return no query
-    if len(lucene_query.split(" ")) + len(group_ids or "") >= MAX_QUERY_LENGTH:
-        return ""
+    if len(lucene_query.split(' ')) + len(group_ids or '') >= MAX_QUERY_LENGTH:
+        return ''
 
-    full_query = group_ids_filter + "(" + lucene_query + ")"
+    full_query = group_ids_filter + '(' + lucene_query + ')'
 
     return full_query
 
@@ -112,7 +110,7 @@ async def get_mentioned_nodes(
         """,
         uuids=episode_uuids,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
 
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -137,7 +135,7 @@ async def get_communities_by_nodes(
     """,
         uuids=node_uuids,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
 
     communities = [get_community_node_from_record(record) for record in records]
@@ -154,7 +152,7 @@ async def edge_fulltext_search(
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == "":
+    if fuzzy_query == '':
         return []
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
@@ -191,7 +189,7 @@ async def edge_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -265,7 +263,7 @@ async def edge_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -320,7 +318,7 @@ async def edge_bfs_search(
         depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -337,7 +335,7 @@ async def node_fulltext_search(
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == "":
+    if fuzzy_query == '':
         return []
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
@@ -362,7 +360,7 @@ async def node_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -409,7 +407,7 @@ async def node_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -445,7 +443,7 @@ async def node_bfs_search(
         depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -453,7 +451,7 @@ async def node_bfs_search(
 
 
 async def episode_fulltext_search(
-    driver: AsyncDriver,
+    driver: Driver,
     query: str,
     _search_filter: SearchFilters,
     group_ids: list[str] | None = None,
@@ -495,14 +493,14 @@ async def episode_fulltext_search(
 
 
 async def community_fulltext_search(
-    driver: AsyncDriver,
+    driver: Driver,
     query: str,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids)
-    if fuzzy_query == "":
+    if fuzzy_query == '':
         return []
 
     records, _, _ = await driver.execute_query(
@@ -523,7 +521,7 @@ async def community_fulltext_search(
         group_ids=group_ids,
         limit=limit,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -569,7 +567,7 @@ async def community_similarity_search(
         limit=limit,
         min_score=min_score,
         database_=DEFAULT_DATABASE,
-        routing_="r",
+        routing_='r',
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -579,7 +577,7 @@ async def community_similarity_search(
 async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
-    driver: AsyncDriver,
+    driver: Driver,
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
@@ -646,7 +644,7 @@ async def hybrid_node_search(
     relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
 
     end = time()
-    logger.debug(f"Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms")
+    logger.debug(f'Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms')
     return relevant_nodes
 
 
@@ -807,7 +805,7 @@ async def get_relevant_edges(
 
 
 async def get_edge_invalidation_candidates(
-    driver: AsyncDriver,
+    driver: Driver,
     edges: list[EntityEdge],
     search_filter: SearchFilters,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -888,7 +886,7 @@ def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[st
 
 
 async def node_distance_reranker(
-    driver: AsyncDriver,
+    driver: Driver,
     node_uuids: list[str],
     center_node_uuid: str,
     min_score: float = 0,
@@ -900,13 +898,11 @@ async def node_distance_reranker(
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
     # Find the shortest path to center node
-    query = Query(
-        """
+    query = Query("""
         UNWIND $node_uuids AS node_uuid
         MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: node_uuid})
         RETURN length(p) AS score, node_uuid AS uuid
-        """
-    )
+        """)
 
     path_results, _, _ = await driver.execute_query(
         query,
@@ -916,13 +912,13 @@ async def node_distance_reranker(
     )
 
     for result in path_results:
-        uuid = result["uuid"]
-        score = result["score"]
+        uuid = result['uuid']
+        score = result['score']
         scores[uuid] = score
 
     for uuid in filtered_uuids:
         if uuid not in scores:
-            scores[uuid] = float("inf")
+            scores[uuid] = float('inf')
 
     # rerank on shortest distance
     filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
@@ -936,20 +932,18 @@ async def node_distance_reranker(
 
 
 async def episode_mentions_reranker(
-    driver: AsyncDriver, node_uuids: list[list[str]], min_score: float = 0
+    driver: Driver, node_uuids: list[list[str]], min_score: float = 0
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(node_uuids)
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
-    query = Query(
-        """
+    query = Query("""
         UNWIND $node_uuids AS node_uuid 
         MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
         RETURN count(*) AS score, n.uuid AS uuid
-        """
-    )
+        """)
 
     results, _, _ = await driver.execute_query(
         query,
@@ -958,7 +952,7 @@ async def episode_mentions_reranker(
     )
 
     for result in results:
-        scores[result["uuid"]] = result["score"]
+        scores[result['uuid']] = result['score']
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])

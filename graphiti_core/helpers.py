@@ -36,10 +36,6 @@ RUNTIME_QUERY: LiteralString = (
     'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
 )
 
-RUNTIME_QUERY: LiteralString = (
-    'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
-)
-
 
 def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None:
     return (
@@ -54,31 +50,31 @@ def lucene_sanitize(query: str) -> str:
     # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
     escape_map = str.maketrans(
         {
-            "+": r"\+",
-            "-": r"\-",
-            "&": r"\&",
-            "|": r"\|",
-            "!": r"\!",
-            "(": r"\(",
-            ")": r"\)",
-            "{": r"\{",
-            "}": r"\}",
-            "[": r"\[",
-            "]": r"\]",
-            "^": r"\^",
-            '"': r"\"",
-            "~": r"\~",
-            "*": r"\*",
-            "?": r"\?",
-            ":": r"\:",
-            "\\": r"\\",
-            "/": r"\/",
-            "O": r"\O",
-            "R": r"\R",
-            "N": r"\N",
-            "T": r"\T",
-            "A": r"\A",
-            "D": r"\D",
+            '+': r'\+',
+            '-': r'\-',
+            '&': r'\&',
+            '|': r'\|',
+            '!': r'\!',
+            '(': r'\(',
+            ')': r'\)',
+            '{': r'\{',
+            '}': r'\}',
+            '[': r'\[',
+            ']': r'\]',
+            '^': r'\^',
+            '"': r'\"',
+            '~': r'\~',
+            '*': r'\*',
+            '?': r'\?',
+            ':': r'\:',
+            '\\': r'\\',
+            '/': r'\/',
+            'O': r'\O',
+            'R': r'\R',
+            'N': r'\N',
+            'T': r'\T',
+            'A': r'\A',
+            'D': r'\D',
         }
     )
 

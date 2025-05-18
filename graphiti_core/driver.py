@@ -28,9 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 class GraphClientSession(ABC):
-
     @abstractmethod
-    def run(self, query: str, **kwargs: any) -> Any:
+    async def run(self, query: str, **kwargs: Any) -> Any:
         raise NotImplementedError()
 
 

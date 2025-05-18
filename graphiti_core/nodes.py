@@ -264,7 +264,7 @@ class EpisodicNode(Node):
         return episodes
 
     @classmethod
-    async def get_by_entity_node_uuid(cls, driver: AsyncDriver, entity_node_uuid: str):
+    async def get_by_entity_node_uuid(cls, driver: Driver, entity_node_uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
@@ -305,7 +305,7 @@ class EntityNode(Node):
 
         return self.name_embedding
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         entity_data: dict[str, Any] = {
             'uuid': self.uuid,
             'name': self.name,
@@ -329,7 +329,7 @@ class EntityNode(Node):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: AsyncDriver, uuid: str):
+    async def get_by_uuid(cls, driver: Driver, uuid: str):
         query = (
             """
                                     MATCH (n:Entity {uuid: $uuid})
