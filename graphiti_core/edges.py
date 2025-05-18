@@ -221,7 +221,7 @@ class EntityEdge(Edge):
 
         return self.fact_embedding
 
-    async def load_fact_embedding(self, driver: AsyncDriver):
+    async def load_fact_embedding(self, driver: Driver):
         query: LiteralString = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
@@ -235,7 +235,7 @@ class EntityEdge(Edge):
 
         self.fact_embedding = records[0]['fact_embedding']
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         result = await driver.execute_query(
             ENTITY_EDGE_SAVE,
             source_uuid=self.source_node_uuid,

@@ -312,6 +312,9 @@ class Driver:
 
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self._driver.delete_all_indexes(database_)
+    
+    def session(self, database: str) -> GraphClientSession:
+        return self._driver.session(database)
 
     def create_node_index(
         self,

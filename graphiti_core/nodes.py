@@ -304,7 +304,7 @@ class EntityNode(Node):
 
         return self.name_embedding
 
-    async def load_name_embedding(self, driver: AsyncDriver):
+    async def load_name_embedding(self, driver: Driver):
         query: LiteralString = """
             MATCH (n:Entity {uuid: $uuid})
             RETURN n.name_embedding AS name_embedding
@@ -318,7 +318,7 @@ class EntityNode(Node):
 
         self.name_embedding = records[0]['name_embedding']
 
-    async def save(self, driver: AsyncDriver):
+    async def save(self, driver: Driver):
         entity_data: dict[str, Any] = {
             'uuid': self.uuid,
             'name': self.name,
@@ -441,7 +441,7 @@ class CommunityNode(Node):
 
         return self.name_embedding
 
-    async def load_name_embedding(self, driver: AsyncDriver):
+    async def load_name_embedding(self, driver: Driver):
         query: LiteralString = """
             MATCH (c:Community {uuid: $uuid})
             RETURN c.name_embedding AS name_embedding

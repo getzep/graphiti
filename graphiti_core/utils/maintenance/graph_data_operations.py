@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 from datetime import datetime, timezone
+import pdb
 
 from typing_extensions import LiteralString
 from graphiti_core.driver import Driver
@@ -98,15 +99,18 @@ async def clear_data(driver: Driver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
+            pdb.set_trace()
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
+            pdb.set_trace()
             await tx.run(
                 'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
                 group_ids=group_ids,
             )
-
+        pdb.set_trace()
         if group_ids is None:
+            pdb.set_trace()
             await session.execute_write(delete_all)
         else:
             await session.execute_write(delete_group_ids)
