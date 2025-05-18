@@ -119,6 +119,7 @@ async def test_resolve_extracted_edge_no_changes(
         mock_extracted_edge,
         mock_related_edges,
         mock_existing_edges,
+        mock_current_episode,
     )
 
     assert resolved_edge.uuid == mock_extracted_edge.uuid
@@ -170,6 +171,7 @@ async def test_resolve_extracted_edge_with_invalidation(
         mock_extracted_edge,
         mock_related_edges,
         mock_existing_edges,
+        mock_current_episode,
     )
 
     assert resolved_edge.uuid == mock_extracted_edge.uuid

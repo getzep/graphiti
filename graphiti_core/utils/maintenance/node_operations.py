@@ -72,7 +72,6 @@ async def extract_nodes(
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
-    embedder = clients.embedder
     llm_response = {}
     custom_prompt = ''
     entities_missed = True
@@ -165,8 +164,6 @@ async def extract_nodes(
         extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
-    await create_entity_node_embeddings(embedder, extracted_nodes)
-
     logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
     return extracted_nodes
 
@@ -235,7 +232,6 @@ async def resolve_extracted_nodes(
             search(
                 clients=clients,
                 query=node.name,
-                query_vector=node.name_embedding,
                 group_ids=[node.group_id],
                 search_filter=SearchFilters(),
                 config=NODE_HYBRID_SEARCH_RRF,
@@ -294,7 +290,6 @@ async def resolve_extracted_node(
                 'id': i,
                 'name': node.name,
                 'entity_types': node.labels,
-                'summary': node.summary,
             },
             **node.attributes,
         }
@@ -388,7 +383,7 @@ async def extract_attributes_from_node(
         'summary': (
             str,
             Field(
-                description='Summary containing the important information about the entity. Under 500 words',
+                description='Summary containing the important information about the entity. Under 250 words',
             ),
         )
     }
@@ -440,10 +435,7 @@ async def dedupe_node_list(
         node_map[node.uuid] = node
 
     # Prepare context for LLM
-    nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary}.update(node.attributes)
-        for node in nodes
-    ]
+    nodes_context = [{'uuid': node.uuid, 'name': node.name, **node.attributes} for node in nodes]
 
     context = {
         'nodes': nodes_context,
