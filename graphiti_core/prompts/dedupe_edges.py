@@ -31,7 +31,7 @@ class EdgeDuplicate(BaseModel):
         ...,
         description='List of ids of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
     )
-    fact_type: str = Field(..., description='One of the provided fact_Types or DEFAULT')
+    fact_type: str = Field(..., description='One of the provided fact types or DEFAULT')
 
 
 class UniqueFact(BaseModel):
