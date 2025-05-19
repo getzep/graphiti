@@ -376,7 +376,7 @@ async def resolve_extracted_edge(
     extracted_edge: EntityEdge,
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
-    episode: EpisodicNode | None = None,
+    episode: EpisodicNode,
     edge_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:

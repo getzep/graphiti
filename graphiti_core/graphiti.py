@@ -700,7 +700,17 @@ class Graphiti:
         )[0]
 
         resolved_edge, invalidated_edges = await resolve_extracted_edge(
-            self.llm_client, updated_edge, related_edges, existing_edges
+            self.llm_client,
+            updated_edge,
+            related_edges,
+            existing_edges,
+            EpisodicNode(
+                source=EpisodeType.text,
+                source_description='',
+                content='',
+                valid_at=edge.valid_at,
+                entity_edges=[],
+            ),
         )
 
         await add_nodes_and_edges_bulk(
