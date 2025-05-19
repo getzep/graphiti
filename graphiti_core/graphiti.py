@@ -357,6 +357,13 @@ class Graphiti:
                 )
             )
 
+            # Create default edge type map
+            edge_type_map_default = (
+                {('Entity', 'Entity'): list(edge_types.keys())}
+                if edge_types is not None
+                else {('Entity', 'Entity'): []}
+            )
+
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
@@ -384,8 +391,9 @@ class Graphiti:
                     self.clients,
                     edges,
                     episode,
-                    edge_types,
-                    edge_type_map,
+                    nodes,
+                    edge_types or {},
+                    edge_type_map or edge_type_map_default,
                 ),
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
