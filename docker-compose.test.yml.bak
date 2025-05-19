@@ -2,10 +2,6 @@ version: '3.8'
 
 services:
   graph:
-    security_opt:
-      - no-new-privileges:true
-    security_opt:
-      - no-new-privileges:true
     image: graphiti-service:${GITHUB_SHA}
     ports:
       - "8000:8000"
