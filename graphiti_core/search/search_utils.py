@@ -174,7 +174,8 @@ async def edge_fulltext_search(
                      r.episodes AS episodes,
                      r.expired_at AS expired_at,
                      r.valid_at AS valid_at,
-                     r.invalid_at AS invalid_at
+                     r.invalid_at AS invalid_at,
+                     properties(r) AS attributes
                  ORDER BY score DESC LIMIT $limit
                  """
     )
@@ -243,7 +244,8 @@ async def edge_similarity_search(
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
                 ORDER BY score DESC
                 LIMIT $limit
         """
@@ -301,7 +303,8 @@ async def edge_bfs_search(
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
                 LIMIT $limit
         """
     )
@@ -337,10 +340,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                                                YIELD node AS n, score
-                                                                                WHERE n:Entity
-                                                                                """
+                                                                                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                                        YIELD node AS n, score
+                                                                                        WHERE n:Entity
+                                                                                        """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -771,7 +774,8 @@ async def get_relevant_edges(
                     episodes: e.episodes,
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
-                    invalid_at: e.invalid_at
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )
@@ -837,7 +841,8 @@ async def get_edge_invalidation_candidates(
                     episodes: e.episodes,
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
-                    invalid_at: e.invalid_at
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )

@@ -31,6 +31,7 @@ class EdgeDuplicate(BaseModel):
         ...,
         description='List of ids of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
     )
+    fact_type: str = Field(..., description='One of the provided fact types or DEFAULT')
 
 
 class UniqueFact(BaseModel):
@@ -133,10 +134,17 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         {context['edge_invalidation_candidates']}
         </FACT INVALIDATION CANDIDATES>
         
+        <FACT TYPES>
+        {context['edge_types']}
+        </FACT TYPES>
+        
 
         Task:
         If the NEW FACT represents the same factual information as any fact in EXISTING FACTS, return the idx of the duplicate fact.
         If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return -1.
+        
+        Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
+        Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
         
         Based on the provided FACT INVALIDATION CANDIDATES and NEW FACT, determine which existing facts the new fact contradicts.
         Return a list containing all idx's of the facts that are contradicted by the NEW FACT.

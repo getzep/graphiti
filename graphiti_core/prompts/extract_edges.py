@@ -48,11 +48,13 @@ class MissingFacts(BaseModel):
 class Prompt(Protocol):
     edge: PromptVersion
     reflexion: PromptVersion
+    extract_attributes: PromptVersion
 
 
 class Versions(TypedDict):
     edge: PromptFunction
     reflexion: PromptFunction
+    extract_attributes: PromptFunction
 
 
 def edge(context: dict[str, Any]) -> list[Message]:
@@ -82,12 +84,18 @@ def edge(context: dict[str, Any]) -> list[Message]:
 {context['reference_time']}  # ISO 8601 (UTC); used to resolve relative time mentions
 </REFERENCE_TIME>
 
+<FACT TYPES>
+{context['edge_types']}
+</FACT TYPES>
+
 # TASK
 Extract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.
 Only extract facts that:
 - involve two DISTINCT ENTITIES from the ENTITIES list,
 - are clearly stated or unambiguously implied in the CURRENT MESSAGE,
-- and can be represented as edges in a knowledge graph.
+    and can be represented as edges in a knowledge graph.
+- The FACT TYPES provide a list of the most important types of facts, make sure to extract any facts that
+    could be classified into one of the provided fact types
 
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 
@@ -145,4 +153,40 @@ determine if any facts haven't been extracted.
     ]
 
 
-versions: Versions = {'edge': edge, 'reflexion': reflexion}
+def extract_attributes(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts fact properties from the provided text.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+
+        <MESSAGE>
+        {json.dumps(context['episode_content'], indent=2)}
+        </MESSAGE>
+        <REFERENCE TIME>
+        {context['reference_time']}
+        </REFERENCE TIME>
+
+        Given the above MESSAGE, its REFERENCE TIME, and the following FACT, update any of its attributes based on the information provided
+        in MESSAGE. Use the provided attribute descriptions to better understand how each attribute should be determined.
+
+        Guidelines:
+        1. Do not hallucinate entity property values if they cannot be found in the current context.
+        2. Only use the provided MESSAGES and FACT to set attribute values.
+
+        <FACT>
+        {context['fact']}
+        </FACT>
+        """,
+        ),
+    ]
+
+
+versions: Versions = {
+    'edge': edge,
+    'reflexion': reflexion,
+    'extract_attributes': extract_attributes,
+}

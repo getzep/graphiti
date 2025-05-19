@@ -273,6 +273,8 @@ class Graphiti:
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
         previous_episode_uuids: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -355,6 +357,13 @@ class Graphiti:
                 )
             )
 
+            # Create default edge type map
+            edge_type_map_default = (
+                {('Entity', 'Entity'): list(edge_types.keys())}
+                if edge_types is not None
+                else {('Entity', 'Entity'): []}
+            )
+
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
@@ -370,7 +379,9 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                 ),
-                extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
+                extract_edges(
+                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                ),
             )
 
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -380,6 +391,9 @@ class Graphiti:
                     self.clients,
                     edges,
                     episode,
+                    nodes,
+                    edge_types or {},
+                    edge_type_map or edge_type_map_default,
                 ),
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
@@ -686,7 +700,19 @@ class Graphiti:
         )[0]
 
         resolved_edge, invalidated_edges = await resolve_extracted_edge(
-            self.llm_client, updated_edge, related_edges, existing_edges
+            self.llm_client,
+            updated_edge,
+            related_edges,
+            existing_edges,
+            EpisodicNode(
+                name='',
+                source=EpisodeType.text,
+                source_description='',
+                content='',
+                valid_at=edge.valid_at or utc_now(),
+                entity_edges=[],
+                group_id=edge.group_id,
+            ),
         )
 
         await add_nodes_and_edges_bulk(

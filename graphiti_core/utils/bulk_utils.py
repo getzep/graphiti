@@ -137,16 +137,34 @@ async def add_nodes_and_edges_bulk_tx(
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         nodes.append(entity_data)
 
+    edges: list[dict[str, Any]] = []
     for edge in entity_edges:
         if edge.fact_embedding is None:
             await edge.generate_embedding(embedder)
+        edge_data: dict[str, Any] = {
+            'uuid': edge.uuid,
+            'source_node_uuid': edge.source_node_uuid,
+            'target_node_uuid': edge.target_node_uuid,
+            'name': edge.name,
+            'fact': edge.fact,
+            'fact_embedding': edge.fact_embedding,
+            'group_id': edge.group_id,
+            'episodes': edge.episodes,
+            'created_at': edge.created_at,
+            'expired_at': edge.expired_at,
+            'valid_at': edge.valid_at,
+            'invalid_at': edge.invalid_at,
+        }
+
+        edge_data.update(edge.attributes or {})
+        edges.append(edge_data)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
     await tx.run(
         EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
     )
-    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[edge.model_dump() for edge in entity_edges])
+    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=edges)
 
 
 async def extract_nodes_and_edges_bulk(
