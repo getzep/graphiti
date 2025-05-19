@@ -1806,19 +1806,19 @@ tiktoken = ">=0.7,<1"
 
 [[package]]
 name = "langgraph"
-version = "0.4.1"
+version = "0.4.5"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "langgraph-0.4.1-py3-none-any.whl", hash = "sha256:ad0a5fb4707ec46eb69a9905d629e3712ac14d58bd41fc63df18502dbb8e44b9"},
-    {file = "langgraph-0.4.1.tar.gz", hash = "sha256:c6de009e638c3128232e8defa6e9a3218c03bcc2348ec7f06fba23ffcef4b98d"},
+    {file = "langgraph-0.4.5-py3-none-any.whl", hash = "sha256:73f36caae55137c2bdb2a6c59661f0ae29c1516a0d1f4ad4975ad3862865a979"},
+    {file = "langgraph-0.4.5.tar.gz", hash = "sha256:08a8c6577b09cda4e0c16712e762927f00930dabbc7fe235562985ad85891349"},
 ]
 
 [package.dependencies]
 langchain-core = {version = ">=0.1", markers = "python_version < \"4.0\""}
-langgraph-checkpoint = ">=2.0.10,<3.0.0"
+langgraph-checkpoint = ">=2.0.26,<3.0.0"
 langgraph-prebuilt = {version = ">=0.1.8", markers = "python_version < \"4.0\""}
 langgraph-sdk = {version = ">=0.1.42", markers = "python_version < \"4.0\""}
 pydantic = ">=2.7.4"
@@ -1826,18 +1826,18 @@ xxhash = ">=3.5.0,<4.0.0"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.24"
+version = "2.0.26"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
-python-versions = "<4.0.0,>=3.9.0"
+python-versions = ">=3.9"
 groups = ["dev"]
 files = [
-    {file = "langgraph_checkpoint-2.0.24-py3-none-any.whl", hash = "sha256:3836e2909ef2387d1fa8d04ee3e2a353f980d519fd6c649af352676dc73d66b8"},
-    {file = "langgraph_checkpoint-2.0.24.tar.gz", hash = "sha256:9596dad332344e7e871257be464df8a07c2e9bac66143081b11b9422b0167e5b"},
+    {file = "langgraph_checkpoint-2.0.26-py3-none-any.whl", hash = "sha256:ad4907858ed320a208e14ac037e4b9244ec1cb5aa54570518166ae8b25752cec"},
+    {file = "langgraph_checkpoint-2.0.26.tar.gz", hash = "sha256:2b800195532d5efb079db9754f037281225ae175f7a395523f4bf41223cbc9d6"},
 ]
 
 [package.dependencies]
-langchain-core = ">=0.2.38,<0.4"
+langchain-core = {version = ">=0.2.38", markers = "python_version < \"4.0\""}
 ormsgpack = ">=1.8.0,<2.0.0"
 
 [[package]]
