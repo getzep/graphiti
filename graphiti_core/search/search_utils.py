@@ -340,10 +340,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                                                    YIELD node AS n, score
-                                                                                    WHERE n:Entity
-                                                                                    """
+                                                                                        CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                                        YIELD node AS n, score
+                                                                                        WHERE n:Entity
+                                                                                        """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -775,7 +775,7 @@ async def get_relevant_edges(
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
                     invalid_at: e.invalid_at,
-                    attributes: properties(e),
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )
@@ -842,7 +842,7 @@ async def get_edge_invalidation_candidates(
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
                     invalid_at: e.invalid_at,
-                    attributes: properties(e),
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )

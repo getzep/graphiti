@@ -284,16 +284,17 @@ async def resolve_extracted_edges(
             for target_label in target_node_labels
         ]
 
-        extracted_edge_types = []
+        extracted_edge_types = {}
         for label_tuple in label_tuples:
-            extracted_edge_types.extend(edge_type_map.get(label_tuple, []))
+            type_names = edge_type_map.get(label_tuple, [])
+            for type_name in type_names:
+                type_model = edge_types.get(type_name)
+                if type_model is None:
+                    continue
 
-        for type_name in extracted_edge_types:
-            type_model = edge_types.get(type_name)
-            if type_model is None:
-                continue
+                extracted_edge_types[type_name] = type_model
 
-            edge_types_lst.append({type_name: type_model})
+        edge_types_lst.append(extracted_edge_types)
 
     # resolve edges with related edges in the graph and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
