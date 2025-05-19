@@ -157,29 +157,29 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts entity properties from the provided text.',
+            content='You are a helpful assistant that extracts fact properties from the provided text.',
         ),
         Message(
             role='user',
             content=f"""
 
-        <MESSAGES>
-        {json.dumps(context['previous_episodes'], indent=2)}
+        <MESSAGE>
         {json.dumps(context['episode_content'], indent=2)}
-        </MESSAGES>
+        </MESSAGE>
+        <REFERENCE TIME>
+        {context['reference_time']}
+        </REFERENCE TIME>
 
-        Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
-        in MESSAGES. Use the provided attribute descriptions to better understand how each attribute should be determined.
+        Given the above MESSAGE, its REFERENCE TIME, and the following FACT, update any of its attributes based on the information provided
+        in MESSAGE. Use the provided attribute descriptions to better understand how each attribute should be determined.
 
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
-        2. Only use the provided MESSAGES and ENTITY to set attribute values.
-        3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
-            Summaries must be no longer than 250 words.
+        2. Only use the provided MESSAGES and FACT to set attribute values.
 
-        <ENTITY>
-        {context['node']}
-        </ENTITY>
+        <FACT>
+        {context['fact']}
+        </FACT>
         """,
         ),
     ]

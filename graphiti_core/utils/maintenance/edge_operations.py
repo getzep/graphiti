@@ -42,9 +42,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    entity_nodes: list[EntityNode],
-    episode: EpisodicNode,
-    created_at: datetime,
+        entity_nodes: list[EntityNode],
+        episode: EpisodicNode,
+        created_at: datetime,
 ) -> list[EpisodicEdge]:
     episodic_edges: list[EpisodicEdge] = [
         EpisodicEdge(
@@ -62,9 +62,9 @@ def build_episodic_edges(
 
 
 def build_community_edges(
-    entity_nodes: list[EntityNode],
-    community_node: CommunityNode,
-    created_at: datetime,
+        entity_nodes: list[EntityNode],
+        community_node: CommunityNode,
+        created_at: datetime,
 ) -> list[CommunityEdge]:
     edges: list[CommunityEdge] = [
         CommunityEdge(
@@ -80,12 +80,12 @@ def build_community_edges(
 
 
 async def extract_edges(
-    clients: GraphitiClients,
-    episode: EpisodicNode,
-    nodes: list[EntityNode],
-    previous_episodes: list[EpisodicNode],
-    group_id: str = '',
-    edge_types: dict[str, BaseModel] | None = None,
+        clients: GraphitiClients,
+        episode: EpisodicNode,
+        nodes: list[EntityNode],
+        previous_episodes: list[EpisodicNode],
+        group_id: str = '',
+        edge_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -202,9 +202,9 @@ async def extract_edges(
 
 
 async def dedupe_extracted_edges(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        existing_edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     # Create edge map
     edge_map: dict[str, EntityEdge] = {}
@@ -246,11 +246,11 @@ async def dedupe_extracted_edges(
 
 
 async def resolve_extracted_edges(
-    clients: GraphitiClients,
-    extracted_edges: list[EntityEdge],
-    episode: EpisodicNode,
-    edge_types: dict[str, BaseModel] | None = None,
-    edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        clients: GraphitiClients,
+        extracted_edges: list[EntityEdge],
+        episode: EpisodicNode,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
@@ -309,7 +309,7 @@ async def resolve_extracted_edges(
 
 
 def resolve_edge_contradictions(
-    resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
+        resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
     if len(invalidation_candidates) == 0:
         return []
@@ -319,20 +319,20 @@ def resolve_edge_contradictions(
     for edge in invalidation_candidates:
         # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
         if (
-            edge.invalid_at is not None
-            and resolved_edge.valid_at is not None
-            and edge.invalid_at <= resolved_edge.valid_at
+                edge.invalid_at is not None
+                and resolved_edge.valid_at is not None
+                and edge.invalid_at <= resolved_edge.valid_at
         ) or (
-            edge.valid_at is not None
-            and resolved_edge.invalid_at is not None
-            and resolved_edge.invalid_at <= edge.valid_at
+                edge.valid_at is not None
+                and resolved_edge.invalid_at is not None
+                and resolved_edge.invalid_at <= edge.valid_at
         ):
             continue
         # New edge invalidates edge
         elif (
-            edge.valid_at is not None
-            and resolved_edge.valid_at is not None
-            and edge.valid_at < resolved_edge.valid_at
+                edge.valid_at is not None
+                and resolved_edge.valid_at is not None
+                and edge.valid_at < resolved_edge.valid_at
         ):
             edge.invalid_at = resolved_edge.valid_at
             edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
@@ -342,12 +342,12 @@ def resolve_edge_contradictions(
 
 
 async def resolve_extracted_edge(
-    llm_client: LLMClient,
-    extracted_edge: EntityEdge,
-    related_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
-    episode: EpisodicNode | None = None,
-    edge_types: dict[str, BaseModel] | None = None,
+        llm_client: LLMClient,
+        extracted_edge: EntityEdge,
+        related_edges: list[EntityEdge],
+        existing_edges: list[EntityEdge],
+        episode: EpisodicNode | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, []
@@ -405,16 +405,24 @@ async def resolve_extracted_edge(
     invalidation_candidates: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
 
     fact_type: str = llm_response.get('fact_type')
-    if fact_type != 'DEFAULT' and edge_types is not None:
+    if fact_type.upper() != 'DEFAULT' and edge_types is not None:
         resolved_edge.name = fact_type
 
-        edge_attributes_context = {}
+        edge_attributes_context = {
+            'message': episode.content,
+            'reference_time': episode.valid_at,
+            'fact': resolved_edge.fact,
+        }
+
+        edge_model = edge_types.get(fact_type)
 
         edge_attributes_response = await llm_client.generate_response(
             prompt_library.extract_edges.extract_attributes(edge_attributes_context),
-            response_model=edge_types.get(fact_type),
+            response_model=edge_model,
             model_size=ModelSize.small,
         )
+
+        resolved_edge.attributes = edge_attributes_response
 
     end = time()
     logger.debug(
@@ -431,11 +439,11 @@ async def resolve_extracted_edge(
         invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
         for candidate in invalidation_candidates:
             if (
-                candidate.valid_at
-                and resolved_edge.valid_at
-                and candidate.valid_at.tzinfo
-                and resolved_edge.valid_at.tzinfo
-                and candidate.valid_at > resolved_edge.valid_at
+                    candidate.valid_at
+                    and resolved_edge.valid_at
+                    and candidate.valid_at.tzinfo
+                    and resolved_edge.valid_at.tzinfo
+                    and candidate.valid_at > resolved_edge.valid_at
             ):
                 # Expire new edge since we have information about more recent events
                 resolved_edge.invalid_at = candidate.valid_at
@@ -449,10 +457,10 @@ async def resolve_extracted_edge(
 
 
 async def dedupe_extracted_edge(
-    llm_client: LLMClient,
-    extracted_edge: EntityEdge,
-    related_edges: list[EntityEdge],
-    episode: EpisodicNode | None = None,
+        llm_client: LLMClient,
+        extracted_edge: EntityEdge,
+        related_edges: list[EntityEdge],
+        episode: EpisodicNode | None = None,
 ) -> EntityEdge:
     if len(related_edges) == 0:
         return extracted_edge
@@ -499,8 +507,8 @@ async def dedupe_extracted_edge(
 
 
 async def dedupe_edge_list(
-    llm_client: LLMClient,
-    edges: list[EntityEdge],
+        llm_client: LLMClient,
+        edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     start = time()
 
