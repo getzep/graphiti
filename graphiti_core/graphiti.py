@@ -705,11 +705,13 @@ class Graphiti:
             related_edges,
             existing_edges,
             EpisodicNode(
+                name='',
                 source=EpisodeType.text,
                 source_description='',
                 content='',
-                valid_at=edge.valid_at,
+                valid_at=edge.valid_at or utc_now(),
                 entity_edges=[],
+                group_id=edge.group_id,
             ),
         )
 
