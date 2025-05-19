@@ -144,7 +144,7 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return -1.
         
         Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
-        Return the fact type as fact_Type or DEFAULT if NEW FACT is not one of the FACT TYPES.
+        Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
         
         Based on the provided FACT INVALIDATION CANDIDATES and NEW FACT, determine which existing facts the new fact contradicts.
         Return a list containing all idx's of the facts that are contradicted by the NEW FACT.
