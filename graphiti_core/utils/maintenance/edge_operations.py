@@ -434,7 +434,7 @@ async def resolve_extracted_edge(
 
     invalidation_candidates: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
 
-    fact_type: str = llm_response.get('fact_type')
+    fact_type: str = str(llm_response.get('fact_type'))
     if fact_type.upper() != 'DEFAULT' and edge_types is not None:
         resolved_edge.name = fact_type
 
@@ -448,7 +448,7 @@ async def resolve_extracted_edge(
 
         edge_attributes_response = await llm_client.generate_response(
             prompt_library.extract_edges.extract_attributes(edge_attributes_context),
-            response_model=edge_model,
+            response_model=edge_model,  # type: ignore
             model_size=ModelSize.small,
         )
 
