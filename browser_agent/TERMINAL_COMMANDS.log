@@ -1,0 +1,70 @@
+# Terminal Commands Used in Browser Agent Development
+
+## Git Commands
+
+# Create branch
+git checkout -b browser-agent-feature
+
+# Check status
+git status
+
+# Add files
+git add browser_agent/
+git add server/graph_service/routers/browser_agent.py
+git add server/graph_service/main.py
+
+# Commit changes
+git commit -m "Add browser agent feature"
+
+# Push to GitHub
+git push origin browser-agent-feature
+
+# Add project requirements document
+git add browser_agent/PROJECT_REQUIREMENTS.md
+git commit -m "Add interactive project requirements document"
+git push origin browser-agent-feature
+
+# Update project requirements
+git add browser_agent/PROJECT_REQUIREMENTS.md
+git commit -m "Update project requirements with verification criteria and interactive tracking"
+git push origin browser-agent-feature
+
+## GitHub API Commands
+
+# Create pull request
+curl -X POST "https://api.github.com/repos/tmdcpro/graphiti/pulls" \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -d '{
+        "title":"Add Browser Agent Feature for Web Data Extraction",
+        "head":"browser-agent-feature",
+        "base":"main",
+        "draft":true,
+        "body":"## Browser Agent Feature\n\nThis PR adds a browser extension that allows users to extract, categorize, and save web page data directly to their Graphiti knowledge graph.\n\n### Features\n\n- Chrome browser extension for data extraction\n- AI-powered categorization of web content\n- Direct integration with Graphiti knowledge graph\n- Customizable semantic categorization\n- User-friendly interface for data selection"
+    }'
+
+# Update pull request description
+curl -X PATCH "https://api.github.com/repos/tmdcpro/graphiti/pulls/1" \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "body": "## Browser Agent Feature\n\nThis PR adds a browser extension that allows users to extract, categorize, and save web page data directly to their Graphiti knowledge graph.\n\n### Features\n\n- Chrome browser extension for data extraction\n- AI-powered categorization of web content\n- Direct integration with Graphiti knowledge graph\n- Customizable semantic categorization\n- User-friendly interface for data selection\n\n### Implementation\n\n- Browser extension with popup UI, content scripts, and background service\n- Server-side API endpoints for browser agent communication\n- Integration with Graphiti knowledge graph\n- Comprehensive documentation and testing utilities\n\n### Added Files\n\n- `/browser_agent/`: Browser extension implementation\n- `/server/graph_service/routers/browser_agent.py`: Server API endpoints\n- `/browser_agent/PROJECT_REQUIREMENTS.md`: Detailed project requirements with verification criteria\n\n### Testing\n\nThe browser agent has been tested with various websites and content types. The API endpoints have been verified to work correctly with the browser extension.\n\n### Documentation\n\nDetailed documentation is provided in the README.md and FEATURE_README.md files. The PROJECT_REQUIREMENTS.md file contains a comprehensive list of tasks, subtasks, and deliverables with verification criteria and tests."
+    }'
+
+## File Operations
+
+# Create directories
+mkdir -p browser_agent/icons
+
+# Create files
+# (Multiple file creation operations for manifest.json, popup.html, etc.)
+
+## Verification Commands
+
+# Check directory structure
+ls -la browser_agent/
+
+# Verify file contents
+cat browser_agent/manifest.json
+
+# Check git history
+git log --pretty=format:"%h %ad | %s%d [%an]" --graph --date=short browser-agent-feature

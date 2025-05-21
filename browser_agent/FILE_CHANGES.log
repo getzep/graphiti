@@ -1,0 +1,17 @@
+A	browser_agent/DELIVERABLES.md
+A	browser_agent/FEATURE_README.md
+A	browser_agent/PROJECT_REQUIREMENTS.md
+A	browser_agent/README.md
+A	browser_agent/TESTING_PLAN.md
+A	browser_agent/background.js
+A	browser_agent/content.js
+A	browser_agent/generate_icons.py
+A	browser_agent/manifest.json
+A	browser_agent/popup.css
+A	browser_agent/popup.html
+A	browser_agent/popup.js
+A	browser_agent/test_api.py
+A	browser_agent/test_extension.js
+A	browser_agent/test_server_api.py
+M	server/graph_service/main.py
+A	server/graph_service/routers/browser_agent.py
