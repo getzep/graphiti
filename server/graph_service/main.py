@@ -2,9 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from graph_service.config import get_settings
-from graph_service.routers import ingest, retrieve
+from graph_service.routers import ingest, retrieve, browser_agent
 from graph_service.zep_graphiti import initialize_graphiti
 
 
@@ -19,9 +20,18 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Add CORS middleware to allow requests from the browser extension
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict this to your extension's origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(retrieve.router)
 app.include_router(ingest.router)
+app.include_router(browser_agent.router)
 
 
 @app.get('/healthcheck')

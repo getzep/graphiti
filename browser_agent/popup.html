@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Graphiti Web Scraper</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Graphiti Web Scraper</h1>
+    
+    <div class="status-container">
+      <div id="connection-status" class="status-indicator disconnected">
+        <span class="status-dot"></span>
+        <span class="status-text">Disconnected</span>
+      </div>
+    </div>
+    
+    <div class="action-buttons">
+      <button id="extract-data" class="primary-button">Extract Data</button>
+      <button id="select-elements" class="secondary-button">Select Elements</button>
+    </div>
+    
+    <div id="extraction-results" class="hidden">
+      <h2>Extracted Data</h2>
+      <div id="data-preview"></div>
+      
+      <div class="categorization-section">
+        <h3>AI Categorization</h3>
+        <div id="ai-categories"></div>
+        
+        <h3>Custom Categorization</h3>
+        <div class="custom-category-input">
+          <input type="text" id="custom-category" placeholder="Add custom category">
+          <button id="add-category">Add</button>
+        </div>
+        <div id="custom-categories"></div>
+      </div>
+      
+      <button id="save-to-graphiti" class="primary-button">Save to Knowledge Graph</button>
+    </div>
+    
+    <div id="settings-section">
+      <h2>Settings</h2>
+      <div class="setting-item">
+        <label for="api-endpoint">Graphiti API Endpoint:</label>
+        <input type="text" id="api-endpoint" placeholder="http://localhost:8000/api">
+      </div>
+      <div class="setting-item">
+        <label for="api-key">API Key (if required):</label>
+        <input type="password" id="api-key">
+      </div>
+      <button id="save-settings" class="secondary-button">Save Settings</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
