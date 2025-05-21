@@ -10,6 +10,9 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   } else if (request.action === "enableElementSelection") {
     enableElementSelection();
     sendResponse({success: true});
+  } else if (request.action === "testConnection") {
+    // Simple test connection handler
+    sendResponse({success: true, message: "Connection successful"});
   }
   return true; // Keep the message channel open for async responses
 });

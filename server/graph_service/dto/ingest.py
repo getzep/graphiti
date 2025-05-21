@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from graph_service.dto.common import Message
+from server.graph_service.dto.common import Message
 
 
 class AddMessagesRequest(BaseModel):

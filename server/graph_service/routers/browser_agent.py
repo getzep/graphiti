@@ -29,7 +29,7 @@ from server.graph_service.config import get_graphiti
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/browser_agent",
+    prefix="/browser-agent",
     tags=["browser_agent"],
 )
 
@@ -46,7 +46,7 @@ class CategoryResponse(BaseModel):
     categories: List[str] = Field(..., description="AI-generated categories for the content")
 
 
-@router.post("/ingest", response_model=Dict[str, str])
+@router.post("/save", response_model=Dict[str, str])
 async def ingest_web_page(
     data: WebPageContent,
     graphiti: Graphiti = Depends(get_graphiti),
@@ -135,7 +135,7 @@ async def categorize_content(
         raise HTTPException(status_code=500, detail=f"Failed to categorize content: {str(e)}")
 
 
-@router.get("/health")
+@router.get("/healthcheck")
 async def health_check() -> Dict[str, str]:
     """
     Health check endpoint for the browser agent API.

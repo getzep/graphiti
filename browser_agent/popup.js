@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    fetch(`${apiEndpoint}/health`, {
+    fetch(`${apiEndpoint}/healthcheck`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadingEl.textContent = 'Analyzing data...';
     aiCategories.appendChild(loadingEl);
     
-    fetch(`${apiEndpoint}/categorize`, {
+    fetch(`${apiEndpoint}/browser-agent/categorize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -142,11 +142,12 @@ document.addEventListener('DOMContentLoaded', function() {
       body: JSON.stringify({ content: data })
     })
     .then(response => response.json())
-    .then(categories => {
+    .then(data => {
       // Clear loading indicator
       aiCategories.innerHTML = '';
       
       // Display AI suggested categories
+      const categories = data.categories || [];
       categories.forEach(category => {
         const categoryTag = createCategoryTag(category, false);
         aiCategories.appendChild(categoryTag);
@@ -227,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // Send data to Graphiti API
-    fetch(`${apiEndpoint}/ingest/episode`, {
+    fetch(`${apiEndpoint}/browser-agent/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

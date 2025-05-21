@@ -4,21 +4,25 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from graph_service.config import get_settings
-from graph_service.routers import ingest, retrieve, browser_agent
-from graph_service.zep_graphiti import initialize_graphiti
+from server.graph_service.config import get_settings
+from server.graph_service.routers import ingest, retrieve, browser_agent
+from server.graph_service.zep_graphiti import initialize_graphiti
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    settings = get_settings()
-    await initialize_graphiti(settings)
+    # Skip Neo4j initialization for testing
+    # settings = get_settings()
+    # await initialize_graphiti(settings)
     yield
     # Shutdown
     # No need to close Graphiti here, as it's handled per-request
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+
 
 # Add CORS middleware to allow requests from the browser extension
 app.add_middleware(

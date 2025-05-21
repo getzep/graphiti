@@ -2,14 +2,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, status
 
-from graph_service.dto import (
+from server.graph_service.dto import (
     GetMemoryRequest,
     GetMemoryResponse,
     Message,
     SearchQuery,
     SearchResults,
 )
-from graph_service.zep_graphiti import ZepGraphitiDep, get_fact_result_from_edge
+from server.graph_service.zep_graphiti import ZepGraphitiDep, get_fact_result_from_edge
 
 router = APIRouter()
 
