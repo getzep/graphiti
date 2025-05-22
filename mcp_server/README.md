@@ -103,7 +103,7 @@ Available arguments:
 
 - `--model`: Specify the model name to use with the LLM client
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
-- `--group-id`: Set a namespace for the graph (optional)
+- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
@@ -183,7 +183,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
 ```json
 {
   "mcpServers": {
-    "graphiti": {
+    "graphiti-memory": {
       "transport": "stdio",
       "command": "/Users/<user>/.local/bin/uv",
       "args": [
@@ -214,7 +214,7 @@ For SSE transport (HTTP-based), you can use this configuration:
 ```json
 {
   "mcpServers": {
-    "graphiti": {
+    "graphiti-memory": {
       "transport": "sse",
       "url": "http://localhost:8000/sse"
     }
@@ -262,15 +262,20 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
 ```
 
-Hint: specify a `group_id` to retain prior graph data. If you do not specify a `group_id`, the server will create a new
-graph
+Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "default" as the group_id.
+
+or
+
+```bash
+docker compose up
+```
 
 2. Configure Cursor to connect to the Graphiti MCP server.
 
 ```json
 {
   "mcpServers": {
-    "Graphiti": {
+    "graphiti-memory": {
       "url": "http://localhost:8000/sse"
     }
   }
@@ -284,6 +289,45 @@ graph
 The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph
 capabilities.
 
+## Integrating with Claude Desktop (Docker MCP Server)
+
+The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop does not natively support SSE, so you'll need to use a gateway like `mcp-remote`.
+
+1.  **Run the Graphiti MCP server using SSE transport**:
+
+    ```bash
+    docker compose up
+    ```
+
+2.  **(Optional) Install `mcp-remote` globally**:
+    If you prefer to have `mcp-remote` installed globally, or if you encounter issues with `npx` fetching the package, you can install it globally. Otherwise, `npx` (used in the next step) will handle it for you.
+
+    ```bash
+    npm install -g mcp-remote
+    ```
+
+3.  **Configure Claude Desktop**:
+    Open your Claude Desktop configuration file (usually `claude_desktop_config.json`) and add or modify the `mcpServers` section as follows:
+
+    ```json
+    {
+      "mcpServers": {
+        "graphiti-memory": {
+          // You can choose a different name if you prefer
+          "command": "npx", // Or the full path to mcp-remote if npx is not in your PATH
+          "args": [
+            "mcp-remote",
+            "http://localhost:8000/sse" // Ensure this matches your Graphiti server's SSE endpoint
+          ]
+        }
+      }
+    }
+    ```
+
+    If you already have an `mcpServers` entry, add `graphiti-memory` (or your chosen name) as a new key within it.
+
+4.  **Restart Claude Desktop** for the changes to take effect.
+
 ## Requirements
 
 - Python 3.10 or higher
@@ -293,4 +337,4 @@ capabilities.
 
 ## License
 
-This project is licensed under the same license as the Graphiti project.
+This project is licensed under the same license as the parent Graphiti project.

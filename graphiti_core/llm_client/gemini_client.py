@@ -139,13 +139,16 @@ class GeminiClient(LLMClient):
             # Generate content using the simple string approach
             response = await self.client.aio.models.generate_content(
                 model=self.model or DEFAULT_MODEL,
-                contents=gemini_messages,
+                contents=gemini_messages,  # type: ignore[arg-type]  # mypy fails on broad union type
                 config=generation_config,
             )
 
             # If this was a structured output request, parse the response into the Pydantic model
             if response_model is not None:
                 try:
+                    if not response.text:
+                        raise ValueError('No response text')
+
                     validated_model = response_model.model_validate(json.loads(response.text))
 
                     # Return as a dictionary for API consistency
