@@ -66,7 +66,7 @@ class GeminiEmbedder(EmbedderClient):
         )
 
         if not result.embeddings or len(result.embeddings) == 0 or not result.embeddings[0].values:
-            raise Exception('No embeddings returned')
+            raise ValueError('No embeddings returned from Gemini API in create()')
 
         return result.embeddings[0].values
 
