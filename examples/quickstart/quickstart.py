@@ -46,12 +46,12 @@ load_dotenv()
 
 # Neo4j connection parameters
 # Make sure Neo4j Desktop is running with a local DBMS started
-uri = 'bolt://localhost:7687'
-user = 'neo4j'
-password = 'password'
-# uri = 'falkor://localhost:6379'
+# uri = 'bolt://localhost:7687'
 # user = 'neo4j'
 # password = 'password'
+uri = 'falkor://localhost:6379'
+user = 'neo4j'
+password = 'password'
 
 if not uri or not user or not password:
     raise ValueError('URI, USER, and PASSWORD must be set for Graph database connection.')

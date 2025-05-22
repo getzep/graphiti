@@ -404,9 +404,7 @@ class Graphiti:
             if update_communities:
                 await semaphore_gather(
                     *[
-                        update_community(
-                            self.driver, self.llm_client, self.embedder, node
-                        )
+                        update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
                     ]
                 )
@@ -496,20 +494,18 @@ class Graphiti:
             # Dedupe extracted nodes, compress extracted edges
             (nodes, uuid_map), extracted_edges_timestamped = await semaphore_gather(
                 dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
-                extract_edge_dates_bulk(
-                    self.llm_client, extracted_edges, episode_pairs
-                ),
+                extract_edge_dates_bulk(self.llm_client, extracted_edges, episode_pairs),
             )
 
             # save nodes to KG
             await semaphore_gather(*[node.save(self.driver) for node in nodes])
 
             # re-map edge pointers so that they don't point to discard dupe nodes
-            extracted_edges_with_resolved_pointers: list[EntityEdge] = (
-                resolve_edge_pointers(extracted_edges_timestamped, uuid_map)
+            extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
+                extracted_edges_timestamped, uuid_map
             )
-            episodic_edges_with_resolved_pointers: list[EpisodicEdge] = (
-                resolve_edge_pointers(episodic_edges, uuid_map)
+            episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
+                episodic_edges, uuid_map
             )
 
             # save episodic edges to KG
@@ -534,9 +530,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def build_communities(
-        self, group_ids: list[str] | None = None
-    ) -> list[CommunityNode]:
+    async def build_communities(self, group_ids: list[str] | None = None) -> list[CommunityNode]:
         """
         Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
         the content of these communities.
@@ -602,9 +596,7 @@ class Graphiti:
         point for temporal relevance.
         """
         search_config = (
-            EDGE_HYBRID_SEARCH_RRF
-            if center_node_uuid is None
-            else EDGE_HYBRID_SEARCH_NODE_DISTANCE
+            EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
         search_config.limit = num_results
 
@@ -674,9 +666,7 @@ class Graphiti:
 
         return SearchResults(edges=edges, nodes=nodes, episodes=[], communities=[])
 
-    async def add_triplet(
-        self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
-    ):
+    async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:
             await source_node.generate_name_embedding(self.embedder)
         if target_node.name_embedding is None:

@@ -222,7 +222,6 @@ class FalkorClient(GraphClient):
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
-        # future = Future()
         graph_name = kwargs.pop("database_", DEFAULT_DATABASE)
         graph = self.client.select_graph(graph_name)
 
@@ -235,8 +234,7 @@ class FalkorClient(GraphClient):
                 print(f"Index already exists: {e}")
                 return None
             return None
-        # pdb.set_trace()
-        # future.set_result((result.result_set, None, None))
+
         header = [h[1].decode('utf-8') for h in result.header]
         return (result.result_set, header, None)
 

@@ -1,11 +1,9 @@
 from typing_extensions import LiteralString
 from graphiti_core.models.edges.edge_db_queries import (
     ENTITY_EDGE_SAVE_BULK,
-    EPISODIC_EDGE_SAVE_BULK,
 )
 from graphiti_core.models.nodes.node_db_queries import (
     ENTITY_NODE_SAVE_BULK,
-    EPISODIC_NODE_SAVE_BULK,
 )
 
 def get_range_indices(db_type: str = "neo4j") -> list[LiteralString]:

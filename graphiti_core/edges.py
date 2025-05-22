@@ -452,7 +452,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
-        created_at=handle_datatime_objects(record['created_at']),
+        created_at=parse_db_date(record['created_at']),
     )
 
 
@@ -465,7 +465,7 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         name=record['name'],
         group_id=record['group_id'],
         episodes=record['episodes'],
-        created_at=handle_datatime_objects(record['created_at']),
+        created_at=parse_db_date(record['created_at']),
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
@@ -478,7 +478,7 @@ def get_community_edge_from_record(record: Any):
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
-        created_at=handle_datatime_objects(record['created_at']),
+        created_at=parse_db_date(record['created_at']),
     )
 
 

@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, handle_datatime_objects
+from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
@@ -542,8 +542,8 @@ class CommunityNode(Node):
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     return EpisodicNode(
         content=record['content'],
-        created_at=handle_datatime_objects(record['created_at']).timestamp(),
-        valid_at=(handle_datatime_objects(record['valid_at'])),
+        created_at=parse_db_date(record['created_at']).timestamp(),
+        valid_at=(parse_db_date(record['valid_at'])),
         uuid=record['uuid'],
         group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
@@ -559,7 +559,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         name=record['name'],
         group_id=record['group_id'],
         labels=record['labels'],
-        created_at=handle_datatime_objects(record['created_at']),
+        created_at=parse_db_date(record['created_at']),
         summary=record['summary'],
         attributes=record['attributes'],
     )
@@ -580,7 +580,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        created_at=handle_datatime_objects(record['created_at']),
+        created_at=parse_db_date(record['created_at']),
         summary=record['summary'],
     )
 
