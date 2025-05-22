@@ -147,7 +147,7 @@ class GeminiClient(LLMClient):
             if response_model is not None:
                 try:
                     if not response.text:
-                        raise Exception('No response text')
+                        raise ValueError('No response text')
 
                     validated_model = response_model.model_validate(json.loads(response.text))
 
