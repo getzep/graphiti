@@ -46,29 +46,27 @@ load_dotenv()
 
 # Neo4j connection parameters
 # Make sure Neo4j Desktop is running with a local DBMS started
-# uri = 'bolt://localhost:7687'
-# user = 'neo4j'
-# password = 'password'
-uri = 'falkor://localhost:6379'
+uri = 'bolt://localhost:7687'
 user = 'neo4j'
 password = 'password'
-
-graph_provider = os.getenv('GRAPH_PROVIDER', 'FalkorDB')
+# uri = 'falkor://localhost:6379'
+# user = 'neo4j'
+# password = 'password'
 
 if not uri or not user or not password:
-    raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
+    raise ValueError('URI, USER, and PASSWORD must be set for Graph database connection.')
 
 
 async def main():
     #################################################
     # INITIALIZATION
     #################################################
-    # Connect to Neo4j and set up Graphiti indices
+    # Connect to Neo4j/FalkorDB and set up Graphiti indices
     # This is required before using other Graphiti
     # functionality
     #################################################
 
-    # Initialize Graphiti with Neo4j connection
+    # Initialize Graphiti with Graph connection
     graphiti = Graphiti(uri, user, password)
 
     try:

@@ -237,7 +237,8 @@ class FalkorClient(GraphClient):
             return None
         # pdb.set_trace()
         # future.set_result((result.result_set, None, None))
-        return (result.result_set, result.header, None)
+        header = [h[1].decode('utf-8') for h in result.header]
+        return (result.result_set, header, None)
 
     def session(self, database: str) -> GraphClientSession:
         return FalkorClientSession(self._get_graph(database))

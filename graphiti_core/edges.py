@@ -27,7 +27,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
+from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date, handle_datatime_objects
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_SAVE,
     ENTITY_EDGE_SAVE,
@@ -100,7 +100,7 @@ class EpisodicEdge(Edge):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to Graph: {self.uuid}')
 
         return result
 
@@ -253,7 +253,7 @@ class EntityEdge(Edge):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to Graph: {self.uuid}')
 
         return result
 
@@ -359,7 +359,7 @@ class CommunityEdge(Edge):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved edge to neo4j: {self.uuid}')
+        logger.debug(f'Saved edge to Graph: {self.uuid}')
 
         return result
 
@@ -452,7 +452,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
-        created_at=record['created_at'].to_native(),
+        created_at=handle_datatime_objects(record['created_at']),
     )
 
 
@@ -465,7 +465,7 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         name=record['name'],
         group_id=record['group_id'],
         episodes=record['episodes'],
-        created_at=record['created_at'].to_native(),
+        created_at=handle_datatime_objects(record['created_at']),
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
@@ -478,7 +478,7 @@ def get_community_edge_from_record(record: Any):
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
-        created_at=record['created_at'].to_native(),
+        created_at=handle_datatime_objects(record['created_at']),
     )
 
 

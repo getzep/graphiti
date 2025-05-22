@@ -332,12 +332,12 @@ version = "5.0.1"
 description = "Timeout context manager for asyncio programs"
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
-markers = "python_version < \"3.11\""
+groups = ["main", "dev"]
 files = [
     {file = "async_timeout-5.0.1-py3-none-any.whl", hash = "sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c"},
     {file = "async_timeout-5.0.1.tar.gz", hash = "sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3"},
 ]
+markers = {main = "python_full_version < \"3.11.3\"", dev = "python_version < \"3.11\""}
 
 [[package]]
 name = "attrs"
@@ -797,6 +797,20 @@ files = [
 
 [package.extras]
 tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipython", "littleutils", "pytest", "rich ; python_version >= \"3.11\""]
+
+[[package]]
+name = "falkordb"
+version = "1.1.1"
+description = "Python client for interacting with FalkorDB database"
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "falkordb-1.1.1.tar.gz", hash = "sha256:a8ce594f37cd6b7b4483a7e0610caa5f46a679a59c511657bd015b28ae2ed754"},
+]
+
+[package.dependencies]
+redis = ">=5.0.1,<6.0.0"
 
 [[package]]
 name = "fastjsonschema"
@@ -3699,6 +3713,7 @@ version = "5.2.1"
 description = "Python client for Redis database and key-value store"
 optional = false
 python-versions = ">=3.8"
+groups = ["main"]
 files = [
     {file = "redis-5.2.1-py3-none-any.whl", hash = "sha256:ee7e1056b9aea0f04c6c2ed59452947f34c4940ee025f5dd83e6a6418b6989e4"},
     {file = "redis-5.2.1.tar.gz", hash = "sha256:16f2e22dff21d5125e8481515e386711a34cbec50f0e44413dd7d9c060a54e0f"},
@@ -5376,4 +5391,4 @@ groq = ["groq"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "4ffa68a8953cb18a1d2a43335cf2187e609659cd414bcd7f65ab285971ba72aa"
+content-hash = "3e9a4c0cdb5e551a1b9b7279cbc6e82f9a319ebba917ce8d9a0be0ad9edbabef"

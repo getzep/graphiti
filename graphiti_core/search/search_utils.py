@@ -20,7 +20,6 @@ from time import time
 from typing import Any
 
 import numpy as np
-from neo4j import Query
 from typing_extensions import LiteralString
 from graphiti_core.graph_queries import get_node_name_and_summary_query, get_edge_name_and_fact_query, get_vector_cosine_func_query, get_node_name_and_summary_query_2, get_community_name_query,get_episode_content_query
 from graphiti_core.driver import Driver
@@ -245,7 +244,7 @@ async def edge_similarity_search(
         """
     )
 
-    records, headers, _ = await driver.execute_query(
+    records, header, _ = await driver.execute_query(
         query,
         params=query_params,
         search_vector=search_vector,
@@ -257,9 +256,8 @@ async def edge_similarity_search(
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkor':
-        headers = [h[1] for h in headers]
-        records = [dict(zip(headers, row)) for row in records]
+    if driver.provider == 'falkordb':
+        records = [dict(zip(header, row)) for row in records]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -338,9 +336,7 @@ async def node_fulltext_search(
             ORDER BY score DESC
             """
         )
-        print(query)
-        # pdb.set_trace()
-        records, headers, _ = await driver.execute_query(
+        records, header, _ = await driver.execute_query(
             query,
             params=filter_params,
             query=fuzzy_query,
@@ -349,9 +345,8 @@ async def node_fulltext_search(
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
-        if driver.provider == 'falkor':
-            headers = [h[1] for h in headers]
-            records = [dict(zip(headers, row)) for row in records]
+        if driver.provider == 'falkordb':
+            records = [dict(zip(header, row)) for row in records]
 
         nodes = [get_entity_node_from_record(record) for record in records]
     except Exception as e:
@@ -378,7 +373,7 @@ async def node_similarity_search(
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
     try:
-        records, headers, _ = await driver.execute_query(
+        records, header, _ = await driver.execute_query(
             RUNTIME_QUERY
             + """
                 MATCH (n:Entity)
@@ -401,9 +396,8 @@ async def node_similarity_search(
             database_=DEFAULT_DATABASE,
             routing_='r',
         )
-        if driver.provider == 'falkor':
-            headers = [h[1] for h in headers]
-            records = [dict(zip(headers, row)) for row in records]
+        if driver.provider == 'falkordb':
+            records = [dict(zip(header, row)) for row in records]
         nodes = [get_entity_node_from_record(record) for record in records]
     except Exception as e:
         print(f"Error in node_similarity_search: {e}")
@@ -904,15 +898,15 @@ async def node_distance_reranker(
             MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
             RETURN 1 AS score, node_uuid AS uuid
             """
-    results, headers, _ = await driver.execute_query(
+    results, header, _ = await driver.execute_query(
         query,
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
         database_=DEFAULT_DATABASE,
     )
-    if driver.provider == 'falkor':
-        path_headers = [h[1] for h in headers]
-        results = [dict(zip(path_headers, row)) for row in results]
+    if driver.provider == 'falkordb':
+        results = [dict(zip(header, row)) for row in results]
+
     for result in results:
         uuid = result['uuid']
         score = result['score']

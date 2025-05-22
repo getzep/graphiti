@@ -18,6 +18,7 @@ import asyncio
 import os
 from collections.abc import Coroutine
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -26,7 +27,7 @@ from typing_extensions import LiteralString
 
 load_dotenv()
 # "DEFAULT_DATABASE"
-DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', "DEFAULT_DATABASE")
+DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
@@ -103,3 +104,15 @@ async def semaphore_gather(*coroutines: Coroutine, max_coroutines: int = SEMAPHO
             return await coroutine
 
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
+
+def handle_datatime_objects(datetime_obj: Any) -> datetime | None:
+    
+    if isinstance(datetime_obj, str):
+        try:
+            time_value = datetime.fromisoformat(datetime_obj)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {datetime_obj}")
+    else:
+        time_value = datetime_obj.to_native() if hasattr(datetime_obj, 'to_native') else datetime_obj
+
+    return time_value

@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE
+from graphiti_core.helpers import DEFAULT_DATABASE, handle_datatime_objects
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
@@ -165,7 +165,7 @@ class EpisodicNode(Node):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved Node to neo4j: {self.uuid}')
+        logger.debug(f'Saved Node to Graph: {self.uuid}')
 
         return result
 
@@ -337,7 +337,7 @@ class EntityNode(Node):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved Node to neo4j: {self.uuid}')
+        logger.debug(f'Saved Node to Graph: {self.uuid}')
 
         return result
 
@@ -428,7 +428,7 @@ class CommunityNode(Node):
             database_=DEFAULT_DATABASE,
         )
 
-        logger.debug(f'Saved Node to neo4j: {self.uuid}')
+        logger.debug(f'Saved Node to Graph: {self.uuid}')
 
         return result
 
@@ -542,8 +542,8 @@ class CommunityNode(Node):
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     return EpisodicNode(
         content=record['content'],
-        created_at=record['created_at'].to_native().timestamp(),
-        valid_at=(record['valid_at'].to_native()),
+        created_at=handle_datatime_objects(record['created_at']).timestamp(),
+        valid_at=(handle_datatime_objects(record['valid_at'])),
         uuid=record['uuid'],
         group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
@@ -554,22 +554,12 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any) -> EntityNode:
-    created_at_value = record['created_at']
-    
-    if isinstance(created_at_value, str):
-        try:
-            created_at = datetime.fromisoformat(created_at_value)
-        except ValueError:
-            raise ValueError(f"Invalid date format: {created_at_value}")
-    else:
-        created_at = created_at_value.to_native() if hasattr(created_at_value, 'to_native') else created_at_value
-
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
         labels=record['labels'],
-        created_at=created_at,
+        created_at=handle_datatime_objects(record['created_at']),
         summary=record['summary'],
         attributes=record['attributes'],
     )
@@ -590,7 +580,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        created_at=record['created_at'].to_native(),
+        created_at=handle_datatime_objects(record['created_at']),
         summary=record['summary'],
     )
 
