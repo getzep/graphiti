@@ -498,7 +498,7 @@ config = GraphitiConfig()
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
-Welcome to Graphiti MCP - a memory service for AI agents built on a knowledge graph. Graphiti performs well
+Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
 with dynamic data such as user interactions, changing enterprise data, and external information.
 
 Graphiti transforms information into a richly connected knowledge network, allowing you to 
@@ -529,7 +529,7 @@ API keys are provided for any language model operations.
 
 # MCP server instance
 mcp = FastMCP(
-    'graphiti',
+    'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
@@ -652,7 +652,7 @@ async def process_episode_queue(group_id: str):
 
 
 @mcp.tool()
-async def add_episode(
+async def add_memory(
     name: str,
     episode_body: str,
     group_id: str | None = None,
@@ -660,16 +660,16 @@ async def add_episode(
     source_description: str = '',
     uuid: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
-    """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
+    """Add an episode to memory. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
 
     Args:
         name (str): Name of the episode
-        episode_body (str): The content of the episode. When source='json', this must be a properly escaped JSON string,
-                           not a raw Python dictionary. The JSON data will be automatically processed
-                           to extract entities and relationships.
+        episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
+                           properly escaped JSON string, not a raw Python dictionary. The JSON data will be
+                           automatically processed to extract entities and relationships.
         group_id (str, optional): A unique ID for this graph. If not provided, uses the default group_id from CLI
                                  or a generated one.
         source (str, optional): Source type, must be one of:
@@ -761,9 +761,6 @@ async def add_episode(
                 )
                 logger.info(f"Episode '{name}' added successfully")
 
-                logger.info(f"Building communities after episode '{name}'")
-                await client.build_communities()
-
                 logger.info(f"Episode '{name}' processed successfully")
             except Exception as e:
                 error_msg = str(e)
@@ -793,14 +790,14 @@ async def add_episode(
 
 
 @mcp.tool()
-async def search_nodes(
+async def search_memory_nodes(
     query: str,
     group_ids: list[str] | None = None,
     max_nodes: int = 10,
     center_node_uuid: str | None = None,
     entity: str = '',  # cursor seems to break with None
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search the Graphiti knowledge graph for relevant node summaries.
+    """Search the graph memory for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
 
     Note: entity is a single entity type to filter results (permitted: "Preference", "Procedure").
@@ -874,13 +871,13 @@ async def search_nodes(
 
 
 @mcp.tool()
-async def search_facts(
+async def search_memory_facts(
     query: str,
     group_ids: list[str] | None = None,
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
-    """Search the Graphiti knowledge graph for relevant facts.
+    """Search the graph memory for relevant facts.
 
     Args:
         query: The search query
@@ -925,7 +922,7 @@ async def search_facts(
 
 @mcp.tool()
 async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an entity edge from the Graphiti knowledge graph.
+    """Delete an entity edge from the graph memory.
 
     Args:
         uuid: UUID of the entity edge to delete
@@ -955,7 +952,7 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
 
 @mcp.tool()
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an episode from the Graphiti knowledge graph.
+    """Delete an episode from the graph memory.
 
     Args:
         uuid: UUID of the episode to delete
@@ -985,7 +982,7 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
 
 @mcp.tool()
 async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
-    """Get an entity edge from the Graphiti knowledge graph by its UUID.
+    """Get an entity edge from the graph memory by its UUID.
 
     Args:
         uuid: UUID of the entity edge to retrieve
@@ -1018,7 +1015,7 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 async def get_episodes(
     group_id: str | None = None, last_n: int = 10
 ) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
-    """Get the most recent episodes for a specific group.
+    """Get the most recent memory episodes for a specific group.
 
     Args:
         group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
@@ -1066,7 +1063,7 @@ async def get_episodes(
 
 @mcp.tool()
 async def clear_graph() -> SuccessResponse | ErrorResponse:
-    """Clear all data from the Graphiti knowledge graph and rebuild indices."""
+    """Clear all data from the graph memory and rebuild indices."""
     global graphiti_client
 
     if graphiti_client is None:
