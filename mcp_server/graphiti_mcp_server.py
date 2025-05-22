@@ -38,6 +38,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 load_dotenv()
 
 DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
+SMALL_LLM_MODEL = 'gpt-4.1-nano'
 DEFAULT_EMBEDDER_MODEL = 'text-embedding-3-small'
 
 
@@ -187,6 +188,7 @@ class GraphitiLLMConfig(BaseModel):
 
     api_key: str | None = None
     model: str = DEFAULT_LLM_MODEL
+    small_model: str = SMALL_LLM_MODEL
     temperature: float = 0.0
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
@@ -199,6 +201,10 @@ class GraphitiLLMConfig(BaseModel):
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_LLM_MODEL
+
+        # Get small_model from environment, or use default if not set or empty
+        small_model_env = os.environ.get('SMALL_MODEL_NAME', '')
+        small_model = small_model_env if small_model_env.strip() else SMALL_LLM_MODEL
 
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', None)
@@ -222,6 +228,7 @@ class GraphitiLLMConfig(BaseModel):
             return cls(
                 api_key=os.environ.get('OPENAI_API_KEY'),
                 model=model,
+                small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
             )
         else:
@@ -244,6 +251,8 @@ class GraphitiLLMConfig(BaseModel):
                 api_key=api_key,
                 azure_openai_api_version=azure_openai_api_version,
                 azure_openai_deployment_name=azure_openai_deployment_name,
+                model=model,
+                small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
             )
 
@@ -261,6 +270,12 @@ class GraphitiLLMConfig(BaseModel):
             else:
                 # Log that empty model was provided and default is used
                 logger.warning(f'Empty model name provided, using default: {DEFAULT_LLM_MODEL}')
+
+        if hasattr(args, 'small_model') and args.small_model:
+            if args.small_model.strip():
+                config.small_model = args.small_model
+            else:
+                logger.warning(f'Empty small_model name provided, using default: {SMALL_LLM_MODEL}')
 
         if hasattr(args, 'temperature') and args.temperature is not None:
             config.temperature = args.temperature
@@ -301,7 +316,7 @@ class GraphitiLLMConfig(BaseModel):
             return None
 
         llm_client_config = LLMConfig(
-            api_key=self.api_key, model=self.model, small_model=self.model
+            api_key=self.api_key, model=self.model, small_model=self.small_model
         )
 
         # Set temperature
@@ -315,7 +330,9 @@ class GraphitiLLMConfig(BaseModel):
             client = self.create_client()
             return OpenAIRerankerClient(client=client)
         else:
-            llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+            llm_client_config = LLMConfig(
+                api_key=self.api_key, model=self.model, small_model=self.small_model
+            )
             return OpenAIRerankerClient(config=llm_client_config)
 
 
@@ -1133,6 +1150,10 @@ async def initialize_server() -> MCPConfig:
     )
     parser.add_argument(
         '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
+    )
+    parser.add_argument(
+        '--small-model',
+        help=f'Small model name to use with the LLM client. (default: {SMALL_LLM_MODEL})',
     )
     parser.add_argument(
         '--temperature',
