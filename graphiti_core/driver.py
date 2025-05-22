@@ -18,11 +18,16 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Coroutine
 from asyncio import sleep, Future
+from datetime import datetime
 
-from neo4j import AsyncGraphDatabase
-from falkordb import FalkorDB, Graph as FalkorGraph
+
+from neo4j import AsyncGraphDatabase, GraphDatabase
+from falkordb.asyncio import FalkorDB
+from falkordb import Graph as FalkorGraph
+
 
 from graphiti_core.helpers import DEFAULT_DATABASE
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +43,22 @@ class FalkorClientSession(GraphClientSession):
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
-    def run(self, cypher_query_: str, **kwargs: any) -> Coroutine:
-        return self.graph.query(str(cypher_query_), dict(kwargs))
+    async def execute_write(self, func, *args, **kwargs):
+        # Directly await the provided async function with `self` as the transaction/session
+        return await func(self, *args, **kwargs)
+    async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
+        if isinstance(cypher_query_, list):
+            for query in cypher_query_:
+                params = query[1]
+                query = query[0]
+                params = convert_datetimes_to_strings(params)
+                await self.graph.query(str(query), params)
+        else:
+            params = dict(kwargs)
+            params = convert_datetimes_to_strings(params)
+            await self.graph.query(str(cypher_query_), params)
+        # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
+        return None
 
 
 class GraphClient(ABC):
@@ -116,7 +135,12 @@ class Neo4jClient(GraphClient):
         )
 
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
-        return self._client.execute_query(cypher_query_, **kwargs)
+        params = kwargs.pop("params", None)
+        try:
+            result = self._client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        except Exception as e:
+            print(f"Error executing query: {e}")
+        return result
 
     def session(self, database: str) -> GraphClientSession:
         return self._client.session(database=database)  # type: ignore
@@ -188,24 +212,32 @@ class FalkorClient(GraphClient):
         password: str,
     ):
         super().__init__()
-        self.client = FalkorDB(
+        self.client = FalkorDB.from_url(
             url=uri,
-            username=user,
-            password=password,
+            # username=user,
+            # password=password,
         )
 
     def _get_graph(self, graph_name: str) -> FalkorGraph:
         return self.client.select_graph(graph_name)
 
-    def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
-        future = Future()
+    async def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
+        # future = Future()
         graph_name = kwargs.pop("database_", DEFAULT_DATABASE)
-        final_query = str(cypher_query_)
-        if "db.index.fulltext.queryRelationships" in final_query:
-            final_query = "RETURN []"
-        result = self._get_graph(graph_name).query(final_query, dict(kwargs))
-        future.set_result((result.result_set[0], None, None))
-        return future
+        graph = self.client.select_graph(graph_name)
+
+        params = convert_datetimes_to_strings(dict(kwargs))
+        try:
+            result = await graph.query(cypher_query_, params)
+        except Exception as e:
+            if "indexed" in str(e):
+                # check if index already exists
+                print(f"Index already exists: {e}")
+                return None
+            return None
+        # pdb.set_trace()
+        # future.set_result((result.result_set, None, None))
+        return (result.result_set, result.header, None)
 
     def session(self, database: str) -> GraphClientSession:
         return FalkorClientSession(self._get_graph(database))
@@ -298,11 +330,16 @@ class Driver:
         user: str,
         password: str,
     ):
-        self._driver = (
-            FalkorClient(uri, user, password)
-            if "falkor" in uri
-            else Neo4jClient(uri, user, password)
-        )
+        # pdb.set_trace()
+        if "falkor" in uri:
+            # FalkorDB
+            self._driver = FalkorClient(uri, user, password)
+            self.provider = "falkordb"
+        else:
+            # Neo4j
+            self._driver = Neo4jClient(uri, user, password)
+            self.provider = "neo4j"
+        
 
     def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
         return self._driver.execute_query(cypher_query_, **kwargs)
@@ -357,3 +394,15 @@ class Driver:
         return self._driver.create_relationship_fulltext_index(
             label, properties, index_name, database_
         )
+
+def convert_datetimes_to_strings(obj):
+    if isinstance(obj, dict):
+        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetimes_to_strings(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_datetimes_to_strings(item) for item in obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj

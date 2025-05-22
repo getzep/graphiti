@@ -16,11 +16,11 @@ limitations under the License.
 
 import logging
 from datetime import datetime, timezone
-import pdb
 
 from typing_extensions import LiteralString
 from graphiti_core.driver import Driver
 
+from graphiti_core.graph_queries import get_range_indices, get_fulltext_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
@@ -48,69 +48,41 @@ async def build_indices_and_constraints(driver: Driver, delete_existing: bool = 
                 for name in index_names
             ]
         )
+    range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    range_indices: list[LiteralString] = [
-        'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
-        'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
-        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
-        'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
-        'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
-        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
-        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
-        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
-        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
-        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
-        'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
-        'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
-        'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
-        'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
-        'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
-        'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
-        'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
-        'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
-        'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
-    ]
-
-    fulltext_indices: list[LiteralString] = [
-        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
-        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
-        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
-        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
-        FOR (n:Community) ON EACH [n.name, n.group_id]""",
-        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
-        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
-    ]
+    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
-
-    await semaphore_gather(
-        *[
-            driver.execute_query(
-                query,
-                database_=DEFAULT_DATABASE,
-            )
-            for query in index_queries
-        ]
-    )
+    # pdb.set_trace()
+    # for query in index_queries:
+    #     driver.execute_query(query, database_=DEFAULT_DATABASE)
+    try:
+        await semaphore_gather(
+            *[
+                driver.execute_query(
+                    query,
+                    database_=DEFAULT_DATABASE,
+                )
+                for query in index_queries
+            ]
+        )
+    except Exception as e:
+        print(f"Error creating indices: {e}")
+    # pdb.set_trace()
 
 
 async def clear_data(driver: Driver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
-            pdb.set_trace()
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            pdb.set_trace()
             await tx.run(
                 'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
                 group_ids=group_ids,
             )
-        pdb.set_trace()
         if group_ids is None:
-            pdb.set_trace()
             await session.execute_write(delete_all)
         else:
             await session.execute_write(delete_group_ids)
@@ -161,8 +133,7 @@ async def retrieve_episodes(
         LIMIT $num_episodes
         """
     )
-
-    result = await driver.execute_query(
+    result, _, _ = await driver.execute_query(
         query,
         reference_time=reference_time,
         source=source.name if source is not None else None,
@@ -170,6 +141,7 @@ async def retrieve_episodes(
         group_ids=group_ids,
         database_=DEFAULT_DATABASE,
     )
+
     episodes = [
         EpisodicNode(
             content=record['content'],
@@ -183,6 +155,6 @@ async def retrieve_episodes(
             name=record['name'],
             source_description=record['source_description'],
         )
-        for record in result.records
+        for record in result
     ]
     return list(reversed(episodes))  # Return in chronological order

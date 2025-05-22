@@ -554,12 +554,22 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any) -> EntityNode:
+    created_at_value = record['created_at']
+    
+    if isinstance(created_at_value, str):
+        try:
+            created_at = datetime.fromisoformat(created_at_value)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {created_at_value}")
+    else:
+        created_at = created_at_value.to_native() if hasattr(created_at_value, 'to_native') else created_at_value
+
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
         labels=record['labels'],
-        created_at=record['created_at'].to_native(),
+        created_at=created_at,
         summary=record['summary'],
         attributes=record['attributes'],
     )

@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 from neo4j import Query
 from typing_extensions import LiteralString
-
+from graphiti_core.graph_queries import get_node_name_and_summary_query, get_edge_name_and_fact_query, get_vector_cosine_func_query, get_node_name_and_summary_query_2, get_community_name_query,get_episode_content_query
 from graphiti_core.driver import Driver
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.helpers import (
@@ -58,7 +58,7 @@ MAX_QUERY_LENGTH = 32
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
-        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+        [f"group_id-'{lucene_sanitize(g)}'" for g in group_ids] if group_ids is not None else []
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:
@@ -154,15 +154,12 @@ async def edge_fulltext_search(
         return []
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
-
-    cypher_query = Query(
-        """
-              CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
+    
+    query_rel = get_edge_name_and_fact_query(driver.provider)
+    cypher_query =  query_rel +"""
               YIELD relationship AS rel, score
               MATCH (:Entity)-[r:RELATES_TO]->(:Entity)
-              WHERE r.group_id IN $group_ids"""
-        + filter_query
-        + """\nWITH r, score, startNode(r) AS n, endNode(r) AS m
+              WHERE r.group_id IN $group_ids"""+ filter_query+ """\nWITH r, score, startNode(r) AS n, endNode(r) AS m
                RETURN
                      r.uuid AS uuid,
                      r.group_id AS group_id,
@@ -177,11 +174,10 @@ async def edge_fulltext_search(
                      r.invalid_at AS invalid_at
                  ORDER BY score DESC LIMIT $limit
                  """
-    )
 
     records, _, _ = await driver.execute_query(
         cypher_query,
-        filter_params,
+        params=filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
@@ -230,7 +226,7 @@ async def edge_similarity_search(
                                                                                                                                                """
         + group_filter_query
         + filter_query
-        + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
+        + """\nWITH DISTINCT r, """ + get_vector_cosine_func_query("r.fact_embedding", "$search_vector", driver.provider) + """ AS score
                 WHERE score > $min_score
                 RETURN
                     r.uuid AS uuid,
@@ -249,9 +245,9 @@ async def edge_similarity_search(
         """
     )
 
-    records, _, _ = await driver.execute_query(
+    records, headers, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         search_vector=search_vector,
         source_uuid=source_node_uuid,
         target_uuid=target_node_uuid,
@@ -261,6 +257,9 @@ async def edge_similarity_search(
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
+    if driver.provider == 'falkor':
+        headers = [h[1] for h in headers]
+        records = [dict(zip(headers, row)) for row in records]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -280,16 +279,13 @@ async def edge_bfs_search(
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
-    query = Query(
-        """
+    query ="""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
                 UNWIND relationships(path) AS rel
                 MATCH ()-[r:RELATES_TO]-()
                 WHERE r.uuid = rel.uuid
-                """
-        + filter_query
-        + """  
+                """+ filter_query+ """  
                 RETURN DISTINCT
                     r.uuid AS uuid,
                     r.group_id AS group_id,
@@ -304,11 +300,10 @@ async def edge_bfs_search(
                     r.invalid_at AS invalid_at
                 LIMIT $limit
         """
-    )
 
     records, _, _ = await driver.execute_query(
         query,
-        filter_params,
+        params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
@@ -332,33 +327,35 @@ async def node_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
+    try:
+        filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
-    filter_query, filter_params = node_search_filter_query_constructor(search_filter)
+        query = (
+            get_node_name_and_summary_query(driver.provider)
+            + filter_query
+            + ENTITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            """
+        )
+        print(query)
+        # pdb.set_trace()
+        records, headers, _ = await driver.execute_query(
+            query,
+            params=filter_params,
+            query=fuzzy_query,
+            group_ids=group_ids,
+            limit=limit,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        if driver.provider == 'falkor':
+            headers = [h[1] for h in headers]
+            records = [dict(zip(headers, row)) for row in records]
 
-    query = (
-        """
-                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                YIELD node AS n, score
-                                                WHERE n:Entity
-                                                """
-        + filter_query
-        + ENTITY_NODE_RETURN
-        + """
-        ORDER BY score DESC
-        """
-    )
-
-    records, _, _ = await driver.execute_query(
-        query,
-        filter_params,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
-    nodes = [get_entity_node_from_record(record) for record in records]
-
+        nodes = [get_entity_node_from_record(record) for record in records]
+    except Exception as e:
+        print(f"Error in node_fulltext_search: {e}")
     return nodes
 
 
@@ -380,32 +377,37 @@ async def node_similarity_search(
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
-
-    records, _, _ = await driver.execute_query(
-        RUNTIME_QUERY
-        + """
-            MATCH (n:Entity)
-            """
-        + group_filter_query
-        + filter_query
-        + """
-            WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
-            WHERE score > $min_score"""
-        + ENTITY_NODE_RETURN
-        + """
-        ORDER BY score DESC
-        LIMIT $limit
-        """,
-        query_params,
-        search_vector=search_vector,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
-    nodes = [get_entity_node_from_record(record) for record in records]
-
+    try:
+        records, headers, _ = await driver.execute_query(
+            RUNTIME_QUERY
+            + """
+                MATCH (n:Entity)
+                """
+            + group_filter_query
+            + filter_query#, vector.similarity.cosine(n.name_embedding, $search_vector) AS score
+            + """
+                WITH n, """ + get_vector_cosine_func_query("n.name_embedding", "$search_vector", driver.provider) + """ AS score
+                WHERE score > $min_score"""
+            + ENTITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """,
+            params=query_params,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        if driver.provider == 'falkor':
+            headers = [h[1] for h in headers]
+            records = [dict(zip(headers, row)) for row in records]
+        nodes = [get_entity_node_from_record(record) for record in records]
+    except Exception as e:
+        print(f"Error in node_similarity_search: {e}")
+        nodes = []
     return nodes
 
 
@@ -433,7 +435,7 @@ async def node_bfs_search(
         + """
         LIMIT $limit
         """,
-        filter_params,
+        params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
         limit=limit,
@@ -456,10 +458,9 @@ async def episode_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
-
     records, _, _ = await driver.execute_query(
         """
-        CALL db.index.fulltext.queryNodes("episode_content", $query, {limit: $limit}) 
+        CALL """ + get_episode_content_query(driver.provider) + """
         YIELD node AS episode, score
         MATCH (e:Episodic)
         WHERE e.uuid = episode.uuid
@@ -497,10 +498,9 @@ async def community_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
-
     records, _, _ = await driver.execute_query(
         """
-        CALL db.index.fulltext.queryNodes("community_name", $query, {limit: $limit}) 
+        CALL """ + get_community_name_query(driver.provider) + """
         YIELD node AS comm, score
         RETURN
             comm.uuid AS uuid,
@@ -542,9 +542,9 @@ async def community_similarity_search(
         + """
            MATCH (comm:Community)
            """
-        + group_filter_query
+        + group_filter_query#vec.cosineDistance(n.name_embedding, $search_vector)vector.similarity.cosine(comm.name_embedding, $search_vector)
         + """
-           WITH comm, vector.similarity.cosine(comm.name_embedding, $search_vector) AS score
+           WITH comm, """ + get_vector_cosine_func_query("comm.name_embedding", "$search_vector", driver.provider) + """ AS score
            WHERE score > $min_score
            RETURN
                comm.uuid As uuid,
@@ -666,11 +666,11 @@ async def get_relevant_nodes(
             """
         + filter_query
         + """
-        WITH node, n, vector.similarity.cosine(n.name_embedding, node.name_embedding) AS score
+        WITH node, n, """ + get_vector_cosine_func_query("n.name_embedding", "node.name_embedding", driver.provider) + """ AS score
         WHERE score > $min_score
         WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
         
-        CALL db.index.fulltext.queryNodes("node_name_and_summary", node.fulltext_query, {limit: $limit}) 
+        CALL """ + get_node_name_and_summary_query_2(driver.provider) + """
         YIELD node AS m
         WHERE m.group_id = $group_id
         WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
@@ -711,7 +711,7 @@ async def get_relevant_nodes(
 
     results, _, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         nodes=query_nodes,
         group_id=group_id,
         limit=limit,
@@ -754,7 +754,7 @@ async def get_relevant_edges(
             """
         + filter_query
         + """
-            WITH e, edge, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
+            WITH e, edge, """ + get_vector_cosine_func_query("e.fact_embedding", "edge.fact_embedding", driver.provider) + """ AS score
             WHERE score > $min_score
             WITH edge, e, score
             ORDER BY score DESC
@@ -775,16 +775,19 @@ async def get_relevant_edges(
                 })[..$limit] AS matches
         """
     )
-
-    results, _, _ = await driver.execute_query(
-        query,
-        query_params,
-        edges=[edge.model_dump() for edge in edges],
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+    try:
+        results, _, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+    except Exception as e:
+        logger.error(f"Error in query: {query}")
+        raise
     relevant_edges_dict: dict[str, list[EntityEdge]] = {
         result['search_edge_uuid']: [
             get_entity_edge_from_record(record) for record in result['matches']
@@ -820,7 +823,7 @@ async def get_edge_invalidation_candidates(
             """
         + filter_query
         + """
-            WITH edge, e, vector.similarity.cosine(e.fact_embedding, edge.fact_embedding) AS score
+            WITH edge, e, """ + get_vector_cosine_func_query("e.fact_embedding", "edge.fact_embedding", driver.provider) + """ AS score
             WHERE score > $min_score
             WITH edge, e, score
             ORDER BY score DESC
@@ -844,7 +847,7 @@ async def get_edge_invalidation_candidates(
 
     results, _, _ = await driver.execute_query(
         query,
-        query_params,
+        params=query_params,
         edges=[edge.model_dump() for edge in edges],
         limit=limit,
         min_score=min_score,
@@ -891,20 +894,26 @@ async def node_distance_reranker(
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
     # Find the shortest path to center node
-    query = Query("""
+    query = """
         UNWIND $node_uuids AS node_uuid
         MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: node_uuid})
         RETURN length(p) AS score, node_uuid AS uuid
-        """)
-
-    path_results, _, _ = await driver.execute_query(
+        """
+    query = """
+            UNWIND $node_uuids AS node_uuid
+            MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
+            RETURN 1 AS score, node_uuid AS uuid
+            """
+    results, headers, _ = await driver.execute_query(
         query,
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
         database_=DEFAULT_DATABASE,
     )
-
-    for result in path_results:
+    if driver.provider == 'falkor':
+        path_headers = [h[1] for h in headers]
+        results = [dict(zip(path_headers, row)) for row in results]
+    for result in results:
         uuid = result['uuid']
         score = result['score']
         scores[uuid] = score
@@ -932,12 +941,11 @@ async def episode_mentions_reranker(
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
-    query = Query("""
+    query = """
         UNWIND $node_uuids AS node_uuid 
         MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
         RETURN count(*) AS score, n.uuid AS uuid
-        """)
-
+        """
     results, _, _ = await driver.execute_query(
         query,
         node_uuids=sorted_uuids,

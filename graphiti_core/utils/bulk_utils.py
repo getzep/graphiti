@@ -24,6 +24,7 @@ from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
 
+from graphiti_core.graph_queries import get_entity_node_save_bulk_query, get_entity_edge_save_bulk_query
 from graphiti_core.driver import Driver, GraphClientSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient
@@ -98,7 +99,26 @@ async def add_nodes_and_edges_bulk(
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
 ):
-    async with driver.session(database=DEFAULT_DATABASE) as session:
+    # async with driver.session(database=DEFAULT_DATABASE) as session:
+    #     await session.execute_write(
+    #         add_nodes_and_edges_bulk_tx,
+    #         episodic_nodes,
+    #         episodic_edges,
+    #         entity_nodes,
+    #         entity_edges,
+    #         embedder,
+    #     )
+    session = driver.session(database=DEFAULT_DATABASE)
+    try:
+        # async with driver.session(database=DEFAULT_DATABASE) as session:
+        #     await session.execute_write(
+        #         add_nodes_and_edges_bulk_tx,
+        #         episodic_nodes,
+        #         episodic_edges,
+        #         entity_nodes,
+        #         entity_edges,
+        #         embedder,
+        #     )
         await session.execute_write(
             add_nodes_and_edges_bulk_tx,
             episodic_nodes,
@@ -106,7 +126,14 @@ async def add_nodes_and_edges_bulk(
             entity_nodes,
             entity_edges,
             embedder,
+            driver=driver,
         )
+    except Exception as e:
+        logger.error(f"Error adding nodes and edges: {e}")
+        raise
+
+
+
 
 
 async def add_nodes_and_edges_bulk_tx(
@@ -116,6 +143,7 @@ async def add_nodes_and_edges_bulk_tx(
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
+    driver: Driver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -140,12 +168,13 @@ async def add_nodes_and_edges_bulk_tx(
     for edge in entity_edges:
         if edge.fact_embedding is None:
             await edge.generate_embedding(embedder)
-
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episode)
+    ENTITY_NODE_SAVE_BULK = get_entity_node_save_bulk_query(nodes, driver.provider)
     await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
     await tx.run(
         EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
     )
+    ENTITY_EDGE_SAVE_BULK = get_entity_edge_save_bulk_query(driver.provider)
     await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[edge.model_dump() for edge in entity_edges])
 
 
@@ -449,3 +478,15 @@ def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
     edge_chunks = [chunk for chunk in edge_chunk_map.values()]
 
     return edge_chunks
+
+def convert_datetimes_to_strings(obj):
+    if isinstance(obj, dict):
+        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetimes_to_strings(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_datetimes_to_strings(item) for item in obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj

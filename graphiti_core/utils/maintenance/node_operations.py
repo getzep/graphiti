@@ -344,24 +344,25 @@ async def extract_attributes_from_nodes(
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
+    try:
+        updated_nodes: list[EntityNode] = await semaphore_gather(
+            *[
+                extract_attributes_from_node(
+                    llm_client,
+                    node,
+                    episode,
+                    previous_episodes,
+                    entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
+                    if entity_types is not None
+                    else None,
+                )
+                for node in nodes
+            ]
+        )
 
-    updated_nodes: list[EntityNode] = await semaphore_gather(
-        *[
-            extract_attributes_from_node(
-                llm_client,
-                node,
-                episode,
-                previous_episodes,
-                entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
-                if entity_types is not None
-                else None,
-            )
-            for node in nodes
-        ]
-    )
-
-    await create_entity_node_embeddings(embedder, updated_nodes)
-
+        await create_entity_node_embeddings(embedder, updated_nodes)
+    except Exception as e:
+        print(f'Error extracting attributes from nodes: {e}')
     return updated_nodes
 
 
