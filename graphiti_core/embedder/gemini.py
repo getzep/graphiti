@@ -81,4 +81,9 @@ class GeminiEmbedder(EmbedderClient):
         if not result.embeddings or len(result.embeddings) == 0:
             raise Exception('No embeddings returned')
 
-        return [embedding.values if embedding.values else [] for embedding in result.embeddings]
+        embeddings = []
+        for embedding in result.embeddings:
+            if not embedding.values:
+                raise ValueError('Empty embedding values returned')
+            embeddings.append(embedding.values)
+        return embeddings
