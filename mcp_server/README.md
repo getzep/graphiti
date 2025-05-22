@@ -75,7 +75,9 @@ The server uses the following environment variables:
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
 - `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
-- `MODEL_NAME`: Optional model name to use for LLM inference
+- `MODEL_NAME`: OpenAI model name to use for LLM operations.
+- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
+- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
 - `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI deployment name
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
@@ -101,10 +103,12 @@ uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 
 Available arguments:
 
-- `--model`: Specify the model name to use with the LLM client
+- `--model`: Overrides the `MODEL_NAME` environment variable.
+- `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
+- `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
-- `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
+- `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
 ### Docker Deployment
