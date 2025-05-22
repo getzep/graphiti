@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
@@ -301,7 +300,9 @@ class GraphitiLLMConfig(BaseModel):
         if not self.api_key:
             return None
 
-        llm_client_config = LLMConfig(api_key=self.api_key, model=self.model, small_model=self.model)
+        llm_client_config = LLMConfig(
+            api_key=self.api_key, model=self.model, small_model=self.model
+        )
 
         # Set temperature
         llm_client_config.temperature = self.temperature
@@ -462,7 +463,7 @@ class GraphitiConfig(BaseModel):
         if args.group_id:
             config.group_id = args.group_id
         else:
-            config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
+            config.group_id = 'default'
 
         config.use_custom_entities = args.use_custom_entities
         config.destroy_graph = args.destroy_graph

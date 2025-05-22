@@ -103,7 +103,7 @@ Available arguments:
 
 - `--model`: Specify the model name to use with the LLM client
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
-- `--group-id`: Set a namespace for the graph (optional)
+- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: Destroy all Graphiti graphs (use with caution)
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
@@ -262,8 +262,7 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
 ```
 
-Hint: specify a `group_id` to retain prior graph data. If you do not specify a `group_id`, the server will create a new
-graph
+Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "default" as the group_id.
 
 2. Configure Cursor to connect to the Graphiti MCP server.
 
