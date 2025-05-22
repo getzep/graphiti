@@ -61,9 +61,12 @@ class GeminiEmbedder(EmbedderClient):
         # Generate embeddings
         result = await self.client.aio.models.embed_content(
             model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
-            contents=[input_data],
+            contents=[input_data],  # type: ignore[arg-type]  # mypy fails on broad union type
             config=types.EmbedContentConfig(output_dimensionality=self.config.embedding_dim),
         )
+
+        if not result.embeddings or len(result.embeddings) == 0 or not result.embeddings[0].values:
+            raise ValueError('No embeddings returned from Gemini API in create()')
 
         return result.embeddings[0].values
 
@@ -71,8 +74,11 @@ class GeminiEmbedder(EmbedderClient):
         # Generate embeddings
         result = await self.client.aio.models.embed_content(
             model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL,
-            contents=input_data_list,
+            contents=input_data_list,  # type: ignore[arg-type]  # mypy fails on broad union type
             config=types.EmbedContentConfig(output_dimensionality=self.config.embedding_dim),
         )
 
-        return [embedding.values for embedding in result.embeddings]
+        if not result.embeddings or len(result.embeddings) == 0:
+            raise Exception('No embeddings returned')
+
+        return [embedding.values if embedding.values else [] for embedding in result.embeddings]
