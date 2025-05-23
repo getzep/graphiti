@@ -54,6 +54,13 @@ async def add_messages(
     graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
+        print("[Graphiti] Zaczynam dodawanie do Neo4j")
+        try:
+            await graphiti.add_episode(...)
+            print("[Graphiti] DONE dodane")
+        except Exception as e:
+            print(f"[Graphiti] ERROR: {e}")
+
         await graphiti.add_episode(
             uuid=m.uuid,
             group_id=request.group_id,
