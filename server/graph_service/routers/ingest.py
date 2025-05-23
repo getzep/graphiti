@@ -9,7 +9,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
-from ai.factExtractor import extractFactsAndStore
+from routers.ai.factExtractor import extractFactsAndStore
 
 
 class AsyncWorker:
@@ -68,7 +68,7 @@ async def add_messages(
                 source_description=m.source_description,
             )
             print("[Graphiti] DONE dodane")
-            
+
             await extractFactsAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
