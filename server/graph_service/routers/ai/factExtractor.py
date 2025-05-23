@@ -1,3 +1,4 @@
+from graph_service.config import get_settings
 import openai
 import os
 
@@ -32,10 +33,12 @@ Message:
                     MERGE (f:Fact {text: $fact})
                     WITH f
                     MATCH (e:Episodic {uuid: $uuid})
+                    WHERE e.group_id = $group_id
                     MERGE (e)-[:IS_FACT]->(f)
                 """, {
                     "fact": fact,
-                    "uuid": message.uuid
+                    "uuid": message.uuid,
+                    "group_id": group_id
                 })
 
         print(f"[Graphiti] Facts added: {facts}")

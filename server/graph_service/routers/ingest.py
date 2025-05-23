@@ -9,7 +9,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
-from routers.ai.factExtractor import extractFactsAndStore
+from graph_service.routers.ai.factExtractor import extractFactsAndStore
 
 
 class AsyncWorker:
