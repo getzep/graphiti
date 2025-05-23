@@ -30,7 +30,6 @@ from .errors import RateLimitError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gemini-2.0-flash'
-DEFAULT_THINKING_BUDGET = 0
 
 
 class GeminiClient(LLMClient):
@@ -44,10 +43,10 @@ class GeminiClient(LLMClient):
         model (str): The model name to use for generating responses.
         temperature (float): The temperature to use for generating responses.
         max_tokens (int): The maximum number of tokens to generate in a response.
-        thinking_budget (int): The maximum number of tokens to spend on thinking for 2.5 version models. 0 disables thinking.
+        thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
     Methods:
-        __init__(config: LLMConfig | None = None, cache: bool = False):
-            Initializes the GeminiClient with the provided configuration and cache setting.
+        __init__(config: LLMConfig | None = None, cache: bool = False, thinking_config: types.ThinkingConfig | None = None):
+            Initializes the GeminiClient with the provided configuration, cache setting, and optional thinking config.
 
         _generate_response(messages: list[Message]) -> dict[str, typing.Any]:
             Generates a response from the language model based on the provided messages.
@@ -58,15 +57,16 @@ class GeminiClient(LLMClient):
         config: LLMConfig | None = None,
         cache: bool = False,
         max_tokens: int = DEFAULT_MAX_TOKENS,
-        thinking_budget: int = DEFAULT_THINKING_BUDGET,
+        thinking_config: types.ThinkingConfig | None = None,
     ):
         """
-        Initialize the GeminiClient with the provided configuration and cache setting.
+        Initialize the GeminiClient with the provided configuration, cache setting, and optional thinking config.
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
-            thinking_budget (int): The maximum number of tokens to spend on thinking for 2.5 version models. 0 disables thinking.
+            thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
+                Only use with models that support thinking (gemini-2.5+). Defaults to None.
 
         """
         if config is None:
@@ -80,7 +80,7 @@ class GeminiClient(LLMClient):
             api_key=config.api_key,
         )
         self.max_tokens = max_tokens
-        self.thinking_budget = thinking_budget
+        self.thinking_config = thinking_config
 
     async def _generate_response(
         self,
@@ -132,17 +132,6 @@ class GeminiClient(LLMClient):
                     types.Content(role=m.role, parts=[types.Part.from_text(text=m.content)])
                 )
 
-            # Determine the model to be used
-            model_to_use = self.model or DEFAULT_MODEL
-
-            # Conditionally create thinking_config for 2.5 version models
-            thinking_config_arg = None
-            if model_to_use.startswith('gemini-2.5'):
-                thinking_config_arg = types.ThinkingConfig(
-                    include_thoughts=False,
-                    thinking_budget=self.thinking_budget,
-                )
-
             # Create generation config
             generation_config = types.GenerateContentConfig(
                 temperature=self.temperature,
@@ -150,12 +139,12 @@ class GeminiClient(LLMClient):
                 response_mime_type='application/json' if response_model else None,
                 response_schema=response_model if response_model else None,
                 system_instruction=system_prompt,
-                thinking_config=thinking_config_arg,
+                thinking_config=self.thinking_config,
             )
 
             # Generate content using the simple string approach
             response = await self.client.aio.models.generate_content(
-                model=model_to_use,
+                model=self.model or DEFAULT_MODEL,
                 contents=gemini_messages,  # type: ignore[arg-type]  # mypy fails on broad union type
                 config=generation_config,
             )
