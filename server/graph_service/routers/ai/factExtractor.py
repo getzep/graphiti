@@ -3,7 +3,7 @@ import openai
 import os
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = "gpt-4.1-nano"  # or "gpt-4", adjustable as needed
+OPENAI_MODEL = "gpt-4.1-mini"  # or "gpt-4", adjustable as needed
 
 openai.api_key = OPENAI_API_KEY
 
