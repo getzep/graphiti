@@ -17,7 +17,7 @@ Message:
 """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
                 {"role": "user", "content": prompt}
