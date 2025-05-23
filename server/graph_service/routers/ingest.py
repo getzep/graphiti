@@ -66,18 +66,16 @@ async def add_messages(
                 source_description=m.source_description,
             )
             print("[Graphiti] DONE dodane")
+
+            await graphiti.build_graph_from_episode(
+                uuid=m.uuid,
+                group_id=request.group_id,
+                episode_body=m.content  # surowa treść wiadomości
+            )
+            print("[Graphiti] Graph enrichment done.")
+            
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
-
-        # await graphiti.add_episode(
-        #     uuid=m.uuid,
-        #     group_id=request.group_id,
-        #     name=m.name,
-        #     episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
-        #     reference_time=m.timestamp,
-        #     source=EpisodeType.message,
-        #     source_description=m.source_description,
-        # )
 
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
