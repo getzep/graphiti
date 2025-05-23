@@ -69,15 +69,15 @@ async def add_messages(
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
 
-        await graphiti.add_episode(
-            uuid=m.uuid,
-            group_id=request.group_id,
-            name=m.name,
-            episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
-            reference_time=m.timestamp,
-            source=EpisodeType.message,
-            source_description=m.source_description,
-        )
+        # await graphiti.add_episode(
+        #     uuid=m.uuid,
+        #     group_id=request.group_id,
+        #     name=m.name,
+        #     episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
+        #     reference_time=m.timestamp,
+        #     source=EpisodeType.message,
+        #     source_description=m.source_description,
+        # )
 
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
