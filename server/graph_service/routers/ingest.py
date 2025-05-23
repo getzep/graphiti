@@ -69,7 +69,8 @@ async def add_messages(
             )
             print("[Graphiti] DONE dodane")
 
-            await extractFactsAndStore(graphiti, m, request.group_id)
+            if m.role == "user":
+                await extractFactsAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
