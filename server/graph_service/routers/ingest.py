@@ -56,7 +56,15 @@ async def add_messages(
     async def add_messages_task(m: Message):
         print("[Graphiti] Zaczynam dodawanie do Neo4j")
         try:
-            await graphiti.add_episode(...)
+            await graphiti.add_episode(
+                uuid=m.uuid,
+                group_id=request.group_id,
+                name=m.name,
+                episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
+                reference_time=m.timestamp,
+                source=EpisodeType.message,
+                source_description=m.source_description,
+            )
             print("[Graphiti] DONE dodane")
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
