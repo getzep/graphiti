@@ -9,6 +9,8 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
+from ai.factExtractor import extractFactsAndStore
+
 
 class AsyncWorker:
     def __init__(self):
@@ -66,14 +68,9 @@ async def add_messages(
                 source_description=m.source_description,
             )
             print("[Graphiti] DONE dodane")
-
-            await graphiti.build_graph_from_episode(
-                uuid=m.uuid,
-                group_id=request.group_id,
-                episode_body=m.content  # surowa treść wiadomości
-            )
-            print("[Graphiti] Graph enrichment done.")
             
+            await extractFactsAndStore(graphiti, m, request.group_id)
+
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
 
