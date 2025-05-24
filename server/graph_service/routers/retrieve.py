@@ -4,8 +4,8 @@ from fastapi import APIRouter, status
 import logging
 
 from graph_service.dto import (
-    GetMemoryRequest,
-    GetMemoryResponse,
+    GetEntityRequest,
+    GetEntityResponse,
     Message,
     SearchQuery,
     SearchResults,
@@ -44,9 +44,9 @@ async def get_episodes(group_id: str, last_n: int, graphiti: ZepGraphitiDep):
     return episodes
 
 
-@router.post('/get-memory', status_code=status.HTTP_200_OK)
-async def get_memory(
-    request: GetMemoryRequest,
+@router.post('/get-entity', status_code=status.HTTP_200_OK)
+async def get_entity(
+    request: GetEntityRequest,
     graphiti: ZepGraphitiDep,
 ):
     combined_query = compose_query_from_messages(request.messages)
@@ -56,7 +56,7 @@ async def get_memory(
         num_results=request.max_facts,
     )
     facts = [get_fact_result_from_edge(edge) for edge in result]
-    return GetMemoryResponse(facts=facts)
+    return GetEntityResponse(facts=facts)
 
 
 @router.post('/relations', status_code=status.HTTP_200_OK)

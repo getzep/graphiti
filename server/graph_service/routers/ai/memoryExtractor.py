@@ -12,35 +12,35 @@ openai.api_key = OPENAI_API_KEY
 # Define function spec for OpenAI function calling
 functions_spec = [
     {
-        "name": "extract_memories",
-        "description": "Extract recollections or memories mentioned in the provided message.",
+        "name": "extract_entities",
+        "description": "Extract entities mentioned in the provided message.",
         "parameters": {
             "type": "object",
             "properties": {
-                "memories": {
+                "entities": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of specific memories or recollections"
+                    "description": "List of specific entities or objects"
                 }
             },
-            "required": ["memories"]
+            "required": ["entities"]
         }
     }
 ]
 
-async def extractMemoriesAndStore(graphiti, message, group_id):
+async def extractEntitiesAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract only past personal experiences or specific events that the speaker actually lived through.
+Extract only concrete entities, objects, or people that the speaker actually mentions.
 Do NOT extract wishes, desires, hypothetical situations, or general statements.
-If there are no such memories, return an empty array.
+If there are no such entities, return an empty array.
 
 Message:
 """{message.content}"""
 '''
 
     try:
-        print("[Graphiti] Starting memory extraction")
-         # Use function calling to get structured memories
+        print("[Graphiti] Starting entity extraction")
+         # Use function calling to get structured entities
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -52,7 +52,7 @@ Message:
         msg = choice.message
         func_call = msg.function_call
         args = json.loads(func_call.arguments)
-        memories = args.get("memories", [])
+        entities = args.get("entities", [])
 
         async with graphiti.driver.session() as session:
             await session.run(
@@ -60,14 +60,14 @@ Message:
                 MERGE (e:Episodic {uuid: $uuid})
                 ON CREATE SET e.group_id = $group_id
                 WITH e
-                UNWIND $memories AS mem
-                  MERGE (m:Memory {text: mem})
-                  MERGE (e)-[:HAS_MEMORY]->(m)
+                UNWIND $entities AS ent
+                  MERGE (m:Entity {text: ent})
+                  MERGE (e)-[:HAS_ENTITY]->(m)
                 """,
-                {"uuid": message.uuid, "group_id": group_id, "memories": memories}
+                {"uuid": message.uuid, "group_id": group_id, "entities": entities}
             )
 
-        print("[Graphiti] Finished memory extraction")
+        print("[Graphiti] Finished entity extraction")
 
     except Exception as e:
-        print(f"[Graphiti] ERROR in extractMemories: {e}")
+        print(f"[Graphiti] ERROR in extractEntities: {e}")
