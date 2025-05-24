@@ -13,7 +13,7 @@ openai.api_key = OPENAI_API_KEY
 functionsSpec = [
    {
         "name": "extractFacts",
-        "description": "Extract factual statements from the provided message.",
+        "description": "List of objective facts based on observable events or actions. Each fact must be concise (max 5 words) and exclude feelings or thoughts.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -124,8 +124,9 @@ Message content for analysis:
     # 3. Przygotuj osobne instrukcje i kontekst do każdej funkcji
     facts_context = f"""
 Already existing facts: {existing_facts}
-When extracting new facts, try to match them to the existing ones if possible.
-Return only short, essential facts – no longer than 5 words each.
+Extract only observable facts — events or actions that could be seen, heard, or confirmed.
+Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'.
+Keep each fact under 5 words.
 """
 
     emotions_context = f"""
