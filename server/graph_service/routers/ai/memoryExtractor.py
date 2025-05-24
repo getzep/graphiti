@@ -11,33 +11,33 @@ openai.api_key = OPENAI_API_KEY
 # Define function spec for OpenAI function calling
 functions_spec = [
     {
-        "name": "extract_facts",
-        "description": "Extract factual statements from the provided message.",
+        "name": "extract_memories",
+        "description": "Extract recollections or memories mentioned in the provided message.",
         "parameters": {
             "type": "object",
             "properties": {
-                "analysis": {
+                "memories": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of short factual statements"
+                    "description": "List of specific memories or recollections"
                 }
             },
-            "required": ["analysis"]
+            "required": ["memories"]
         }
     }
 ]
 
-async def extractFactsAndStore(graphiti, message, group_id):
+async def extractMemoriesAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract clear, specific factual statements from the following message.
-Return JSON with a single key "analysis" whose value is an array of short facts (no commentary, no emotions).
+Extract clear, specific recollections or memories from the following message.
+Return JSON with a single key "memories" whose value is an array of short memory statements (no commentary).
 
 Message:
 """{message.content}"""
 '''
 
     try:
-        # Use function calling to get structured facts
+        # Use function calling to get structured memories
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -45,28 +45,27 @@ Message:
             function_call="auto",
             temperature=0.1
         )
-        # Get the function call arguments from the response
         choice = response.choices[0]
         msg = choice.message
         func_call = msg.function_call
         args = json.loads(func_call.arguments)
-        facts = args.get("analysis", [])
+        memories = args.get("memories", [])
 
-        for fact in facts:
+        for memory in memories:
             async with graphiti.driver.session() as session:
                 await session.run("""
-                    MERGE (f:Fact {text: $fact})
-                    WITH f
+                    MERGE (m:Memory {text: $memory})
+                    WITH m
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:IS_FACT]->(f)
+                    MERGE (e)-[:HAS_MEMORY]->(m)
                 """, {
-                    "fact": fact,
+                    "memory": memory,
                     "uuid": message.uuid,
                     "group_id": group_id
                 })
 
-        print(f"[Graphiti] Facts added: {facts}")
+        print(f"[Graphiti] Memories added: {memories}")
 
     except Exception as e:
-        print(f"[Graphiti] ERROR in extractFacts: {e}")
+        print(f"[Graphiti] ERROR in extractMemories: {e}")

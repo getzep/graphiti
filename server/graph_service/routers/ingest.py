@@ -10,6 +10,9 @@ from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message,
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 from graph_service.routers.ai.factExtractor import extractFactsAndStore
+from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
+from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
+from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
 
 
 class AsyncWorker:
@@ -71,6 +74,9 @@ async def add_messages(
 
             if m.role == "user":
                 await extractFactsAndStore(graphiti, m, request.group_id)
+                await extractEmotionsAndStore(graphiti, m, request.group_id)
+                await extractMemoriesAndStore(graphiti, m, request.group_id)
+                await extractRelationsAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")

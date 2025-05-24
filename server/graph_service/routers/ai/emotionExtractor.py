@@ -11,62 +11,60 @@ openai.api_key = OPENAI_API_KEY
 # Define function spec for OpenAI function calling
 functions_spec = [
     {
-        "name": "extract_facts",
-        "description": "Extract factual statements from the provided message.",
+        "name": "extract_emotions",
+        "description": "Extract emotional tones from the provided message.",
         "parameters": {
             "type": "object",
             "properties": {
-                "analysis": {
+                "emotions": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of short factual statements"
+                    "description": "List of emotional tones"
                 }
             },
-            "required": ["analysis"]
+            "required": ["emotions"]
         }
     }
 ]
 
-async def extractFactsAndStore(graphiti, message, group_id):
+async def extractEmotionsAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract clear, specific factual statements from the following message.
-Return JSON with a single key "analysis" whose value is an array of short facts (no commentary, no emotions).
+Extract clear, specific emotional tones from the following message.
+Return JSON with a single key "emotions" whose value is an array of emotions (no commentary).
 
 Message:
 """{message.content}"""
 '''
 
     try:
-        # Use function calling to get structured facts
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
             function_call="auto",
-            temperature=0.1
+            temperature=0.3
         )
-        # Get the function call arguments from the response
         choice = response.choices[0]
         msg = choice.message
         func_call = msg.function_call
         args = json.loads(func_call.arguments)
-        facts = args.get("analysis", [])
+        emotions = args.get("emotions", [])
 
-        for fact in facts:
+        for emotion in emotions:
             async with graphiti.driver.session() as session:
                 await session.run("""
-                    MERGE (f:Fact {text: $fact})
-                    WITH f
+                    MERGE (em:Emotion {text: $emotion})
+                    WITH em
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:IS_FACT]->(f)
+                    MERGE (e)-[:HAS_EMOTION]->(em)
                 """, {
-                    "fact": fact,
+                    "emotion": emotion,
                     "uuid": message.uuid,
                     "group_id": group_id
                 })
 
-        print(f"[Graphiti] Facts added: {facts}")
+        print(f"[Graphiti] Emotions added: {emotions}")
 
     except Exception as e:
-        print(f"[Graphiti] ERROR in extractFacts: {e}")
+        print(f"[Graphiti] ERROR in extractEmotions: {e}")

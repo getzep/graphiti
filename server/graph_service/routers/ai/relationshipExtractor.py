@@ -11,62 +11,60 @@ openai.api_key = OPENAI_API_KEY
 # Define function spec for OpenAI function calling
 functions_spec = [
     {
-        "name": "extract_facts",
-        "description": "Extract factual statements from the provided message.",
+        "name": "extract_relations",
+        "description": "Extract relationships between the message subject and other entities (people, animals, objects)",
         "parameters": {
             "type": "object",
             "properties": {
-                "analysis": {
+                "relations": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of short factual statements"
+                    "description": "List of relationship statements"
                 }
             },
-            "required": ["analysis"]
+            "required": ["relations"]
         }
     }
 ]
 
-async def extractFactsAndStore(graphiti, message, group_id):
+async def extractRelationsAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract clear, specific factual statements from the following message.
-Return JSON with a single key "analysis" whose value is an array of short facts (no commentary, no emotions).
+Extract clear, specific relationship statements between the message subject and other entities (people, animals, objects).
+Return JSON with a single key "relations" whose value is an array of short relationship descriptions (no commentary).
 
 Message:
 """{message.content}"""
-'''
+'''  
 
     try:
-        # Use function calling to get structured facts
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
             function_call="auto",
-            temperature=0.1
+            temperature=0.3
         )
-        # Get the function call arguments from the response
         choice = response.choices[0]
         msg = choice.message
         func_call = msg.function_call
         args = json.loads(func_call.arguments)
-        facts = args.get("analysis", [])
+        relations = args.get("relations", [])
 
-        for fact in facts:
+        for relation in relations:
             async with graphiti.driver.session() as session:
                 await session.run("""
-                    MERGE (f:Fact {text: $fact})
-                    WITH f
+                    MERGE (r:Relation {text: $relation})
+                    WITH r
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:IS_FACT]->(f)
+                    MERGE (e)-[:HAS_RELATION]->(r)
                 """, {
-                    "fact": fact,
+                    "relation": relation,
                     "uuid": message.uuid,
                     "group_id": group_id
                 })
 
-        print(f"[Graphiti] Facts added: {facts}")
+        print(f"[Graphiti] Relations added: {relations}")
 
     except Exception as e:
-        print(f"[Graphiti] ERROR in extractFacts: {e}")
+        print(f"[Graphiti] ERROR in extractRelations: {e}")
