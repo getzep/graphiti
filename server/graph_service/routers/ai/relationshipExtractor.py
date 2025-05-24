@@ -37,6 +37,7 @@ Message:
 '''  
 
     try:
+        print("[Graphiti] Starting relation extraction")
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -63,8 +64,8 @@ Message:
                     "uuid": message.uuid,
                     "group_id": group_id
                 })
-
         print(f"[Graphiti] Relations added: {relations}")
+        print("[Graphiti] Finished relation extraction")
 
     except Exception as e:
         print(f"[Graphiti] ERROR in extractRelations: {e}")

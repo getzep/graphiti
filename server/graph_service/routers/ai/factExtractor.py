@@ -37,13 +37,14 @@ Message:
 '''
 
     try:
-        # Use function calling to get structured facts
+        print("[Graphiti] Starting fact extraction")
+         # Use function calling to get structured facts
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
             function_call="auto",
-            temperature=0.1
+            temperature=0.3
         )
         # Get the function call arguments from the response
         choice = response.choices[0]
@@ -67,6 +68,7 @@ Message:
                 })
 
         print(f"[Graphiti] Facts added: {facts}")
+        print("[Graphiti] Finished fact extraction")
 
     except Exception as e:
         print(f"[Graphiti] ERROR in extractFacts: {e}")

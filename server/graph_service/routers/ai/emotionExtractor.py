@@ -37,6 +37,7 @@ Message:
 '''
 
     try:
+        print("[Graphiti] Starting emotion extraction")
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -63,8 +64,7 @@ Message:
                     "uuid": message.uuid,
                     "group_id": group_id
                 })
-
-        print(f"[Graphiti] Emotions added: {emotions}")
+        print("[Graphiti] Finished emotion extraction")
 
     except Exception as e:
         print(f"[Graphiti] ERROR in extractEmotions: {e}")

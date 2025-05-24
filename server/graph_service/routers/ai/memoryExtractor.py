@@ -37,13 +37,14 @@ Message:
 '''
 
     try:
-        # Use function calling to get structured memories
+        print("[Graphiti] Starting memory extraction")
+         # Use function calling to get structured memories
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
             function_call="auto",
-            temperature=0.1
+            temperature=0.3
         )
         choice = response.choices[0]
         msg = choice.message
@@ -66,6 +67,7 @@ Message:
                 })
 
         print(f"[Graphiti] Memories added: {memories}")
+        print("[Graphiti] Finished memory extraction")
 
     except Exception as e:
         print(f"[Graphiti] ERROR in extractMemories: {e}")
