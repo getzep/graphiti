@@ -133,17 +133,17 @@ Message content for analysis:
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
-                  MERGE (e)-[:HAS_EMOTION]->(em)
+                  MERGE (e)-[rel:HAS_EMOTION {group_id: $groupId}]->(em)
                 WITH e
 
                 UNWIND $facts AS fact
                   MERGE (f:Fact {text: fact})
-                  MERGE (e)-[:IS_FACT]->(f)
+                  MERGE (e)-[rel:IS_FACT {group_id: $groupId}]->(f)
                 WITH e
 
                 UNWIND $memories AS mem
                   MERGE (m:Memory {text: mem})
-                  MERGE (e)-[:HAS_MEMORY]->(m)
+                  MERGE (e)-[rel:HAS_MEMORY {group_id: $groupId}]->(m)
                 """,
                 {
                     "uuid": message.uuid,
