@@ -83,7 +83,10 @@ Message content for analysis:
             function_call="auto",
             temperature=TEMPERATURE
         )
-        facts = json.loads(respFacts.choices[0].message.function_call.arguments).get("facts", [])
+        facts = []
+        fc = respFacts.choices[0].message.function_call
+        if fc and hasattr(fc, 'arguments'):
+            facts = json.loads(fc.arguments).get("facts", [])
 
         # 2) Extract emotions
         respEmo = openai.chat.completions.create(
@@ -93,7 +96,10 @@ Message content for analysis:
             function_call="auto",
             temperature=TEMPERATURE
         )
-        emotions = json.loads(respEmo.choices[0].message.function_call.arguments).get("emotions", [])
+        emotions = []
+        fc = respEmo.choices[0].message.function_call
+        if fc and hasattr(fc, 'arguments'):
+            emotions = json.loads(fc.arguments).get("emotions", [])
 
         # 3) Extract memories
         respMem = openai.chat.completions.create(
@@ -103,7 +109,10 @@ Message content for analysis:
             function_call="auto",
             temperature=TEMPERATURE
         )
-        memories = json.loads(respMem.choices[0].message.function_call.arguments).get("memories", [])
+        memories = []
+        fc = respMem.choices[0].message.function_call
+        if fc and hasattr(fc, 'arguments'):
+            memories = json.loads(fc.arguments).get("memories", [])
 
         # Calculate and print token usage
         inputTokens = (
