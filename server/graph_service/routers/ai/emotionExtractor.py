@@ -29,16 +29,17 @@ functions_spec = [
 ]
 
 async def extractEmotionsAndStore(graphiti, message, group_id):
-    prompt = f'''\
+    # 1) Przygotuj prompt do OpenAI
+    prompt = f"""
 Extract clear, specific emotional tones from the following message.
 Return JSON with a single key "emotions" whose value is an array of emotions (no commentary).
 
 Message:
-"""{message.content}"""
-'''
+\"\"\"{message.content}\"\"\"
+"""
 
     try:
-        print("[Graphiti] Starting emotion extraction")
+        # 2) Wywołaj model z funkcją
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -46,33 +47,28 @@ Message:
             function_call="auto",
             temperature=TEMPERATURE
         )
-        choice = response.choices[0]
-        msg = choice.message
-        func_call = msg.function_call
-        args = json.loads(func_call.arguments)
-        emotions = args.get("emotions", [])
 
-        for emotion in emotions:
-            async with graphiti.driver.session() as session:
-                await session.run(
+        func_args = json.loads(response.choices[0].message.function_call.arguments)
+        emotions = func_args.get("emotions", [])
+
+        # 3) Jeden kontekst sesji, jedno MERGE dla Episodic, jedno UNWIND
+        async with graphiti.driver.session() as session:
+            await session.run(
                 """
-                MERGE (e:Episodic {uuid: $uuid, group_id: $group_id})
+                MERGE (e:Episodic {uuid: $uuid})
                 ON CREATE SET e.group_id = $group_id
+                WITH e
+                UNWIND $emotions AS emo
+                  MERGE (em:Emotion {text: emo})
+                  MERGE (e)-[:HAS_EMOTION]->(em)
                 """,
-                {"uuid": message['uuid'], "group_id": group_id}
+                {
+                    "uuid": message['uuid'],
+                    "group_id": group_id,
+                    "emotions": emotions
+                }
             )
 
-            # Store each emotion relation
-            for emotion in emotions:
-                await session.run(
-                    """
-                    MERGE (em:Emotion {text: $emotion})
-                    WITH em
-                    MATCH (e:Episodic {uuid: $uuid, group_id: $group_id})
-                    MERGE (e)-[:HAS_EMOTION]->(em)
-                    """,
-                    {"emotion": emotion, "uuid": message['uuid'], "group_id": group_id}
-                )
         print("[Graphiti] Finished emotion extraction")
 
     except Exception as e:

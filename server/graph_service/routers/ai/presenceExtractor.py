@@ -58,13 +58,13 @@ Message:
         async with graphiti.driver.session() as session:
             await session.run(
                 """
-                MATCH (e:Episodic {uuid: $uuid})
-                WHERE e.group_id = $group_id
+                MERGE (e:Episodic {uuid: $uuid})
+                ON CREATE SET e.group_id = $group_id
                 SET e.has_fact = $fact, e.has_emotion = $emotion, e.has_memory = $memory, e.has_relation = $relation
                 """,
-                {"uuid": message.uuid, "group_id": group_id, "fact": fact, "emotion": emotion, "memory": memory, "relation": relation}
+                {"uuid": message['uuid'], "group_id": group_id, "fact": fact, "emotion": emotion, "memory": memory, "relation": relation}
             )
-        print("[Graphiti] Presence extraction done", data)
+        print("[Graphiti] Presence extraction done")
         return data
     except Exception as e:
         print(f"[Graphiti] ERROR in extractPresence: {e}")

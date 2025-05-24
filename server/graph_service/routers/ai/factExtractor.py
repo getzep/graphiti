@@ -55,21 +55,19 @@ Message:
         args = json.loads(func_call.arguments)
         facts = args.get("analysis", [])
 
-        for fact in facts:
-            async with graphiti.driver.session() as session:
-                await session.run("""
-                    MERGE (f:Fact {text: $fact})
-                    WITH f
-                    MATCH (e:Episodic {uuid: $uuid})
-                    WHERE e.group_id = $group_id
-                    MERGE (e)-[:IS_FACT {group_id: $group_id}]->(f)
-                """, {
-                    "fact": fact,
-                    "uuid": message.uuid,
-                    "group_id": group_id
-                })
+        async with graphiti.driver.session() as session:
+            await session.run(
+                """
+                MERGE (e:Episodic {uuid: $uuid})
+                ON CREATE SET e.group_id = $group_id
+                WITH e
+                UNWIND $facts AS fact
+                  MERGE (f:Fact {text: fact})
+                  MERGE (e)-[:IS_FACT]->(f)
+                """,
+                {"uuid": message['uuid'], "group_id": group_id, "facts": facts}
+            )
 
-        print(f"[Graphiti] Facts added: {facts}")
         print("[Graphiti] Finished fact extraction")
 
     except Exception as e:

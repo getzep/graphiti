@@ -54,21 +54,19 @@ Message:
         args = json.loads(func_call.arguments)
         memories = args.get("memories", [])
 
-        for memory in memories:
-            async with graphiti.driver.session() as session:
-                await session.run("""
-                    MERGE (m:Memory {text: $memory})
-                    WITH m
-                    MATCH (e:Episodic {uuid: $uuid})
-                    WHERE e.group_id = $group_id
-                    MERGE (e)-[:HAS_MEMORY {group_id: $group_id}]->(m)
-                """, {
-                    "memory": memory,
-                    "uuid": message.uuid,
-                    "group_id": group_id
-                })
+        async with graphiti.driver.session() as session:
+            await session.run(
+                """
+                MERGE (e:Episodic {uuid: $uuid})
+                ON CREATE SET e.group_id = $group_id
+                WITH e
+                UNWIND $memories AS mem
+                  MERGE (m:Memory {text: mem})
+                  MERGE (e)-[:HAS_MEMORY]->(m)
+                """,
+                {"uuid": message['uuid'], "group_id": group_id, "memories": memories}
+            )
 
-        print(f"[Graphiti] Memories added: {memories}")
         print("[Graphiti] Finished memory extraction")
 
     except Exception as e:

@@ -38,7 +38,6 @@ Message:
 '''  
 
     try:
-        print("[Graphiti] Starting relation extraction")
         response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -52,20 +51,18 @@ Message:
         args = json.loads(func_call.arguments)
         relations = args.get("relations", [])
 
-        for relation in relations:
-            async with graphiti.driver.session() as session:
-                await session.run("""
-                    MERGE (r:Relation {text: $relation})
-                    WITH r
-                    MATCH (e:Episodic {uuid: $uuid})
-                    WHERE e.group_id = $group_id
-                    MERGE (e)-[:HAS_RELATION {group_id: $group_id}]->(r)
-                """, {
-                    "relation": relation,
-                    "uuid": message.uuid,
-                    "group_id": group_id
-                })
-        print(f"[Graphiti] Relations added: {relations}")
+        async with graphiti.driver.session() as session:
+            await session.run(
+                """
+                MERGE (e:Episodic {uuid: $uuid})
+                ON CREATE SET e.group_id = $group_id
+                WITH e
+                UNWIND $relations AS rel
+                  MERGE (r:Relation {text: rel})
+                  MERGE (e)-[:HAS_RELATION]->(r)
+                """,
+                {"uuid": message['uuid'], "group_id": group_id, "relations": relations}
+            )
         print("[Graphiti] Finished relation extraction")
 
     except Exception as e:
