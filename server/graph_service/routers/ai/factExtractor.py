@@ -72,7 +72,6 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
     existing_facts = []
     existing_emotions = []
     existing_entities = []
-    print(f"[DEBUG] Attempting to fetch existing data for group_id: {group_id}") # Zmieniono log
     async with graphiti.driver.session() as session:
         # Pobierz istniejące fakty dla grupy
         result_facts = await session.run(
@@ -86,7 +85,6 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
         record_facts = await result_facts.single()
         if record_facts and record_facts["fact_nodes_for_group"]:
             fact_nodes = record_facts["fact_nodes_for_group"]
-            print(f"[DEBUG] Fact nodes from DB for group: {fact_nodes}") # Zmieniono log
             existing_facts = [fn["text"] for fn in fact_nodes if fn and fn.get("text")]
         
         # Pobierz istniejące emocje dla grupy
@@ -101,7 +99,6 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
         record_emotions = await result_emotions.single()
         if record_emotions and record_emotions["emotion_nodes_for_group"]:
             emotion_nodes = record_emotions["emotion_nodes_for_group"]
-            print(f"[DEBUG] Emotion nodes from DB for group: {emotion_nodes}") # Zmieniono log
             existing_emotions = [en["text"] for en in emotion_nodes if en and en.get("text")]
 
         # Pobierz istniejące encje dla grupy
@@ -116,18 +113,7 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
         record_entities = await result_entities.single()
         if record_entities and record_entities["entity_nodes_for_group"]:
             entity_nodes = record_entities["entity_nodes_for_group"]
-            print(f"[DEBUG] Entity nodes from DB for group: {entity_nodes}") # Zmieniono log
             existing_entities = [mn["text"] for mn in entity_nodes if mn and mn.get("text")]
-
-    # Usunięto logi dotyczące episodic_node, bo nie jest już bezpośrednio pobierany w tym bloku
-    # print(f"[DEBUG] Episodic node found: {episodic_node}") 
-            
-    print(f"[DEBUG] Populated existing_facts for group: {existing_facts}") # Zmieniono log
-    print(f"[DEBUG] Populated existing_emotions for group: {existing_emotions}") # Zmieniono log
-    print(f"[DEBUG] Populated existing_entities for group: {existing_entities}") # Zmieniono log
-    # Usunięto warunek else, który logował brak rekordu dla uuid, bo teraz szukamy po group_id
-    # else:
-    #     print("[DEBUG] No record found in DB for this uuid (Episodic node not found).")
 
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
@@ -157,6 +143,7 @@ When extracting new entities, try to match them to the existing ones if possible
     try:
         # Prepare messages for OpenAI API calls
         base_messages = [{"role": "user", "content": promptBase}]
+        print(f"[Graphiti] Extracting facts, emotions, and entities for message: {chat_history}")
         if chat_history and chat_history.strip():
             base_messages.append({"role": "assistant", "content": chat_history})
 
@@ -218,7 +205,6 @@ When extracting new entities, try to match them to the existing ones if possible
             respEmo.usage.total_tokens +
             respEnt.usage.total_tokens
         )
-        # print(f"[Graphiti] Token usage - total: {totalTokens}, input: {inputTokens}, output: {outputTokens}")
 
         # 4) Store all in Neo4j
         # Ensure all lists are unique
@@ -257,8 +243,6 @@ When extracting new entities, try to match them to the existing ones if possible
                 }
             )
 
-        # print("[Graphiti] Extraction and storage complete.")
-
         return {
             "total_tokens": totalTokens,
             "input_tokens": inputTokens,
@@ -268,7 +252,7 @@ When extracting new entities, try to match them to the existing ones if possible
         }
 
     except Exception as err:
-        print(f"[Graphiti] ERROR in extractAllAndStore: {err}")
+        print(f"[Graphiti] ERROR in extractAllAndStore: {err}") # Keep this error print
         return None
 
 # Alias for backward compatibility
