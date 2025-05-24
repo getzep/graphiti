@@ -64,7 +64,7 @@ async def get_relations(
     request: GetRelationsRequest,
     graphiti: ZepGraphitiDep,
 ):
-    logger.info(f"get_relations called with group_id={request.group_id}, relation_types={request.relation_types}")
+    print(f"[get_relations] called with group_id={request.group_id}, relation_types={request.relation_types}")
     relations_dict: dict[str, list[RelationItem]] = {rt: [] for rt in request.relation_types}
     # mapping of type keys to (relationship type, node label)
     mapping = {
@@ -75,13 +75,13 @@ async def get_relations(
     }
     async with graphiti.driver.session() as session:
         for rt in request.relation_types:
-            logger.info(f"Processing relation type: {rt}")
+            print(f"[get_relations] Processing relation type: {rt}")
             rel_info = mapping.get(rt)
             if not rel_info:
-                logger.warning(f"Unknown relation type: {rt}")
+                print(f"[get_relations] Warning: Unknown relation type: {rt}")
                 continue
             rel_type, node_label = rel_info
-            logger.info(f"Running query for rel_type={rel_type}, node_label={node_label}")
+            print(f"[get_relations] Running query for rel_type={rel_type}, node_label={node_label}")
             # use generic relationship match to avoid warnings for unknown types
             query = f'''
                 MATCH (e:Episodic {{group_id: $group_id}})-[r]->(n:{node_label})
@@ -90,11 +90,11 @@ async def get_relations(
             '''
             result = await session.run(query, group_id=request.group_id, rel_type=rel_type)
             records = await result.data()
-            logger.info(f"Found {len(records)} records for {rt}")
+            print(f"[get_relations] Found {len(records)} records for {rt}")
             for rec in records:
-                logger.debug(f"Record for {rt}: {rec}")
+                print(f"[get_relations] Record for {rt}: {rec}")
                 relations_dict[rt].append(
-                    RelationItem(episodic_id=rec['episodic_id'], text=rec['text'])
+                    RelationItem(episodic_id=rec['episod_id'], text=rec['text'])
                 )
     return RelationsResponse(relations=relations_dict)
 
