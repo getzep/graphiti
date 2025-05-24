@@ -41,16 +41,16 @@ functionsSpec = [
             "required": ["emotions"]
         }
     },
-    {
+   {
         "name": "extractEntities",
-        "description": "Extract entities described in the message.",
+        "description": "Identify specific people mentioned in the message.",
         "parameters": {
             "type": "object",
             "properties": {
                 "entities": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of user entities"
+                    "items": { "type": "string" },
+                    "description": "List of specific people mentioned in the message. Include names or clear roles (e.g. 'my neighbor', 'dad', 'Marta'). Do not include vague pronouns like 'she', 'someone', 'they'."
                 }
             },
             "required": ["entities"]
