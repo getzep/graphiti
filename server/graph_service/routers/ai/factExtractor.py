@@ -68,45 +68,66 @@ async def extractAllAndStore(graphiti, message, groupId):
     if not message or not hasattr(message, 'content') or not message.content or not message.content.strip():
         return None
 
-    # 1. Pobierz istniejące fakty, emocje i encje z Neo4j
+    # 1. Pobierz istniejące fakty, emocje i encje dla danego groupId
     existing_facts = []
     existing_emotions = []
     existing_entities = []
-    print(f"[DEBUG] Attempting to fetch existing data for message.uuid: {message.uuid}")
+    print(f"[DEBUG] Attempting to fetch existing data for groupId: {groupId}") # Zmieniono log
     async with graphiti.driver.session() as session:
-        result = await session.run(
+        # Pobierz istniejące fakty dla grupy
+        result_facts = await session.run(
             """
-            MATCH (e:Episodic {uuid: $uuid})
-            OPTIONAL MATCH (e)-[:IS_FACT]->(f:Fact)
-            OPTIONAL MATCH (e)-[:HAS_EMOTION]->(em:Emotion)
-            OPTIONAL MATCH (e)-[:HAS_ENTITY]->(m:Entity)
-            RETURN e AS episodic_node, collect(DISTINCT f) AS fact_nodes, collect(DISTINCT em) AS emotion_nodes, collect(DISTINCT m) AS entity_nodes
+            MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
+            WHERE r.group_id = $groupId
+            RETURN collect(DISTINCT fact_node) AS fact_nodes_for_group
             """,
-            {"uuid": message.uuid}
+            {"groupId": groupId}
         )
-        record = await result.single()
-        print(f"[DEBUG] Raw record from DB (nodes): {record}")
-        if record:
-            episodic_node = record["episodic_node"]
-            print(f"[DEBUG] Episodic node found: {episodic_node}")
-            
-            fact_nodes = record.get("fact_nodes", [])
-            emotion_nodes = record.get("emotion_nodes", [])
-            entity_nodes = record.get("entity_nodes", [])
-            
-            print(f"[DEBUG] Fact nodes from DB: {fact_nodes}")
-            print(f"[DEBUG] Emotion nodes from DB: {emotion_nodes}")
-            print(f"[DEBUG] Entity nodes from DB: {entity_nodes}")
-
+        record_facts = await result_facts.single()
+        if record_facts and record_facts["fact_nodes_for_group"]:
+            fact_nodes = record_facts["fact_nodes_for_group"]
+            print(f"[DEBUG] Fact nodes from DB for group: {fact_nodes}") # Zmieniono log
             existing_facts = [fn["text"] for fn in fact_nodes if fn and fn.get("text")]
+        
+        # Pobierz istniejące emocje dla grupy
+        result_emotions = await session.run(
+            """
+            MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
+            WHERE r.group_id = $groupId
+            RETURN collect(DISTINCT emotion_node) AS emotion_nodes_for_group
+            """,
+            {"groupId": groupId}
+        )
+        record_emotions = await result_emotions.single()
+        if record_emotions and record_emotions["emotion_nodes_for_group"]:
+            emotion_nodes = record_emotions["emotion_nodes_for_group"]
+            print(f"[DEBUG] Emotion nodes from DB for group: {emotion_nodes}") # Zmieniono log
             existing_emotions = [en["text"] for en in emotion_nodes if en and en.get("text")]
+
+        # Pobierz istniejące encje dla grupy
+        result_entities = await session.run(
+            """
+            MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
+            WHERE r.group_id = $groupId
+            RETURN collect(DISTINCT entity_node) AS entity_nodes_for_group
+            """,
+            {"groupId": groupId}
+        )
+        record_entities = await result_entities.single()
+        if record_entities and record_entities["entity_nodes_for_group"]:
+            entity_nodes = record_entities["entity_nodes_for_group"]
+            print(f"[DEBUG] Entity nodes from DB for group: {entity_nodes}") # Zmieniono log
             existing_entities = [mn["text"] for mn in entity_nodes if mn and mn.get("text")]
+
+    # Usunięto logi dotyczące episodic_node, bo nie jest już bezpośrednio pobierany w tym bloku
+    # print(f"[DEBUG] Episodic node found: {episodic_node}") 
             
-            print(f"[DEBUG] Populated existing_facts: {existing_facts}")
-            print(f"[DEBUG] Populated existing_emotions: {existing_emotions}")
-            print(f"[DEBUG] Populated existing_entities: {existing_entities}")
-        else:
-            print("[DEBUG] No record found in DB for this uuid (Episodic node not found).")
+    print(f"[DEBUG] Populated existing_facts for group: {existing_facts}") # Zmieniono log
+    print(f"[DEBUG] Populated existing_emotions for group: {existing_emotions}") # Zmieniono log
+    print(f"[DEBUG] Populated existing_entities for group: {existing_entities}") # Zmieniono log
+    # Usunięto warunek else, który logował brak rekordu dla uuid, bo teraz szukamy po groupId
+    # else:
+    #     print("[DEBUG] No record found in DB for this uuid (Episodic node not found).")
 
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
