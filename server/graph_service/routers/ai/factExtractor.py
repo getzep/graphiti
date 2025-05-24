@@ -143,7 +143,7 @@ When extracting new entities, try to match them to the existing ones if possible
     try:
         # Prepare messages for OpenAI API calls
         base_messages = [{"role": "user", "content": promptBase}]
-        print(f"[Graphiti] Extracting facts, emotions, and entities for message: {chat_history}")
+        print(f"[Graphiti] Extracting facts, emotions, and entities. History: {chat_history}, Shirt Slug: {shirt_slug}")
         if chat_history and chat_history.strip():
             base_messages.append({"role": "assistant", "content": chat_history})
 
@@ -218,6 +218,7 @@ When extracting new entities, try to match them to the existing ones if possible
                 ON CREATE SET e.group_id = $group_id
                 WITH e
                 MERGE (s:Shirt {slug: $shirt_slug})
+                WITH e, s
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
