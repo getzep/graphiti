@@ -138,7 +138,7 @@ Message content for analysis:
 
                 UNWIND $facts AS fact
                   MERGE (f:Fact {text: fact})
-                  MERGE (e)-[:HAS_FACT]->(f)
+                  MERGE (e)-[:IS_FACT]->(f)
                 WITH e
 
                 UNWIND $memories AS mem
