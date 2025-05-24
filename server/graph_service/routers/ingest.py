@@ -1,4 +1,5 @@
 import asyncio
+import uuid  # add UUID generation
 from contextlib import asynccontextmanager
 from functools import partial
 
@@ -60,6 +61,9 @@ async def add_messages(
     graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
+        # Ensure message has UUID to avoid null merges
+        if not getattr(m, 'uuid', None):
+            m.uuid = str(uuid.uuid4())
         print("[Graphiti] Zaczynam dodawanie do Neo4j")
         try:
             await graphiti.add_episode(
