@@ -29,8 +29,9 @@ functions_spec = [
 
 async def extractMemoriesAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract clear, specific recollections or memories from the following message.
-Return JSON with a single key "memories" whose value is an array of short memory statements (no commentary).
+Extract only past personal experiences or specific events that the speaker actually lived through.
+Do NOT extract wishes, desires, hypothetical situations, or general statements.
+If there are no such memories, return an empty array.
 
 Message:
 """{message.content}"""

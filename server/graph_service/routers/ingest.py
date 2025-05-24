@@ -13,6 +13,7 @@ from graph_service.routers.ai.factExtractor import extractFactsAndStore
 from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
 from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
 from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
+from graph_service.routers.ai.presenceExtractor import extractPresenceAndStore
 
 
 class AsyncWorker:
@@ -77,6 +78,7 @@ async def add_messages(
                 await extractEmotionsAndStore(graphiti, m, request.group_id)
                 await extractMemoriesAndStore(graphiti, m, request.group_id)
                 await extractRelationsAndStore(graphiti, m, request.group_id)
+                await extractPresenceAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
