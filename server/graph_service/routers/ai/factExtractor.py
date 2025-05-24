@@ -67,7 +67,7 @@ async def extractAllAndStore(graphiti, message, groupId):
     # Prepare prompt
     promptBase = f"""
 Message content for analysis:
-"""{message.content}"""
+\"""{message.content}\"""
 """
     # Containers for results
     facts = []

@@ -11,10 +11,10 @@ from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message,
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 from graph_service.routers.ai.factExtractor import extractFactsAndStore
-from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
-from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
-from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
-from graph_service.routers.ai.presenceExtractor import extractPresenceAndStore
+# from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
+# from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
+# from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
+# from graph_service.routers.ai.presenceExtractor import extractPresenceAndStore
 
 
 class AsyncWorker:
