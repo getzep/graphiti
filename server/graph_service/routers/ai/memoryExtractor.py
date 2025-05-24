@@ -60,7 +60,7 @@ Message:
                     WITH m
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:HAS_MEMORY]->(m)
+                    MERGE (e)-[:HAS_MEMORY {group_id: $group_id}]->(m)
                 """, {
                     "memory": memory,
                     "uuid": message.uuid,

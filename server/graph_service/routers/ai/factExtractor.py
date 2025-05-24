@@ -61,7 +61,7 @@ Message:
                     WITH f
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:IS_FACT]->(f)
+                    MERGE (e)-[:IS_FACT {group_id: $group_id}]->(f)
                 """, {
                     "fact": fact,
                     "uuid": message.uuid,

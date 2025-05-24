@@ -58,7 +58,7 @@ Message:
                     WITH r
                     MATCH (e:Episodic {uuid: $uuid})
                     WHERE e.group_id = $group_id
-                    MERGE (e)-[:HAS_RELATION]->(r)
+                    MERGE (e)-[:HAS_RELATION {group_id: $group_id}]->(r)
                 """, {
                     "relation": relation,
                     "uuid": message.uuid,
