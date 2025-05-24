@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from graphiti_core.utils.datetime_utils import utc_now
 from pydantic import BaseModel, Field
@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class Result(BaseModel):
     message: str
     success: bool
+    tokens: Optional[Any] = None  # pozwala na zwracanie tokenów lub innych danych
 
 
 class Message(BaseModel):
