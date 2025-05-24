@@ -78,12 +78,11 @@ async def add_messages(
             )
             print("[Graphiti] DONE dodane")
 
-            # Zmienna do sumowania tokenów (możesz ją przenieść wyżej jeśli chcesz sumować dla wszystkich wiadomości)
-            token_usage = None
             if m.role == "user":
                 token_usage = await extractFactsAndStore(graphiti, m, request.group_id)
                 if token_usage:
                     print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
+                    token_usages.append({"uuid": m.uuid, **token_usage})
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
