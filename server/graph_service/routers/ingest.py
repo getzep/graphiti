@@ -84,10 +84,6 @@ async def add_messages(
                 token_usage = await extractFactsAndStore(graphiti, m, request.group_id)
                 if token_usage:
                     print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
-                    token_usages.append({
-                        "uuid": m.uuid,
-                        **token_usage
-                    })
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
