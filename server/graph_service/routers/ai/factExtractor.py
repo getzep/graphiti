@@ -29,8 +29,9 @@ functions_spec = [
 
 async def extractFactsAndStore(graphiti, message, group_id):
     prompt = f'''\
-Extract clear, specific factual statements from the following message.
-Return JSON with a single key "analysis" whose value is an array of short facts (no commentary, no emotions).
+Extract only explicit content facts from the following message—that is, statements about events, actions or situations the speaker describes.
+Do NOT extract any meta-information about the message itself (language, style, typos, tone), opinions, emotions, wishes, uncertainties, or ambiguous fragments.
+If no such content facts exist, return an empty array.
 
 Message:
 """{message.content}"""

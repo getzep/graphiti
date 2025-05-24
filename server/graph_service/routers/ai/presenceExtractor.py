@@ -36,7 +36,7 @@ Message:
 
     try:
         print("[Graphiti] Starting presence extraction")
-        response = await openai.chat.completions.create(
+        response = openai.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
@@ -64,5 +64,6 @@ Message:
                 {"uuid": message.uuid, "group_id": group_id, "fact": fact, "emotion": emotion, "memory": memory, "relation": relation}
             )
         print("[Graphiti] Presence extraction done", data)
+        return data
     except Exception as e:
         print(f"[Graphiti] ERROR in extractPresence: {e}")

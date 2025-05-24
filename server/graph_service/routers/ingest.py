@@ -74,11 +74,17 @@ async def add_messages(
             print("[Graphiti] DONE dodane")
 
             if m.role == "user":
-                await extractFactsAndStore(graphiti, m, request.group_id)
-                await extractEmotionsAndStore(graphiti, m, request.group_id)
-                await extractMemoriesAndStore(graphiti, m, request.group_id)
-                await extractRelationsAndStore(graphiti, m, request.group_id)
-                await extractPresenceAndStore(graphiti, m, request.group_id)
+                # Extract presence flags first
+                presence_data = await extractPresenceAndStore(graphiti, m, request.group_id)
+                # Conditionally call other extractors based on presence
+                if presence_data.get("fact"):
+                    await extractFactsAndStore(graphiti, m, request.group_id)
+                if presence_data.get("emotion"):
+                    await extractEmotionsAndStore(graphiti, m, request.group_id)
+                if presence_data.get("memory"):
+                    await extractMemoriesAndStore(graphiti, m, request.group_id)
+                if presence_data.get("relation"):
+                    await extractRelationsAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
