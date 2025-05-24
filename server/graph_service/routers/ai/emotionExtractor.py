@@ -5,6 +5,7 @@ import json
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = "gpt-4.1-mini"  # or "gpt-4", adjustable as needed
+TEMPERATURE = 0.5  # model temperature
 
 openai.api_key = OPENAI_API_KEY
 
@@ -43,7 +44,7 @@ Message:
             messages=[{"role": "user", "content": prompt}],
             functions=functions_spec,
             function_call="auto",
-            temperature=0.3
+            temperature=TEMPERATURE
         )
         choice = response.choices[0]
         msg = choice.message

@@ -65,6 +65,8 @@ async def get_relations(
     graphiti: ZepGraphitiDep,
 ):
     print(f"[get_relations] called with group_id={request.group_id}, relation_types={request.relation_types}")
+    # log full request payload
+    print(f"[get_relations] request payload: {request.dict()}")
     relations_dict: dict[str, list[RelationItem]] = {rt: [] for rt in request.relation_types}
     # mapping of type keys to (relationship type, node label)
     mapping = {
