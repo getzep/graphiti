@@ -158,3 +158,6 @@ Message content for analysis:
 
     except Exception as err:
         print(f"[Graphiti] ERROR in extractAllAndStore: {err}")
+
+# Alias for backward compatibility
+extractFactsAndStore = extractAllAndStore
