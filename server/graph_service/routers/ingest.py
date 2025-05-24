@@ -19,7 +19,6 @@ from graph_service.routers.ai.factExtractor import extractFactsAndStore
 
 class AsyncWorker:
     def __init__(self):
-        self.queue = asyncio.Queue()
         self.task = None
 
     async def worker(self):
@@ -88,7 +87,7 @@ async def add_messages(
             print(f"[Graphiti] ERROR: {e}")
 
     for m in request.messages:
-        await async_worker.queue.put(partial(add_messages_task, m))
+        await add_messages_task(m)
 
     print(f"[Graphiti] FINAL token_usages: {token_usages}")
     return Result(message='Messages added to processing queue2', success=True, tokens=token_usages)
