@@ -62,7 +62,7 @@ async def extractAllAndStore(graphiti, message, groupId):
     """
     Extract facts, emotions, and memories from `message.content` using OpenAI function calls,
     then store them in Neo4j as connected nodes under Episodic(uuid).
-    Prints token usage statistics for the three calls.
+    Prints token usage statistics for the three calls and returns the total token usage.
     """
     # Prepare prompt
     promptBase = f'''
@@ -130,7 +130,7 @@ Message content for analysis:
             respEmo.usage.total_tokens +
             respMem.usage.total_tokens
         )
-        print(f"[Graphiti] Token usage - total: {totalTokens}, input: {inputTokens}, output: {outputTokens}")
+        # print(f"[Graphiti] Token usage - total: {totalTokens}, input: {inputTokens}, output: {outputTokens}")
 
         # 4) Store all in Neo4j
         async with graphiti.driver.session() as session:
@@ -163,10 +163,19 @@ Message content for analysis:
                 }
             )
 
-        print("[Graphiti] Extraction and storage complete.")
+        # print("[Graphiti] Extraction and storage complete.")
+
+        return {
+            "total_tokens": totalTokens,
+            "input_tokens": inputTokens,
+            "output_tokens": outputTokens,
+            "model": OPENAI_MODEL,
+            "temperature": TEMPERATURE
+        }
 
     except Exception as err:
         print(f"[Graphiti] ERROR in extractAllAndStore: {err}")
+        return None
 
 # Alias for backward compatibility
 extractFactsAndStore = extractAllAndStore

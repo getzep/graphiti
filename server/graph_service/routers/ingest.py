@@ -60,6 +60,7 @@ async def add_messages(
     request: AddMessagesRequest,
     graphiti: ZepGraphitiDep,
 ):
+    token_usages = []
     async def add_messages_task(m: Message):
         # Ensure message has UUID to avoid null merges
         if not getattr(m, 'uuid', None):
@@ -77,16 +78,15 @@ async def add_messages(
             )
             print("[Graphiti] DONE dodane")
 
+            # Zmienna do sumowania tokenów (możesz ją przenieść wyżej jeśli chcesz sumować dla wszystkich wiadomości)
+            token_usage = None
             if m.role == "user":
-                # Extract presence flags first
-                # presence_data = await extractPresenceAndStore(graphiti, m, request.group_id)
-                # If no presence flag is true, stop processing
-                # if not any(presence_data.values()):
-                #     print("[Graphiti] No presence flags true, skipping additional extraction")
-                #     return
-                # Conditionally call other extractors based on presence
-                # if presence_data.get("fact"):
-                await extractFactsAndStore(graphiti, m, request.group_id)
+                token_usage = await extractFactsAndStore(graphiti, m, request.group_id)
+                if token_usage:
+                    token_usages.append({
+                        "uuid": m.uuid,
+                        **token_usage
+                    })
                 # if presence_data.get("emotion"):
                 #     await extractEmotionsAndStore(graphiti, m, request.group_id)
                 # if presence_data.get("memory"):
@@ -100,7 +100,7 @@ async def add_messages(
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
 
-    return Result(message='Messages added to processing queue', success=True)
+    return Result(message='Messages added to processing queue', success=True, data={"token_usages": token_usages})
 
 
 @router.post('/entity-node', status_code=status.HTTP_201_CREATED)
