@@ -85,9 +85,10 @@ async def get_relations(
             rel_type, node_label = rel_info
             print(f"[get_relations] Running query for rel_type={rel_type}, node_label={node_label}")
             # use generic relationship match to avoid warnings for unknown types
+            # match both node and relationship by group_id to ensure correct linking
             query = f'''
                 MATCH (e:Episodic {{group_id: $group_id}})-[r]->(n:{node_label})
-                WHERE type(r) = $rel_type
+                WHERE type(r) = $rel_type AND r.group_id = $group_id
                 RETURN e.uuid AS episodic_id, n.text AS text
             '''
             result = await session.run(query, group_id=request.group_id, rel_type=rel_type)
@@ -95,8 +96,9 @@ async def get_relations(
             print(f"[get_relations] Found {len(records)} records for {rt}")
             for rec in records:
                 print(f"[get_relations] Record for {rt}: {rec}")
+                # correct key for episodic_id
                 relations_dict[rt].append(
-                    RelationItem(episodic_id=rec['episod_id'], text=rec['text'])
+                    RelationItem(episodic_id=rec['episodic_id'], text=rec['text'])
                 )
     return RelationsResponse(relations=relations_dict)
 
