@@ -76,6 +76,10 @@ async def add_messages(
             if m.role == "user":
                 # Extract presence flags first
                 presence_data = await extractPresenceAndStore(graphiti, m, request.group_id)
+                # If no presence flag is true, stop processing
+                if not any(presence_data.values()):
+                    print("[Graphiti] No presence flags true, skipping additional extraction")
+                    return
                 # Conditionally call other extractors based on presence
                 if presence_data.get("fact"):
                     await extractFactsAndStore(graphiti, m, request.group_id)

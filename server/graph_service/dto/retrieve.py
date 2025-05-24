@@ -43,3 +43,17 @@ class GetMemoryRequest(BaseModel):
 
 class GetMemoryResponse(BaseModel):
     facts: list[FactResult] = Field(..., description='The facts that were retrieved from the graph')
+
+
+class RelationItem(BaseModel):
+    episodic_id: str = Field(..., description='UUID of the episodic node')
+    text: str = Field(..., description='Text of the relation/fact/emotion/memory')
+
+
+class GetRelationsRequest(BaseModel):
+    group_id: str = Field(..., description='The group id to fetch relations for')
+    relation_types: list[str] = Field(default_factory=lambda: ['emotions', 'relations', 'facts', 'memories'], description='The types of relations to retrieve')
+
+
+class RelationsResponse(BaseModel):
+    relations: dict[str, list[RelationItem]]
