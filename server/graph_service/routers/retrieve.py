@@ -63,31 +63,26 @@ async def get_relations(
     graphiti: ZepGraphitiDep,
 ):
     relations_dict: dict[str, list[RelationItem]] = {rt: [] for rt in request.relation_types}
+    # mapping of type keys to (relationship type, node label)
+    mapping = {
+        'emotions': ('HAS_EMOTION', 'Emotion'),
+        'relations': ('HAS_RELATION', 'Relation'),
+        'facts': ('IS_FACT', 'Fact'),
+        'memories': ('HAS_MEMORY', 'Memory'),
+    }
     async with graphiti.driver.session() as session:
         for rt in request.relation_types:
-            if rt == 'emotions':
-                query = '''
-                    MATCH (e:Episodic {group_id: $group_id})-[r:HAS_EMOTION]->(n:Emotion)
-                    RETURN e.uuid AS episodic_id, n.text AS text
-                '''
-            elif rt == 'relations':
-                query = '''
-                    MATCH (e:Episodic {group_id: $group_id})-[r:HAS_RELATION]->(n:Relation)
-                    RETURN e.uuid AS episodic_id, n.text AS text
-                '''
-            elif rt == 'facts':
-                query = '''
-                    MATCH (e:Episodic {group_id: $group_id})-[r:IS_FACT]->(n:Fact)
-                    RETURN e.uuid AS episodic_id, n.text AS text
-                '''
-            elif rt == 'memories':
-                query = '''
-                    MATCH (e:Episodic {group_id: $group_id})-[r:HAS_MEMORY]->(n:Memory)
-                    RETURN e.uuid AS episodic_id, n.text AS text
-                '''
-            else:
+            rel_info = mapping.get(rt)
+            if not rel_info:
                 continue
-            result = await session.run(query, group_id=request.group_id)
+            rel_type, node_label = rel_info
+            # use generic relationship match to avoid warnings for unknown types
+            query = f'''
+                MATCH (e:Episodic {{group_id: $group_id}})-[r]->(n:{node_label})
+                WHERE type(r) = $rel_type
+                RETURN e.uuid AS episodic_id, n.text AS text
+            '''
+            result = await session.run(query, group_id=request.group_id, rel_type=rel_type)
             records = await result.data()
             for rec in records:
                 relations_dict[rt].append(
