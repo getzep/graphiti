@@ -64,43 +64,41 @@ async def get_relations(
     request: GetRelationsRequest,
     graphiti: ZepGraphitiDep,
 ):
-    print(f"[get_relations] called with group_id={request.group_id}, relation_types={request.relation_types}")
-    # log full request payload
-    print(f"[get_relations] request payload: {request.dict()}")
-    relations_dict: dict[str, list[RelationItem]] = {rt: [] for rt in request.relation_types}
-    # mapping of type keys to (relationship type, node label)
-    mapping = {
-        'emotions': ('HAS_EMOTION', 'Emotion'),
-        'relations': ('HAS_RELATION', 'Relation'),
-        'facts': ('IS_FACT', 'Fact'),
-        'memories': ('HAS_MEMORY', 'Memory'),
+    # przygotuj słownik wyników dla żądanych typów relacji
+    relations_dict = {rt: [] for rt in request.relation_types}
+    # mapa Cypher → klucz w odpowiedzi
+    rel_map = {
+        'HAS_EMOTION': 'emotions',
+        'HAS_MEMORY':  'memories',
+        'IS_FACT':     'facts',
     }
+    query = """
+    MATCH (e:Episodic {group_id: $group_id})-[r]->(n)
+    WHERE r.group_id = $group_id
+      AND type(r) IN $rel_types
+    RETURN
+      type(r)      AS rel_type,
+      e.uuid       AS episodic_id,
+      n.text       AS text
+    """
     async with graphiti.driver.session() as session:
-        for rt in request.relation_types:
-            print(f"[get_relations] Processing relation type: {rt}")
-            rel_info = mapping.get(rt)
-            if not rel_info:
-                print(f"[get_relations] Warning: Unknown relation type: {rt}")
-                continue
-            rel_type, node_label = rel_info
-            print(f"[get_relations] Running query for rel_type={rel_type}, node_label={node_label}")
-            # use generic relationship match to avoid warnings for unknown types
-            # match both node and relationship by group_id to ensure correct linking
-            query = f'''
-                MATCH (e:Episodic {{group_id: $group_id}})-[r]->(n:{node_label})
-                WHERE type(r) = $rel_type AND r.group_id = $group_id
-                RETURN e.uuid AS episodic_id, n.text AS text
-            '''
-            result = await session.run(query, group_id=request.group_id, rel_type=rel_type)
-            records = await result.data()
-            print(f"[get_relations] Found {len(records)} records for {rt}")
-            for rec in records:
-                print(f"[get_relations] Record for {rt}: {rec}")
-                # correct key for episodic_id
-                relations_dict[rt].append(
-                    RelationItem(episodic_id=rec['episodic_id'], text=rec['text'])
+        result = await session.run(
+            query,
+            group_id=request.group_id,
+            rel_types=list(rel_map.keys())
+        )
+        records = await result.data()
+    for rec in records:
+        key = rel_map.get(rec['rel_type'])
+        if key in relations_dict:
+            relations_dict[key].append(
+                RelationItem(
+                    episodic_id=rec['episodic_id'],
+                    text=rec['text']
                 )
+            )
     return RelationsResponse(relations=relations_dict)
+
 
 
 def compose_query_from_messages(messages: list[Message]):
