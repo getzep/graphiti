@@ -80,21 +80,33 @@ async def extractAllAndStore(graphiti, message, groupId):
             OPTIONAL MATCH (e)-[:IS_FACT]->(f:Fact)
             OPTIONAL MATCH (e)-[:HAS_EMOTION]->(em:Emotion)
             OPTIONAL MATCH (e)-[:HAS_ENTITY]->(m:Entity)
-            RETURN collect(DISTINCT f.text) AS facts, collect(DISTINCT em.text) AS emotions, collect(DISTINCT m.text) AS entities
+            RETURN e AS episodic_node, collect(DISTINCT f) AS fact_nodes, collect(DISTINCT em) AS emotion_nodes, collect(DISTINCT m) AS entity_nodes
             """,
             {"uuid": message.uuid}
         )
         record = await result.single()
-        print(f"[DEBUG] Raw record from DB: {record}")
+        print(f"[DEBUG] Raw record from DB (nodes): {record}")
         if record:
-            existing_facts = [x for x in record["facts"] if x]
-            existing_emotions = [x for x in record["emotions"] if x]
-            existing_entities = [x for x in record["entities"] if x]
+            episodic_node = record["episodic_node"]
+            print(f"[DEBUG] Episodic node found: {episodic_node}")
+            
+            fact_nodes = record.get("fact_nodes", [])
+            emotion_nodes = record.get("emotion_nodes", [])
+            entity_nodes = record.get("entity_nodes", [])
+            
+            print(f"[DEBUG] Fact nodes from DB: {fact_nodes}")
+            print(f"[DEBUG] Emotion nodes from DB: {emotion_nodes}")
+            print(f"[DEBUG] Entity nodes from DB: {entity_nodes}")
+
+            existing_facts = [fn["text"] for fn in fact_nodes if fn and fn.get("text")]
+            existing_emotions = [en["text"] for en in emotion_nodes if en and en.get("text")]
+            existing_entities = [mn["text"] for mn in entity_nodes if mn and mn.get("text")]
+            
             print(f"[DEBUG] Populated existing_facts: {existing_facts}")
             print(f"[DEBUG] Populated existing_emotions: {existing_emotions}")
             print(f"[DEBUG] Populated existing_entities: {existing_entities}")
         else:
-            print("[DEBUG] No record found in DB for this uuid.")
+            print("[DEBUG] No record found in DB for this uuid (Episodic node not found).")
 
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
