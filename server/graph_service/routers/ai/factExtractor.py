@@ -11,7 +11,7 @@ openai.api_key = OPENAI_API_KEY
 
 # Define OpenAI function specifications for facts, emotions, and entities
 functionsSpec = [
-    {
+   {
         "name": "extractFacts",
         "description": "Extract factual statements from the provided message.",
         "parameters": {
@@ -20,7 +20,7 @@ functionsSpec = [
                 "facts": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of short factual statements"
+                    "description": "List of short factual statements, each no longer than 5 words"
                 }
             },
             "required": ["facts"]
@@ -124,8 +124,10 @@ Message content for analysis:
     # 3. Przygotuj osobne instrukcje i kontekst do każdej funkcji
     facts_context = f"""
 Already existing facts: {existing_facts}
-When extracting new facts, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new fact matches an existing one, return the existing value instead of a new variant. Only add new facts if they are truly new and not covered by the existing ones.
+When extracting new facts, try to match them to the existing ones if possible.
+Return only short, essential facts – no longer than 5 words each.
 """
+
     emotions_context = f"""
 Already existing emotions: {existing_emotions}
 When extracting new emotions, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new emotion matches an existing one, return the existing value instead of a new variant. Only add new emotions if they are truly new and not covered by the existing ones.
