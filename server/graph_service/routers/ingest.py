@@ -61,6 +61,10 @@ async def add_messages(
 ):
     token_usages = []
     async def add_messages_task(m: Message):
+        # Pomiń, jeśli wiadomość nie ma treści
+        if not hasattr(m, 'content') or not m.content or not m.content.strip():
+            print(f"[Graphiti] Pomijam pustą wiadomość (uuid: {getattr(m, 'uuid', None)})")
+            return None
         # Ensure message has UUID to avoid null merges
         if not getattr(m, 'uuid', None):
             m.uuid = str(uuid.uuid4())

@@ -68,11 +68,47 @@ async def extractAllAndStore(graphiti, message, groupId):
     if not message or not hasattr(message, 'content') or not message.content or not message.content.strip():
         return None
 
-    # Prepare prompt
+    # 1. Pobierz istniejące fakty, emocje i encje z Neo4j
+    existing_facts = []
+    existing_emotions = []
+    existing_entities = []
+    async with graphiti.driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (e:Episodic {uuid: $uuid})
+            OPTIONAL MATCH (e)-[:IS_FACT]->(f:Fact)
+            OPTIONAL MATCH (e)-[:HAS_EMOTION]->(em:Emotion)
+            OPTIONAL MATCH (e)-[:HAS_ENTITY]->(m:Entity)
+            RETURN collect(DISTINCT f.text) AS facts, collect(DISTINCT em.text) AS emotions, collect(DISTINCT m.text) AS entities
+            """,
+            {"uuid": message.uuid}
+        )
+        record = await result.single()
+        if record:
+            existing_facts = [x for x in record["facts"] if x]
+            existing_emotions = [x for x in record["emotions"] if x]
+            existing_entities = [x for x in record["entities"] if x]
+
+    # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
 Message content for analysis:
 """{message.content}"""
 '''
+
+    # 3. Przygotuj osobne instrukcje i kontekst do każdej funkcji
+    facts_context = f"""
+Already existing facts: {existing_facts}
+When extracting new facts, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new fact matches an existing one, return the existing value instead of a new variant. Only add new facts if they are truly new and not covered by the existing ones.
+"""
+    emotions_context = f"""
+Already existing emotions: {existing_emotions}
+When extracting new emotions, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new emotion matches an existing one, return the existing value instead of a new variant. Only add new emotions if they are truly new and not covered by the existing ones.
+"""
+    entities_context = f"""
+Already existing entities: {existing_entities}
+When extracting new entities, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new entity matches an existing one, return the existing value instead of a new variant. Only add new entities if they are truly new and not covered by the existing ones.
+"""
+
     # Containers for results
     facts = []
     emotions = []
@@ -82,7 +118,10 @@ Message content for analysis:
         # 1) Extract facts
         respFacts = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": promptBase}],
+            messages=[
+                {"role": "user", "content": promptBase},
+                {"role": "system", "content": facts_context}
+            ],
             functions=[functionsSpec[0]],
             function_call="auto",
             temperature=TEMPERATURE
@@ -95,7 +134,10 @@ Message content for analysis:
         # 2) Extract emotions
         respEmo = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": promptBase}],
+            messages=[
+                {"role": "user", "content": promptBase},
+                {"role": "system", "content": emotions_context}
+            ],
             functions=[functionsSpec[1]],
             function_call="auto",
             temperature=TEMPERATURE
@@ -108,7 +150,10 @@ Message content for analysis:
         # 3) Extract entities
         respEnt = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": promptBase}],
+            messages=[
+                {"role": "user", "content": promptBase},
+                {"role": "system", "content": entities_context}
+            ],
             functions=[functionsSpec[2]],
             function_call="auto",
             temperature=TEMPERATURE
