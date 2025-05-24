@@ -65,10 +65,10 @@ async def extractAllAndStore(graphiti, message, groupId):
     Prints token usage statistics for the three calls.
     """
     # Prepare prompt
-    promptBase = f"""
+    promptBase = f'''
 Message content for analysis:
-\"""{message.content}\"""
-"""
+"""{message.content}"""
+'''
     # Containers for results
     facts = []
     emotions = []
