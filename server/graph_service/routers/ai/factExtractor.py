@@ -219,6 +219,8 @@ When extracting new entities, try to match them to the existing ones if possible
                 WITH e
                 MERGE (s:Shirt {slug: $shirt_slug})
                 WITH e, s
+                MERGE (e)-[:CONNECTED_TO]->(s)
+                WITH e
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
