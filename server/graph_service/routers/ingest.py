@@ -91,7 +91,7 @@ async def add_messages(
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
 
-    return Result(message='Messages added to processing queue2', success=True, data={"token_usages": token_usages})
+    return Result(message='Messages added to processing queue2', success=True, tokens=token_usages})
 
 
 @router.post('/entity-node', status_code=status.HTTP_201_CREATED)
