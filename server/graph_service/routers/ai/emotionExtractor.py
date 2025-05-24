@@ -63,7 +63,7 @@ Message:
                   MERGE (e)-[:HAS_EMOTION]->(em)
                 """,
                 {
-                    "uuid": message['uuid'],
+                    "uuid": message.uuid,
                     "group_id": group_id,
                     "emotions": emotions
                 }

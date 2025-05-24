@@ -65,7 +65,7 @@ Message:
                   MERGE (f:Fact {text: fact})
                   MERGE (e)-[:IS_FACT]->(f)
                 """,
-                {"uuid": message['uuid'], "group_id": group_id, "facts": facts}
+                {"uuid": message.uuid, "group_id": group_id, "facts": facts}
             )
 
         print("[Graphiti] Finished fact extraction")

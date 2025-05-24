@@ -61,7 +61,7 @@ Message:
                   MERGE (r:Relation {text: rel})
                   MERGE (e)-[:HAS_RELATION]->(r)
                 """,
-                {"uuid": message['uuid'], "group_id": group_id, "relations": relations}
+                {"uuid": message.uuid, "group_id": group_id, "relations": relations}
             )
         print("[Graphiti] Finished relation extraction")
 

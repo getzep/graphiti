@@ -64,7 +64,7 @@ Message:
                   MERGE (m:Memory {text: mem})
                   MERGE (e)-[:HAS_MEMORY]->(m)
                 """,
-                {"uuid": message['uuid'], "group_id": group_id, "memories": memories}
+                {"uuid": message.uuid, "group_id": group_id, "memories": memories}
             )
 
         print("[Graphiti] Finished memory extraction")
