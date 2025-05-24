@@ -217,8 +217,13 @@ When extracting new entities, try to match them to the existing ones if possible
                 MERGE (e:Episodic {uuid: $uuid})
                 ON CREATE SET e.group_id = $group_id
                 WITH e
-                MERGE (s:Shirt {slug: $shirt_slug})
-                WITH e, s
+
+                // Conditionally merge Shirt node if shirt_slug is provided and not empty
+                FOREACH (actual_slug IN CASE WHEN $shirt_slug IS NOT NULL AND $shirt_slug <> '' THEN [$shirt_slug] ELSE [] END |
+                    MERGE (s:Shirt {slug: actual_slug})
+                )
+
+                WITH e // Carry 'e' through for subsequent operations
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
@@ -240,7 +245,7 @@ When extracting new entities, try to match them to the existing ones if possible
                     "emotions": emotions,
                     "facts": facts,
                     "entities": entities,
-                    "shirt_slug": shirt_slug
+                    "shirt_slug": shirt_slug # This can be None
                 }
             )
 
