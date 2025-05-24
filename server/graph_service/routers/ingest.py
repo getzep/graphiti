@@ -56,11 +56,15 @@ router = APIRouter(lifespan=lifespan)
 
 @router.post('/messages', status_code=status.HTTP_202_ACCEPTED)
 async def add_messages(
-    request: AddMessagesRequest,
+    request: AddMessagesRequest, # Assume this DTO might contain 'chat_history' and 'shirt_slug'
     graphiti: ZepGraphitiDep,
 ):
     token_usages = []
-    async def add_messages_task(m: Message):
+
+    chat_history_from_request = getattr(request, 'chat_history', "")
+    shirt_slug_from_request = getattr(request, 'shirt_slug', None)
+
+    async def add_messages_task(m: Message): # Inner function, can access chat_history_from_request and shirt_slug_from_request
         # Pomiń, jeśli wiadomość nie ma treści
         if not hasattr(m, 'content') or not m.content or not m.content.strip():
             print(f"[Graphiti] Pomijam pustą wiadomość (uuid: {getattr(m, 'uuid', None)})")
@@ -82,7 +86,13 @@ async def add_messages(
             print("[Graphiti] DONE dodane")
 
             if m.role == "user":
-                token_usage = await extractFactsAndStore(graphiti, m, request.group_id)
+                token_usage = await extractFactsAndStore(
+                    graphiti, 
+                    m, 
+                    request.group_id, 
+                    chat_history_from_request, # Use history from request
+                    shirt_slug_from_request    # Use shirt_slug from request
+                )
                 if token_usage:
                     print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
                     token_usages.append({"uuid": m.uuid, **token_usage})
@@ -90,8 +100,8 @@ async def add_messages(
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
 
-    for m in request.messages:
-        await add_messages_task(m)
+    for m_message in request.messages: # Renamed loop variable for clarity
+        await add_messages_task(m_message)
 
     print(f"[Graphiti] FINAL token_usages: {token_usages}")
     return Result(message='Messages added to processing queue2', success=True, tokens=token_usages)

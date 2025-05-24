@@ -58,7 +58,7 @@ functionsSpec = [
     }
 ]
 
-async def extractAllAndStore(graphiti, message, groupId):
+async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_slug):
     """
     Extract facts, emotions, and entities from `message.content` using OpenAI function calls,
     then store them in Neo4j as connected nodes under Episodic(uuid).
@@ -68,20 +68,20 @@ async def extractAllAndStore(graphiti, message, groupId):
     if not message or not hasattr(message, 'content') or not message.content or not message.content.strip():
         return None
 
-    # 1. Pobierz istniejące fakty, emocje i encje dla danego groupId
+    # 1. Pobierz istniejące fakty, emocje i encje dla danego group_id
     existing_facts = []
     existing_emotions = []
     existing_entities = []
-    print(f"[DEBUG] Attempting to fetch existing data for groupId: {groupId}") # Zmieniono log
+    print(f"[DEBUG] Attempting to fetch existing data for group_id: {group_id}") # Zmieniono log
     async with graphiti.driver.session() as session:
         # Pobierz istniejące fakty dla grupy
         result_facts = await session.run(
             """
             MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
-            WHERE r.group_id = $groupId
+            WHERE r.group_id = $group_id
             RETURN collect(DISTINCT fact_node) AS fact_nodes_for_group
             """,
-            {"groupId": groupId}
+            {"group_id": group_id}
         )
         record_facts = await result_facts.single()
         if record_facts and record_facts["fact_nodes_for_group"]:
@@ -93,10 +93,10 @@ async def extractAllAndStore(graphiti, message, groupId):
         result_emotions = await session.run(
             """
             MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
-            WHERE r.group_id = $groupId
+            WHERE r.group_id = $group_id
             RETURN collect(DISTINCT emotion_node) AS emotion_nodes_for_group
             """,
-            {"groupId": groupId}
+            {"group_id": group_id}
         )
         record_emotions = await result_emotions.single()
         if record_emotions and record_emotions["emotion_nodes_for_group"]:
@@ -108,10 +108,10 @@ async def extractAllAndStore(graphiti, message, groupId):
         result_entities = await session.run(
             """
             MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
-            WHERE r.group_id = $groupId
+            WHERE r.group_id = $group_id
             RETURN collect(DISTINCT entity_node) AS entity_nodes_for_group
             """,
-            {"groupId": groupId}
+            {"group_id": group_id}
         )
         record_entities = await result_entities.single()
         if record_entities and record_entities["entity_nodes_for_group"]:
@@ -125,7 +125,7 @@ async def extractAllAndStore(graphiti, message, groupId):
     print(f"[DEBUG] Populated existing_facts for group: {existing_facts}") # Zmieniono log
     print(f"[DEBUG] Populated existing_emotions for group: {existing_emotions}") # Zmieniono log
     print(f"[DEBUG] Populated existing_entities for group: {existing_entities}") # Zmieniono log
-    # Usunięto warunek else, który logował brak rekordu dla uuid, bo teraz szukamy po groupId
+    # Usunięto warunek else, który logował brak rekordu dla uuid, bo teraz szukamy po group_id
     # else:
     #     print("[DEBUG] No record found in DB for this uuid (Episodic node not found).")
 
@@ -155,13 +155,16 @@ When extracting new entities, try to match them to the existing ones if possible
     entities = []
 
     try:
+        # Prepare messages for OpenAI API calls
+        base_messages = [{"role": "user", "content": promptBase}]
+        if chat_history and chat_history.strip():
+            base_messages.append({"role": "assistant", "content": chat_history})
+
         # 1) Extract facts
+        messages_facts = base_messages + [{"role": "system", "content": facts_context}]
         respFacts = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "user", "content": promptBase},
-                {"role": "system", "content": facts_context}
-            ],
+            messages=messages_facts,
             functions=[functionsSpec[0]],
             function_call="auto",
             temperature=TEMPERATURE
@@ -172,12 +175,10 @@ When extracting new entities, try to match them to the existing ones if possible
             facts = json.loads(fc.arguments).get("facts", [])
 
         # 2) Extract emotions
+        messages_emotions = base_messages + [{"role": "system", "content": emotions_context}]
         respEmo = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "user", "content": promptBase},
-                {"role": "system", "content": emotions_context}
-            ],
+            messages=messages_emotions,
             functions=[functionsSpec[1]],
             function_call="auto",
             temperature=TEMPERATURE
@@ -188,12 +189,10 @@ When extracting new entities, try to match them to the existing ones if possible
             emotions = json.loads(fc.arguments).get("emotions", [])
 
         # 3) Extract entities
+        messages_entities = base_messages + [{"role": "system", "content": entities_context}]
         respEnt = openai.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "user", "content": promptBase},
-                {"role": "system", "content": entities_context}
-            ],
+            messages=messages_entities,
             functions=[functionsSpec[2]],
             function_call="auto",
             temperature=TEMPERATURE
@@ -230,29 +229,31 @@ When extracting new entities, try to match them to the existing ones if possible
             await session.run(
                 """
                 MERGE (e:Episodic {uuid: $uuid})
-                ON CREATE SET e.group_id = $groupId
+                ON CREATE SET e.group_id = $group_id
                 WITH e
+                MERGE (s:Shirt {slug: $shirt_slug})
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
-                  MERGE (e)-[rel:HAS_EMOTION {group_id: $groupId}]->(em)
+                  MERGE (e)-[rel:HAS_EMOTION {group_id: $group_id}]->(em)
                 WITH e
 
                 UNWIND $facts AS fact
                   MERGE (f:Fact {text: fact})
-                  MERGE (e)-[rel:IS_FACT {group_id: $groupId}]->(f)
+                  MERGE (e)-[rel:IS_FACT {group_id: $group_id}]->(f)
                 WITH e
 
                 UNWIND $entities AS ent
                   MERGE (m:Entity {text: ent})
-                  MERGE (e)-[rel:HAS_ENTITY {group_id: $groupId}]->(m)
+                  MERGE (e)-[rel:HAS_ENTITY {group_id: $group_id}]->(m)
                 """,
                 {
                     "uuid": message.uuid,
-                    "groupId": groupId,
+                    "group_id": group_id,
                     "emotions": emotions,
                     "facts": facts,
-                    "entities": entities
+                    "entities": entities,
+                    "shirt_slug": shirt_slug
                 }
             )
 
