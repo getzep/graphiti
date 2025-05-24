@@ -64,8 +64,8 @@ async def extractAllAndStore(graphiti, message, groupId):
     then store them in Neo4j as connected nodes under Episodic(uuid).
     Prints token usage statistics for the three calls and returns the total token usage.
     """
-    # Jeśli nie ma message, nic nie rób
-    if not message:
+    # Jeśli nie ma message lub message.content, nic nie rób
+    if not message or not hasattr(message, 'content') or not message.content or not message.content.strip():
         return None
 
     # Prepare prompt
