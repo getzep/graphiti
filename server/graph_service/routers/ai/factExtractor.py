@@ -72,6 +72,7 @@ async def extractAllAndStore(graphiti, message, groupId):
     existing_facts = []
     existing_emotions = []
     existing_entities = []
+    print(f"[DEBUG] Attempting to fetch existing data for message.uuid: {message.uuid}")
     async with graphiti.driver.session() as session:
         result = await session.run(
             """
@@ -84,10 +85,16 @@ async def extractAllAndStore(graphiti, message, groupId):
             {"uuid": message.uuid}
         )
         record = await result.single()
+        print(f"[DEBUG] Raw record from DB: {record}")
         if record:
             existing_facts = [x for x in record["facts"] if x]
             existing_emotions = [x for x in record["emotions"] if x]
             existing_entities = [x for x in record["entities"] if x]
+            print(f"[DEBUG] Populated existing_facts: {existing_facts}")
+            print(f"[DEBUG] Populated existing_emotions: {existing_emotions}")
+            print(f"[DEBUG] Populated existing_entities: {existing_entities}")
+        else:
+            print("[DEBUG] No record found in DB for this uuid.")
 
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
