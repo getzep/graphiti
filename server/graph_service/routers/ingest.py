@@ -90,6 +90,7 @@ async def add_messages(
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
 
+    print(f"[Graphiti] FINAL token_usages: {token_usages}")
     return Result(message='Messages added to processing queue2', success=True, tokens=token_usages)
 
 
