@@ -76,7 +76,7 @@ Message content for analysis:
 
     try:
         # 1) Extract facts
-        respFacts = openai.chat.completions.create(
+        respFacts = await openai.chat.completions.acreate(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": promptBase}],
             functions=[functionsSpec[0]],
@@ -86,7 +86,7 @@ Message content for analysis:
         facts = json.loads(respFacts.choices[0].message.function_call.arguments).get("facts", [])
 
         # 2) Extract emotions
-        respEmo = openai.chat.completions.create(
+        respEmo = await openai.chat.completions.acreate(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": promptBase}],
             functions=[functionsSpec[1]],
@@ -96,7 +96,7 @@ Message content for analysis:
         emotions = json.loads(respEmo.choices[0].message.function_call.arguments).get("emotions", [])
 
         # 3) Extract memories
-        respMem = openai.chat.completions.create(
+        respMem = await openai.chat.completions.acreate(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": promptBase}],
             functions=[functionsSpec[2]],
