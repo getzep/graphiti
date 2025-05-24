@@ -83,16 +83,11 @@ async def add_messages(
             if m.role == "user":
                 token_usage = await extractFactsAndStore(graphiti, m, request.group_id)
                 if token_usage:
+                    print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
                     token_usages.append({
                         "uuid": m.uuid,
                         **token_usage
                     })
-                # if presence_data.get("emotion"):
-                #     await extractEmotionsAndStore(graphiti, m, request.group_id)
-                # if presence_data.get("memory"):
-                #     await extractMemoriesAndStore(graphiti, m, request.group_id)
-                # if presence_data.get("relation"):
-                #     await extractRelationsAndStore(graphiti, m, request.group_id)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
