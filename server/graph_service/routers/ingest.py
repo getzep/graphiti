@@ -105,26 +105,23 @@ async def add_messages(
 
     print(f"[Graphiti] FINAL token_usages: {token_usages}")
 
-    facts_entities = None
-    facts_emotions = None
-    emotions_entities = None
-    entities = None # DODANE
-    emotions = None # DODANE
-    facts = None # DODANE
-
+    # Extract only token usage information (not facts/emotions/entities)
+    tokens_only = []
     if token_usages:
-        last_token_usage = token_usages[-1]
-        top_facts = last_token_usage.get("top_facts")
-        top_emotions = last_token_usage.get("top_emotions")
-        top_entities = last_token_usage.get("top_entities")
+        for usage in token_usages:
+            tokens_only.append({
+                "uuid": usage.get("uuid"),
+                "tokens": usage.get("tokens", {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0
+                })
+            })
 
     return Result(
-        message='Messages added to processing queue',  # Zachowano poprzednią edycję użytkownika
+        message='Messages added to processing queue',
         success=True,
-        tokens=token_usages,
-        top_facts=top_facts,
-        top_emotions=top_emotions,
-        top_entities=top_entities
+        tokens=tokens_only
     )
 
 

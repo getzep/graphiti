@@ -8,10 +8,7 @@ from pydantic import BaseModel, Field
 class Result(BaseModel):
     message: str
     success: bool
-    tokens: Optional[Any] = None  # pozwala na zwracanie tokenów lub innych danych
-    top_facts: Optional[list] = None
-    top_emotions: Optional[list] = None
-    top_entities: Optional[list] = None
+    tokens: Optional[Any] = None  # Contains token usage information
 
 
 class Message(BaseModel):
