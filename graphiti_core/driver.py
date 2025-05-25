@@ -46,11 +46,9 @@ class FalkorClientSession(GraphClientSession):
     async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
         # FalkorDB does not support argument for Label Set, so its converted into array of queries
         if isinstance(cypher_query_, list):
-            for query in cypher_query_:
-                params = query[1]
-                query = query[0]
+            for cypher, params in cypher_query_:
                 params = convert_datetimes_to_strings(params)
-                await self.graph.query(str(query), params)
+                await self.graph.query(str(cypher), params)
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
@@ -95,10 +93,8 @@ class Neo4jClient(GraphClient):
 
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
         params = kwargs.pop("params", None)
-        try:
-            result = self._client.execute_query(cypher_query_, parameters_=params, **kwargs)
-        except Exception as e:
-            print(f"Error executing query: {e}")
+        result = self._client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        
         return result
 
     def session(self, database: str) -> GraphClientSession:
@@ -176,7 +172,7 @@ class Driver:
     def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
         return self._driver.execute_query(cypher_query_, **kwargs)
 
-    def close(self):
+    async def close(self):
         return self._driver.close()
 
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:

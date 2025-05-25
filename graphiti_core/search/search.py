@@ -90,59 +90,56 @@ async def search(
     )
 
     # if group_ids is empty, set it to None
-    try:
-        group_ids = group_ids if group_ids else None
-        edges, nodes, episodes, communities = await semaphore_gather(
-            edge_search(
-                driver,
-                cross_encoder,
-                query,
-                query_vector,
-                group_ids,
-                config.edge_config,
-                search_filter,
-                center_node_uuid,
-                bfs_origin_node_uuids,
-                config.limit,
-                config.reranker_min_score,
-            ),
-            node_search(
-                driver,
-                cross_encoder,
-                query,
-                query_vector,
-                group_ids,
-                config.node_config,
-                search_filter,
-                center_node_uuid,
-                bfs_origin_node_uuids,
-                config.limit,
-                config.reranker_min_score,
-            ),
-            episode_search(
-                driver,
-                cross_encoder,
-                query,
-                query_vector,
-                group_ids,
-                config.episode_config,
-                search_filter,
-                config.limit,
-                config.reranker_min_score,
-            ),
-            community_search(
-                driver,
-                cross_encoder,
-                query,
-                query_vector,
-                group_ids,
-                config.community_config,
-                config.limit,
-                config.reranker_min_score,
-            ),
-        )
-    except Exception as e:
-        print(f'Error during search: {e}')
+    group_ids = group_ids if group_ids else None
+    edges, nodes, episodes, communities = await semaphore_gather(
+        edge_search(
+            driver,
+            cross_encoder,
+            query,
+            query_vector,
+            group_ids,
+            config.edge_config,
+            search_filter,
+            center_node_uuid,
+            bfs_origin_node_uuids,
+            config.limit,
+            config.reranker_min_score,
+        ),
+        node_search(
+            driver,
+            cross_encoder,
+            query,
+            query_vector,
+            group_ids,
+            config.node_config,
+            search_filter,
+            center_node_uuid,
+            bfs_origin_node_uuids,
+            config.limit,
+            config.reranker_min_score,
+        ),
+        episode_search(
+            driver,
+            cross_encoder,
+            query,
+            query_vector,
+            group_ids,
+            config.episode_config,
+            search_filter,
+            config.limit,
+            config.reranker_min_score,
+        ),
+        community_search(
+            driver,
+            cross_encoder,
+            query,
+            query_vector,
+            group_ids,
+            config.community_config,
+            config.limit,
+            config.reranker_min_score,
+        ),
+    )
 
     results = SearchResults(
         edges=edges,
@@ -173,29 +170,26 @@ async def edge_search(
 ) -> list[EntityEdge]:
     if config is None:
         return []
-    try:
-        search_results: list[list[EntityEdge]] = list(
-            await semaphore_gather(
-                *[
-                    edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                    edge_similarity_search(
-                        driver,
-                        query_vector,
-                        None,
-                        None,
-                        search_filter,
-                        group_ids,
-                        2 * limit,
-                        config.sim_min_score,
-                    ),
-                    edge_bfs_search(
-                        driver, bfs_origin_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
-                    ),
-                ]
-            )
+    search_results: list[list[EntityEdge]] = list(
+        await semaphore_gather(
+            *[
+                edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
+                edge_similarity_search(
+                    driver,
+                    query_vector,
+                    None,
+                    None,
+                    search_filter,
+                    group_ids,
+                    2 * limit,
+                    config.sim_min_score,
+                ),
+                edge_bfs_search(
+                    driver, bfs_origin_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
+                ),
+            ]
         )
-    except Exception as e:
-        print(f'Error during edge search: {e}')
+    )
 
     if EdgeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
@@ -285,22 +279,19 @@ async def node_search(
 ) -> list[EntityNode]:
     if config is None:
         return []
-    try:
-        search_results: list[list[EntityNode]] = list(
-            await semaphore_gather(
-                *[
-                    node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                    node_similarity_search(
-                        driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
-                    ),
-                    node_bfs_search(
-                        driver, bfs_origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
-                    ),
-                ]
-            )
+    search_results: list[list[EntityNode]] = list(
+        await semaphore_gather(
+            *[
+                node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
+                node_similarity_search(
+                    driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
+                ),
+                node_bfs_search(
+                    driver, bfs_origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+                ),
+            ]
         )
-    except Exception as e:
-        print(f'Error during node search: {e}')
+    )
 
     if NodeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         origin_node_uuids = [node.uuid for result in search_results for node in result]
@@ -375,16 +366,13 @@ async def episode_search(
 ) -> list[EpisodicNode]:
     if config is None:
         return []
-    try:
-        search_results: list[list[EpisodicNode]] = list(
-            await semaphore_gather(
-                *[
-                    episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                ]
-            )
+    search_results: list[list[EpisodicNode]] = list(
+        await semaphore_gather(
+            *[
+                episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
+            ]
         )
-    except Exception as e:
-        print(f'Error during episode search: {e}')
+    )
 
     search_result_uuids = [[episode.uuid for episode in result] for result in search_results]
     episode_uuid_map = {episode.uuid: episode for result in search_results for episode in result}

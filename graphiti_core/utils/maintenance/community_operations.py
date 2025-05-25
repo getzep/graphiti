@@ -60,8 +60,7 @@ async def get_community_clusters(
             )
 
             projection[node.uuid] = [
-                Neighbor(node_uuid=record["uuid"], edge_count=record["count"])
-                for record in records
+                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
             ]
 
         cluster_uuids = label_propagation(projection)
@@ -95,10 +94,7 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
-                community_candidates[
-                    community_map[neighbor.node_uuid]
-                ] += neighbor.edge_count
-
+                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
             community_lst = [
                 (count, community) for community, count in community_candidates.items()
             ]

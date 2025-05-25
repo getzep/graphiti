@@ -53,23 +53,16 @@ async def build_indices_and_constraints(driver: Driver, delete_existing: bool = 
     fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
-    # pdb.set_trace()
-    # for query in index_queries:
-    #     driver.execute_query(query, database_=DEFAULT_DATABASE)
-    try:
-        await semaphore_gather(
-            *[
-                driver.execute_query(
-                    query,
-                    database_=DEFAULT_DATABASE,
-                )
-                for query in index_queries
-            ]
-        )
-    except Exception as e:
-        print(f"Error creating indices: {e}")
-    # pdb.set_trace()
 
+    await semaphore_gather(
+        *[
+            driver.execute_query(
+                query,
+                database_=DEFAULT_DATABASE,
+            )
+            for query in index_queries
+        ]
+    )
 
 async def clear_data(driver: Driver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:

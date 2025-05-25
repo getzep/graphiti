@@ -99,42 +99,16 @@ async def add_nodes_and_edges_bulk(
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
 ):
-    # async with driver.session(database=DEFAULT_DATABASE) as session:
-    #     await session.execute_write(
-    #         add_nodes_and_edges_bulk_tx,
-    #         episodic_nodes,
-    #         episodic_edges,
-    #         entity_nodes,
-    #         entity_edges,
-    #         embedder,
-    #     )
     session = driver.session(database=DEFAULT_DATABASE)
-    try:
-        # async with driver.session(database=DEFAULT_DATABASE) as session:
-        #     await session.execute_write(
-        #         add_nodes_and_edges_bulk_tx,
-        #         episodic_nodes,
-        #         episodic_edges,
-        #         entity_nodes,
-        #         entity_edges,
-        #         embedder,
-        #     )
-        await session.execute_write(
-            add_nodes_and_edges_bulk_tx,
-            episodic_nodes,
-            episodic_edges,
-            entity_nodes,
-            entity_edges,
-            embedder,
-            driver=driver,
-        )
-    except Exception as e:
-        logger.error(f"Error adding nodes and edges: {e}")
-        raise
-
-
-
-
+    await session.execute_write(
+        add_nodes_and_edges_bulk_tx,
+        episodic_nodes,
+        episodic_edges,
+        entity_nodes,
+        entity_edges,
+        embedder,
+        driver=driver,
+    )
 
 async def add_nodes_and_edges_bulk_tx(
     tx: GraphClientSession,
@@ -169,14 +143,11 @@ async def add_nodes_and_edges_bulk_tx(
         if edge.fact_embedding is None:
             await edge.generate_embedding(embedder)
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episode)
-    ENTITY_NODE_SAVE_BULK = get_entity_node_save_bulk_query(nodes, driver.provider)
-    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
-    await tx.run(
-        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
-    )
-    ENTITY_EDGE_SAVE_BULK = get_entity_edge_save_bulk_query(driver.provider)
-    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[edge.model_dump() for edge in entity_edges])
-
+    entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
+    await tx.run(entity_node_save_bulk, nodes=nodes)
+    await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges])
+    entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
+    await tx.run(entity_edge_save_bulk, entity_edges=[edge.model_dump() for edge in entity_edges])
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
@@ -478,15 +449,3 @@ def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
     edge_chunks = [chunk for chunk in edge_chunk_map.values()]
 
     return edge_chunks
-
-def convert_datetimes_to_strings(obj):
-    if isinstance(obj, dict):
-        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetimes_to_strings(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_datetimes_to_strings(item) for item in obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    else:
-        return obj

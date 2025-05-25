@@ -18,7 +18,6 @@ import asyncio
 import os
 from collections.abc import Coroutine
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -26,6 +25,7 @@ from neo4j import time as neo4j_time
 from typing_extensions import LiteralString
 
 load_dotenv()
+
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))

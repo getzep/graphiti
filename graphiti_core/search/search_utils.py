@@ -578,7 +578,7 @@ async def community_similarity_search(
         + """
            MATCH (comm:Community)
            """
-        + group_filter_query#vec.cosineDistance(n.name_embedding, $search_vector)vector.similarity.cosine(comm.name_embedding, $search_vector)
+        + group_filter_query
         + """
            WITH comm, """ + get_vector_cosine_func_query("comm.name_embedding", "$search_vector", driver.provider) + """ AS score
            WHERE score > $min_score
@@ -935,17 +935,10 @@ async def node_distance_reranker(
     min_score: float = 0,
 ) -> list[str]:
     # filter out node_uuid center node node uuid
-    filtered_uuids = list(
-        filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids)
-    )
+    filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
     # Find the shortest path to center node
-    query = """
-        UNWIND $node_uuids AS node_uuid
-        MATCH p = SHORTEST 1 (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-+(n:Entity {uuid: node_uuid})
-        RETURN length(p) AS score, node_uuid AS uuid
-        """
     query = (
         """
         UNWIND $node_uuids AS node_uuid
@@ -1019,12 +1012,8 @@ def maximal_marginal_relevance(
 ):
     candidates_with_mmr: list[tuple[str, float]] = []
     for candidate in candidates:
-        max_sim = max(
-            [np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates]
-        )
-        mmr = (
-            mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
-        )
+        max_sim = max([np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates])
+        mmr = mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
         candidates_with_mmr.append((candidate[0], mmr))
 
     candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
