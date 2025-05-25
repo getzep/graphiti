@@ -6,7 +6,7 @@ import json
 # Load settings and API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0.4
+TEMPERATURE = 0.25
 openai.api_key = OPENAI_API_KEY
 
 # Define OpenAI function specifications for facts, emotions, and entities
@@ -82,7 +82,7 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             """
             MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
             WHERE r.group_id = $group_id
-            RETURN collect(DISTINCT fact_node) AS fact_nodes_for_group
+            RETURN collect(DISTINCT {text: fact_node.text, count: COALESCE(fact_node.count, 0)}) AS fact_nodes_for_group
             """,
             {"group_id": group_id}
         )
@@ -96,7 +96,7 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             """
             MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
             WHERE r.group_id = $group_id
-            RETURN collect(DISTINCT emotion_node) AS emotion_nodes_for_group
+            RETURN collect(DISTINCT {text: emotion_node.text, count: COALESCE(emotion_node.count, 0)}) AS emotion_nodes_for_group
             """,
             {"group_id": group_id}
         )
@@ -110,7 +110,7 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             """
             MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
             WHERE r.group_id = $group_id
-            RETURN collect(DISTINCT entity_node) AS entity_nodes_for_group
+            RETURN collect(DISTINCT {text: entity_node.text, count: COALESCE(entity_node.count, 0)}) AS entity_nodes_for_group
             """,
             {"group_id": group_id}
         )
@@ -120,7 +120,7 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             existing_entities = [mn["text"] for mn in entity_nodes if mn and mn.get("text")]
 
         # Usunięto stąd blok pobierający facts_connected_to_entities, facts_connected_to_emotions, emotions_connected_to_entities.
-        # Został on przeniesiony na koniec funkcji.
+        # Został on przeniesiony na koniec funkcji
 
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
@@ -233,16 +233,22 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
 
                 UNWIND $emotions AS emo
                   MERGE (em:Emotion {text: emo})
+                  ON CREATE SET em.count = 1
+                  ON MATCH SET em.count = COALESCE(em.count, 0) + 1
                   MERGE (e)-[rel:HAS_EMOTION {group_id: $group_id, shirt_slug: $shirt_slug}]->(em)
                 WITH e
 
                 UNWIND $facts AS fact
                   MERGE (f:Fact {text: fact})
+                  ON CREATE SET f.count = 1
+                  ON MATCH SET f.count = COALESCE(f.count, 0) + 1
                   MERGE (e)-[rel:IS_FACT {group_id: $group_id, shirt_slug: $shirt_slug}]->(f)
                 WITH e
 
                 UNWIND $entities AS ent
                   MERGE (m:Entity {text: ent})
+                  ON CREATE SET m.count = 1
+                  ON MATCH SET m.count = COALESCE(m.count, 0) + 1
                   MERGE (e)-[rel:HAS_ENTITY {group_id: $group_id, shirt_slug: $shirt_slug}]->(m)
                 """,
                 {
@@ -260,7 +266,12 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
                 """
                 MATCH (fact_node:Fact)<-[rf:IS_FACT]-(ep:Episodic)-[re:HAS_ENTITY]->(entity_node:Entity)
                 WHERE rf.group_id = $group_id AND re.group_id = $group_id
-                RETURN collect(DISTINCT {fact: fact_node.text, entity: entity_node.text}) AS facts_with_entities
+                RETURN collect(DISTINCT {
+                    fact: fact_node.text, 
+                    entity: entity_node.text, 
+                    fact_count: COALESCE(fact_node.count, 0),
+                    entity_count: COALESCE(entity_node.count, 0)
+                }) AS facts_with_entities
                 """,
                 {"group_id": group_id}
             )
@@ -275,7 +286,12 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
                 """
                 MATCH (fact_node:Fact)<-[rf:IS_FACT]-(ep:Episodic)-[rem:HAS_EMOTION]->(emotion_node:Emotion)
                 WHERE rf.group_id = $group_id AND rem.group_id = $group_id
-                RETURN collect(DISTINCT {fact: fact_node.text, emotion: emotion_node.text}) AS facts_with_emotions
+                RETURN collect(DISTINCT {
+                    fact: fact_node.text, 
+                    emotion: emotion_node.text,
+                    fact_count: COALESCE(fact_node.count, 0),
+                    emotion_count: COALESCE(emotion_node.count, 0)
+                }) AS facts_with_emotions
                 """,
                 {"group_id": group_id}
             )
@@ -290,7 +306,12 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
                 """
                 MATCH (emotion_node:Emotion)<-[rem:HAS_EMOTION]-(ep:Episodic)-[re:HAS_ENTITY]->(entity_node:Entity)
                 WHERE rem.group_id = $group_id AND re.group_id = $group_id
-                RETURN collect(DISTINCT {emotion: emotion_node.text, entity: entity_node.text}) AS emotions_with_entities
+                RETURN collect(DISTINCT {
+                    emotion: emotion_node.text, 
+                    entity: entity_node.text,
+                    emotion_count: COALESCE(emotion_node.count, 0),
+                    entity_count: COALESCE(entity_node.count, 0)
+                }) AS emotions_with_entities
                 """,
                 {"group_id": group_id}
             )
@@ -300,17 +321,68 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
             else:
                 emotions_connected_to_entities = []
 
+        # Przygotuj informacje o licznikach dla emotions, entities i facts
+        async with graphiti.driver.session() as session:
+            # Pobierz liczniki dla emotions
+            result_emotions_counts = await session.run(
+                """
+                MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
+                WHERE r.group_id = $group_id AND emotion_node.text IN $emotions
+                RETURN emotion_node.text AS text, emotion_node.count AS count
+                """,
+                {"group_id": group_id, "emotions": emotions}
+            )
+            emotions_with_counts = []
+            async for record in result_emotions_counts:
+                emotions_with_counts.append({
+                    "text": record["text"], 
+                    "count": record["count"]
+                })
+            
+            # Pobierz liczniki dla entities
+            result_entities_counts = await session.run(
+                """
+                MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
+                WHERE r.group_id = $group_id AND entity_node.text IN $entities
+                RETURN entity_node.text AS text, entity_node.count AS count
+                """,
+                {"group_id": group_id, "entities": entities}
+            )
+            entities_with_counts = []
+            async for record in result_entities_counts:
+                entities_with_counts.append({
+                    "text": record["text"], 
+                    "count": record["count"]
+                })
+            
+            # Pobierz liczniki dla facts
+            result_facts_counts = await session.run(
+                """
+                MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
+                WHERE r.group_id = $group_id AND fact_node.text IN $facts
+                RETURN fact_node.text AS text, fact_node.count AS count
+                """,
+                {"group_id": group_id, "facts": facts}
+            )
+            facts_with_counts = []
+            async for record in result_facts_counts:
+                facts_with_counts.append({
+                    "text": record["text"], 
+                    "count": record["count"]
+                })
+
         return {
             "total_tokens": totalTokens,
             "input_tokens": inputTokens,
             "output_tokens": outputTokens,
             "model": OPENAI_MODEL,
             "temperature": TEMPERATURE,
-            "entities": entities,
-            "emotions": emotions,
-            "facts_connected_to_entities": facts_connected_to_entities, # DODANE DO ZWRACANEJ WARTOŚCI
-            "facts_connected_to_emotions": facts_connected_to_emotions, # DODANE DO ZWRACANEJ WARTOŚCI
-            "emotions_connected_to_entities": emotions_connected_to_entities # DODANE DO ZWRACANEJ WARTOŚCI
+            "entities": entities_with_counts if entities_with_counts else entities,
+            "emotions": emotions_with_counts if emotions_with_counts else emotions,
+            "facts": facts_with_counts if facts_with_counts else facts,
+            "facts_connected_to_entities": facts_connected_to_entities,
+            "facts_connected_to_emotions": facts_connected_to_emotions,
+            "emotions_connected_to_entities": emotions_connected_to_entities
         }
 
     except Exception as err:

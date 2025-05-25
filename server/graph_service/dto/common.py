@@ -14,6 +14,7 @@ class Result(BaseModel):
     emotions_connected_to_entities: Optional[list] = None
     entities: Optional[list] = None
     emotions: Optional[list] = None
+    facts: Optional[list] = None
 
 
 class Message(BaseModel):
