@@ -44,94 +44,131 @@ Message content for analysis:
 '''
 
     facts_context = """
-You are a converter that rewrites user sentences into **directly observable life-facts**.
+You are an assistant tasked with extracting meaningful and concise factual statements from a user's message, using previous user messages provided in the assistant role for context clarification only.
 
-STRICT rules
-1. Keep ONLY real-world actions or states a bystander could literally see or hear.
-2. Accept simple existence/location states such as “X is on/in/at Y”.
-3. Ignore conditional or hypothetical clauses introduced by words like: if, when, once, in case.
-4. Remove all feelings, opinions, intentions, plans, desire/need statements, fillers, greetings, and meta-speech.
-   • Discard any clause whose main verb is a mental-state or desire verb (need, want, miss, love, hope, feel, etc.).
-5. Pronouns  
-   • If a third-person pronoun (“she”, “he”, “they”, etc.) has a clear, unique antecedent
-     (name or role) either **earlier in the SAME user message _or_ in the most recent user messages
-     of the conversation**, replace the pronoun with that antecedent.  
-   • If multiple plausible antecedents exist, leave the pronoun unchanged.  
-   • Never invent an antecedent that has not appeared in the conversation.
-6. Write in third-person, declarative mood.
-7. If several actions or states involve the same subjects and occur at the same time or place,
-   merge them into ONE sentence using “while”, “when”, “as”, or “and”.
-8. If actions/states cannot logically be merged, write one sentence per action/state.
-9. When no observable life-facts remain, respond **exactly** with `[]` (an empty list).
-10. Never add details that are not in the user’s text or prior context.
-11. Output ONLY the transformed sentence(s) or `[]` – no explanations, no comments.
+Guidelines:
+- First, check if the user's current message contains significant factual content. Ignore very short or meaningless messages such as "yes", "no", "oh", "why", "maybe", etc.
+- Extract only objective, observable events or actions with significant meaning or value.
+- Exclude any statements expressing thoughts, feelings, opinions, or insignificant details.
+- Prioritize the user's current message. Previous user messages from the assistant context are only for resolving ambiguities about who or what the user refers to.
+- If no meaningful factual statements can be extracted, return an empty list.
 
-–––– EXAMPLES ––––
-• Previous user message: “Viola left her scarf on the chair.”  
-  Input:  “She walked outside.”  
-  Output: “Viola walked outside.”
+Example:
+User message: "I love her"
+Assistant previous user messages: "I spoke to Lila last night | yesterday clearly I was waiting for her to come"
+Extracted Fact: ["User loves Lila"]
 
-• Previous user messages mention both *Anna* and *Maria*.  
-  Input:  “She opened the window.”  
-  Output: “She opened the window.”   ← ambiguous antecedent, pronoun kept
+Output the result strictly as per the following function-calling schema:
+ ["Extracted factual statement(s)"]
 
-• Input:  “Her photo on the desk.”  
-  Output: “Her photo is on the desk.”
-
-• Input:  “I’m home playing Xbox, missing Viola.”  
-  Output: “He is at home playing Xbox.”
-
-• Input:  “If they arrive, we’ll start dinner.”  
-  Output: []
-
-• Input:  “She is what I need.”  
-  Output: []   ← desire statement, discarded
 """
 
     emotions_context = f"""
 Already existing emotions: {existing_emotions or []}
-When extracting new emotions FROM USER TEXT ONLY (not from assistant section), try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new emotion matches an existing one, return the existing value instead of a new variant. Only add new emotions if they are truly new and not covered by the existing ones.
+You are an assistant tasked with extracting emotions from a user's message, using previously identified emotions provided for context clarification.
+
+Guidelines:
+- Extract emotions only from the user's current message.
+- Match extracted emotions to existing known emotions based on meaning, synonyms, or clear similarity whenever possible.
+- Return an existing emotion if a new emotion closely matches an existing one.
+- Add a new emotion only if it is truly new and not already covered by known emotions.
+- Be as specific as possible. Prefer detailed emotional labels (e.g., 'resentment', 'shame', 'anticipation') over general ones (e.g., 'sadness', 'happiness').
+- Avoid vague or overly broad categories unless no better match exists.
+
+Examples:
+
+Example 1:
+Known emotions: ['grief']
+User message: "I still can't believe he's gone."
+Extracted emotions: ['grief']
+
+Example 2:
+Known emotions: ['relief']
+User message: "Finally, it's over. I can breathe again."
+Extracted emotions: ['relief']
+
+Example 3:
+Known emotions: ['frustration']
+User message: "I keep trying and failing. It's exhausting."
+Extracted emotions: ['frustration']
+
+Example 4:
+Known emotions: ['resentment', 'envy']
+User message: "She always gets what she wants. It's not fair."
+Extracted emotions: ['resentment', 'envy']
+
+Example 5:
+Known emotions: ['sadness', 'anger']
+User message: "Every morning I feel the same pointlessness, but I'm neither angry nor sad – just empty."
+Extracted emotions: ['emptiness']
+
+Example 6:
+Known emotions: ['anxiety', 'excitement']
+User message: "I can't focus because I'm constantly waiting for a reply."
+Extracted emotions: ['anticipation']
+
+Example 7:
+Known emotions: ['jealousy', 'envy']
+User message: "I can't be happy for their success. I feel overlooked."
+Extracted emotions: ['feeling overlooked']
+
+Example 8:
+Known emotions: ['shame']
+User message: "I wanted to say something smart, but I hesitated and pretended I had nothing to add."
+Extracted emotions: ['self-doubt']
+
+Output the result strictly as per the following function-calling schema:
+
+["Extracted emotion/emotions"]
 """
-    
+
     entities_context = f"""
 Already existing entities: {existing_entities or []}
-When extracting new entities from the USER message only (not assistant), always try to match them to the existing entities whenever possible—based on meaning, synonyms, pronouns, grammatical gender, or clear similarity.
-If a user uses a pronoun (he, she, they, it, etc.), or a vague reference ("this person", "that place"), and there is a matching existing entity, return the existing value instead of a new one.
+Already existing entities [maria]
+You are an assistant tasked with extracting entities (persons, places, objects) from a user's message, using previous known entities provided for context clarification.
 
-Never create a new entity for a pronoun or vague reference if there is a clear matching entity in the list.
+Guidelines:
+- Extract new entities only from the user's current message.
+- Match extracted entities to existing known entities based on meaning, synonyms, pronouns, grammatical gender, or clear similarity whenever possible.
+- Do not create a new entity for a pronoun or vague reference if there is a clear matching entity.
+- Add a new entity only if it is truly new and not already covered by known entities.
+- If a pronoun or vague reference could match multiple known entities, return all possible matches.
 
-Only add new entities if they are truly new and not already covered by the known entities.
+Examples:
 
 Example 1:
 Known entities: ['Sarah']
-User: "She helped me yesterday."
+User message: "She helped me yesterday."
 Extracted entities: ['Sarah']
 
 Example 2:
 Known entities: ['London']
-User: "I was there last summer."
+User message: "I was there last summer."
 Extracted entities: ['London']
 
 Example 3:
 Known entities: ['my boss']
-User: "He was very strict."
+User message: "He was very strict."
 Extracted entities: ['my boss']
 
 Example 4:
 Known entities: ['David']
-User: "He called me last night."
+User message: "He called me last night."
 Extracted entities: ['David']
 
 Example 5:
 Known entities: ['the old house']
-User: "I went back there to see it."
+User message: "I went back there to see it."
 Extracted entities: ['the old house']
 
 Example 6:
 Known entities: ['Sarah', 'Anna']
-User: "She wasn't at the meeting."
+User message: "She wasn't at the meeting."
 Extracted entities: ['Sarah', 'Anna']
-(If the pronoun could refer to more than one known entity, return all possible matches.)"""
+
+Output the result strictly as per the following function-calling schema:
+ ["Extracted entity/entities"]
+"""
 
     # Initialize results
     facts = []
