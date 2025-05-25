@@ -1,3 +1,9 @@
+"""
+Database query utilities for different graph database backends.
+
+This module provides database-agnostic query generation for Neo4j and FalkorDB,
+supporting index creation, fulltext search, and bulk operations.
+"""
 from typing_extensions import LiteralString
 from graphiti_core.models.edges.edge_db_queries import (
     ENTITY_EDGE_SAVE_BULK,
@@ -5,6 +11,14 @@ from graphiti_core.models.edges.edge_db_queries import (
 from graphiti_core.models.nodes.node_db_queries import (
     ENTITY_NODE_SAVE_BULK,
 )
+
+# Mapping from Neo4j fulltext index names to FalkorDB node labels
+NEO4J_TO_FALKORDB_MAPPING = {
+    "node_name_and_summary": "Entity",
+    "community_name": "Community", 
+    "episode_content": "Episodic",
+    "edge_name_and_fact": "RELATES_TO"
+}
 
 def get_range_indices(db_type: str = "neo4j") -> list[LiteralString]:
     if db_type == "falkordb":
@@ -63,31 +77,23 @@ def get_fulltext_indices(db_type: str = "neo4j") -> list[LiteralString]:
             FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
         ]
     
-def get_node_name_and_summary_query(db_type: str = "neo4j") -> str:
+def get_query_nodes_query(db_type: str = "neo4j", name: str = None,query: str = None) -> str:
     if db_type == "falkordb":
-        return """
-                CALL db.idx.fulltext.queryNodes("Entity", $query) 
-                YIELD node AS n, score
-                WITH n, score
-                LIMIT $limit
-                WHERE n:Entity
-                """
+        return f"CALL db.idx.fulltext.queryNodes('{NEO4J_TO_FALKORDB_MAPPING[name]}', {query})"
     else:
-        return """
-                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                YIELD node AS n, score
-                WHERE n:Entity
-                """
+        return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
+    
+def get_vector_cosine_func_query(vec1, vec2, db_type: str = "neo4j") -> str:
+    if db_type == "falkordb":
+        return f"vec.cosineDistance({vec1}, vecf32({vec2}))"
+    else:
+        return f"vector.similarity.cosine({vec1}, {vec2})"
 
-def get_edge_name_and_fact_query(db_type: str = "neo4j") -> str:
+def get_query_relationships_query(db_type: str = "neo4j", name: str = None, query: str = None) -> str:
     if db_type == "falkordb":
-        return """
-                CALL db.idx.fulltext.queryRelationships('RELATES_TO', $query)
-                """
+        return f"CALL db.idx.fulltext.queryRelationships('{NEO4J_TO_FALKORDB_MAPPING[name]}', {query})"
     else:
-        return """
-                CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
-                """
+        return f'CALL db.index.fulltext.queryRelationships("{name}", {query}, {{limit: $limit}})'
     
 def get_entity_node_save_bulk_query(nodes, db_type: str = "neo4j") -> str:
     if db_type == "falkordb":
@@ -121,27 +127,4 @@ def get_entity_edge_save_bulk_query(db_type: str = "neo4j") -> str:
     else:
         return ENTITY_EDGE_SAVE_BULK
     
-def get_vector_cosine_func_query(vec1, vec2, db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
-        return f"vec.cosineDistance({vec1}, vecf32({vec2}))"
-    else:
-        return f"vector.similarity.cosine({vec1}, {vec2})"
-    
-def get_node_name_and_summary_query_2(db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
-        return "db.idx.fulltext.queryNodes('Entity', node.fulltext_query)"
-    else:
-        return 'db.index.fulltext.queryNodes("node_name_and_summary", node.fulltext_query, {limit: $limit})'
-    
-def get_community_name_query(db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
-        return "db.idx.fulltext.queryNodes('Community', $query)"
-    else:
-        return 'db.index.fulltext.queryNodes("community_name", $query, {limit: $limit})'
-    
-def get_episode_content_query(db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
-        return "db.idx.fulltext.queryNodes('Episodic', $query)"
-    else:
-        return 'db.index.fulltext.queryNodes("episode_content", $query, {limit: $limit})'
 

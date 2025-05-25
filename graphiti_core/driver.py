@@ -17,14 +17,11 @@ limitations under the License.
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Coroutine
-from asyncio import sleep, Future
 from datetime import datetime
-
 
 from neo4j import AsyncGraphDatabase, GraphDatabase
 from falkordb.asyncio import FalkorDB
 from falkordb import Graph as FalkorGraph
-
 
 from graphiti_core.helpers import DEFAULT_DATABASE
 import asyncio
@@ -47,6 +44,7 @@ class FalkorClientSession(GraphClientSession):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
     async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
+        # FalkorDB does not support argument for Label Set, so its converted into array of queries
         if isinstance(cypher_query_, list):
             for query in cypher_query_:
                 params = query[1]
@@ -75,50 +73,11 @@ class GraphClient(ABC):
     def close(self) -> None:
         raise NotImplementedError()
 
-    @abstractmethod
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_node_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_relationship_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_node_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_relationship_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        raise NotImplementedError()
-
+        return self._client.execute_query(
+            "CALL db.indexes() YIELD name DROP INDEX name",
+            database_,
+        )
 
 class Neo4jClient(GraphClient):
 
@@ -148,63 +107,7 @@ class Neo4jClient(GraphClient):
     def close(self) -> None:
         return self._client.close()
 
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self._client.execute_query(
-            "CALL db.indexes() YIELD name DROP INDEX name",
-            database_,
-        )
-
-    def create_node_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._client.execute_query(
-            f"CREATE INDEX {index_name} IF NOT EXISTS FOR (n:{label}) ON (n.{property})",
-            database_,
-        )
-
-    def create_relationship_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._client.execute_query(
-            f"CREATE INDEX {index_name} IF NOT EXISTS FOR ()-[e:{label}]-() ON (e.{property})",
-            database_,
-        )
-
-    def create_node_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._client.execute_query(
-            f"CREATE FULLTEXT INDEX {index_name} IF NOT EXISTS FOR (n:{label}) ON EACH [{', n.'.join(properties)}]",
-            database_,
-        )
-
-    def create_relationship_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._client.execute_query(
-            f"CREATE FULLTEXT INDEX {index_name} IF NOT EXISTS FOR ()-[e:{label}]-() ON EACH [{', e.'.join(properties)}]",
-            database_,
-        )
-
-
 class FalkorClient(GraphClient):
-
     def __init__(
         self,
         uri: str,
@@ -219,22 +122,28 @@ class FalkorClient(GraphClient):
         )
 
     def _get_graph(self, graph_name: str) -> FalkorGraph:
+        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
+        if graph_name is None:
+            graph_name = "DEFAULT_DATABASE"
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
         graph_name = kwargs.pop("database_", DEFAULT_DATABASE)
-        graph = self.client.select_graph(graph_name)
+        graph = self._get_graph(graph_name)
 
+        # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
         params = convert_datetimes_to_strings(dict(kwargs))
+
         try:
             result = await graph.query(cypher_query_, params)
         except Exception as e:
-            if "indexed" in str(e):
+            if "already indexed" in str(e):
                 # check if index already exists
                 print(f"Index already exists: {e}")
                 return None
             return None
 
+        # Convert the result header to a list of strings
         header = [h[1].decode('utf-8') for h in result.header]
         return (result.result_set, header, None)
 
@@ -243,80 +152,6 @@ class FalkorClient(GraphClient):
 
     def close(self) -> None:
         self.client.connection.close()
-
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return
-
-    def create_node_index(
-        self,
-        label: str,
-        property: str,
-        _: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        future = Future()
-        try:
-            print(f"Creating index for {label} on {property}")
-            return self._get_graph(database_).query(
-                f"CREATE INDEX FOR (n:{label}) ON (n.{property})",
-            )
-        except Exception as e:
-            # check if index already exists
-            if "already indexed" in str(e):
-                future.set_result(None)
-                return future
-            raise e
-
-    def create_relationship_index(
-        self,
-        label: str,
-        property: str,
-        _: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        future = Future()
-        try:
-            print(f"Creating index for {label} on {property}")
-            return self._get_graph(database_).query(
-                f"CREATE INDEX FOR ()-[e:{label}]-() ON (e.{property})",
-            )
-        except Exception as e:
-            # check if index already exists
-            if "already indexed" in str(e):
-                future.set_result(None)
-                return future
-            raise e
-
-    def create_node_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        _: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        future = Future()
-        try:
-            print(f"Creating fulltext index for {label} on {properties}")
-            return self._get_graph(database_).query(
-                f"CALL db.idx.fulltext.createNodeIndex('{label}', '{'\', \''.join(properties)}')",
-            )
-        except Exception as e:
-            # check if index already exists
-            if "already indexed" in str(e):
-                future.set_result(None)
-                return future
-
-    def create_relationship_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        _: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        print(f"Creating fulltext index for {label} on {properties}")
-        future = Future()
-        future.set_result(None)
-        return future
 
 
 class Driver:
@@ -329,7 +164,6 @@ class Driver:
         user: str,
         password: str,
     ):
-        # pdb.set_trace()
         if "falkor" in uri:
             # FalkorDB
             self._driver = FalkorClient(uri, user, password)
@@ -339,7 +173,6 @@ class Driver:
             self._driver = Neo4jClient(uri, user, password)
             self.provider = "neo4j"
         
-
     def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
         return self._driver.execute_query(cypher_query_, **kwargs)
 
@@ -351,48 +184,6 @@ class Driver:
     
     def session(self, database: str) -> GraphClientSession:
         return self._driver.session(database)
-
-    def create_node_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._driver.create_node_index(label, property, index_name, database_)
-
-    def create_relationship_index(
-        self,
-        label: str,
-        property: str,
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._driver.create_relationship_index(
-            label, property, index_name, database_
-        )
-
-    def create_node_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._driver.create_node_fulltext_index(
-            label, properties, index_name, database_
-        )
-
-    def create_relationship_fulltext_index(
-        self,
-        label: str,
-        properties: list[str],
-        index_name: str | None = None,
-        database_: str = DEFAULT_DATABASE,
-    ) -> Coroutine:
-        return self._driver.create_relationship_fulltext_index(
-            label, properties, index_name, database_
-        )
 
 def convert_datetimes_to_strings(obj):
     if isinstance(obj, dict):
