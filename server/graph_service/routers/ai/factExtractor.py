@@ -328,66 +328,58 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
                 """
                 MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
                 WHERE r.group_id = $group_id AND emotion_node.text IN $emotions
-                RETURN emotion_node.text AS text, emotion_node.count AS count
+                RETURN DISTINCT emotion_node.text AS text, emotion_node.count AS count
                 """,
                 {"group_id": group_id, "emotions": emotions}
             )
             emotions_with_counts = []
+            unique_emotions = set()  # Zbiór unikalnych tekstów emocji
             async for record in result_emotions_counts:
-                emotions_with_counts.append({
-                    "text": record["text"], 
-                    "count": record["count"]
-                })
+                emotion_text = record["text"]
+                if emotion_text not in unique_emotions:
+                    emotions_with_counts.append({
+                        "text": emotion_text, 
+                        "count": record["count"]
+                    })
+                    unique_emotions.add(emotion_text)
             
             # Pobierz liczniki dla entities
             result_entities_counts = await session.run(
                 """
                 MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
                 WHERE r.group_id = $group_id AND entity_node.text IN $entities
-                RETURN entity_node.text AS text, entity_node.count AS count
+                RETURN DISTINCT entity_node.text AS text, entity_node.count AS count
                 """,
                 {"group_id": group_id, "entities": entities}
             )
             entities_with_counts = []
+            unique_entities = set()  # Zbiór unikalnych tekstów encji
             async for record in result_entities_counts:
-                entities_with_counts.append({
-                    "text": record["text"], 
-                    "count": record["count"]
-                })
+                entity_text = record["text"]
+                if entity_text not in unique_entities:
+                    entities_with_counts.append({
+                        "text": entity_text, 
+                        "count": record["count"]
+                    })
+                    unique_entities.add(entity_text)
             
             # Pobierz liczniki dla facts
             result_facts_counts = await session.run(
                 """
                 MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
                 WHERE r.group_id = $group_id AND fact_node.text IN $facts
-                RETURN fact_node.text AS text, fact_node.count AS count
+                RETURN DISTINCT fact_node.text AS text, fact_node.count AS count
                 """,
                 {"group_id": group_id, "facts": facts}
             )
             facts_with_counts = []
+            unique_facts = set()  # Zbiór unikalnych tekstów faktów
             async for record in result_facts_counts:
-                facts_with_counts.append({
-                    "text": record["text"], 
-                    "count": record["count"]
-                })
-
-        return {
-            "total_tokens": totalTokens,
-            "input_tokens": inputTokens,
-            "output_tokens": outputTokens,
-            "model": OPENAI_MODEL,
-            "temperature": TEMPERATURE,
-            "entities": entities_with_counts if entities_with_counts else entities,
-            "emotions": emotions_with_counts if emotions_with_counts else emotions,
-            "facts": facts_with_counts if facts_with_counts else facts,
-            "facts_connected_to_entities": facts_connected_to_entities,
-            "facts_connected_to_emotions": facts_connected_to_emotions,
-            "emotions_connected_to_entities": emotions_connected_to_entities
-        }
-
-    except Exception as err:
-        print(f"[Graphiti] ERROR in extractAllAndStore: {err}") # Keep this error print
-        return None
-
-# Alias for backward compatibility
-extractFactsAndStore = extractAllAndStore
+                fact_text = record["text"]
+                if fact_text not in unique_facts:
+                    facts_with_counts.append({
+                        "text": fact_text, 
+                        "count": record["count"]
+                    })
+                    unique_facts.add(fact_text)
+       
