@@ -72,6 +72,10 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
     existing_facts = []
     existing_emotions = []
     existing_entities = []
+    facts_connected_to_entities = [] # Inicjalizacje pozostają na górze funkcji
+    facts_connected_to_emotions = []
+    emotions_connected_to_entities = []
+
     async with graphiti.driver.session() as session:
         # Pobierz istniejące fakty dla grupy
         result_facts = await session.run(
@@ -115,6 +119,9 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             entity_nodes = record_entities["entity_nodes_for_group"]
             existing_entities = [mn["text"] for mn in entity_nodes if mn and mn.get("text")]
 
+        # Usunięto stąd blok pobierający facts_connected_to_entities, facts_connected_to_emotions, emotions_connected_to_entities.
+        # Został on przeniesiony na koniec funkcji.
+
     # 2. Przygotuj bazowy prompt tylko z treścią wiadomości
     promptBase = f'''
 Message content for analysis:
@@ -123,18 +130,18 @@ Message content for analysis:
 
     # 3. faktów nie porównujemy z istniejącymi (za dużo ich może być),
     facts_context = f"""
-Extract only observable facts FROM USER TEXT (not from assistant section) — events or actions that could be seen, heard, or confirmed.
+Extract only observable facts FROM USER TEXT ONLY (not from assistant section) — events or actions that could be seen, heard, or confirmed.
 Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'.
 Keep each fact under 5 words.
 """
 
     emotions_context = f"""
 Already existing emotions: {existing_emotions}
-When extracting new emotions, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new emotion matches an existing one, return the existing value instead of a new variant. Only add new emotions if they are truly new and not covered by the existing ones.
+When extracting new emotions FROM USER TEXT ONLY (not from assistant section), try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new emotion matches an existing one, return the existing value instead of a new variant. Only add new emotions if they are truly new and not covered by the existing ones.
 """
     entities_context = f"""
 Already existing entities: {existing_entities}
-When extracting new entities, try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new entity matches an existing one, return the existing value instead of a new variant. Only add new entities if they are truly new and not covered by the existing ones.
+When extracting new entities FROM USER TEXT ONLY (not from assistant section), try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new entity matches an existing one, return the existing value instead of a new variant. Only add new entities if they are truly new and not covered by the existing ones.
 """
 
     # Containers for results
@@ -248,12 +255,62 @@ When extracting new entities, try to match them to the existing ones if possible
                 }
             )
 
+            # Pobierz fakty połączone z osobami (entities) - PRZENIESIONE TUTAJ
+            result_facts_entities = await session.run(
+                """
+                MATCH (fact_node:Fact)<-[rf:IS_FACT]-(ep:Episodic)-[re:HAS_ENTITY]->(entity_node:Entity)
+                WHERE rf.group_id = $group_id AND re.group_id = $group_id
+                RETURN collect(DISTINCT {fact: fact_node.text, entity: entity_node.text}) AS facts_with_entities
+                """,
+                {"group_id": group_id}
+            )
+            record_facts_entities = await result_facts_entities.single()
+            if record_facts_entities and record_facts_entities["facts_with_entities"]:
+                facts_connected_to_entities = record_facts_entities["facts_with_entities"]
+            else:
+                facts_connected_to_entities = []
+
+            # Pobierz fakty powiązane z emocjami - PRZENIESIONE TUTAJ
+            result_facts_emotions = await session.run(
+                """
+                MATCH (fact_node:Fact)<-[rf:IS_FACT]-(ep:Episodic)-[rem:HAS_EMOTION]->(emotion_node:Emotion)
+                WHERE rf.group_id = $group_id AND rem.group_id = $group_id
+                RETURN collect(DISTINCT {fact: fact_node.text, emotion: emotion_node.text}) AS facts_with_emotions
+                """,
+                {"group_id": group_id}
+            )
+            record_facts_emotions = await result_facts_emotions.single()
+            if record_facts_emotions and record_facts_emotions["facts_with_emotions"]:
+                facts_connected_to_emotions = record_facts_emotions["facts_with_emotions"]
+            else:
+                facts_connected_to_emotions = []
+
+            # Pobierz emocje powiązane z osobami (entities) - PRZENIESIONE TUTAJ
+            result_emotions_entities = await session.run(
+                """
+                MATCH (emotion_node:Emotion)<-[rem:HAS_EMOTION]-(ep:Episodic)-[re:HAS_ENTITY]->(entity_node:Entity)
+                WHERE rem.group_id = $group_id AND re.group_id = $group_id
+                RETURN collect(DISTINCT {emotion: emotion_node.text, entity: entity_node.text}) AS emotions_with_entities
+                """,
+                {"group_id": group_id}
+            )
+            record_emotions_entities = await result_emotions_entities.single()
+            if record_emotions_entities and record_emotions_entities["emotions_with_entities"]:
+                emotions_connected_to_entities = record_emotions_entities["emotions_with_entities"]
+            else:
+                emotions_connected_to_entities = []
+
         return {
             "total_tokens": totalTokens,
             "input_tokens": inputTokens,
             "output_tokens": outputTokens,
             "model": OPENAI_MODEL,
-            "temperature": TEMPERATURE
+            "temperature": TEMPERATURE,
+            "entities": entities,
+            "emotions": emotions,
+            "facts_connected_to_entities": facts_connected_to_entities, # DODANE DO ZWRACANEJ WARTOŚCI
+            "facts_connected_to_emotions": facts_connected_to_emotions, # DODANE DO ZWRACANEJ WARTOŚCI
+            "emotions_connected_to_entities": emotions_connected_to_entities # DODANE DO ZWRACANEJ WARTOŚCI
         }
 
     except Exception as err:

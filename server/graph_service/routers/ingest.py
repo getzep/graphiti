@@ -104,7 +104,25 @@ async def add_messages(
         await add_messages_task(m_message)
 
     print(f"[Graphiti] FINAL token_usages: {token_usages}")
-    return Result(message='Messages added to processing queue2', success=True, tokens=token_usages)
+
+    facts_entities = None
+    facts_emotions = None
+    emotions_entities = None
+
+    if token_usages:
+        last_token_usage = token_usages[-1]
+        facts_entities = last_token_usage.get("facts_connected_to_entities")
+        facts_emotions = last_token_usage.get("facts_connected_to_emotions")
+        emotions_entities = last_token_usage.get("emotions_connected_to_entities")
+
+    return Result(
+        message='Messages added to processing queue',  # Zachowano poprzednią edycję użytkownika
+        success=True,
+        tokens=token_usages,
+        facts_connected_to_entities=facts_entities,
+        facts_connected_to_emotions=facts_emotions,
+        emotions_connected_to_entities=emotions_entities
+    )
 
 
 @router.post('/entity-node', status_code=status.HTTP_201_CREATED)

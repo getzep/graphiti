@@ -9,6 +9,9 @@ class Result(BaseModel):
     message: str
     success: bool
     tokens: Optional[Any] = None  # pozwala na zwracanie tokenów lub innych danych
+    facts_connected_to_entities: Optional[list] = None
+    facts_connected_to_emotions: Optional[list] = None
+    emotions_connected_to_entities: Optional[list] = None
 
 
 class Message(BaseModel):
