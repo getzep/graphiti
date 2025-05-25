@@ -46,17 +46,38 @@ Message content for analysis:
     facts_context = """
 You are a converter that rewrites user sentences into **directly observable life-facts**.
 
-Rules:
-1. Remove all feelings, opinions, intentions, and plans.
-2. Keep only actions or events from real life that a bystander could literally see or hear.
-3. Ignore pure conversational filler such as greetings, rhetorical questions, or meta-linguistic acts
-   (e.g. “He said ‘Hello’”). If an utterance contains only such filler, treat it as having no facts.
-4. Write in **third-person**, declarative mood.
-5. If several actions involve the same people/things and happen at the same time or place,
-   **merge them into one sentence** using “while”, “when”, “as”, or “and”.
-6. If actions cannot logically be merged, write one sentence per action.
-7. When the text contains no observable life-facts, respond exactly with `[]` (an empty list).
-8. Do not add explanations or comments—return only the transformed sentence(s) or `[]`.
+STRICT rules
+1. Keep ONLY real-world actions or events that a bystander could literally see or hear.
+2. Ignore conditional or hypothetical clauses introduced by words such as: if, when, once, in case.
+3. Ignore pure states of being (is / are / was / were) UNLESS followed by an explicit, observable action.
+4. Remove all feelings, opinions, intentions, plans, fillers, greetings, and meta-speech.
+5. Pronouns  
+   • If a third-person pronoun (“she”, “he”, “they”, etc.) has a clear antecedent (name or role) earlier in the SAME user message, replace the pronoun with that antecedent.  
+   • Otherwise leave the pronoun unchanged. Do **not** discard the sentence.
+6. Write in third-person, declarative mood.
+7. If several actions involve the same subjects and occur at the same time or place, merge them into ONE sentence using “while”, “when”, “as”, or “and”.
+8. If actions cannot logically be merged, write one sentence per action.
+9. When no observable life-facts remain, respond **exactly** with `[]` (an empty list).
+10. Output ONLY the transformed sentence(s) or `[]` – no explanations, no comments.
+
+–––– EXAMPLES ––––
+• Input: “Jess spilled coffee on her shirt, then she laughed.”  
+  Output: “Jess spilled coffee on Jess’s shirt and Jess laughed.”
+
+• Input: “Mike waited in the lobby for forty minutes, totally bored.”  
+  Output: “Mike waited in the lobby for forty minutes.”
+
+• Input: “If Mark shows up, we’ll start the meeting.”  
+  Output: []
+
+• Input: “Tom’s phone died while he was calling his friend.”  
+  Output: “Tom’s phone died while Tom was calling his friend.”
+
+• Input: “They loaded the boxes into the van and drove off.”  
+  Output: “They loaded the boxes into the van and drove off.”
+
+• Input: “Sarah got home late, ate dinner, and went straight to bed.”  
+  Output: “Sarah got home late, ate dinner, and went straight to bed.”
 """
 
     emotions_context = f"""

@@ -127,10 +127,18 @@ async def add_messages(
         combined_tokens["total_tokens"] += result.get("total_tokens", 0)
         
         # Set model and temperature from the first result (they should be the same for all)
-        if combined_tokens["model"] is None and result.get("model"):
-            combined_tokens["model"] = result.get("model")
-        if combined_tokens["temperature"] is None and result.get("temperature") is not None:
-            combined_tokens["temperature"] = result.get("temperature")
+        # Extract from models/temperatures dictionaries if they exist
+        models_dict = result.get("models", {})
+        temperatures_dict = result.get("temperatures", {})
+        
+        if combined_tokens["model"] is None and models_dict:
+            # Use the facts model as the primary model (they should all be the same)
+            combined_tokens["model"] = models_dict.get("facts") or next(iter(models_dict.values()), None)
+        if combined_tokens["temperature"] is None and temperatures_dict:
+            # Use the facts temperature as the primary temperature 
+            combined_tokens["temperature"] = temperatures_dict.get("facts")
+            if combined_tokens["temperature"] is None:
+                combined_tokens["temperature"] = next(iter(temperatures_dict.values()), None)
 
     for result in message_results:
         data["facts"].extend(result.get("facts", []))
