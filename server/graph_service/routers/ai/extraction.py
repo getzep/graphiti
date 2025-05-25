@@ -5,7 +5,12 @@ import openai
 import json
 from typing import List, Dict, Any
 
-from .config import OPENAI_API_KEY, OPENAI_MODEL, TEMPERATURE
+from .config import (
+    OPENAI_API_KEY, 
+    FACTS_CONFIG, 
+    EMOTIONS_CONFIG, 
+    ENTITIES_CONFIG
+)
 from .function_specs import functionsSpec
 
 # Set API key
@@ -39,9 +44,16 @@ Message content for analysis:
 '''
 
     facts_context = """
-Extract only observable facts from whole message — events or actions that could be seen, heard, or confirmed.
-Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'. Fact is a whole sentence or phrase that describes an event or action.
-Keep each fact under 5 words.
+You are a converter that rewrites user sentences into **directly observable facts**.
+
+Rules:
+1. Remove all feelings, opinions, intentions, and plans.
+2. Keep only actions or events that a bystander could literally see or hear.
+3. Write in **third-person**, declarative mood.
+4. If several actions involve the same people/things and happen at the same time or place, **merge them into one sentence** using “while”, “when”, “as”, or “and”.
+5. If actions cannot logically be merged, write one sentence per action.
+6. When the text contains no observable facts, respond exactly with `[]` (an empty list).
+7. Do not add explanations or comments—return only the transformed sentence(s) or `[]`.
 """
 
     emotions_context = f"""
@@ -62,16 +74,14 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
     # Prepare messages for OpenAI API calls
     base_messages = [{"role": "user", "content": promptBase}]
     if chat_history and chat_history.strip():
-        base_messages.append({"role": "assistant", "content": chat_history})
-
-    # 1) Extract facts
+        base_messages.append({"role": "assistant", "content": chat_history})    # 1) Extract facts
     messages_facts = base_messages + [{"role": "system", "content": facts_context}]
     respFacts = openai.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=FACTS_CONFIG.model,
         messages=messages_facts,
         functions=[functionsSpec[0]],
         function_call="auto",
-        temperature=TEMPERATURE
+        temperature=FACTS_CONFIG.temperature
     )
     fc = respFacts.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
@@ -80,11 +90,11 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
     # 2) Extract emotions
     messages_emotions = base_messages + [{"role": "system", "content": emotions_context}]
     respEmo = openai.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=EMOTIONS_CONFIG.model,
         messages=messages_emotions,
         functions=[functionsSpec[1]],
         function_call="auto",
-        temperature=TEMPERATURE
+        temperature=EMOTIONS_CONFIG.temperature
     )
     fc = respEmo.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
@@ -93,11 +103,11 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
     # 3) Extract entities
     messages_entities = base_messages + [{"role": "system", "content": entities_context}]
     respEnt = openai.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=ENTITIES_CONFIG.model,
         messages=messages_entities,
         functions=[functionsSpec[2]],
         function_call="auto",
-        temperature=TEMPERATURE
+        temperature=ENTITIES_CONFIG.temperature
     )
     fc = respEnt.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
@@ -118,8 +128,16 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
             respEmo.usage.total_tokens +
             respEnt.usage.total_tokens
         ),
-        "model": OPENAI_MODEL,
-        "temperature": TEMPERATURE
+        "models": {
+            "facts": FACTS_CONFIG.model,
+            "emotions": EMOTIONS_CONFIG.model,
+            "entities": ENTITIES_CONFIG.model
+        },
+        "temperatures": {
+            "facts": FACTS_CONFIG.temperature,
+            "emotions": EMOTIONS_CONFIG.temperature,
+            "entities": ENTITIES_CONFIG.temperature
+        }
     }
     
     # Ensure all lists are unique

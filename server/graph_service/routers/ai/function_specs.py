@@ -6,14 +6,14 @@ Function specifications for OpenAI API calls.
 functionsSpec = [
    {
         "name": "extractFacts",
-        "description": "List of objective facts based on observable events or actions. Each fact must be concise (max 5 words) and exclude feelings or thoughts.",
+        "description": "List of objective facts based on observable events or actions. Each fact must be concise and exclude feelings or thoughts.",
         "parameters": {
             "type": "object",
             "properties": {
                 "facts": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of short factual statements, each no longer than 5 words"
+                    "description": "List of short factual statements"
                 }
             },
             "required": ["facts"]
