@@ -95,7 +95,15 @@ async def add_messages(
                 )
                 if token_usage:
                     print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
-                    token_usages.append({"uuid": m.uuid, **token_usage})
+                    # Only store UUID and token usage info (not facts/emotions/entities)
+                    token_usages.append({
+                        "uuid": m.uuid, 
+                        "tokens": token_usage.get("tokens", {
+                            "input_tokens": 0,
+                            "output_tokens": 0,
+                            "total_tokens": 0
+                        })
+                    })
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
@@ -105,23 +113,10 @@ async def add_messages(
 
     print(f"[Graphiti] FINAL token_usages: {token_usages}")
 
-    # Extract only token usage information (not facts/emotions/entities)
-    tokens_only = []
-    if token_usages:
-        for usage in token_usages:
-            tokens_only.append({
-                "uuid": usage.get("uuid"),
-                "tokens": usage.get("tokens", {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0
-                })
-            })
-
     return Result(
         message='Messages added to processing queue',
         success=True,
-        tokens=tokens_only
+        tokens=token_usages
     )
 
 
