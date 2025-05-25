@@ -6,7 +6,7 @@ import json
 # Load settings and API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = "gpt-4.1-mini"
-TEMPERATURE = 0.0
+TEMPERATURE = 0.4
 openai.api_key = OPENAI_API_KEY
 
 # Define OpenAI function specifications for facts, emotions, and entities
