@@ -59,7 +59,7 @@ async def add_messages(
     request: AddMessagesRequest, # Assume this DTO might contain 'chat_history' and 'shirt_slug'
     graphiti: ZepGraphitiDep,
 ):
-    token_usages = []
+    message_results = []
 
     chat_history_from_request = getattr(request, 'chat_history', "")
     shirt_slug_from_request = getattr(request, 'shirt_slug', None)
@@ -86,19 +86,21 @@ async def add_messages(
             print("[Graphiti] DONE dodane")
 
             if m.role == "user":
-                token_usage = await extractFactsAndStore(
+                extraction_result = await extractFactsAndStore(
                     graphiti, 
                     m, 
                     request.group_id, 
                     chat_history_from_request, # Use history from request
                     shirt_slug_from_request    # Use shirt_slug from request
                 )
-                if token_usage:
-                    print(f"[Graphiti] Token usage for message {m.uuid}: {token_usage}")
-                    # Only store UUID and token usage info (not facts/emotions/entities)
-                    token_usages.append({
-                        "uuid": m.uuid, 
-                        "tokens": token_usage.get("tokens", {
+                if extraction_result:
+                    print(f"[Graphiti] Extraction result for message {m.uuid}: {extraction_result}")
+                    # Store complete data structure with facts, emotions, entities and tokens
+                    message_results.append({
+                        "facts": extraction_result.get("facts", []),
+                        "emotions": extraction_result.get("emotions", []),
+                        "entities": extraction_result.get("entities", []),
+                        "tokens": extraction_result.get("tokens", {
                             "input_tokens": 0,
                             "output_tokens": 0,
                             "total_tokens": 0
@@ -111,12 +113,12 @@ async def add_messages(
     for m_message in request.messages: # Renamed loop variable for clarity
         await add_messages_task(m_message)
 
-    print(f"[Graphiti] FINAL token_usages: {token_usages}")
+    print(f"[Graphiti] FINAL message_results: {message_results}")
 
     return Result(
         message='Messages added to processing queue',
         success=True,
-        tokens=token_usages
+        tokens=message_results
     )
 
 

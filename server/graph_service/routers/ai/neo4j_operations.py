@@ -391,16 +391,28 @@ async def get_current_message_data(
     )
     record_emotions = await result_emotions.single()
     if record_emotions and record_emotions["message_emotions"]:
-        results["message_emotions"] = record_emotions["message_emotions"]
-    
-    # Get entities associated with this specific message
+        results["message_emotions"] = record_emotions["message_emotions"]    # Get entities associated with this specific message with related emotions and facts
     result_entities = await session.run(
         """
         MATCH (ep:Episodic {uuid: $message_uuid})-[rent:HAS_ENTITY]->(entity:Entity)
         WHERE rent.group_id = $group_id
+        
+        OPTIONAL MATCH (entity)<-[re:HAS_ENTITY]-(ep2:Episodic)-[rem:HAS_EMOTION]->(emotion:Emotion)
+        WHERE re.group_id = $group_id AND rem.group_id = $group_id
+        WITH entity, emotion, COALESCE(emotion.count, 0) AS emotion_count
+        ORDER BY emotion_count DESC
+        WITH entity, collect(emotion.text)[0..3] AS top_emotions
+        
+        OPTIONAL MATCH (entity)<-[re2:HAS_ENTITY]-(ep3:Episodic)-[rf:IS_FACT]->(fact:Fact)
+        WHERE re2.group_id = $group_id AND rf.group_id = $group_id
+        WITH entity, top_emotions, fact, COALESCE(fact.count, 0) AS fact_count
+        ORDER BY fact_count DESC
+        WITH entity, top_emotions, collect(fact.text)[0..3] AS top_facts
+        
         RETURN collect({
             text: entity.text,
-            count: COALESCE(entity.count, 0)
+            related_emotions: top_emotions,
+            related_facts: top_facts
         }) AS message_entities
         """,
         {"message_uuid": message_uuid, "group_id": group_id}
