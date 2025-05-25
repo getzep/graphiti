@@ -11,8 +11,7 @@ from .extraction import extract_facts_emotions_entities
 from .neo4j_operations import (
     get_existing_data,
     store_extracted_data,
-    get_relationships_data,
-    get_top_items
+    get_current_message_data
 )
 
 # Eksportowane funkcje
@@ -65,6 +64,9 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
             f"Output: {usage['output_tokens']}, Total: {usage['total_tokens']}"
         )
         
+        # Log extracted data
+        logger.info(f"[Graphiti] Extracted {len(facts)} facts, {len(emotions)} emotions, {len(entities)} entities")
+        
         # 3. Store data in Neo4j
         async with graphiti.driver.session() as session:
             # Store main data
@@ -78,19 +80,28 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
                 shirt_slug
             )
             
-            # Fetch relationship data (not used but could be useful for future analysis)
-            relationships = await get_relationships_data(session, group_id)
+            # Get data specifically for this message (top 3 facts, top 3 emotions, all entities)
+            current_message_data = await get_current_message_data(
+                session, message.uuid, group_id
+            )
             
-        # 4. Get top facts, emotions, and entities
-        async with graphiti.driver.session() as session:
-            top_items = await get_top_items(session, group_id)
-            
-        return top_items
+        # Log what was found for this specific message
+        logger.info(f"[Graphiti] Message contains {len(current_message_data['message_facts'])} facts, "
+                   f"{len(current_message_data['message_emotions'])} emotions, "
+                   f"{len(current_message_data['message_entities'])} entities")
+        
+        # 4. Return data specific to current message
+        return {
+            "facts": current_message_data["message_facts"],
+            "emotions": current_message_data["message_emotions"], 
+            "entities": current_message_data["message_entities"],
+            "message_uuid": message.uuid
+        }
     except Exception as e:
         logger.error(f"[Graphiti] Error in extractAllAndStore: {str(e)}")
         return {
-            "top_facts": [],
-            "top_emotions": [],
-            "top_entities": [],
+            "facts": [],
+            "emotions": [],
+            "entities": [],
             "error": str(e)
         }

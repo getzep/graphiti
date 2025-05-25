@@ -261,3 +261,151 @@ async def get_top_items(session, group_id: str) -> Dict[str, List[Dict[str, Any]
         "top_emotions": top_emotions,
         "top_entities": top_entities
     }
+
+async def get_relationships_for_extracted_data(
+    session, 
+    group_id: str, 
+    extracted_facts: List[str], 
+    extracted_emotions: List[str], 
+    extracted_entities: List[str]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Get relationships specifically for newly extracted facts, emotions, and entities.
+    
+    Args:
+        session: Neo4j database session
+        group_id: Group ID to fetch relationships for
+        extracted_facts: List of newly extracted facts
+        extracted_emotions: List of newly extracted emotions  
+        extracted_entities: List of newly extracted entities
+        
+    Returns:
+        Dictionary containing relationships between newly extracted items
+    """
+    results = {
+        "new_facts_to_entities": [],
+        "new_facts_to_emotions": [],
+        "new_emotions_to_entities": [],
+        "all_related_to_new_extractions": []
+    }
+    
+    if not any([extracted_facts, extracted_emotions, extracted_entities]):
+        return results
+    
+    # Build lists for Cypher queries
+    all_extracted_texts = extracted_facts + extracted_emotions + extracted_entities
+    
+    # Get relationships where newly extracted items are involved
+    if all_extracted_texts:
+        result_new_relationships = await session.run(
+            """
+            WITH $extracted_texts AS new_items
+            MATCH (source_node)<-[r1]-(ep:Episodic)-[r2]->(target_node)
+            WHERE r1.group_id = $group_id AND r2.group_id = $group_id
+                AND (source_node.text IN new_items OR target_node.text IN new_items)
+            RETURN DISTINCT {
+                source_type: labels(source_node)[0],
+                source_text: source_node.text,
+                target_type: labels(target_node)[0], 
+                target_text: target_node.text,
+                episodic_uuid: ep.uuid,
+                is_source_new: source_node.text IN new_items,
+                is_target_new: target_node.text IN new_items
+            } AS relationship
+            """,
+            {"group_id": group_id, "extracted_texts": all_extracted_texts}
+        )
+        
+        records = await result_new_relationships.data()
+        for record in records:
+            rel = record["relationship"]
+            results["all_related_to_new_extractions"].append(rel)
+            
+            # Categorize by type combinations
+            source_type = rel["source_type"]
+            target_type = rel["target_type"]
+            
+            if source_type == "Fact" and target_type == "Entity":
+                results["new_facts_to_entities"].append(rel)
+            elif source_type == "Fact" and target_type == "Emotion":  
+                results["new_facts_to_emotions"].append(rel)
+            elif source_type == "Emotion" and target_type == "Entity":
+                results["new_emotions_to_entities"].append(rel)
+    
+    return results
+
+async def get_current_message_data(
+    session, 
+    message_uuid: str,
+    group_id: str
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Get facts, emotions, and entities specifically associated with the current message.
+    
+    Args:
+        session: Neo4j database session
+        message_uuid: UUID of the current message
+        group_id: Group ID for filtering
+        
+    Returns:
+        Dictionary containing facts, emotions, and entities for the current message
+    """
+    results = {
+        "message_facts": [],
+        "message_emotions": [], 
+        "message_entities": []
+    }
+      # Get facts associated with this specific message
+    result_facts = await session.run(
+        """
+        MATCH (ep:Episodic {uuid: $message_uuid})-[rf:IS_FACT]->(fact:Fact)
+        WHERE rf.group_id = $group_id
+        WITH fact.text AS text, COALESCE(fact.count, 0) AS count
+        ORDER BY count DESC
+        LIMIT 3
+        RETURN collect({
+            text: text,
+            count: count
+        }) AS message_facts
+        """,
+        {"message_uuid": message_uuid, "group_id": group_id}
+    )
+    record_facts = await result_facts.single()
+    if record_facts and record_facts["message_facts"]:
+        results["message_facts"] = record_facts["message_facts"]
+      # Get emotions associated with this specific message
+    result_emotions = await session.run(
+        """
+        MATCH (ep:Episodic {uuid: $message_uuid})-[re:HAS_EMOTION]->(emotion:Emotion)
+        WHERE re.group_id = $group_id
+        WITH emotion.text AS text, COALESCE(emotion.count, 0) AS count
+        ORDER BY count DESC
+        LIMIT 3
+        RETURN collect({
+            text: text,
+            count: count
+        }) AS message_emotions
+        """,
+        {"message_uuid": message_uuid, "group_id": group_id}
+    )
+    record_emotions = await result_emotions.single()
+    if record_emotions and record_emotions["message_emotions"]:
+        results["message_emotions"] = record_emotions["message_emotions"]
+    
+    # Get entities associated with this specific message
+    result_entities = await session.run(
+        """
+        MATCH (ep:Episodic {uuid: $message_uuid})-[rent:HAS_ENTITY]->(entity:Entity)
+        WHERE rent.group_id = $group_id
+        RETURN collect({
+            text: entity.text,
+            count: COALESCE(entity.count, 0)
+        }) AS message_entities
+        """,
+        {"message_uuid": message_uuid, "group_id": group_id}
+    )
+    record_entities = await result_entities.single()
+    if record_entities and record_entities["message_entities"]:
+        results["message_entities"] = record_entities["message_entities"]
+    
+    return results
