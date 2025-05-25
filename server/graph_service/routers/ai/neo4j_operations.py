@@ -354,8 +354,7 @@ async def get_current_message_data(
         "message_emotions": [], 
         "message_entities": []
     }
-    
-    # Get facts associated with this specific message
+      # Get facts associated with this specific message
     result_facts = await session.run(
         """
         MATCH (ep:Episodic {uuid: $message_uuid})-[rf:IS_FACT]->(fact:Fact)
@@ -363,18 +362,14 @@ async def get_current_message_data(
         WITH fact.text AS text, COALESCE(fact.count, 0) AS count
         ORDER BY count DESC
         LIMIT 3
-        RETURN collect({
-            text: text,
-            count: count
-        }) AS message_facts
+        RETURN collect(text) AS message_facts
         """,
         {"message_uuid": message_uuid, "group_id": group_id}
     )
     record_facts = await result_facts.single()
     if record_facts and record_facts["message_facts"]:
         results["message_facts"] = record_facts["message_facts"]
-    
-    # Get emotions associated with this specific message
+      # Get emotions associated with this specific message
     result_emotions = await session.run(
         """
         MATCH (ep:Episodic {uuid: $message_uuid})-[re:HAS_EMOTION]->(emotion:Emotion)
@@ -382,10 +377,7 @@ async def get_current_message_data(
         WITH emotion.text AS text, COALESCE(emotion.count, 0) AS count
         ORDER BY count DESC
         LIMIT 3
-        RETURN collect({
-            text: text,
-            count: count
-        }) AS message_emotions
+        RETURN collect(text) AS message_emotions
         """,
         {"message_uuid": message_uuid, "group_id": group_id}
     )

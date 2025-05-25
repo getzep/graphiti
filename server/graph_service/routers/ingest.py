@@ -95,17 +95,8 @@ async def add_messages(
                 )
                 if extraction_result:
                     print(f"[Graphiti] Extraction result for message {m.uuid}: {extraction_result}")
-                    # Store complete data structure with facts, emotions, entities and tokens
-                    message_results.append({
-                        "facts": extraction_result.get("facts", []),
-                        "emotions": extraction_result.get("emotions", []),
-                        "entities": extraction_result.get("entities", []),
-                        "tokens": extraction_result.get("tokens", {
-                            "input_tokens": 0,
-                            "output_tokens": 0,
-                            "total_tokens": 0
-                        })
-                    })
+                    # Store extraction result directly
+                    message_results.append(extraction_result)
 
         except Exception as e:
             print(f"[Graphiti] ERROR: {e}")
@@ -115,10 +106,34 @@ async def add_messages(
 
     print(f"[Graphiti] FINAL message_results: {message_results}")
 
+    # Combine all message results into tokens structure  
+    combined_tokens = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0
+    }
+
+    data = {
+        "facts": [],
+        "emotions": [],
+        "entities": [],
+    }
+    
+    for result in message_results:
+        combined_tokens["input_tokens"] += result.get("input_tokens", 0)
+        combined_tokens["output_tokens"] += result.get("output_tokens", 0)
+        combined_tokens["total_tokens"] += result.get("total_tokens", 0)
+
+    for result in message_results:
+        data["facts"].extend(result.get("facts", []))
+        data["emotions"].extend(result.get("emotions", []))
+        data["entities"].extend(result.get("entities", []))
+
     return Result(
         message='Messages added to processing queue',
         success=True,
-        tokens=message_results
+        tokens=combined_tokens,
+        data=data
     )
 
 

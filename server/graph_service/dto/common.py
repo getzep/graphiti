@@ -9,6 +9,7 @@ class Result(BaseModel):
     message: str
     success: bool
     tokens: Optional[Any] = None  # Contains token usage information
+    data: Optional[Any] = None  # Contains extracted data (facts, emotions, entities, etc.)
 
 
 class Message(BaseModel):
