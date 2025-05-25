@@ -125,15 +125,14 @@ Output the result strictly as per the following function-calling schema:
 
     entities_context = f"""
 Already existing entities: {existing_entities or []}
-Already existing entities [maria]
 You are an assistant tasked with extracting entities (persons, places, objects) from a user's message, using previous known entities provided for context clarification.
 
 Guidelines:
 - Extract new entities only from the user's current message.
-- Match extracted entities to existing known entities based on meaning, synonyms, pronouns, grammatical gender, or clear similarity whenever possible.
-- Do not create a new entity for a pronoun or vague reference if there is a clear matching entity.
+- When a pronoun (e.g., "he", "she", "they", "it") or vague reference (e.g., "this person") is used, always try to match it to an existing known entity based on meaning, synonyms, pronouns, grammatical gender, or clear similarity.
+- If a pronoun or vague reference could match multiple known entities, return all possible matches (e.g., all female names for "she" if unclear).
+- Never return a bare pronoun (such as "she", "he", etc.) as an entity. If you are about to do so, stop and make one more careful attempt to deduce the correct entity or entities using all available context.
 - Add a new entity only if it is truly new and not already covered by known entities.
-- If a pronoun or vague reference could match multiple known entities, return all possible matches.
 
 Examples:
 
