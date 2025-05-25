@@ -66,8 +66,43 @@ When extracting new emotions FROM USER TEXT ONLY (not from assistant section), t
     
     entities_context = f"""
 Already existing entities: {existing_entities or []}
-When extracting new entities FROM USER TEXT ONLY (not from assistant section), try to match them to the existing ones if possible (by meaning, synonyms, or clear similarity). If a new entity matches an existing one, return the existing value instead of a new variant. Only add new entities if they are truly new and not covered by the existing ones.
-"""
+When extracting new entities from the USER message only (not assistant), always try to match them to the existing entities whenever possible—based on meaning, synonyms, pronouns, grammatical gender, or clear similarity.
+If a user uses a pronoun (he, she, they, it, etc.), or a vague reference ("this person", "that place"), and there is a matching existing entity, return the existing value instead of a new one.
+
+Never create a new entity for a pronoun or vague reference if there is a clear matching entity in the list.
+
+Only add new entities if they are truly new and not already covered by the known entities.
+
+Example 1:
+Known entities: ['Sarah']
+User: "She helped me yesterday."
+Extracted entities: ['Sarah']
+
+Example 2:
+Known entities: ['London']
+User: "I was there last summer."
+Extracted entities: ['London']
+
+Example 3:
+Known entities: ['my boss']
+User: "He was very strict."
+Extracted entities: ['my boss']
+
+Example 4:
+Known entities: ['David']
+User: "He called me last night."
+Extracted entities: ['David']
+
+Example 5:
+Known entities: ['the old house']
+User: "I went back there to see it."
+Extracted entities: ['the old house']
+
+Example 6:
+Known entities: ['Sarah', 'Anna']
+User: "She wasn't at the meeting."
+Extracted entities: ['Sarah', 'Anna']
+(If the pronoun could refer to more than one known entity, return all possible matches.)"""
 
     # Initialize results
     facts = []
