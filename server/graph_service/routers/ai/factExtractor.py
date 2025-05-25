@@ -123,7 +123,7 @@ Message content for analysis:
 
     # 3. faktów nie porównujemy z istniejącymi (za dużo ich może być),
     facts_context = f"""
-Extract only observable facts — events or actions that could be seen, heard, or confirmed.
+Extract only observable facts FROM USER TEXT (not from assistant section) — events or actions that could be seen, heard, or confirmed.
 Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'.
 Keep each fact under 5 words.
 """
