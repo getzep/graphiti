@@ -108,12 +108,16 @@ async def add_messages(
     facts_entities = None
     facts_emotions = None
     emotions_entities = None
+    entities = None # DODANE
+    emotions = None # DODANE
 
     if token_usages:
         last_token_usage = token_usages[-1]
         facts_entities = last_token_usage.get("facts_connected_to_entities")
         facts_emotions = last_token_usage.get("facts_connected_to_emotions")
         emotions_entities = last_token_usage.get("emotions_connected_to_entities")
+        entities = last_token_usage.get("entities") # DODANE
+        emotions = last_token_usage.get("emotions") # DODANE
 
     return Result(
         message='Messages added to processing queue',  # Zachowano poprzednią edycję użytkownika
@@ -121,7 +125,9 @@ async def add_messages(
         tokens=token_usages,
         facts_connected_to_entities=facts_entities,
         facts_connected_to_emotions=facts_emotions,
-        emotions_connected_to_entities=emotions_entities
+        emotions_connected_to_entities=emotions_entities,
+        entities=entities, # DODANE
+        emotions=emotions # DODANE
     )
 
 
