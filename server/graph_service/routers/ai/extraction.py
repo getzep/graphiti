@@ -50,6 +50,7 @@ Guidelines:
 - First, check if the user's current message contains significant factual content. Ignore very short or meaningless messages such as "yes", "no", "oh", "why", "maybe", etc.
 - Extract only objective, observable events or actions with significant meaning or value.
 - Exclude any statements expressing thoughts, feelings, opinions, or insignificant details.
+- Combine related facts into a single sentence whenever possible.
 - Prioritize the user's current message. Previous user messages from the assistant context are only for resolving ambiguities about who or what the user refers to.
 - If no meaningful factual statements can be extracted, return an empty list.
 
