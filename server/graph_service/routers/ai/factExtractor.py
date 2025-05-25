@@ -90,11 +90,16 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
                    f"{len(current_message_data['message_emotions'])} emotions, "
                    f"{len(current_message_data['message_entities'])} entities")
         
-        # 4. Return data specific to current message
+        # 4. Return data specific to current message with token usage
         return {
             "facts": current_message_data["message_facts"],
             "emotions": current_message_data["message_emotions"], 
             "entities": current_message_data["message_entities"],
+            "tokens": {
+                "input_tokens": usage['input_tokens'],
+                "output_tokens": usage['output_tokens'], 
+                "total_tokens": usage['total_tokens']
+            },
             "message_uuid": message.uuid
         }
     except Exception as e:
@@ -103,5 +108,10 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
             "facts": [],
             "emotions": [],
             "entities": [],
+            "tokens": {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0
+            },
             "error": str(e)
         }

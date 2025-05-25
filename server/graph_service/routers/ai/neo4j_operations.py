@@ -348,14 +348,14 @@ async def get_current_message_data(
         group_id: Group ID for filtering
         
     Returns:
-        Dictionary containing facts, emotions, and entities for the current message
-    """
+        Dictionary containing facts, emotions, and entities for the current message    """
     results = {
         "message_facts": [],
         "message_emotions": [], 
         "message_entities": []
     }
-      # Get facts associated with this specific message
+    
+    # Get facts associated with this specific message
     result_facts = await session.run(
         """
         MATCH (ep:Episodic {uuid: $message_uuid})-[rf:IS_FACT]->(fact:Fact)
@@ -373,7 +373,8 @@ async def get_current_message_data(
     record_facts = await result_facts.single()
     if record_facts and record_facts["message_facts"]:
         results["message_facts"] = record_facts["message_facts"]
-      # Get emotions associated with this specific message
+    
+    # Get emotions associated with this specific message
     result_emotions = await session.run(
         """
         MATCH (ep:Episodic {uuid: $message_uuid})-[re:HAS_EMOTION]->(emotion:Emotion)
