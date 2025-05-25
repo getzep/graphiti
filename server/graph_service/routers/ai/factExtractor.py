@@ -323,63 +323,50 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
 
         # Przygotuj informacje o licznikach dla emotions, entities i facts
         async with graphiti.driver.session() as session:
-            # Pobierz liczniki dla emotions
-            result_emotions_counts = await session.run(
-                """
-                MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
-                WHERE r.group_id = $group_id AND emotion_node.text IN $emotions
-                RETURN DISTINCT emotion_node.text AS text, emotion_node.count AS count
-                """,
-                {"group_id": group_id, "emotions": emotions}
-            )
-            emotions_with_counts = []
-            unique_emotions = set()  # Zbiór unikalnych tekstów emocji
-            async for record in result_emotions_counts:
-                emotion_text = record["text"]
-                if emotion_text not in unique_emotions:
-                    emotions_with_counts.append({
-                        "text": emotion_text, 
-                        "count": record["count"]
-                    })
-                    unique_emotions.add(emotion_text)
-            
-            # Pobierz liczniki dla entities
-            result_entities_counts = await session.run(
-                """
-                MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
-                WHERE r.group_id = $group_id AND entity_node.text IN $entities
-                RETURN DISTINCT entity_node.text AS text, entity_node.count AS count
-                """,
-                {"group_id": group_id, "entities": entities}
-            )
-            entities_with_counts = []
-            unique_entities = set()  # Zbiór unikalnych tekstów encji
-            async for record in result_entities_counts:
-                entity_text = record["text"]
-                if entity_text not in unique_entities:
-                    entities_with_counts.append({
-                        "text": entity_text, 
-                        "count": record["count"]
-                    })
-                    unique_entities.add(entity_text)
-            
-            # Pobierz liczniki dla facts
-            result_facts_counts = await session.run(
+            # Pobierz top 5 najczęstszych faktów
+            result_top_facts = await session.run(
                 """
                 MATCH (fact_node:Fact)<-[r:IS_FACT]-(:Episodic)
-                WHERE r.group_id = $group_id AND fact_node.text IN $facts
-                RETURN DISTINCT fact_node.text AS text, fact_node.count AS count
+                WHERE r.group_id = $group_id
+                WITH fact_node.text AS text, MAX(fact_node.count) AS count
+                ORDER BY count DESC LIMIT 5
+                RETURN collect({text: text, count: count}) AS top_facts
                 """,
-                {"group_id": group_id, "facts": facts}
+                {"group_id": group_id}
             )
-            facts_with_counts = []
-            unique_facts = set()  # Zbiór unikalnych tekstów faktów
-            async for record in result_facts_counts:
-                fact_text = record["text"]
-                if fact_text not in unique_facts:
-                    facts_with_counts.append({
-                        "text": fact_text, 
-                        "count": record["count"]
-                    })
-                    unique_facts.add(fact_text)
-       
+            record_top_facts = await result_top_facts.single()
+            top_facts = record_top_facts["top_facts"] if record_top_facts else []
+            
+            # Pobierz top 5 najczęstszych emocji
+            result_top_emotions = await session.run(
+                """
+                MATCH (emotion_node:Emotion)<-[r:HAS_EMOTION]-(:Episodic)
+                WHERE r.group_id = $group_id
+                WITH emotion_node.text AS text, MAX(emotion_node.count) AS count
+                ORDER BY count DESC LIMIT 5
+                RETURN collect({text: text, count: count}) AS top_emotions
+                """,
+                {"group_id": group_id}
+            )
+            record_top_emotions = await result_top_emotions.single()
+            top_emotions = record_top_emotions["top_emotions"] if record_top_emotions else []
+            
+            # Pobierz top 5 najczęstszych encji
+            result_top_entities = await session.run(
+                """
+                MATCH (entity_node:Entity)<-[r:HAS_ENTITY]-(:Episodic)
+                WHERE r.group_id = $group_id
+                WITH entity_node.text AS text, MAX(entity_node.count) AS count
+                ORDER BY count DESC LIMIT 5
+                RETURN collect({text: text, count: count}) AS top_entities
+                """,
+                {"group_id": group_id}
+            )
+            record_top_entities = await result_top_entities.single()
+            top_entities = record_top_entities["top_entities"] if record_top_entities else []
+
+        return {
+            "top_facts": top_facts,
+            "top_emotions": top_emotions,
+            "top_entities": top_entities
+        }
