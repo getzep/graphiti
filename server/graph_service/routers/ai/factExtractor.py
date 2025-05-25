@@ -370,3 +370,11 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
             "top_emotions": top_emotions,
             "top_entities": top_entities
         }
+    except Exception as e:
+        print(f"[Graphiti] Error in extractAllAndStore: {str(e)}")
+        return {
+            "top_facts": [],
+            "top_emotions": [],
+            "top_entities": [],
+            "error": str(e)
+        }
