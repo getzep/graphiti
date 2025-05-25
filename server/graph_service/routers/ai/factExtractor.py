@@ -15,13 +15,13 @@ from .neo4j_operations import (
     get_top_items
 )
 
+# Eksportowane funkcje
+__all__ = ['extractFactsAndStore']
+
 # Configure logger
 logger = logging.getLogger(__name__)
 
-# Alias dla kompatybilności wstecznej - stara nazwa funkcji
-extractFactsAndStore = extractAllAndStore
-
-async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_slug):
+async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_slug):
     """
     Extract facts, emotions, and entities from `message.content` using OpenAI function calls,
     then store them in Neo4j as connected nodes under Episodic(uuid).
@@ -94,6 +94,3 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             "top_entities": [],
             "error": str(e)
         }
-
-# Alias dla kompatybilności wstecznej
-extractFactsAndStore = extractAllAndStore
