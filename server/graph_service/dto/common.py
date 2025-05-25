@@ -5,10 +5,19 @@ from graphiti_core.utils.datetime_utils import utc_now
 from pydantic import BaseModel, Field
 
 
+class TokenUsage(BaseModel):
+    """Token usage information including model and temperature"""
+    input_tokens: int = Field(default=0, description='Number of input tokens used')
+    output_tokens: int = Field(default=0, description='Number of output tokens used')
+    total_tokens: int = Field(default=0, description='Total number of tokens used')
+    model: Optional[str] = Field(default=None, description='Model used for the request')
+    temperature: Optional[float] = Field(default=None, description='Temperature setting used')
+
+
 class Result(BaseModel):
     message: str
     success: bool
-    tokens: Optional[Any] = None  # Contains token usage information
+    tokens: Optional[TokenUsage] = None  # Contains token usage information
     data: Optional[Any] = None  # Contains extracted data (facts, emotions, entities, etc.)
 
 

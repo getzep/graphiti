@@ -20,6 +20,8 @@ class MockUsage:
         self.input_tokens = 150
         self.output_tokens = 75
         self.total_tokens = 225
+        self.model = "gpt-4.1-mini"
+        self.temperature = 0.25
 
 async def test_response_structure():
     """Test what the current response structure looks like."""
@@ -58,8 +60,7 @@ async def test_response_structure():
             }
         ]
     }
-    
-    # This is what factExtractor.py returns
+      # This is what factExtractor.py returns
     response = {
         "facts": current_message_data["message_facts"],
         "emotions": current_message_data["message_emotions"], 
@@ -67,19 +68,22 @@ async def test_response_structure():
         "tokens": {
             "input_tokens": mock_usage.input_tokens,
             "output_tokens": mock_usage.output_tokens, 
-            "total_tokens": mock_usage.total_tokens
+            "total_tokens": mock_usage.total_tokens,
+            "model": mock_usage.model,
+            "temperature": mock_usage.temperature
         },
         "message_uuid": mock_message.uuid
     }
-    
-    print("=== CURRENT RESPONSE STRUCTURE ===")
+      print("=== CURRENT RESPONSE STRUCTURE ===")
     print(json.dumps(response, indent=2, ensure_ascii=False))
     print("\n=== STRUCTURE BREAKDOWN ===")
     print(f"Facts: {len(response['facts'])} items (simple strings)")
     print(f"Emotions: {len(response['emotions'])} items (simple strings)")
     print(f"Entities: {len(response['entities'])} items (objects with text + related arrays)")
-    print(f"Tokens: Contains usage info (input_tokens, output_tokens, total_tokens)")
+    print(f"Tokens: Contains usage info (input_tokens, output_tokens, total_tokens, model, temperature)")
     print(f"Message UUID: {response['message_uuid']}")
+    print(f"Model: {response['tokens']['model']}")
+    print(f"Temperature: {response['tokens']['temperature']}")
     
     print("\n=== ENTITY STRUCTURE DETAILS ===")
     for i, entity in enumerate(response['entities']):

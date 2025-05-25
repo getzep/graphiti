@@ -39,8 +39,8 @@ Message content for analysis:
 '''
 
     facts_context = """
-Extract only observable facts FROM USER TEXT ONLY (not from assistant section) — events or actions that could be seen, heard, or confirmed.
-Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'.
+Extract only observable facts from whole message — events or actions that could be seen, heard, or confirmed.
+Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'. Fact is a whole sentence or phrase that describes an event or action.
 Keep each fact under 5 words.
 """
 
@@ -101,9 +101,7 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
     )
     fc = respEnt.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
-        entities = json.loads(fc.arguments).get("entities", [])
-
-    # Calculate token usage
+        entities = json.loads(fc.arguments).get("entities", [])    # Calculate token usage
     usage = {
         "input_tokens": (
             respFacts.usage.prompt_tokens +
@@ -119,7 +117,9 @@ When extracting new entities FROM USER TEXT ONLY (not from assistant section), t
             respFacts.usage.total_tokens +
             respEmo.usage.total_tokens +
             respEnt.usage.total_tokens
-        )
+        ),
+        "model": OPENAI_MODEL,
+        "temperature": TEMPERATURE
     }
     
     # Ensure all lists are unique

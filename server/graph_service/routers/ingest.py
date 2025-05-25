@@ -7,7 +7,7 @@ from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
-from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
+from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result, TokenUsage
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 from graph_service.routers.ai import extractFactsAndStore
@@ -110,7 +110,9 @@ async def add_messages(
     combined_tokens = {
         "input_tokens": 0,
         "output_tokens": 0,
-        "total_tokens": 0
+        "total_tokens": 0,
+        "model": None,
+        "temperature": None
     }
 
     data = {
@@ -123,6 +125,12 @@ async def add_messages(
         combined_tokens["input_tokens"] += result.get("input_tokens", 0)
         combined_tokens["output_tokens"] += result.get("output_tokens", 0)
         combined_tokens["total_tokens"] += result.get("total_tokens", 0)
+        
+        # Set model and temperature from the first result (they should be the same for all)
+        if combined_tokens["model"] is None and result.get("model"):
+            combined_tokens["model"] = result.get("model")
+        if combined_tokens["temperature"] is None and result.get("temperature") is not None:
+            combined_tokens["temperature"] = result.get("temperature")
 
     for result in message_results:
         data["facts"].extend(result.get("facts", []))
@@ -132,7 +140,7 @@ async def add_messages(
     return Result(
         message='Messages added to processing queue',
         success=True,
-        tokens=combined_tokens,
+        tokens=TokenUsage(**combined_tokens),
         data=data
     )
 

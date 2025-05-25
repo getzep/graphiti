@@ -98,6 +98,8 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
             "input_tokens": usage['input_tokens'],
             "output_tokens": usage['output_tokens'], 
             "total_tokens": usage['total_tokens'],
+            "model": usage['model'],
+            "temperature": usage['temperature'],
             "message_uuid": message.uuid
         }
     except Exception as e:
@@ -109,5 +111,7 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
+            "model": None,
+            "temperature": None,
             "error": str(e)
         }
