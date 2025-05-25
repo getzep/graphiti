@@ -10,7 +10,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
-from graph_service.routers.ai.factExtractor import extractFactsAndStore
+from graph_service.routers.ai.factExtractor import extractAllAndStore
 # from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
 # from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
 # from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
@@ -86,7 +86,7 @@ async def add_messages(
             print("[Graphiti] DONE dodane")
 
             if m.role == "user":
-                token_usage = await extractFactsAndStore(
+                token_usage = await extractAllAndStore(
                     graphiti, 
                     m, 
                     request.group_id, 

@@ -18,6 +18,9 @@ from .neo4j_operations import (
 # Configure logger
 logger = logging.getLogger(__name__)
 
+# Alias dla kompatybilności wstecznej - stara nazwa funkcji
+extractFactsAndStore = extractAllAndStore
+
 async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_slug):
     """
     Extract facts, emotions, and entities from `message.content` using OpenAI function calls,
@@ -91,3 +94,6 @@ async def extractAllAndStore(graphiti, message, group_id, chat_history, shirt_sl
             "top_entities": [],
             "error": str(e)
         }
+
+# Alias dla kompatybilności wstecznej
+extractFactsAndStore = extractAllAndStore
