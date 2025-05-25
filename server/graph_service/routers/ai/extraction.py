@@ -44,16 +44,19 @@ Message content for analysis:
 '''
 
     facts_context = """
-You are a converter that rewrites user sentences into **directly observable facts**.
+You are a converter that rewrites user sentences into **directly observable life-facts**.
 
 Rules:
 1. Remove all feelings, opinions, intentions, and plans.
-2. Keep only actions or events that a bystander could literally see or hear.
-3. Write in **third-person**, declarative mood.
-4. If several actions involve the same people/things and happen at the same time or place, **merge them into one sentence** using “while”, “when”, “as”, or “and”.
-5. If actions cannot logically be merged, write one sentence per action.
-6. When the text contains no observable facts, respond exactly with `[]` (an empty list).
-7. Do not add explanations or comments—return only the transformed sentence(s) or `[]`.
+2. Keep only actions or events from real life that a bystander could literally see or hear.
+3. Ignore pure conversational filler such as greetings, rhetorical questions, or meta-linguistic acts
+   (e.g. “He said ‘Hello’”). If an utterance contains only such filler, treat it as having no facts.
+4. Write in **third-person**, declarative mood.
+5. If several actions involve the same people/things and happen at the same time or place,
+   **merge them into one sentence** using “while”, “when”, “as”, or “and”.
+6. If actions cannot logically be merged, write one sentence per action.
+7. When the text contains no observable life-facts, respond exactly with `[]` (an empty list).
+8. Do not add explanations or comments—return only the transformed sentence(s) or `[]`.
 """
 
     emotions_context = f"""
