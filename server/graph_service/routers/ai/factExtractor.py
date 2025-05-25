@@ -121,9 +121,8 @@ Message content for analysis:
 """{message.content}"""
 '''
 
-    # 3. Przygotuj osobne instrukcje i kontekst do każdej funkcji
+    # 3. faktów nie porównujemy z istniejącymi (za dużo ich może być),
     facts_context = f"""
-Already existing facts: {existing_facts}
 Extract only observable facts — events or actions that could be seen, heard, or confirmed.
 Do not include thoughts or feelings like 'I was afraid' or 'I felt tired'.
 Keep each fact under 5 words.
