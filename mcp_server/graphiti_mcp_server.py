@@ -190,6 +190,8 @@ class GraphitiLLMConfig(BaseModel):
     model: str = DEFAULT_LLM_MODEL
     small_model: str = SMALL_LLM_MODEL
     temperature: float = 0.0
+    base_url: str | None = None
+    provider: str = 'openai'  # openai, openrouter, azure
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
@@ -206,6 +208,20 @@ class GraphitiLLMConfig(BaseModel):
         small_model_env = os.environ.get('SMALL_MODEL_NAME', '')
         small_model = small_model_env if small_model_env.strip() else SMALL_LLM_MODEL
 
+        # Get provider and base URL configuration
+        provider = os.environ.get('LLM_PROVIDER', 'openai').lower()
+        base_url = os.environ.get('OPENAI_BASE_URL', None)
+        
+        # Get API key based on provider
+        if provider == 'openrouter':
+            api_key = os.environ.get('OPENROUTER_API_KEY')
+            # Set default OpenRouter base URL if not specified
+            if base_url is None:
+                base_url = 'https://openrouter.ai/api/v1'
+        else:
+            api_key = os.environ.get('OPENAI_API_KEY')
+        
+        # Azure configuration
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', None)
         azure_openai_deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', None)
@@ -226,10 +242,12 @@ class GraphitiLLMConfig(BaseModel):
                 )
 
             return cls(
-                api_key=os.environ.get('OPENAI_API_KEY'),
+                api_key=api_key,
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                base_url=base_url,
+                provider=provider,
             )
         else:
             # Setup for Azure OpenAI API
@@ -254,6 +272,8 @@ class GraphitiLLMConfig(BaseModel):
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                base_url=base_url,
+                provider='azure',
             )
 
     @classmethod
@@ -316,13 +336,21 @@ class GraphitiLLMConfig(BaseModel):
             return None
 
         llm_client_config = LLMConfig(
-            api_key=self.api_key, model=self.model, small_model=self.small_model
+            api_key=self.api_key, 
+            model=self.model, 
+            small_model=self.small_model,
+            base_url=self.base_url
         )
 
         # Set temperature
         llm_client_config.temperature = self.temperature
 
-        return OpenAIClient(config=llm_client_config)
+        # Use OpenAIGenericClient for custom base URLs (like OpenRouter)
+        if self.base_url:
+            from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+            return OpenAIGenericClient(config=llm_client_config)
+        else:
+            return OpenAIClient(config=llm_client_config)
 
     def create_cross_encoder_client(self) -> CrossEncoderClient | None:
         """Create a cross-encoder client based on this configuration."""
@@ -331,7 +359,10 @@ class GraphitiLLMConfig(BaseModel):
             return OpenAIRerankerClient(client=client)
         else:
             llm_client_config = LLMConfig(
-                api_key=self.api_key, model=self.model, small_model=self.small_model
+                api_key=self.api_key, 
+                model=self.model, 
+                small_model=self.small_model,
+                base_url=self.base_url
             )
             return OpenAIRerankerClient(config=llm_client_config)
 
@@ -344,6 +375,8 @@ class GraphitiEmbedderConfig(BaseModel):
 
     model: str = DEFAULT_EMBEDDER_MODEL
     api_key: str | None = None
+    base_url: str | None = None
+    provider: str = 'openai'  # openai, azure (openrouter not supported for embeddings)
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
@@ -356,6 +389,26 @@ class GraphitiEmbedderConfig(BaseModel):
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('EMBEDDER_MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_EMBEDDER_MODEL
+        
+        # Get embedder base URL (for OpenRouter or other providers)
+        base_url = os.environ.get('EMBEDDER_BASE_URL', None)
+        
+        # Get embedder provider and API key
+        embedder_provider = os.environ.get('EMBEDDER_PROVIDER', 'openai').lower()
+        
+        # OpenRouter doesn't support embeddings, so force to OpenAI for embeddings
+        if embedder_provider == 'openrouter':
+            logger.warning("OpenRouter doesn't support embeddings. Falling back to OpenAI for embeddings.")
+            embedder_provider = 'openai'
+            
+        if embedder_provider == 'openai':
+            api_key = os.environ.get('OPENAI_API_KEY')
+            # Use OpenAI base URL for embeddings
+            if base_url is None:
+                base_url = None  # Use default OpenAI endpoint
+        else:
+            # For other providers, use their API key
+            api_key = os.environ.get('OPENAI_API_KEY')  # Default fallback
 
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None)
@@ -367,6 +420,7 @@ class GraphitiEmbedderConfig(BaseModel):
         )
         if azure_openai_endpoint is not None:
             # Setup for Azure OpenAI API
+            embedder_provider = 'azure'
             # Log if empty deployment name was provided
             azure_openai_deployment_name = os.environ.get(
                 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None
@@ -391,11 +445,15 @@ class GraphitiEmbedderConfig(BaseModel):
                 api_key=api_key,
                 azure_openai_api_version=azure_openai_api_version,
                 azure_openai_deployment_name=azure_openai_deployment_name,
+                base_url=base_url,
+                provider=embedder_provider,
             )
         else:
             return cls(
                 model=model,
-                api_key=os.environ.get('OPENAI_API_KEY'),
+                api_key=api_key,
+                base_url=base_url,
+                provider=embedder_provider,
             )
 
     def create_client(self) -> EmbedderClient | None:
@@ -426,7 +484,11 @@ class GraphitiEmbedderConfig(BaseModel):
             if not self.api_key:
                 return None
 
-            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, embedding_model=self.model)
+            embedder_config = OpenAIEmbedderConfig(
+                api_key=self.api_key, 
+                embedding_model=self.model,
+                base_url=self.base_url
+            )
 
             return OpenAIEmbedder(config=embedder_config)
 
@@ -627,8 +689,11 @@ async def initialize_graphiti():
 
         # Log configuration details for transparency
         if llm_client:
-            logger.info(f'Using OpenAI model: {config.llm.model}')
+            logger.info(f'Using LLM provider: {config.llm.provider}')
+            logger.info(f'Using model: {config.llm.model}')
             logger.info(f'Using temperature: {config.llm.temperature}')
+            if config.llm.base_url:
+                logger.info(f'Using custom base URL: {config.llm.base_url}')
         else:
             logger.info('No LLM client configured - entity extraction will be limited')
 

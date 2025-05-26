@@ -69,24 +69,47 @@ uv sync
 
 ## Configuration
 
-The server uses the following environment variables:
+The server supports multiple LLM providers including OpenAI, OpenRouter, and Azure OpenAI. Configure using environment variables:
+
+### Core Configuration
 
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
-- `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
-- `OPENAI_BASE_URL`: Optional base URL for OpenAI API
-- `MODEL_NAME`: OpenAI model name to use for LLM operations.
-- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
-- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI deployment name
-- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
+
+### LLM Provider Configuration
+
+- `LLM_PROVIDER`: Choose your LLM provider (`openai`, `openrouter`, or `azure`) (default: `openai`)
+- `MODEL_NAME`: Model name to use for LLM operations
+- `SMALL_MODEL_NAME`: Model name to use for smaller LLM operations
+- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0)
+
+### OpenAI Configuration
+
+- `OPENAI_API_KEY`: OpenAI API key (required when `LLM_PROVIDER=openai`)
+- `OPENAI_BASE_URL`: Optional custom OpenAI-compatible endpoint
+
+### OpenRouter Configuration
+
+- `OPENROUTER_API_KEY`: OpenRouter API key (required when `LLM_PROVIDER=openrouter`)
+- `OPENAI_BASE_URL`: Optional custom OpenRouter endpoint (defaults to `https://openrouter.ai/api/v1`)
+
+### Azure OpenAI Configuration
+
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint URL (required when `LLM_PROVIDER=azure`)
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Azure OpenAI deployment name
+- `AZURE_OPENAI_API_VERSION`: Azure OpenAI API version
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
-- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Use Azure Managed Identities for authentication
 
-You can set these variables in a `.env` file in the project directory.
+### Embedding Configuration
+
+- `EMBEDDER_MODEL_NAME`: Embedding model name (default: `text-embedding-3-small`)
+- `EMBEDDER_PROVIDER`: Optional separate provider for embeddings (defaults to `LLM_PROVIDER`)
+- `EMBEDDER_BASE_URL`: Optional custom embedder endpoint
+
+You can set these variables in a `.env` file in the project directory. See `env.example` for a complete configuration template.
 
 ## Running the Server
 
@@ -127,14 +150,26 @@ Before running the Docker Compose setup, you need to configure the environment v
      ```bash
      cp .env.example .env
      ```
-   - Edit the `.env` file to set your OpenAI API key and other configuration options:
+   - Edit the `.env` file to set your API key and other configuration options:
+
      ```
-     # Required for LLM operations
+     # For OpenAI (default)
+     LLM_PROVIDER=openai
      OPENAI_API_KEY=your_openai_api_key_here
-     MODEL_NAME=gpt-4.1-mini
-     # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
-     # OPENAI_BASE_URL=https://api.openai.com/v1
+     MODEL_NAME=gpt-4-mini
+
+     # For OpenRouter (cost-effective alternative)
+     # LLM_PROVIDER=openrouter
+     # OPENROUTER_API_KEY=your_openrouter_api_key_here
+     # MODEL_NAME=meta-llama/llama-3.1-70b-instruct
+
+     # For Azure OpenAI
+     # LLM_PROVIDER=azure
+     # AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+     # AZURE_OPENAI_DEPLOYMENT_NAME=your-deployment-name
+     # OPENAI_API_KEY=your_azure_openai_key
      ```
+
    - The Docker Compose setup is configured to use this file if it exists (it's optional)
 
 2. **Using environment variables directly**:
@@ -186,6 +221,68 @@ Once running, you can access different project namespaces using URL query parame
 
 Each URL provides completely isolated data storage while using the same server instance.
 
+## OpenRouter Integration
+
+OpenRouter provides access to multiple AI models at competitive prices, making it an excellent cost-effective alternative to OpenAI. The Graphiti MCP server fully supports OpenRouter with automatic configuration.
+
+### Why Use OpenRouter?
+
+- **Cost Savings**: Often 50-90% cheaper than OpenAI direct pricing
+- **Model Variety**: Access to Llama, Claude, Gemini, and many other models
+- **Reliability**: Built-in fallbacks and load balancing
+- **Transparency**: Clear pricing and usage tracking
+
+### OpenRouter Setup
+
+1. **Get an OpenRouter API key** from [openrouter.ai](https://openrouter.ai)
+
+2. **Configure your environment**:
+
+   ```bash
+   LLM_PROVIDER=openrouter
+   OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   MODEL_NAME=meta-llama/llama-3.1-70b-instruct
+   SMALL_MODEL_NAME=meta-llama/llama-3.1-8b-instruct
+   ```
+
+3. **Recommended Models for Cost Optimization**:
+
+   **Budget Options (Free Tier)**:
+
+   - `meta-llama/llama-3.1-8b-instruct:free`
+   - `microsoft/phi-3-mini-128k-instruct:free`
+   - `google/gemma-2-9b-it:free`
+
+   **Balanced Performance/Cost**:
+
+   - `meta-llama/llama-3.1-70b-instruct` (~$0.50/1M tokens)
+   - `anthropic/claude-3-haiku` (~$0.25/1M tokens)
+   - `google/gemini-pro-1.5` (~$1.25/1M tokens)
+
+   **Premium Options**:
+
+   - `anthropic/claude-3-opus` (~$15/1M tokens)
+   - `openai/gpt-4-turbo` (~$10/1M tokens)
+
+4. **Mixed Provider Setup** (OpenRouter for LLM, OpenAI for embeddings):
+
+   ```bash
+   LLM_PROVIDER=openrouter
+   OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   MODEL_NAME=meta-llama/llama-3.1-70b-instruct
+
+   EMBEDDER_PROVIDER=openai
+   OPENAI_API_KEY=sk-your-openai-key
+   EMBEDDER_MODEL_NAME=text-embedding-3-small
+   ```
+
+### OpenRouter Configuration Examples
+
+See the provided configuration files:
+
+- `mcp_config_openrouter_example.json` - Pure OpenRouter setup
+- `mcp_config_mixed_example.json` - OpenRouter for LLM, OpenAI for embeddings
+
 ## Integrating with MCP Clients
 
 ### Configuration
@@ -218,8 +315,9 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "NEO4J_URI": "bolt://localhost:7687",
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
+        "LLM_PROVIDER": "openai",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
-        "MODEL_NAME": "gpt-4.1-mini"
+        "MODEL_NAME": "gpt-4-mini"
       }
     }
   }
@@ -234,6 +332,41 @@ For SSE transport (HTTP-based), you can use this configuration:
     "graphiti-memory": {
       "transport": "sse",
       "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+#### OpenRouter Configuration Example
+
+For cost-effective AI with OpenRouter:
+
+```json
+{
+  "mcpServers": {
+    "graphiti-openrouter": {
+      "transport": "stdio",
+      "command": "/Users/<user>/.local/bin/uv",
+      "args": [
+        "run",
+        "--isolated",
+        "--directory",
+        "/Users/<user>/dev/zep/graphiti/mcp_server",
+        "--project",
+        ".",
+        "graphiti_mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password",
+        "LLM_PROVIDER": "openrouter",
+        "OPENROUTER_API_KEY": "sk-or-v1-XXXXXXXX",
+        "MODEL_NAME": "meta-llama/llama-3.1-70b-instruct",
+        "SMALL_MODEL_NAME": "meta-llama/llama-3.1-8b-instruct"
+      }
     }
   }
 }
