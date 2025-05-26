@@ -54,6 +54,14 @@ ruff = ">=0.7.1"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[dependency-groups]
+dev = [
+    "azure-identity>=1.23.0",
+    "mcp>=1.9.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+]
+
 [tool.poetry]
 requires-poetry = ">=2.0"
 

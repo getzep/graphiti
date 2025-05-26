@@ -84,7 +84,19 @@ class OpenAIClient(LLMClient):
         super().__init__(config, cache)
 
         if client is None:
-            self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+            # Add OpenRouter identification headers if using OpenRouter
+            default_headers = {}
+            if config.base_url and 'openrouter.ai' in config.base_url:
+                default_headers.update({
+                    'HTTP-Referer': 'https://github.com/getzep/graphiti',
+                    'X-Title': 'Graphiti MCP Server'
+                })
+            
+            self.client = AsyncOpenAI(
+                api_key=config.api_key, 
+                base_url=config.base_url,
+                default_headers=default_headers if default_headers else None
+            )
         else:
             self.client = client
 
