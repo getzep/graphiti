@@ -513,6 +513,28 @@ logger = logging.getLogger(__name__)
 # Create global config instance - will be properly initialized later
 config = GraphitiConfig()
 
+# Global variables
+graphiti_client: Graphiti | None = None
+episode_queues: dict[str, asyncio.Queue] = {}
+queue_workers: dict[str, bool] = {}
+
+# Store the current group_id for URL-based switching
+current_group_id: str | None = None
+
+def set_current_group_id(group_id: str | None) -> None:
+    """Set the current group_id for URL-based switching."""
+    global current_group_id
+    current_group_id = group_id
+    logger.info(f"Current group_id set to: {group_id}")
+
+def get_effective_group_id(provided_group_id: str | None = None) -> str | None:
+    """Get the effective group_id, prioritizing URL-based, then provided, then config default."""
+    if current_group_id is not None:
+        return current_group_id
+    if provided_group_id is not None:
+        return provided_group_id
+    return config.group_id
+
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
 Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
@@ -550,8 +572,20 @@ mcp = FastMCP(
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
-# Initialize Graphiti client
-graphiti_client: Graphiti | None = None
+# Add middleware to extract group_id from query parameters
+async def extract_group_id_middleware(request, call_next):
+    """Middleware to extract group_id from URL query parameters and set current group_id."""
+    # Check if this is an SSE request with group_id query parameter
+    if request.url.path == "/sse" and "group_id" in request.query_params:
+        group_id = request.query_params["group_id"]
+        logger.info(f"Setting group_id from query parameter: {group_id}")
+        set_current_group_id(group_id)
+    elif request.url.path == "/sse":
+        # Reset to None for default SSE requests
+        set_current_group_id(None)
+    
+    response = await call_next(request)
+    return response
 
 
 async def initialize_graphiti():
@@ -625,13 +659,6 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
             'fact_embedding',
         },
     )
-
-
-# Dictionary to store queues for each group_id
-# Each queue is a list of tasks to be processed sequentially
-episode_queues: dict[str, asyncio.Queue] = {}
-# Dictionary to track if a worker is running for each group_id
-queue_workers: dict[str, bool] = {}
 
 
 async def process_episode_queue(group_id: str):
@@ -745,8 +772,8 @@ async def add_memory(
         elif source.lower() == 'json':
             source_type = EpisodeType.json
 
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        # Use the effective group_id (URL-based, provided, or config default)
+        effective_group_id = get_effective_group_id(group_id)
 
         # Cast group_id to str to satisfy type checker
         # The Graphiti client expects a str for group_id, not Optional[str]
@@ -832,10 +859,12 @@ async def search_memory_nodes(
         return ErrorResponse(error='Graphiti client not initialized')
 
     try:
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
-        )
+        # Use the provided group_ids or fall back to current effective group_id if none provided
+        if group_ids is not None:
+            effective_group_ids = group_ids
+        else:
+            current_effective_group_id = get_effective_group_id()
+            effective_group_ids = [current_effective_group_id] if current_effective_group_id else []
 
         # Configure the search
         if center_node_uuid is not None:
@@ -908,10 +937,12 @@ async def search_memory_facts(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
-        )
+        # Use the provided group_ids or fall back to current effective group_id if none provided
+        if group_ids is not None:
+            effective_group_ids = group_ids
+        else:
+            current_effective_group_id = get_effective_group_id()
+            effective_group_ids = [current_effective_group_id] if current_effective_group_id else []
 
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -1044,8 +1075,8 @@ async def get_episodes(
         return {'error': 'Graphiti client not initialized'}
 
     try:
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        # Use the effective group_id (URL-based, provided, or config default)
+        effective_group_id = get_effective_group_id(group_id)
 
         if not isinstance(effective_group_id, str):
             return {'error': 'Group ID must be a string'}
@@ -1203,9 +1234,25 @@ async def run_mcp_server():
     elif mcp_config.transport == 'sse':
         # Set host to 0.0.0.0 for Docker container accessibility
         mcp.settings.host = '0.0.0.0'
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
+        
+        # Add the middleware to extract group_id from query parameters
+        try:
+            # Get the app and add middleware if possible
+            app = getattr(mcp, '_app', None)
+            if app is not None:
+                from fastapi.middleware.base import BaseHTTPMiddleware
+                app.add_middleware(BaseHTTPMiddleware, dispatch=extract_group_id_middleware)
+                logger.info('Added group_id extraction middleware')
+        except Exception as e:
+            logger.warning(f'Could not add middleware: {e}')
+        
+        # Log the available endpoints
+        logger.info(f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}')
+        logger.info('Available endpoints:')
+        logger.info(f'  - Default SSE: http://{mcp.settings.host}:{mcp.settings.port}/sse')
+        logger.info(f'  - SSE with group_id: http://{mcp.settings.host}:{mcp.settings.port}/sse?group_id={{your_group_id}}')
+        logger.info('  - You can now specify group_id in the URL query parameter!')
+        
         await mcp.run_sse_async()
 
 

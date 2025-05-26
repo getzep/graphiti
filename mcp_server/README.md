@@ -19,6 +19,7 @@ The Graphiti MCP server exposes the following key high-level functions of Graphi
 - **Entity Management**: Search and manage entity nodes and relationships in the knowledge graph
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
+- **Multi-Project Support**: URL-based group_id switching for seamless project isolation
 - **Graph Maintenance**: Clear the graph and rebuild indices
 
 ## Quick Start for Claude Desktop, Cursor, and other clients
@@ -171,7 +172,19 @@ This will start both the Neo4j database and the Graphiti MCP server. The Docker 
 - Installs dependencies from the `pyproject.toml` file
 - Connects to the Neo4j container using the environment variables
 - Exposes the server on port 8000 for HTTP-based SSE transport
+- **Supports URL-based group_id switching** for multi-project setups
 - Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
+
+#### Multi-Project Access
+
+Once running, you can access different project namespaces using URL query parameters:
+
+- Default: `http://localhost:8000/sse`
+- Project A: `http://localhost:8000/sse?group_id=project_a`
+- Project B: `http://localhost:8000/sse?group_id=project_b`
+- Personal: `http://localhost:8000/sse?group_id=personal`
+
+Each URL provides completely isolated data storage while using the same server instance.
 
 ## Integrating with MCP Clients
 
@@ -224,6 +237,87 @@ For SSE transport (HTTP-based), you can use this configuration:
     }
   }
 }
+```
+
+### Multi-Project Setup with Group IDs
+
+Graphiti supports isolating data between different projects using `group_id` namespaces. You can specify a group_id in several ways:
+
+#### Option 1: URL Query Parameter (Recommended for SSE Transport)
+
+**NEW FEATURE**: For the most seamless multi-project experience, you can now specify the group_id directly in the SSE URL query parameter:
+
+```json
+{
+  "mcpServers": {
+    "graphiti-project-a": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse?group_id=project_a"
+    },
+    "graphiti-project-b": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse?group_id=project_b"
+    },
+    "graphiti-personal": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse?group_id=personal"
+    }
+  }
+}
+```
+
+**Benefits of URL-based group_id switching**:
+
+- **Single server instance**: Use one Graphiti server for unlimited projects
+- **Automatic data isolation**: Each project's data is completely separated
+- **Zero configuration**: No need for multiple server instances or complex setup
+- **Instant switching**: Change projects by simply switching MCP server connections
+- **Backward compatible**: Works alongside existing group_id methods
+- **Real-time**: Group switching takes effect immediately without server restart
+
+**How it works**: The server automatically extracts the `group_id` from the URL query parameter and uses it for all operations in that connection. Each SSE connection maintains its own isolated namespace.
+
+#### Option 2: Environment Variables (For STDIO Transport)
+
+For STDIO transport, you can set the group_id via environment variables:
+
+```json
+{
+  "mcpServers": {
+    "graphiti-project-a": {
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["run", "graphiti_mcp_server.py", "--group-id", "project_a"],
+      "env": {
+        "OPENAI_API_KEY": "sk-XXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+#### Option 3: Tool-Level Group ID
+
+You can also specify group_id in individual tool calls:
+
+```python
+add_episode(
+    name="Project Feature",
+    episode_body="Implementation details...",
+    group_id="project_a"  # This will override the default group_id
+)
+```
+
+#### Verifying Group Isolation
+
+You can verify that your groups are properly isolated by querying the Neo4j database:
+
+```cypher
+// See all groups and their data counts
+MATCH (n) RETURN DISTINCT n.group_id as group_id, labels(n) as node_types, count(n) as count ORDER BY group_id
+
+// See episodes for a specific group
+MATCH (e:Episodic {group_id: "project_a"}) RETURN e.name, e.content
 ```
 
 ## Available Tools
