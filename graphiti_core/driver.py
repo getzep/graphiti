@@ -111,10 +111,12 @@ class FalkorClient(GraphClient):
         password: str,
     ):
         super().__init__()
+        if user and password:
+            uri_parts = uri.split("://", 1)
+            uri = f"{uri_parts[0]}://{user}:{password}@{uri_parts[1]}"
+            
         self.client = FalkorDB.from_url(
             url=uri,
-            # username=user,
-            # password=password,
         )
 
     def _get_graph(self, graph_name: str) -> FalkorGraph:
@@ -146,8 +148,8 @@ class FalkorClient(GraphClient):
     def session(self, database: str) -> GraphClientSession:
         return FalkorClientSession(self._get_graph(database))
 
-    def close(self) -> None:
-        self.client.connection.close()
+    async def close(self) -> None:
+        await self.client.connection.close()
 
 
 class Driver:
@@ -173,7 +175,7 @@ class Driver:
         return self._driver.execute_query(cypher_query_, **kwargs)
 
     async def close(self):
-        return self._driver.close()
+        return await self._driver.close()
 
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self._driver.delete_all_indexes(database_)

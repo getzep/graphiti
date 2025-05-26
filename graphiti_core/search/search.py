@@ -90,7 +90,7 @@ async def search(
     )
 
     # if group_ids is empty, set it to None
-    group_ids = group_ids if group_ids else None
+    group_ids = group_ids if group_ids and group_ids != [''] else None
     edges, nodes, episodes, communities = await semaphore_gather(
         edge_search(
             driver,

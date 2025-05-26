@@ -31,7 +31,7 @@ from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 # CONFIGURATION
 #################################################
 # Set up logging and environment variables for
-# connecting to Neo4j database
+# connecting to FalkorDB database
 #################################################
 
 # Configure logging
@@ -44,30 +44,25 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Neo4j connection parameters
-# Make sure Neo4j Desktop is running with a local DBMS started
-# uri = 'bolt://localhost:7687'
-# user = 'neo4j'
-# password = 'password'
-uri = 'falkor://localhost:6379'
-user = 'neo4j'
-password = 'password'
+# FalkorDB connection parameters
+# Make sure FalkorDB on premises is running, see https://docs.falkordb.com/ 
+falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
 
-if not uri or not user or not password:
-    raise ValueError('URI, USER, and PASSWORD must be set for Graph database connection.')
+if not falkor_uri:
+    raise ValueError('falkor_URI must be set')
 
 
 async def main():
     #################################################
     # INITIALIZATION
     #################################################
-    # Connect to Neo4j/FalkorDB and set up Graphiti indices
+    # Connect to FalkorDB and set up Graphiti indices
     # This is required before using other Graphiti
     # functionality
     #################################################
 
-    # Initialize Graphiti with Graph connection
-    graphiti = Graphiti(uri, user, password)
+    # Initialize Graphiti with FalkorDB connection
+    graphiti = Graphiti(falkor_uri)
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
@@ -232,7 +227,7 @@ async def main():
         #################################################
         # CLEANUP
         #################################################
-        # Always close the connection to Neo4j when
+        # Always close the connection to FalkorDB when
         # finished to properly release resources
         #################################################
 
