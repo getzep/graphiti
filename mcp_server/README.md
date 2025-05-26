@@ -256,25 +256,94 @@ source_description="CRM data"
 
 ```
 
-## Integrating with the Cursor IDE
+## Cursor Setup Guide for Graphiti MCP Server
 
-To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
+This section walks you through setting up Graphiti's MCP (Model Context Protocol) server and integrating it with Cursor for persistent agent memory.
 
-1. Run the Graphiti MCP server using the SSE transport:
+### Prerequisites for Cursor Integration
+
+- **Python 3.10+**
+- **A Neo4j 5.26+ instance** (can be run via Docker)
+- **An OpenAI API key** - Get one from [OpenAI's platform](https://platform.openai.com/api-keys)
+- **Docker and Docker Compose** (recommended for easy setup)
+
+### Step 1: Clone and Install
 
 ```bash
-python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
+git clone https://github.com/getzep/graphiti.git
+cd graphiti/mcp_server
+
+# Install 'uv' if needed (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment & install dependencies
+uv sync
 ```
 
-Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "default" as the group_id.
+### Step 2: Configure Environment
 
-or
+Create your environment configuration:
 
 ```bash
-docker compose up
+cp .env.example .env
 ```
 
-2. Configure Cursor to connect to the Graphiti MCP server.
+Edit `.env` with your settings:
+
+```dotenv
+# Neo4j Database Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=demodemo
+
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-openai-api-key-here
+MODEL_NAME=gpt-4o-mini
+
+# Optional: Embedder model (defaults to text-embedding-3-small)
+EMBEDDER_MODEL_NAME=text-embedding-3-small
+```
+
+> **Note**: Replace `sk-your-openai-api-key-here` with your actual OpenAI API key.
+
+### Step 3: Run the MCP Server
+
+You have several options for running the server:
+
+#### Option A: Docker Compose (Recommended)
+
+This automatically sets up both Neo4j and the Graphiti MCP server:
+
+```bash
+# Make sure your .env file is configured
+docker compose up -d
+```
+
+The server will be available at `http://localhost:8000/sse`
+
+#### Option B: Local Development
+
+If you have Neo4j running separately:
+
+```bash
+# For SSE transport (recommended for Cursor)
+uv run graphiti_mcp_server.py --transport sse
+
+# For StdIO transport (for direct CLI clients)
+uv run graphiti_mcp_server.py --transport stdio
+```
+
+### Step 4: Configure Cursor
+
+#### Add MCP Server to Cursor Config
+
+1. Open your Cursor MCP configuration file:
+
+   - **Windows**: `%APPDATA%\Cursor\User\globalStorage\mcp.json`
+   - **macOS**: `~/Library/Application Support/Cursor/User/globalStorage/mcp.json`
+   - **Linux**: `~/.config/Cursor/User/globalStorage/mcp.json`
+
+2. Add the Graphiti MCP server configuration:
 
 ```json
 {
@@ -286,12 +355,117 @@ docker compose up
 }
 ```
 
-3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+If you already have other MCP servers configured, just add the `"graphiti-memory"` entry to your existing `"mcpServers"` object.
 
-4. Kick off an agent session in Cursor.
+#### Enable Graphiti Rules in Cursor
 
-The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph
-capabilities.
+1. Copy the contents of `cursor_rules.md` from the repository
+2. In Cursor, go to **Settings** → **Rules** → **User Rules**
+3. Paste the Graphiti rules into your User Rules
+
+These rules instruct Cursor to:
+
+- Search for existing preferences and procedures before starting tasks
+- Save new requirements, preferences, and procedures to memory
+- Use the MCP tools (`add_episode`, `search_nodes`, `search_facts`) automatically
+
+### Step 5: Verify Setup
+
+1. **Check server status**: Visit `http://localhost:8000/sse` in your browser - you should see a connection attempt
+2. **Check Docker logs** (if using Docker):
+   ```bash
+   docker compose logs graphiti-mcp
+   ```
+3. **Restart Cursor** to load the new MCP configuration
+
+### Step 6: Test the Integration
+
+1. Open a new Cursor session
+2. Try asking Cursor to remember something:
+   ```
+   Remember that I prefer using TypeScript over JavaScript for new projects
+   ```
+3. Later, ask Cursor about your preferences:
+   ```
+   What programming language preferences do you know about me?
+   ```
+
+If everything is working correctly, Cursor should be able to store and retrieve your preferences using the Graphiti memory system.
+
+### Troubleshooting Cursor Integration
+
+#### Common Issues
+
+1. **Connection refused errors**:
+
+   - Ensure the MCP server is running on `http://localhost:8000/sse`
+   - Check that Docker containers are up: `docker compose ps`
+
+2. **Authentication errors**:
+
+   - Verify your OpenAI API key is correct in the `.env` file
+   - Check that you have sufficient OpenAI API credits
+
+3. **Neo4j connection issues**:
+
+   - Ensure Neo4j is running and accessible
+   - Verify the connection details in your `.env` file
+
+4. **Cursor not using MCP tools**:
+   - Restart Cursor after adding the MCP configuration
+   - Check that the Graphiti rules are properly added to User Rules
+   - Verify the MCP server URL in your Cursor config
+
+#### Checking Logs
+
+**Docker setup**:
+
+```bash
+# Check Graphiti MCP server logs
+docker compose logs graphiti-mcp
+
+# Check Neo4j logs
+docker compose logs neo4j
+```
+
+**Local setup**:
+Check the terminal where you're running the MCP server for any error messages.
+
+### Advanced Configuration for Cursor
+
+#### Custom Entity Types
+
+Enable custom entity extraction by running with the `--use-custom-entities` flag:
+
+```bash
+uv run graphiti_mcp_server.py --transport sse --use-custom-entities
+```
+
+This enables extraction of:
+
+- **Requirements**: Project needs and specifications
+- **Preferences**: User likes/dislikes
+- **Procedures**: Step-by-step instructions
+
+#### Different Models
+
+You can specify different models in your `.env` file:
+
+```dotenv
+MODEL_NAME=gpt-4o
+SMALL_MODEL_NAME=gpt-4o-mini
+EMBEDDER_MODEL_NAME=text-embedding-3-large
+```
+
+### Next Steps with Cursor
+
+Once everything is working:
+
+1. **Start using memory**: Ask Cursor to remember your coding preferences, project requirements, and procedures
+2. **Explore the tools**: The MCP server provides tools for searching nodes, facts, and managing episodes
+3. **Customize rules**: Modify the Cursor rules to better fit your workflow
+
+Your Cursor AI assistant now has persistent memory powered by Graphiti's knowledge graph! 🎉
 
 ## Integrating with Claude Desktop (Docker MCP Server)
 
@@ -331,6 +505,12 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
     If you already have an `mcpServers` entry, add `graphiti-memory` (or your chosen name) as a new key within it.
 
 4.  **Restart Claude Desktop** for the changes to take effect.
+
+## Support
+
+- **GitHub Issues**: [Graphiti Repository](https://github.com/getzep/graphiti/issues)
+- **Documentation**: [Graphiti Docs](https://docs.getzep.com/graphiti/)
+- **Community**: Join the discussion in the Graphiti community channels
 
 ## Requirements
 

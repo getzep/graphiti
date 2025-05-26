@@ -2,8 +2,8 @@ services:
   neo4j:
     image: neo4j:5.26.0
     ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
+      - '7474:7474' # HTTP
+      - '7687:7687' # Bolt
     environment:
       - NEO4J_AUTH=neo4j/demodemo
       - NEO4J_server_memory_heap_initial__size=512m
@@ -13,7 +13,7 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:7474"]
+      test: ['CMD', 'wget', '-O', '/dev/null', 'http://localhost:7474']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,8 +24,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - path: .env
-        required: false # Makes the file optional. Default value is 'true'
+      - .env
     depends_on:
       neo4j:
         condition: service_healthy
@@ -37,8 +36,8 @@ services:
       - MODEL_NAME=${MODEL_NAME}
       - PATH=/root/.local/bin:${PATH}
     ports:
-      - "8000:8000" # Expose the MCP server via HTTP for SSE transport
-    command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse"]
+      - '8000:8000' # Expose the MCP server via HTTP for SSE transport
+    command: ['uv', 'run', 'graphiti_mcp_server.py', '--transport', 'sse']
 
 volumes:
   neo4j_data:

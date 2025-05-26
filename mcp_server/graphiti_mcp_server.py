@@ -1201,6 +1201,8 @@ async def run_mcp_server():
     if mcp_config.transport == 'stdio':
         await mcp.run_stdio_async()
     elif mcp_config.transport == 'sse':
+        # Set host to 0.0.0.0 for Docker container accessibility
+        mcp.settings.host = '0.0.0.0'
         logger.info(
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
