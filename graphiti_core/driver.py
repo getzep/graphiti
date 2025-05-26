@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Coroutine
 from datetime import datetime
 
-from neo4j import AsyncGraphDatabase, GraphDatabase
+from neo4j import AsyncGraphDatabase
 from falkordb.asyncio import FalkorDB
 from falkordb import Graph as FalkorGraph
 
@@ -70,12 +70,10 @@ class GraphClient(ABC):
     @abstractmethod
     def close(self) -> None:
         raise NotImplementedError()
-
+    
+    @abstractmethod
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self._client.execute_query(
-            "CALL db.indexes() YIELD name DROP INDEX name",
-            database_,
-        )
+        raise NotImplementedError()
 
 class Neo4jClient(GraphClient):
 
@@ -102,6 +100,12 @@ class Neo4jClient(GraphClient):
 
     def close(self) -> None:
         return self._client.close()
+    
+    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+        return self._client.execute_query(
+            "CALL db.indexes() YIELD name DROP INDEX name",
+            database_,
+        )
 
 class FalkorClient(GraphClient):
     def __init__(
@@ -137,9 +141,10 @@ class FalkorClient(GraphClient):
         except Exception as e:
             if "already indexed" in str(e):
                 # check if index already exists
-                print(f"Index already exists: {e}")
+                logger.info(f"Index already exists: {e}")
                 return None
-            return None
+            logger.error(f"Error executing FalkorDB query: {e}")
+            raise
 
         # Convert the result header to a list of strings
         header = [h[1].decode('utf-8') for h in result.header]
@@ -150,6 +155,12 @@ class FalkorClient(GraphClient):
 
     async def close(self) -> None:
         await self.client.connection.close()
+    
+    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+        return self._client.execute_query(
+            "CALL db.indexes() YIELD name DROP INDEX name",
+            database_,
+        )
 
 
 class Driver:
@@ -162,7 +173,7 @@ class Driver:
         user: str,
         password: str,
     ):
-        if "falkor" in uri:
+        if uri.startswith("falkor"):
             # FalkorDB
             self._driver = FalkorClient(uri, user, password)
             self.provider = "falkordb"

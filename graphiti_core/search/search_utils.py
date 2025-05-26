@@ -343,38 +343,36 @@ async def node_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
-    try:
-        filter_query, filter_params = node_search_filter_query_constructor(search_filter)
+    filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
-        query = (
-            get_query_nodes_query(driver.provider, "node_name_and_summary", "$query")
-            + """
-            YIELD node AS n, score
-                WITH n, score
-                LIMIT $limit
-                WHERE n:Entity
-            """
-            + filter_query
-            + ENTITY_NODE_RETURN
-            + """
-            ORDER BY score DESC
-            """
-        )
-        records, header, _ = await driver.execute_query(
-            query,
-            params=filter_params,
-            query=fuzzy_query,
-            group_ids=group_ids,
-            limit=limit,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
-        if driver.provider == 'falkordb':
-            records = [dict(zip(header, row)) for row in records]
+    query = (
+        get_query_nodes_query(driver.provider, "node_name_and_summary", "$query")
+        + """
+        YIELD node AS n, score
+            WITH n, score
+            LIMIT $limit
+            WHERE n:Entity
+        """
+        + filter_query
+        + ENTITY_NODE_RETURN
+        + """
+        ORDER BY score DESC
+        """
+    )
+    records, header, _ = await driver.execute_query(
+        query,
+        params=filter_params,
+        query=fuzzy_query,
+        group_ids=group_ids,
+        limit=limit,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+    if driver.provider == 'falkordb':
+        records = [dict(zip(header, row)) for row in records]
 
-        nodes = [get_entity_node_from_record(record) for record in records]
-    except Exception as e:
-        print(f"Error in node_fulltext_search: {e}")
+    nodes = [get_entity_node_from_record(record) for record in records]
+
     return nodes
 
 
@@ -414,23 +412,20 @@ async def node_similarity_search(
             """
     )
 
-    try:
-        records, header, _ = await driver.execute_query(
-            query,
-            params=query_params,
-            search_vector=search_vector,
-            group_ids=group_ids,
-            limit=limit,
-            min_score=min_score,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
-        if driver.provider == 'falkordb':
-            records = [dict(zip(header, row)) for row in records]
-        nodes = [get_entity_node_from_record(record) for record in records]
-    except Exception as e:
-        print(f"Error in node_similarity_search: {e}")
-        nodes = []
+    records, header, _ = await driver.execute_query(
+        query,
+        params=query_params,
+        search_vector=search_vector,
+        group_ids=group_ids,
+        limit=limit,
+        min_score=min_score,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+    if driver.provider == 'falkordb':
+        records = [dict(zip(header, row)) for row in records]
+    nodes = [get_entity_node_from_record(record) for record in records]
+
     return nodes
 
 
@@ -821,19 +816,16 @@ async def get_relevant_edges(
         """
     )
 
-    try:
-        results, _, _ = await driver.execute_query(
-            query,
-            params=query_params,
-            edges=[edge.model_dump() for edge in edges],
-            limit=limit,
-            min_score=min_score,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
-    except Exception as e:
-        logger.error(f"Error in query: {query}")
-        raise
+    results, _, _ = await driver.execute_query(
+        query,
+        params=query_params,
+        edges=[edge.model_dump() for edge in edges],
+        limit=limit,
+        min_score=min_score,
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
     relevant_edges_dict: dict[str, list[EntityEdge]] = {
         result['search_edge_uuid']: [
             get_entity_edge_from_record(record) for record in result['matches']
