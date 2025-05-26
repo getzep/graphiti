@@ -277,7 +277,7 @@ async def resolve_extracted_edges(
     edge_types_lst: list[dict[str, BaseModel]] = []
     for extracted_edge in extracted_edges:
         source_node_labels = uuid_entity_map[extracted_edge.source_node_uuid].labels
-        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels
+        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels if extracted_edge.target_node_uuid else []
         label_tuples = [
             (source_label, target_label)
             for source_label in source_node_labels
