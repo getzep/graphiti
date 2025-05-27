@@ -439,7 +439,7 @@ async def resolve_extracted_edge(
         resolved_edge.name = fact_type
 
         edge_attributes_context = {
-            'message': episode.content,
+            'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
         }
