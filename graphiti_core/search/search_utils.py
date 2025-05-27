@@ -378,7 +378,7 @@ async def node_similarity_search(
 
     group_filter_query: LiteralString = 'WHERE n.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += 'WHERE n.group_id IN $group_ids'
+        group_filter_query += ' AND n.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
