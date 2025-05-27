@@ -20,6 +20,7 @@ from time import time
 from typing import Any
 
 import numpy as np
+from numpy._typing import NDArray
 from typing_extensions import LiteralString
 from graphiti_core.graph_queries import get_query_nodes_query, get_vector_cosine_func_query, get_query_relationships_query
 from graphiti_core.driver import Driver
@@ -181,9 +182,9 @@ async def edge_fulltext_search(
             r.episodes AS episodes,
             r.expired_at AS expired_at,
             r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at
-        ORDER BY score DESC
-        LIMIT $limit
+            r.invalid_at AS invalid_at,
+            properties(r) AS attributes
+        ORDER BY score DESC LIMIT $limit
         """
     )
 
@@ -252,7 +253,8 @@ async def edge_similarity_search(
             r.episodes AS episodes,
             r.expired_at AS expired_at,
             r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at
+            r.invalid_at AS invalid_at,
+            properties(r) AS attributes
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -300,20 +302,21 @@ async def edge_bfs_search(
         WHERE r.uuid = rel.uuid
         """
         + filter_query
-        + """
-        RETURN DISTINCT
-            r.uuid AS uuid,
-            r.group_id AS group_id,
-            startNode(r).uuid AS source_node_uuid,
-            endNode(r).uuid AS target_node_uuid,
-            r.created_at AS created_at,
-            r.name AS name,
-            r.fact AS fact,
-            r.episodes AS episodes,
-            r.expired_at AS expired_at,
-            r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at
-        LIMIT $limit
+        + """  
+                RETURN DISTINCT
+                    r.uuid AS uuid,
+                    r.group_id AS group_id,
+                    startNode(r).uuid AS source_node_uuid,
+                    endNode(r).uuid AS target_node_uuid,
+                    r.created_at AS created_at,
+                    r.name AS name,
+                    r.fact AS fact,
+                    r.episodes AS episodes,
+                    r.expired_at AS expired_at,
+                    r.valid_at AS valid_at,
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
+                LIMIT $limit
         """
     )
 
@@ -811,7 +814,8 @@ async def get_relevant_edges(
                 episodes: e.episodes,
                 expired_at: e.expired_at,
                 valid_at: e.valid_at,
-                invalid_at: e.invalid_at
+                invalid_at: e.invalid_at,
+                attributes: properties(e)
             })[..$limit] AS matches
         """
     )
@@ -879,7 +883,8 @@ async def get_edge_invalidation_candidates(
                 episodes: e.episodes,
                 expired_at: e.expired_at,
                 valid_at: e.valid_at,
-                invalid_at: e.invalid_at
+                invalid_at: e.invalid_at,
+                attributes: properties(e)
             })[..$limit] AS matches
         """
     )
@@ -943,6 +948,7 @@ async def node_distance_reranker(
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
         database_=DEFAULT_DATABASE,
+        routing_='r',
     )
     if driver.provider == 'falkordb':
         results = [dict(zip(header, row)) for row in results]
@@ -986,6 +992,7 @@ async def episode_mentions_reranker(
         query,
         node_uuids=sorted_uuids,
         database_=DEFAULT_DATABASE,
+        routing_='r',
     )
 
     for result in results:
@@ -999,15 +1006,116 @@ async def episode_mentions_reranker(
 
 def maximal_marginal_relevance(
     query_vector: list[float],
-    candidates: list[tuple[str, list[float]]],
+    candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
-):
-    candidates_with_mmr: list[tuple[str, float]] = []
-    for candidate in candidates:
-        max_sim = max([np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates])
-        mmr = mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
-        candidates_with_mmr.append((candidate[0], mmr))
+    min_score: float = -2.0,
+) -> list[str]:
+    start = time()
+    query_array = np.array(query_vector)
+    candidate_arrays: dict[str, NDArray] = {}
+    for uuid, embedding in candidates.items():
+        candidate_arrays[uuid] = normalize_l2(embedding)
 
-    candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
+    uuids: list[str] = list(candidate_arrays.keys())
 
-    return list(set([candidate[0] for candidate in candidates_with_mmr]))
+    similarity_matrix = np.zeros((len(uuids), len(uuids)))
+
+    for i, uuid_1 in enumerate(uuids):
+        for j, uuid_2 in enumerate(uuids[:i]):
+            u = candidate_arrays[uuid_1]
+            v = candidate_arrays[uuid_2]
+            similarity = np.dot(u, v)
+
+            similarity_matrix[i, j] = similarity
+            similarity_matrix[j, i] = similarity
+
+    mmr_scores: dict[str, float] = {}
+    for i, uuid in enumerate(uuids):
+        max_sim = np.max(similarity_matrix[i, :])
+        mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
+        mmr_scores[uuid] = mmr
+
+    uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
+
+    end = time()
+    logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
+
+    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
+
+
+async def get_embeddings_for_nodes(
+    driver: AsyncDriver, nodes: list[EntityNode]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (n:Entity)
+                              WHERE n.uuid IN $node_uuids
+                              RETURN DISTINCT
+                                n.uuid AS uuid,
+                                n.name_embedding AS name_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query, node_uuids=[node.uuid for node in nodes], database_=DEFAULT_DATABASE, routing_='r'
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('name_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict
+
+
+async def get_embeddings_for_communities(
+    driver: AsyncDriver, communities: list[CommunityNode]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (c:Community)
+                              WHERE c.uuid IN $community_uuids
+                              RETURN DISTINCT
+                                c.uuid AS uuid,
+                                c.name_embedding AS name_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query,
+        community_uuids=[community.uuid for community in communities],
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('name_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict
+
+
+async def get_embeddings_for_edges(
+    driver: AsyncDriver, edges: list[EntityEdge]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
+                              WHERE e.uuid IN $edge_uuids
+                              RETURN DISTINCT
+                                e.uuid AS uuid,
+                                e.fact_embedding AS fact_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query,
+        edge_uuids=[edge.uuid for edge in edges],
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('fact_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict

@@ -41,6 +41,7 @@ from graphiti_core.search.search_config_recipes import (
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
+    get_edge_invalidation_candidates,
     get_mentioned_nodes,
     get_relevant_edges,
 )
@@ -62,9 +63,8 @@ from graphiti_core.utils.maintenance.community_operations import (
 )
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
-    dedupe_extracted_edge,
     extract_edges,
-    resolve_edge_contradictions,
+    resolve_extracted_edge,
     resolve_extracted_edges,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
@@ -77,7 +77,6 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import get_edge_contradictions
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
 
 logger = logging.getLogger(__name__)
@@ -274,6 +273,8 @@ class Graphiti:
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
         previous_episode_uuids: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -356,6 +357,13 @@ class Graphiti:
                 )
             )
 
+            # Create default edge type map
+            edge_type_map_default = (
+                {('Entity', 'Entity'): list(edge_types.keys())}
+                if edge_types is not None
+                else {('Entity', 'Entity'): []}
+            )
+
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
@@ -371,7 +379,9 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                 ),
-                extract_edges(self.clients, episode, extracted_nodes, previous_episodes, group_id),
+                extract_edges(
+                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                ),
             )
 
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -381,6 +391,9 @@ class Graphiti:
                     self.clients,
                     edges,
                     episode,
+                    nodes,
+                    edge_types or {},
+                    edge_type_map or edge_type_map_default,
                 ),
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
@@ -681,16 +694,26 @@ class Graphiti:
 
         updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
 
-        related_edges = await get_relevant_edges(self.driver, [updated_edge], SearchFilters(), 0.8)
+        related_edges = (await get_relevant_edges(self.driver, [updated_edge], SearchFilters()))[0]
+        existing_edges = (
+            await get_edge_invalidation_candidates(self.driver, [updated_edge], SearchFilters())
+        )[0]
 
-        resolved_edge = await dedupe_extracted_edge(
+        resolved_edge, invalidated_edges = await resolve_extracted_edge(
             self.llm_client,
             updated_edge,
-            related_edges[0],
+            related_edges,
+            existing_edges,
+            EpisodicNode(
+                name='',
+                source=EpisodeType.text,
+                source_description='',
+                content='',
+                valid_at=edge.valid_at or utc_now(),
+                entity_edges=[],
+                group_id=edge.group_id,
+            ),
         )
-
-        contradicting_edges = await get_edge_contradictions(self.llm_client, edge, related_edges[0])
-        invalidated_edges = resolve_edge_contradictions(resolved_edge, contradicting_edges)
 
         await add_nodes_and_edges_bulk(
             self.driver, [], [], resolved_nodes, [resolved_edge] + invalidated_edges, self.embedder

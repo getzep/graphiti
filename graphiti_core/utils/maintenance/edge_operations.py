@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 from time import time
 
+from pydantic import BaseModel
+
 from graphiti_core.edges import (
     CommunityEdge,
     EntityEdge,
@@ -35,9 +37,6 @@ from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
-from graphiti_core.utils.maintenance.temporal_operations import (
-    get_edge_contradictions,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,7 @@ async def extract_edges(
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
     group_id: str = '',
+    edge_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -94,12 +94,25 @@ async def extract_edges(
 
     node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
 
+    edge_types_context = (
+        [
+            {
+                'fact_type_name': type_name,
+                'fact_type_description': type_model.__doc__,
+            }
+            for type_name, type_model in edge_types.items()
+        ]
+        if edge_types is not None
+        else []
+    )
+
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'nodes': [node.name for node in nodes],
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_time': episode.valid_at,
+        'edge_types': edge_types_context,
         'custom_prompt': '',
     }
 
@@ -236,34 +249,70 @@ async def resolve_extracted_edges(
     clients: GraphitiClients,
     extracted_edges: list[EntityEdge],
     episode: EpisodicNode,
+    entities: list[EntityNode],
+    edge_types: dict[str, BaseModel],
+    edge_type_map: dict[tuple[str, str], list[str]],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
     embedder = clients.embedder
-    try:
-        await create_entity_edge_embeddings(embedder, extracted_edges)
+    await create_entity_edge_embeddings(embedder, extracted_edges)
 
-        search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
-        get_relevant_edges(driver, extracted_edges, SearchFilters()),
-        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters()),
-    )
+    search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
+    get_relevant_edges(driver, extracted_edges, SearchFilters()),
+    get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
+)
 
-        related_edges_lists, edge_invalidation_candidates = search_results
+    related_edges_lists, edge_invalidation_candidates = search_results
 
-        logger.debug(
-        f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
-    )
-    except Exception as e:
-        print(f'Error resolving extracted edges: {e}')
+    logger.debug(
+    f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
+)
+
+    # Build entity hash table
+    uuid_entity_map: dict[str, EntityNode] = {entity.uuid: entity for entity in entities}
+
+    # Determine which edge types are relevant for each edge
+    edge_types_lst: list[dict[str, BaseModel]] = []
+    for extracted_edge in extracted_edges:
+        source_node_labels = uuid_entity_map[extracted_edge.source_node_uuid].labels
+        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels
+        label_tuples = [
+            (source_label, target_label)
+            for source_label in source_node_labels
+            for target_label in target_node_labels
+        ]
+
+        extracted_edge_types = {}
+        for label_tuple in label_tuples:
+            type_names = edge_type_map.get(label_tuple, [])
+            for type_name in type_names:
+                type_model = edge_types.get(type_name)
+                if type_model is None:
+                    continue
+
+                extracted_edge_types[type_name] = type_model
+
+        edge_types_lst.append(extracted_edge_types)
+
     # resolve edges with related edges in the graph and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
         await semaphore_gather(
             *[
                 resolve_extracted_edge(
-                    llm_client, extracted_edge, related_edges, existing_edges, episode
+                    llm_client,
+                    extracted_edge,
+                    related_edges,
+                    existing_edges,
+                    episode,
+                    extracted_edge_types,
                 )
-                for extracted_edge, related_edges, existing_edges in zip(
-                    extracted_edges, related_edges_lists, edge_invalidation_candidates, strict=True
+                for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
+                    extracted_edges,
+                    related_edges_lists,
+                    edge_invalidation_candidates,
+                    edge_types_lst,
+                    strict=True,
                 )
             ]
         )
@@ -327,10 +376,86 @@ async def resolve_extracted_edge(
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
+    edge_types: dict[str, BaseModel] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge]]:
-    resolved_edge, invalidation_candidates = await semaphore_gather(
-        dedupe_extracted_edge(llm_client, extracted_edge, related_edges, episode),
-        get_edge_contradictions(llm_client, extracted_edge, existing_edges),
+    if len(related_edges) == 0 and len(existing_edges) == 0:
+        return extracted_edge, []
+
+    start = time()
+
+    # Prepare context for LLM
+    related_edges_context = [
+        {'id': edge.uuid, 'fact': edge.fact} for i, edge in enumerate(related_edges)
+    ]
+
+    invalidation_edge_candidates_context = [
+        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
+    ]
+
+    edge_types_context = (
+        [
+            {
+                'fact_type_id': i,
+                'fact_type_name': type_name,
+                'fact_type_description': type_model.__doc__,
+            }
+            for i, (type_name, type_model) in enumerate(edge_types.items())
+        ]
+        if edge_types is not None
+        else []
+    )
+
+    context = {
+        'existing_edges': related_edges_context,
+        'new_edge': extracted_edge.fact,
+        'edge_invalidation_candidates': invalidation_edge_candidates_context,
+        'edge_types': edge_types_context,
+    }
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.dedupe_edges.resolve_edge(context),
+        response_model=EdgeDuplicate,
+        model_size=ModelSize.small,
+    )
+
+    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
+
+    resolved_edge = (
+        related_edges[duplicate_fact_id]
+        if 0 <= duplicate_fact_id < len(related_edges)
+        else extracted_edge
+    )
+
+    if duplicate_fact_id >= 0 and episode is not None:
+        resolved_edge.episodes.append(episode.uuid)
+
+    contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
+
+    invalidation_candidates: list[EntityEdge] = [existing_edges[i] for i in contradicted_facts]
+
+    fact_type: str = str(llm_response.get('fact_type'))
+    if fact_type.upper() != 'DEFAULT' and edge_types is not None:
+        resolved_edge.name = fact_type
+
+        edge_attributes_context = {
+            'message': episode.content,
+            'reference_time': episode.valid_at,
+            'fact': resolved_edge.fact,
+        }
+
+        edge_model = edge_types.get(fact_type)
+
+        edge_attributes_response = await llm_client.generate_response(
+            prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+            response_model=edge_model,  # type: ignore
+            model_size=ModelSize.small,
+        )
+
+        resolved_edge.attributes = edge_attributes_response
+
+    end = time()
+    logger.debug(
+        f'Resolved Edge: {extracted_edge.name} is {resolved_edge.name}, in {(end - start) * 1000} ms'
     )
 
     now = utc_now()

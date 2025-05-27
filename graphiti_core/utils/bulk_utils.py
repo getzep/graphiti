@@ -139,15 +139,35 @@ async def add_nodes_and_edges_bulk_tx(
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         nodes.append(entity_data)
 
+    edges: list[dict[str, Any]] = []
     for edge in entity_edges:
         if edge.fact_embedding is None:
             await edge.generate_embedding(embedder)
+        edge_data: dict[str, Any] = {
+            'uuid': edge.uuid,
+            'source_node_uuid': edge.source_node_uuid,
+            'target_node_uuid': edge.target_node_uuid,
+            'name': edge.name,
+            'fact': edge.fact,
+            'fact_embedding': edge.fact_embedding,
+            'group_id': edge.group_id,
+            'episodes': edge.episodes,
+            'created_at': edge.created_at,
+            'expired_at': edge.expired_at,
+            'valid_at': edge.valid_at,
+            'invalid_at': edge.invalid_at,
+        }
+
+        edge_data.update(edge.attributes or {})
+        edges.append(edge_data)
+
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episode)
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
     await tx.run(entity_node_save_bulk, nodes=nodes)
     await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges])
     entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
     await tx.run(entity_edge_save_bulk, entity_edges=[edge.model_dump() for edge in entity_edges])
+
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
