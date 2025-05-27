@@ -1044,7 +1044,7 @@ def maximal_marginal_relevance(
 
 
 async def get_embeddings_for_nodes(
-    driver: AsyncDriver, nodes: list[EntityNode]
+    driver: Driver, nodes: list[EntityNode]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (n:Entity)
                               WHERE n.uuid IN $node_uuids
@@ -1068,7 +1068,7 @@ async def get_embeddings_for_nodes(
 
 
 async def get_embeddings_for_communities(
-    driver: AsyncDriver, communities: list[CommunityNode]
+    driver: Driver, communities: list[CommunityNode]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (c:Community)
                               WHERE c.uuid IN $community_uuids
@@ -1095,7 +1095,7 @@ async def get_embeddings_for_communities(
 
 
 async def get_embeddings_for_edges(
-    driver: AsyncDriver, edges: list[EntityEdge]
+    driver: Driver, edges: list[EntityEdge]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
                               WHERE e.uuid IN $edge_uuids
