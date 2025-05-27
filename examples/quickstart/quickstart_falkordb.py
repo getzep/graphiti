@@ -31,7 +31,7 @@ from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 # CONFIGURATION
 #################################################
 # Set up logging and environment variables for
-# connecting to Neo4j database
+# connecting to FalkorDB database
 #################################################
 
 # Configure logging
@@ -44,27 +44,25 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Neo4j connection parameters
-# Make sure Neo4j Desktop is running with a local DBMS started
-neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+# FalkorDB connection parameters
+# Make sure FalkorDB on premises is running, see https://docs.falkordb.com/ 
+falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
 
-if not neo4j_uri or not neo4j_user or not neo4j_password:
-    raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
+if not falkor_uri:
+    raise ValueError('FALKORDB_URI must be set')
 
 
 async def main():
     #################################################
     # INITIALIZATION
     #################################################
-    # Connect to Neo4j and set up Graphiti indices
+    # Connect to FalkorDB and set up Graphiti indices
     # This is required before using other Graphiti
     # functionality
     #################################################
 
-    # Initialize Graphiti with Neo4j connection
-    graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    # Initialize Graphiti with FalkorDB connection
+    graphiti = Graphiti(falkor_uri)
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
@@ -229,7 +227,7 @@ async def main():
         #################################################
         # CLEANUP
         #################################################
-        # Always close the connection to Neo4j when
+        # Always close the connection to FalkorDB when
         # finished to properly release resources
         #################################################
 

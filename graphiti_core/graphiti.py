@@ -19,10 +19,10 @@ from datetime import datetime
 from time import time
 
 from dotenv import load_dotenv
-from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
+from graphiti_core.driver import Driver
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge, EpisodicEdge
@@ -94,8 +94,8 @@ class Graphiti:
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str = None,
+        password: str = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
@@ -137,7 +137,7 @@ class Graphiti:
         Make sure to set the OPENAI_API_KEY environment variable before initializing
         Graphiti if you're using the default OpenAIClient.
         """
-        self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+        self.driver = Driver(uri, user, password)
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         if llm_client:

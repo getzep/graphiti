@@ -20,11 +20,12 @@ from collections import defaultdict
 from datetime import datetime
 from math import ceil
 
-from neo4j import AsyncDriver, AsyncManagedTransaction
 from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
 
+from graphiti_core.graph_queries import get_entity_node_save_bulk_query, get_entity_edge_save_bulk_query
+from graphiti_core.driver import Driver, GraphClientSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
@@ -73,7 +74,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: Driver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -91,31 +92,32 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: AsyncDriver,
+    driver: Driver,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
 ):
-    async with driver.session(database=DEFAULT_DATABASE) as session:
-        await session.execute_write(
-            add_nodes_and_edges_bulk_tx,
-            episodic_nodes,
-            episodic_edges,
-            entity_nodes,
-            entity_edges,
-            embedder,
-        )
-
+    session = driver.session(database=DEFAULT_DATABASE)
+    await session.execute_write(
+        add_nodes_and_edges_bulk_tx,
+        episodic_nodes,
+        episodic_edges,
+        entity_nodes,
+        entity_edges,
+        embedder,
+        driver=driver,
+    )
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: AsyncManagedTransaction,
+    tx: GraphClientSession,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
+    driver: Driver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -160,11 +162,11 @@ async def add_nodes_and_edges_bulk_tx(
         edges.append(edge_data)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
-    await tx.run(
-        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
-    )
-    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=edges)
+    entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
+    await tx.run(entity_node_save_bulk, nodes=nodes)
+    await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges])
+    entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
+    await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
 
 async def extract_nodes_and_edges_bulk(
@@ -211,7 +213,7 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: AsyncDriver,
+    driver: Driver,
     llm_client: LLMClient,
     extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
@@ -247,7 +249,7 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+    driver: Driver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)
