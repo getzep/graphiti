@@ -21,6 +21,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
+from graphiti_core.helpers import lucene_sanitize
+
 
 class ComparisonOperator(Enum):
     equals = '='
@@ -42,6 +44,9 @@ class SearchFilters(BaseModel):
     node_labels: list[str] | None = Field(
         default=None, description='List of node labels to filter on'
     )
+    edge_types: list[str] | None = Field(
+        default=None, description='List of edge types to filter on'
+    )
     valid_at: list[list[DateFilter]] | None = Field(default=None)
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
@@ -55,7 +60,7 @@ def node_search_filter_query_constructor(
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
-        node_labels = '|'.join(filters.node_labels)
+        node_labels = '|'.join(list(map(lucene_sanitize, filters.node_labels)))
         node_label_filter = ' AND n:' + node_labels
         filter_query += node_label_filter
 
@@ -68,8 +73,19 @@ def edge_search_filter_query_constructor(
     filter_query: LiteralString = ''
     filter_params: dict[str, Any] = {}
 
+    if filters.edge_types is not None:
+        edge_types = filters.edge_types
+        edge_types_filter = '\nAND r.name in $edge_types'
+        filter_query += edge_types_filter
+        filter_params['edge_types'] = edge_types
+
+    if filters.node_labels is not None:
+        node_labels = '|'.join(list(map(lucene_sanitize, filters.node_labels)))
+        node_label_filter = '\nAND n:' + node_labels + ' AND m:' + node_labels
+        filter_query += node_label_filter
+
     if filters.valid_at is not None:
-        valid_at_filter = ' AND ('
+        valid_at_filter = '\nAND ('
         for i, or_list in enumerate(filters.valid_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['valid_at_' + str(j)] = date_filter.date
