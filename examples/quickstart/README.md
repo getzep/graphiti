@@ -40,7 +40,7 @@ export NEO4J_USER=neo4j
 export NEO4J_PASSWORD=password
 
 # Optional FalkorDB connection parameters (defaults shown)
-export FALKORDB_URI=http://localhost:6379
+export FALKORDB_URI=falkor://localhost:6379
 ```
 
 3. Run the example:
