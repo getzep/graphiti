@@ -44,7 +44,7 @@ class FalkorClientSession(GraphClientSession):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
     async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
-        # FalkorDB does not support argument for Label Set, so its converted into array of queries
+        # FalkorDB does not support argument for Label Set, so it's converted into an array of queries
         if isinstance(cypher_query_, list):
             for cypher, params in cypher_query_:
                 params = convert_datetimes_to_strings(params)
@@ -84,25 +84,25 @@ class Neo4jClient(GraphClient):
         password: str,
     ):
         super().__init__()
-        self._client = AsyncGraphDatabase.driver(
+        self.client = AsyncGraphDatabase.driver(
             uri=uri,
             auth=(user, password),
         )
 
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
         params = kwargs.pop("params", None)
-        result = self._client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        result = self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
         
         return result
 
     def session(self, database: str) -> GraphClientSession:
-        return self._client.session(database=database)  # type: ignore
+        return self.client.session(database=database)  # type: ignore
 
     def close(self) -> None:
-        return self._client.close()
+        return self.client.close()
     
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self._client.execute_query(
+        return self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
             database_,
         )
@@ -157,7 +157,7 @@ class FalkorClient(GraphClient):
         await self.client.connection.close()
     
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self._client.execute_query(
+        return self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
             database_,
         )

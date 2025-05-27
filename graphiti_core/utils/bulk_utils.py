@@ -161,12 +161,12 @@ async def add_nodes_and_edges_bulk_tx(
         edge_data.update(edge.attributes or {})
         edges.append(edge_data)
 
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episode)
+    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
     await tx.run(entity_node_save_bulk, nodes=nodes)
     await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges])
     entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
-    await tx.run(entity_edge_save_bulk, entity_edges=[edge.model_dump() for edge in entity_edges])
+    await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
 
 async def extract_nodes_and_edges_bulk(

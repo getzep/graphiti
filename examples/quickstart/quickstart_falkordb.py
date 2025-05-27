@@ -49,7 +49,7 @@ load_dotenv()
 falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
 
 if not falkor_uri:
-    raise ValueError('falkor_URI must be set')
+    raise ValueError('FALKORDB_URI must be set')
 
 
 async def main():
