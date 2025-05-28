@@ -165,7 +165,7 @@ async def extract_edges(
 
         if source_node_uuid == '' or target_node_uuid == '':
             logger.warning(
-                f'WARNING: source or target node not filled {e}. source_node_uuid: {source_node_uuid} and target_node_uuid: {target_node_uuid} '
+                f'WARNING: source or target node not filled {edge_data.get("edge_name")}. source_node_uuid: {source_node_uuid} and target_node_uuid: {target_node_uuid} '
             )
             continue
 
