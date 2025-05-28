@@ -21,8 +21,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.helpers import lucene_sanitize
-
 
 class ComparisonOperator(Enum):
     equals = '='
