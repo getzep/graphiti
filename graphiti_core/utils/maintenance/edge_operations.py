@@ -160,8 +160,8 @@ async def extract_edges(
         invalid_at = edge_data.get('invalid_at', None)
         valid_at_datetime = None
         invalid_at_datetime = None
-        source_node_uuid = node_uuids_by_name_map.get(edge_data.get('source_entity_name', ''))
-        target_node_uuid = node_uuids_by_name_map.get(edge_data.get('target_entity_name', ''))
+        source_node_uuid = node_uuids_by_name_map.get(edge_data.get('source_entity_name', ''), '')
+        target_node_uuid = node_uuids_by_name_map.get(edge_data.get('target_entity_name', ''), '')
 
         if source_node_uuid == '' or target_node_uuid == '':
             logger.warning(
