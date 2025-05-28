@@ -21,8 +21,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.helpers import lucene_sanitize
-
 
 class ComparisonOperator(Enum):
     equals = '='
@@ -60,7 +58,7 @@ def node_search_filter_query_constructor(
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
-        node_labels = '|'.join(list(map(lucene_sanitize, filters.node_labels)))
+        node_labels = '|'.join(filters.node_labels)
         node_label_filter = ' AND n:' + node_labels
         filter_query += node_label_filter
 
@@ -80,7 +78,7 @@ def edge_search_filter_query_constructor(
         filter_params['edge_types'] = edge_types
 
     if filters.node_labels is not None:
-        node_labels = '|'.join(list(map(lucene_sanitize, filters.node_labels)))
+        node_labels = '|'.join(filters.node_labels)
         node_label_filter = '\nAND n:' + node_labels + ' AND m:' + node_labels
         filter_query += node_label_filter
 
