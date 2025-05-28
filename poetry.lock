@@ -800,13 +800,13 @@ tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipyth
 
 [[package]]
 name = "falkordb"
-version = "1.1.1"
+version = "1.1.2"
 description = "Python client for interacting with FalkorDB database"
 optional = false
 python-versions = "<4.0,>=3.8"
 groups = ["main"]
 files = [
-    {file = "falkordb-1.1.1.tar.gz", hash = "sha256:a8ce594f37cd6b7b4483a7e0610caa5f46a679a59c511657bd015b28ae2ed754"},
+    {file = "falkordb-1.1.2.tar.gz", hash = "sha256:db76c97efe14a56c3d65c61b966a42b874e1c78a8fb6808de3f61f4314b04023"},
 ]
 
 [package.dependencies]
@@ -5388,4 +5388,4 @@ groq = ["groq"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "3e9a4c0cdb5e551a1b9b7279cbc6e82f9a319ebba917ce8d9a0be0ad9edbabef"
+content-hash = "2e02a10a6493f7564b86d5d0d09b4cf718004808e115af39550b9ee87c296fb4"
