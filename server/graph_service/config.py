@@ -5,6 +5,8 @@ from fastapi import Depends
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
 
+from graphiti_core import Graphiti
+
 
 class Settings(BaseSettings):
     openai_api_key: str
@@ -24,3 +26,17 @@ def get_settings():
 
 
 ZepEnvDep = Annotated[Settings, Depends(get_settings)]
+
+
+@lru_cache
+def get_graphiti(settings: ZepEnvDep) -> Graphiti:
+    """Get a Graphiti instance."""
+    return Graphiti(
+        neo4j_uri=settings.neo4j_uri,
+        neo4j_user=settings.neo4j_user,
+        neo4j_password=settings.neo4j_password,
+        openai_api_key=settings.openai_api_key,
+        openai_base_url=settings.openai_base_url,
+        model_name=settings.model_name,
+        embedding_model_name=settings.embedding_model_name,
+    )

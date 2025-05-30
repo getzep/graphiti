@@ -8,8 +8,8 @@ from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, No
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
-from graph_service.config import ZepEnvDep
-from graph_service.dto import FactResult
+from server.graph_service.config import ZepEnvDep
+from server.graph_service.dto import FactResult
 
 logger = logging.getLogger(__name__)
 
