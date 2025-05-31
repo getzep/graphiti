@@ -25,7 +25,8 @@ async def extract_facts_emotions_entities(
     message_content: str, 
     existing_emotions: List[str] = None, 
     existing_entities: List[str] = None,
-    chat_history: Union[List[Dict], str] = None
+    chat_history: Union[List[Dict], str] = None,
+    extract_emotions: bool = False
 ) -> Dict[str, Any]:
     """
     Extract facts, emotions, and entities from message content.
@@ -65,9 +66,22 @@ async def extract_facts_emotions_entities(
         chat_history, 
         existing_entities
     )
-    
     resolved_text = coreference_result["resolved_text"]
     entities = coreference_result["entities"]
+    emotions = []
+    if extract_emotions:
+        emotions = await extract_emotions_with_goemotions(resolved_text)
+    return {
+        "facts": [],
+        "emotions": emotions,
+        "entities": entities,
+        "resolved_text": resolved_text,
+        "usage": {},
+        "coreference_info": {
+            "original_text": message_content,
+            "clusters": coreference_result["coreference_clusters"]
+        }
+    }
     
     # Step 2: Extract facts and emotions using OpenAI with resolved text
     openai_results = await extract_facts_and_emotions_with_openai(
@@ -117,6 +131,7 @@ async def extract_entities_with_coreference(
             elif isinstance(chat_history, str) and chat_history.strip():
                 context_messages.append(chat_history.strip())
         
+        logger.info(f"[FastCoref] context_messages for coreference: {context_messages}")
         # Get coreference resolver (import here to avoid circular imports)
         from .coreference_resolver import get_coreference_resolver
         resolver = get_coreference_resolver()

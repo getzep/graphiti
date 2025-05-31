@@ -3,7 +3,7 @@ import uuid  # add UUID generation
 from contextlib import asynccontextmanager
 from functools import partial
 
-from fastapi import APIRouter, FastAPI, status
+from fastapi import APIRouter, FastAPI, HTTPException, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
@@ -11,10 +11,7 @@ from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message,
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 from graph_service.routers.ai import extractFactsAndStore
-# from graph_service.routers.ai.emotionExtractor import extractEmotionsAndStore
-# from graph_service.routers.ai.memoryExtractor import extractMemoriesAndStore
-# from graph_service.routers.ai.relationshipExtractor import extractRelationsAndStore
-# from graph_service.routers.ai.presenceExtractor import extractPresenceAndStore
+from graph_service.routers.ai.extraction import extract_facts_emotions_entities
 
 
 class AsyncWorker:
@@ -192,3 +189,6 @@ async def clear(
     await clear_data(graphiti.driver)
     await graphiti.build_indices_and_constraints()
     return Result(message='Graph cleared', success=True)
+
+from .messages2 import router as messages2_router
+router.include_router(messages2_router)

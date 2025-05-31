@@ -11,39 +11,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Poetry
 RUN pip install --no-cache-dir poetry
 
-# Copy only the files needed for installation
+# Copy dependency-related files first (cache-friendly)
 COPY ./pyproject.toml ./poetry.lock* ./README.md /app/
-COPY ./graphiti_core /app/graphiti_core
 COPY ./server/pyproject.toml ./server/poetry.lock* /app/server/
+# <-- musi być przed buildem!
+COPY ./graphiti_core /app/graphiti_core  
 
-RUN poetry config virtualenvs.create false 
+# Configure Poetry
+RUN poetry config virtualenvs.create false
 
-# Install the local package
-RUN poetry build && pip install dist/*.whl
+# Build local package & install it
+RUN poetry build -f wheel && pip install dist/*.whl
 
 # Install server dependencies
 WORKDIR /app/server
 RUN poetry install --no-interaction --no-ansi --only main --no-root
 
-# Download spaCy models for FastCoref
-RUN python -m spacy download en_core_web_sm
+# Download spaCy model and GoEmotions model
+RUN python -m spacy download en_core_web_sm && \
+    python -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
+               AutoTokenizer.from_pretrained('monologg/bert-base-cased-goemotions-original'); \
+               AutoModelForSequenceClassification.from_pretrained('monologg/bert-base-cased-goemotions-original')"
 
-# Download GoEmotions model for emotion detection
-RUN python -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; AutoTokenizer.from_pretrained('monologg/bert-base-cased-goemotions-original'); AutoModelForSequenceClassification.from_pretrained('monologg/bert-base-cased-goemotions-original')"
-
+# Runtime stage
 FROM python:3.12-slim
 
-# Copy only the necessary files from the builder stage
+# Copy only necessary files from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Create the app directory and copy server files
+# App directory and source code
 WORKDIR /app
 COPY ./server /app
 
-# Set environment variables
+# Environment
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
-# Command to run the application
 
+# Run the app
 CMD uvicorn graph_service.main:app --host 0.0.0.0 --port $PORT

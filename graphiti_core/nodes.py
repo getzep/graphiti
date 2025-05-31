@@ -539,10 +539,35 @@ class CommunityNode(Node):
 
 # Node helpers
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
+    # Defensive: handle None or string for created_at/valid_at
+    def to_ts(val):
+        if val is None:
+            return None
+        if hasattr(val, 'to_native'):
+            native = val.to_native()
+            if hasattr(native, 'timestamp'):
+                return native.timestamp()
+            return native
+        # try parse string ISO
+        import datetime
+        try:
+            return datetime.datetime.fromisoformat(val).timestamp()
+        except Exception:
+            return val
+    def to_dt(val):
+        if val is None:
+            return None
+        if hasattr(val, 'to_native'):
+            return val.to_native()
+        import datetime
+        try:
+            return datetime.datetime.fromisoformat(val)
+        except Exception:
+            return val
     return EpisodicNode(
         content=record['content'],
-        created_at=record['created_at'].to_native().timestamp(),
-        valid_at=(record['valid_at'].to_native()),
+        created_at=to_ts(record.get('created_at')),
+        valid_at=to_dt(record.get('valid_at')),
         uuid=record['uuid'],
         group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
