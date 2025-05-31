@@ -6,8 +6,8 @@ import asyncio
 import sys
 import os
 
-# Add the server directory to the path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from graph_service.routers.ai.extraction import extract_facts_emotions_entities
 from graph_service.routers.ai.coreference_resolver import get_coreference_resolver

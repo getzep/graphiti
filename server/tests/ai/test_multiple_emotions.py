@@ -5,8 +5,8 @@ import asyncio
 import sys
 import os
 
-# Add the parent directory to the path to import modules
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from graph_service.routers.ai.goemotions import extract_emotions_with_goemotions, get_goemotions_detector
 

@@ -6,7 +6,8 @@ try:
     
     import sys
     import os
-    sys.path.append(os.path.dirname(__file__))
+    # Add the server directory to the path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     print("✓ path setup done")
     
     from graph_service.routers.ai.coreference_resolver import get_coreference_resolver

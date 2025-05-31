@@ -2,7 +2,8 @@
 
 import sys
 import os
-sys.path.append('/c/pawelz-workspace/graphiti/server')
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Test the FastCoref integration without circular imports
 from fastcoref import FCoref

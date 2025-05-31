@@ -28,6 +28,9 @@ RUN poetry install --no-interaction --no-ansi --only main --no-root
 # Download spaCy models for FastCoref
 RUN python -m spacy download en_core_web_sm
 
+# Download GoEmotions model for emotion detection
+RUN python -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; AutoTokenizer.from_pretrained('monologg/bert-base-cased-goemotions-original'); AutoModelForSequenceClassification.from_pretrained('monologg/bert-base-cased-goemotions-original')"
+
 FROM python:3.12-slim
 
 # Copy only the necessary files from the builder stage

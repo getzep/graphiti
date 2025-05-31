@@ -5,7 +5,12 @@ This test verifies that the emotion extraction works end-to-end in the server co
 import pytest
 import asyncio
 import logging
+import os
+import sys
 from typing import List, Dict, Any
+
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

@@ -8,8 +8,8 @@ import os
 import sys
 from typing import List, Dict, Any
 
-# Add the server directory to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 async def test_extraction_integration():
     """Test the GoEmotions integration with the extraction module."""

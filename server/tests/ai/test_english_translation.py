@@ -8,7 +8,8 @@ English: "I went to the cinema with Jarek", "we watched a match there", "he said
 import asyncio
 import sys
 import os
-sys.path.append('/c/pawelz-workspace/graphiti/server')
+# Add the server directory to the path to import modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from graph_service.routers.ai.extraction import extract_facts_emotions_entities
 
