@@ -1,0 +1,16 @@
+{
+  "group_id": "testgroup-003",
+  "shirt_slug": "coref-simple-test",
+  "chat_history": [],
+  "messages": [
+    {
+      "uuid": "1",
+      "role": "user",
+      "role_type": "user",
+      "name": "You",
+      "content": "I met Anna yesterday. She was very happy.",
+      "timestamp": "2025-05-31T20:00:00Z",
+      "source_description": "coref simple test"
+    }
+  ]
+}

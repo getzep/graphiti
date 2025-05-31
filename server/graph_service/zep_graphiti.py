@@ -1,5 +1,6 @@
 import logging
 from typing import Annotated
+from datetime import datetime
 
 from fastapi import Depends, HTTPException
 from graphiti_core import Graphiti  # type: ignore
@@ -7,6 +8,7 @@ from graphiti_core.edges import EntityEdge  # type: ignore
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
+from graphiti_core.nodes import EpisodeType
 
 from graph_service.config import ZepEnvDep
 from graph_service.dto import FactResult
@@ -28,6 +30,37 @@ class ZepGraphiti(Graphiti):
         await new_node.generate_name_embedding(self.embedder)
         await new_node.save(self.driver)
         return new_node
+
+    async def add_episode(
+        self,
+        uuid: str,
+        group_id: str,
+        name: str,
+        episode_body: str,
+        reference_time: str,
+        source_description: str,
+        source: 'EpisodeType'
+    ):
+        async with self.driver.session() as session:
+            await session.run("""
+                CREATE (e:Episodic {
+                    uuid: $uuid,
+                    group_id: $group_id,
+                    name: $name,
+                    content: $episode_body,
+                    reference_time: datetime($reference_time),
+                    source_description: $source_description,
+                    source: $source
+                })
+            """, {
+                "uuid": uuid,
+                "group_id": group_id,
+                "name": name,
+                "episode_body": episode_body,
+                "reference_time": reference_time,
+                "source_description": source_description,
+                "source": source.value if hasattr(source, "value") else source
+            })
 
     async def get_entity_edge(self, uuid: str):
         try:
