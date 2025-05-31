@@ -14,6 +14,9 @@ graphiti-core = { path = "../" }
 pydantic-settings = "^2.4.0"
 uvicorn = "^0.30.6"
 httpx = "^0.28.1"
+fastcoref = "^2.1.6"
+spacy = "^3.0.6"
+torch = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pydantic = "^2.8.2"

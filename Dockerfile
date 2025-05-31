@@ -25,6 +25,9 @@ RUN poetry build && pip install dist/*.whl
 WORKDIR /app/server
 RUN poetry install --no-interaction --no-ansi --only main --no-root
 
+# Download spaCy models for FastCoref
+RUN python -m spacy download en_core_web_sm
+
 FROM python:3.12-slim
 
 # Copy only the necessary files from the builder stage
