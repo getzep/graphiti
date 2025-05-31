@@ -1,7 +1,7 @@
 """
-Module for extracting facts, emotions and entities using OpenAI API and FastCoref.
+Module for extracting facts, emotions and entities using OpenAI API, GoEmotions and FastCoref.
 """
-import openai
+from openai import OpenAI
 import json
 import logging
 from typing import List, Dict, Any, Union
@@ -13,10 +13,13 @@ from .config import (
     ENTITIES_CONFIG
 )
 from .function_specs import functionsSpec
+from .goemotions import extract_emotions_with_goemotions
 
-# Set API key
-openai.api_key = OPENAI_API_KEY
 logger = logging.getLogger(__name__)
+
+def get_openai_client():
+    """Get OpenAI client instance, initialized lazily."""
+    return OpenAI(api_key=OPENAI_API_KEY)
 
 async def extract_facts_emotions_entities(
     message_content: str, 
@@ -151,7 +154,7 @@ async def extract_facts_and_emotions_with_openai(
     existing_emotions: List[str] = None
 ) -> Dict[str, Any]:
     """
-    Extract facts and emotions using OpenAI API.
+    Extract facts using OpenAI API and emotions using GoEmotions model.
     
     Args:
         message_content: Content to analyze (should be resolved text)
@@ -164,24 +167,22 @@ async def extract_facts_and_emotions_with_openai(
     facts = []
     emotions = []
     
-    # Prepare base messages for OpenAI
+    # Prepare base messages for OpenAI (only for facts)
     base_messages = prepare_openai_messages(message_content, chat_history)
     
     # Prepare context prompts
     facts_context = get_facts_extraction_prompt()
-    emotions_context = get_emotions_extraction_prompt(existing_emotions)
     
     try:
-        # Extract facts
+        # Extract facts using OpenAI
         facts_result = await call_openai_for_facts(base_messages, facts_context)
         facts = facts_result.get("facts", [])
         
-        # Extract emotions  
-        emotions_result = await call_openai_for_emotions(base_messages, emotions_context)
-        emotions = emotions_result.get("emotions", [])
+        # Extract emotions using GoEmotions
+        emotions = await extract_emotions_with_goemotions(message_content, existing_emotions)
         
-        # Calculate combined usage
-        usage = calculate_combined_usage(facts_result, emotions_result)
+        # Only facts usage since emotions are processed locally
+        usage = facts_result.get("usage", {})
         
         return {
             "facts": facts,
@@ -190,7 +191,7 @@ async def extract_facts_and_emotions_with_openai(
         }
         
     except Exception as e:
-        logger.error(f"Error in OpenAI extraction: {e}")
+        logger.error(f"Error in extraction: {e}")
         return {
             "facts": [],
             "emotions": [],
@@ -325,7 +326,8 @@ async def call_openai_for_facts(base_messages: List[Dict], facts_context: str) -
     """Call OpenAI API for facts extraction."""
     messages_facts = base_messages + [{"role": "system", "content": facts_context}]
     
-    resp_facts = openai.chat.completions.create(
+    openai_client = get_openai_client()
+    resp_facts = openai_client.chat.completions.create(
         model=FACTS_CONFIG.model,
         messages=messages_facts,
         functions=[functionsSpec[0]],
@@ -348,7 +350,8 @@ async def call_openai_for_emotions(base_messages: List[Dict], emotions_context: 
     """Call OpenAI API for emotions extraction."""
     messages_emotions = base_messages + [{"role": "system", "content": emotions_context}]
     
-    resp_emo = openai.chat.completions.create(
+    openai_client = get_openai_client()
+    resp_emo = openai_client.chat.completions.create(
         model=EMOTIONS_CONFIG.model,
         messages=messages_emotions,
         functions=[functionsSpec[1]],

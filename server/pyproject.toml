@@ -17,6 +17,8 @@ httpx = "^0.28.1"
 fastcoref = "^2.1.6"
 spacy = "^3.0.6"
 torch = "^2.0.0"
+transformers = "^4.45.0"
+torchaudio = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pydantic = "^2.8.2"
@@ -34,6 +36,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
