@@ -1,9 +1,10 @@
 """
-Module for extracting facts, emotions and entities using OpenAI API.
+Module for extracting facts, emotions and entities using OpenAI API and FastCoref.
 """
 import openai
 import json
-from typing import List, Dict, Any
+import logging
+from typing import List, Dict, Any, Union
 
 from .config import (
     OPENAI_API_KEY, 
@@ -15,15 +16,18 @@ from .function_specs import functionsSpec
 
 # Set API key
 openai.api_key = OPENAI_API_KEY
+logger = logging.getLogger(__name__)
 
 async def extract_facts_emotions_entities(
     message_content: str, 
     existing_emotions: List[str] = None, 
     existing_entities: List[str] = None,
-    chat_history = None  # Can be either List[Dict] with role/content or str for backward compatibility
-) -> Dict[str, List[str]]:
+    chat_history: Union[List[Dict], str] = None
+) -> Dict[str, Any]:
     """
-    Extract facts, emotions, and entities from message content using OpenAI function calls.
+    Extract facts, emotions, and entities from message content.
+    Uses FastCoref for entity extraction and coreference resolution,
+    and OpenAI for facts and emotions extraction.
     
     Args:
         message_content: Content of the message to analyze
@@ -34,18 +38,207 @@ async def extract_facts_emotions_entities(
                      - str (old format, for backward compatibility)
     
     Returns:
-        Dictionary with lists of facts, emotions, entities and token usage
+        Dictionary with:
+        - facts: List of extracted facts
+        - emotions: List of extracted emotions
+        - entities: List of extracted entities
+        - resolved_text: Text with resolved coreferences
+        - usage: Token usage information
+        - coreference_info: Information about coreference resolution
     """
     if not message_content or not message_content.strip():
-        return {"facts": [], "emotions": [], "entities": [], "usage": {}}
-        
-    # Prepare contexts
-    promptBase = f'''
-Message content for analysis:
-"""{message_content}"""
-'''
+        return {
+            "facts": [], 
+            "emotions": [], 
+            "entities": [], 
+            "resolved_text": message_content,
+            "usage": {},
+            "coreference_info": {}
+        }
 
-    facts_context = """
+    # Step 1: Resolve coreferences and extract entities using FastCoref
+    coreference_result = await extract_entities_with_coreference(
+        message_content, 
+        chat_history, 
+        existing_entities
+    )
+    
+    resolved_text = coreference_result["resolved_text"]
+    entities = coreference_result["entities"]
+    
+    # Step 2: Extract facts and emotions using OpenAI with resolved text
+    openai_results = await extract_facts_and_emotions_with_openai(
+        resolved_text,
+        chat_history,
+        existing_emotions
+    )
+    
+    return {
+        "facts": openai_results["facts"],
+        "emotions": openai_results["emotions"], 
+        "entities": entities,
+        "resolved_text": resolved_text,
+        "usage": openai_results["usage"],
+        "coreference_info": {
+            "original_text": message_content,
+            "clusters": coreference_result["coreference_clusters"]
+        }
+    }
+async def extract_entities_with_coreference(
+    message_content: str,
+    chat_history: Union[List[Dict], str] = None,
+    existing_entities: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Extract entities and resolve coreferences using FastCoref.
+    
+    Args:
+        message_content: Current message content
+        chat_history: Chat history for context
+        existing_entities: Previously known entities
+        
+    Returns:
+        Dictionary with resolved text, entities, and coreference clusters
+    """
+    try:        # Prepare context history for FastCoref
+        context_messages = []
+        
+        if chat_history:
+            if isinstance(chat_history, list):
+                # Extract content from chat history
+                for msg in chat_history:
+                    if isinstance(msg, dict) and 'content' in msg:
+                        content = msg.get('content', '').strip()
+                        if content:
+                            context_messages.append(content)
+            elif isinstance(chat_history, str) and chat_history.strip():
+                context_messages.append(chat_history.strip())
+        
+        # Get coreference resolver (import here to avoid circular imports)
+        from .coreference_resolver import get_coreference_resolver
+        resolver = get_coreference_resolver()
+        
+        if resolver.is_available():
+            # Use FastCoref for coreference resolution and entity extraction
+            result = resolver.resolve_coreferences_and_extract_entities(
+                text=message_content,
+                context_history=context_messages,
+                existing_entities=existing_entities
+            )
+        else:
+            # Fallback if FastCoref is not available
+            logger.warning("FastCoref not available, using fallback entity extraction")
+            result = {
+                "resolved_text": message_content,
+                "entities": existing_entities or [],
+                "coreference_clusters": []
+            }
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in coreference resolution: {e}")
+        return {
+            "resolved_text": message_content,
+            "entities": existing_entities or [],
+            "coreference_clusters": []
+        }
+
+
+async def extract_facts_and_emotions_with_openai(
+    message_content: str,
+    chat_history: Union[List[Dict], str] = None,
+    existing_emotions: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Extract facts and emotions using OpenAI API.
+    
+    Args:
+        message_content: Content to analyze (should be resolved text)
+        chat_history: Chat history for context
+        existing_emotions: Previously known emotions
+        
+    Returns:
+        Dictionary with facts, emotions, and usage information
+    """
+    facts = []
+    emotions = []
+    
+    # Prepare base messages for OpenAI
+    base_messages = prepare_openai_messages(message_content, chat_history)
+    
+    # Prepare context prompts
+    facts_context = get_facts_extraction_prompt()
+    emotions_context = get_emotions_extraction_prompt(existing_emotions)
+    
+    try:
+        # Extract facts
+        facts_result = await call_openai_for_facts(base_messages, facts_context)
+        facts = facts_result.get("facts", [])
+        
+        # Extract emotions  
+        emotions_result = await call_openai_for_emotions(base_messages, emotions_context)
+        emotions = emotions_result.get("emotions", [])
+        
+        # Calculate combined usage
+        usage = calculate_combined_usage(facts_result, emotions_result)
+        
+        return {
+            "facts": facts,
+            "emotions": emotions,
+            "usage": usage
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in OpenAI extraction: {e}")
+        return {
+            "facts": [],
+            "emotions": [],
+            "usage": {}
+        }
+
+
+def prepare_openai_messages(
+    message_content: str, 
+    chat_history: Union[List[Dict], str] = None
+) -> List[Dict]:
+    """
+    Prepare messages for OpenAI API calls.
+    
+    Args:
+        message_content: Current message content
+        chat_history: Chat history for context
+        
+    Returns:
+        List of formatted messages for OpenAI
+    """
+    base_messages = []
+    
+    # Add chat history to base messages if it exists
+    if chat_history:
+        if isinstance(chat_history, list) and len(chat_history) > 0:
+            # Convert chat_history list to OpenAI messages format
+            for msg in chat_history:
+                if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
+                    # Only add non-empty messages
+                    if msg['content'] and msg['content'].strip():
+                        base_messages.append({
+                            "role": msg['role'], 
+                            "content": msg['content']
+                        })
+        elif isinstance(chat_history, str) and chat_history.strip():
+            # Backward compatibility for string chat_history
+            base_messages.append({"role": "assistant", "content": chat_history})
+    
+    # Add the current user message
+    base_messages.append({"role": "user", "content": message_content})
+    
+    return base_messages
+
+
+def get_facts_extraction_prompt() -> str:
+    """Get the prompt for facts extraction."""
+    return """
 You are an assistant tasked with extracting meaningful and concise factual statements from a user's message, using previous user messages provided in the assistant role for context clarification only.
 
 Guidelines:
@@ -63,10 +256,12 @@ Extracted Fact: ["User loves Lila"]
 
 Output the result strictly as per the following function-calling schema:
  ["Extracted factual statement(s)"]
-
 """
 
-    emotions_context = f"""
+
+def get_emotions_extraction_prompt(existing_emotions: List[str] = None) -> str:
+    """Get the prompt for emotions extraction."""
+    return f"""
 Already existing emotions: {existing_emotions or []}
 You are an assistant tasked with extracting emotions from a user's message, using previously identified emotions provided for context clarification.
 
@@ -125,153 +320,107 @@ Output the result strictly as per the following function-calling schema:
 ["Extracted emotion/emotions"]
 """
 
-    entities_context = f"""
-Already existing entities: {existing_entities or []}
-You are an assistant tasked with extracting entities (persons, places, objects) from a user's message, using previous known entities provided for context clarification.
 
-Guidelines:
-- Extract new entities only from the user's current message.
-- When a pronoun (e.g., "he", "she", "they", "it") or vague reference (e.g., "this person") is used, always try to match it to an existing known entity based on meaning, synonyms, pronouns, grammatical gender, or clear similarity.
-- If a pronoun or vague reference could match multiple known entities, return all possible matches (e.g., all female names for "she" if unclear).
-- Never return a bare pronoun (such as "she", "he", etc.) as an entity. If you are about to do so, stop and make one more careful attempt to deduce the correct entity or entities using all available context.
-- Add a new entity only if it is truly new and not already covered by known entities.
-
-Examples:
-
-Example 1:
-Known entities: ['Sarah']
-User message: "She helped me yesterday."
-Extracted entities: ['Sarah']
-
-Example 2:
-Known entities: ['London']
-User message: "I was there last summer."
-Extracted entities: ['London']
-
-Example 3:
-Known entities: ['my boss']
-User message: "He was very strict."
-Extracted entities: ['my boss']
-
-Example 4:
-Known entities: ['David']
-User message: "He called me last night."
-Extracted entities: ['David']
-
-Example 5:
-Known entities: ['the old house']
-User message: "I went back there to see it."
-Extracted entities: ['the old house']
-
-Example 6:
-Known entities: ['Sarah', 'Anna']
-User message: "She wasn't at the meeting."
-Extracted entities: ['Sarah', 'Anna']
-
-Output the result strictly as per the following function-calling schema:
- ["Extracted entity/entities"]
-"""
-    
-    # Initialize results
-    facts = []
-    emotions = []
-    entities = []
-    
-    # Prepare messages for OpenAI API calls
-    base_messages = []
-    
-    # Add chat history to base messages if it exists
-    if chat_history and isinstance(chat_history, list) and len(chat_history) > 0:
-        # Convert chat_history list to OpenAI messages format
-        for msg in chat_history:
-            if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
-                # Only add non-empty messages
-                if msg['content'] and msg['content'].strip():
-                    base_messages.append({
-                        "role": msg['role'], 
-                        "content": msg['content']
-                    })
-    elif chat_history and isinstance(chat_history, str) and chat_history.strip():
-        # Backward compatibility for string chat_history
-        base_messages.append({"role": "assistant", "content": chat_history})
-    
-    # Add the current user message
-    base_messages.append({"role": "user", "content": message_content})
-    
-    # 1) Extract facts
+async def call_openai_for_facts(base_messages: List[Dict], facts_context: str) -> Dict[str, Any]:
+    """Call OpenAI API for facts extraction."""
     messages_facts = base_messages + [{"role": "system", "content": facts_context}]
-    respFacts = openai.chat.completions.create(
+    
+    resp_facts = openai.chat.completions.create(
         model=FACTS_CONFIG.model,
         messages=messages_facts,
         functions=[functionsSpec[0]],
         function_call="auto",
         temperature=FACTS_CONFIG.temperature
     )
-    fc = respFacts.choices[0].message.function_call
+    
+    facts = []
+    fc = resp_facts.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
         facts = json.loads(fc.arguments).get("facts", [])
+    
+    return {
+        "facts": facts,
+        "usage": resp_facts.usage
+    }
 
-    # 2) Extract emotions
+
+async def call_openai_for_emotions(base_messages: List[Dict], emotions_context: str) -> Dict[str, Any]:
+    """Call OpenAI API for emotions extraction."""
     messages_emotions = base_messages + [{"role": "system", "content": emotions_context}]
-    respEmo = openai.chat.completions.create(
+    
+    resp_emo = openai.chat.completions.create(
         model=EMOTIONS_CONFIG.model,
         messages=messages_emotions,
         functions=[functionsSpec[1]],
         function_call="auto",
         temperature=EMOTIONS_CONFIG.temperature
     )
-    fc = respEmo.choices[0].message.function_call
-    if fc and hasattr(fc, 'arguments'):
-        emotions = json.loads(fc.arguments).get("emotions", [])    # 3) Extract entities
-    messages_entities = base_messages + [{"role": "system", "content": entities_context}]
-    respEnt = openai.chat.completions.create(
-        model=ENTITIES_CONFIG.model,
-        messages=messages_entities,
-        functions=[functionsSpec[2]],
-        function_call="auto",
-        temperature=ENTITIES_CONFIG.temperature
-    )
-    fc = respEnt.choices[0].message.function_call
-    if fc and hasattr(fc, 'arguments'):
-        entities = json.loads(fc.arguments).get("entities", [])
     
-    # Calculate token usage
-    usage = {
+    emotions = []
+    fc = resp_emo.choices[0].message.function_call
+    if fc and hasattr(fc, 'arguments'):
+        emotions = json.loads(fc.arguments).get("emotions", [])
+    
+    return {
+        "emotions": emotions,
+        "usage": resp_emo.usage
+    }
+
+
+def calculate_combined_usage(facts_result: Dict, emotions_result: Dict) -> Dict[str, Any]:
+    """Calculate combined token usage from facts and emotions extraction."""
+    facts_usage = facts_result.get("usage")
+    emotions_usage = emotions_result.get("usage")
+    
+    if not facts_usage or not emotions_usage:
+        return {}
+    
+    return {
         "input_tokens": (
-            respFacts.usage.prompt_tokens +
-            respEmo.usage.prompt_tokens +
-            respEnt.usage.prompt_tokens
+            facts_usage.prompt_tokens +
+            emotions_usage.prompt_tokens
         ),
         "output_tokens": (
-            respFacts.usage.completion_tokens +
-            respEmo.usage.completion_tokens +
-            respEnt.usage.completion_tokens
+            facts_usage.completion_tokens +
+            emotions_usage.completion_tokens
         ),
         "total_tokens": (
-            respFacts.usage.total_tokens +
-            respEmo.usage.total_tokens +
-            respEnt.usage.total_tokens
+            facts_usage.total_tokens +
+            emotions_usage.total_tokens
         ),
         "models": {
             "facts": FACTS_CONFIG.model,
             "emotions": EMOTIONS_CONFIG.model,
-            "entities": ENTITIES_CONFIG.model
         },
         "temperatures": {
             "facts": FACTS_CONFIG.temperature,
             "emotions": EMOTIONS_CONFIG.temperature,
-            "entities": ENTITIES_CONFIG.temperature
         }
     }
+
+
+# Keep the old function for backward compatibility
+async def extract_facts_emotions_entities_legacy(
+    message_content: str, 
+    existing_emotions: List[str] = None, 
+    existing_entities: List[str] = None,
+    chat_history = None
+) -> Dict[str, List[str]]:
+    """
+    Legacy function for backward compatibility.
+    This maintains the old interface while using the new implementation.
+    """
+    result = await extract_facts_emotions_entities(
+        message_content=message_content,
+        existing_emotions=existing_emotions,
+        existing_entities=existing_entities,
+        chat_history=chat_history
+    )
     
-    # Ensure all lists are unique
-    facts = list(set(facts))
-    emotions = list(set(emotions))
-    entities = list(set(entities))
-    
+    # Return in old format
     return {
-        "facts": facts, 
-        "emotions": emotions, 
-        "entities": entities,
-        "usage": usage
+        "facts": result["facts"],
+        "emotions": result["emotions"], 
+        "entities": result["entities"],
+        "usage": result["usage"]
     }

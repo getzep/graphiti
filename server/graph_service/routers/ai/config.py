@@ -17,17 +17,17 @@ class ExtractionConfig:
 
 # Configuration for different types of extractions
 FACTS_CONFIG = ExtractionConfig(
-    model="gpt-4.1-mini",
+    model="gpt-4o-mini",
     temperature=0  # Lower temperature for factual accuracy
 )
 
 EMOTIONS_CONFIG = ExtractionConfig(
-    model="gpt-4.1-mini", 
+    model="gpt-4o-mini", 
     temperature=0.4  # Higher temperature for emotional nuance
 )
 
 ENTITIES_CONFIG = ExtractionConfig(
-    model="gpt-4.1-mini",
+    model="gpt-4o-mini",
     temperature=0.2  # Medium temperature for entity recognition
 )
 
