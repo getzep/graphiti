@@ -29,7 +29,9 @@ async def extractFactsAndStore(graphiti, message, group_id, chat_history, shirt_
         graphiti: Graphiti database connection
         message: Message object containing content to analyze
         group_id: Group ID for the message
-        chat_history: Chat history for context
+        chat_history: Chat history for context - can be either:
+                     - List[Dict] with 'role' and 'content' keys (new format)
+                     - str (old format, for backward compatibility)
         shirt_slug: Shirt slug to associate with the data
         
     Returns:

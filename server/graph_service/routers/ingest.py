@@ -61,7 +61,7 @@ async def add_messages(
 ):
     message_results = []
 
-    chat_history_from_request = getattr(request, 'chat_history', "")
+    chat_history_from_request = getattr(request, 'chat_history', [])
     shirt_slug_from_request = getattr(request, 'shirt_slug', None)
 
     async def add_messages_task(m: Message): # Inner function, can access chat_history_from_request and shirt_slug_from_request

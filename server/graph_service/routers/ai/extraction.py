@@ -20,7 +20,7 @@ async def extract_facts_emotions_entities(
     message_content: str, 
     existing_emotions: List[str] = None, 
     existing_entities: List[str] = None,
-    chat_history: str = None
+    chat_history = None  # Can be either List[Dict] with role/content or str for backward compatibility
 ) -> Dict[str, List[str]]:
     """
     Extract facts, emotions, and entities from message content using OpenAI function calls.
@@ -29,7 +29,9 @@ async def extract_facts_emotions_entities(
         message_content: Content of the message to analyze
         existing_emotions: List of existing emotions to compare against
         existing_entities: List of existing entities to compare against
-        chat_history: Any chat history to provide context
+        chat_history: Chat history for context - can be either:
+                     - List[Dict] with 'role' and 'content' keys (new format)
+                     - str (old format, for backward compatibility)
     
     Returns:
         Dictionary with lists of facts, emotions, entities and token usage
@@ -169,16 +171,34 @@ Extracted entities: ['Sarah', 'Anna']
 Output the result strictly as per the following function-calling schema:
  ["Extracted entity/entities"]
 """
-
+    
     # Initialize results
     facts = []
     emotions = []
     entities = []
     
     # Prepare messages for OpenAI API calls
-    base_messages = [{"role": "user", "content": promptBase}]
-    if chat_history and chat_history.strip():
-        base_messages.append({"role": "assistant", "content": chat_history})    # 1) Extract facts
+    base_messages = []
+    
+    # Add chat history to base messages if it exists
+    if chat_history and isinstance(chat_history, list) and len(chat_history) > 0:
+        # Convert chat_history list to OpenAI messages format
+        for msg in chat_history:
+            if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
+                # Only add non-empty messages
+                if msg['content'] and msg['content'].strip():
+                    base_messages.append({
+                        "role": msg['role'], 
+                        "content": msg['content']
+                    })
+    elif chat_history and isinstance(chat_history, str) and chat_history.strip():
+        # Backward compatibility for string chat_history
+        base_messages.append({"role": "assistant", "content": chat_history})
+    
+    # Add the current user message
+    base_messages.append({"role": "user", "content": message_content})
+    
+    # 1) Extract facts
     messages_facts = base_messages + [{"role": "system", "content": facts_context}]
     respFacts = openai.chat.completions.create(
         model=FACTS_CONFIG.model,
@@ -202,9 +222,7 @@ Output the result strictly as per the following function-calling schema:
     )
     fc = respEmo.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
-        emotions = json.loads(fc.arguments).get("emotions", [])
-
-    # 3) Extract entities
+        emotions = json.loads(fc.arguments).get("emotions", [])    # 3) Extract entities
     messages_entities = base_messages + [{"role": "system", "content": entities_context}]
     respEnt = openai.chat.completions.create(
         model=ENTITIES_CONFIG.model,
@@ -215,7 +233,9 @@ Output the result strictly as per the following function-calling schema:
     )
     fc = respEnt.choices[0].message.function_call
     if fc and hasattr(fc, 'arguments'):
-        entities = json.loads(fc.arguments).get("entities", [])    # Calculate token usage
+        entities = json.loads(fc.arguments).get("entities", [])
+    
+    # Calculate token usage
     usage = {
         "input_tokens": (
             respFacts.usage.prompt_tokens +
