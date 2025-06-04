@@ -223,8 +223,8 @@ azure_openai_client = AsyncAzureOpenAI(
 
 # Create LLM Config with your Azure deployed model names
 azure_llm_config = LLMConfig(
-    small_model="gpt-4o-mini",
-    model="gpt-4o",
+    small_model="gpt-4.1-nano",
+    model="gpt-4.1-mini",
 )
 
 # Initialize Graphiti with Azure OpenAI clients
