@@ -160,6 +160,14 @@ async def extract_edges(
         invalid_at = edge_data.get('invalid_at', None)
         valid_at_datetime = None
         invalid_at_datetime = None
+        source_node_uuid = node_uuids_by_name_map.get(edge_data.get('source_entity_name', ''), '')
+        target_node_uuid = node_uuids_by_name_map.get(edge_data.get('target_entity_name', ''), '')
+
+        if source_node_uuid == '' or target_node_uuid == '':
+            logger.warning(
+                f'WARNING: source or target node not filled {edge_data.get("edge_name")}. source_node_uuid: {source_node_uuid} and target_node_uuid: {target_node_uuid} '
+            )
+            continue
 
         if valid_at:
             try:
@@ -177,12 +185,8 @@ async def extract_edges(
             except ValueError as e:
                 logger.warning(f'WARNING: Error parsing invalid_at date: {e}. Input: {invalid_at}')
         edge = EntityEdge(
-            source_node_uuid=node_uuids_by_name_map.get(
-                edge_data.get('source_entity_name', ''), ''
-            ),
-            target_node_uuid=node_uuids_by_name_map.get(
-                edge_data.get('target_entity_name', ''), ''
-            ),
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
             name=edge_data.get('relation_type', ''),
             group_id=group_id,
             fact=edge_data.get('fact', ''),
@@ -275,8 +279,8 @@ async def resolve_extracted_edges(
     # Determine which edge types are relevant for each edge
     edge_types_lst: list[dict[str, BaseModel]] = []
     for extracted_edge in extracted_edges:
-        source_node_labels = uuid_entity_map[extracted_edge.source_node_uuid].labels
-        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels
+        source_node_labels = uuid_entity_map[extracted_edge.source_node_uuid].labels + ['Entity']
+        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels + ['Entity']
         label_tuples = [
             (source_label, target_label)
             for source_label in source_node_labels
@@ -438,7 +442,7 @@ async def resolve_extracted_edge(
         resolved_edge.name = fact_type
 
         edge_attributes_context = {
-            'message': episode.content,
+            'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
         }

@@ -167,7 +167,7 @@ async def edge_fulltext_search(
         get_query_relationships_query(driver.provider, "edge_name_and_fact", "$query")
         + """
         YIELD relationship AS rel, score
-        MATCH (:Entity)-[r:RELATES_TO]->(:Entity)
+        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
         WHERE r.group_id IN $group_ids """+ filter_query
         + """
         WITH r, score, startNode(r) AS n, endNode(r) AS m
@@ -219,9 +219,9 @@ async def edge_similarity_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
 
-    group_filter_query: LiteralString = ''
+    group_filter_query: LiteralString = 'WHERE r.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += 'WHERE r.group_id IN $group_ids'
+        group_filter_query += '\nAND r.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
         query_params['source_node_uuid'] = source_node_uuid
         query_params['target_node_uuid'] = target_node_uuid
@@ -295,12 +295,12 @@ async def edge_bfs_search(
 
     query = (
         """
-        UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-        UNWIND relationships(path) AS rel
-        MATCH ()-[r:RELATES_TO]-()
-        WHERE r.uuid = rel.uuid
-        """
+                UNWIND $bfs_origin_node_uuids AS origin_uuid
+                MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                UNWIND relationships(path) AS rel
+                MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                WHERE r.uuid = rel.uuid
+                """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -390,9 +390,9 @@ async def node_similarity_search(
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
-    group_filter_query: LiteralString = ''
+    group_filter_query: LiteralString = 'WHERE n.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += 'WHERE n.group_id IN $group_ids'
+        group_filter_query += ' AND n.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
