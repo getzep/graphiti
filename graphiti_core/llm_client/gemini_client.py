@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig
+from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,7 @@ class GeminiClient(LLMClient):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model.
@@ -138,13 +139,16 @@ class GeminiClient(LLMClient):
             # Generate content using the simple string approach
             response = await self.client.aio.models.generate_content(
                 model=self.model or DEFAULT_MODEL,
-                contents=gemini_messages,
+                contents=gemini_messages,  # type: ignore[arg-type]  # mypy fails on broad union type
                 config=generation_config,
             )
 
             # If this was a structured output request, parse the response into the Pydantic model
             if response_model is not None:
                 try:
+                    if not response.text:
+                        raise ValueError('No response text')
+
                     validated_model = response_model.model_validate(json.loads(response.text))
 
                     # Return as a dictionary for API consistency
@@ -167,6 +171,7 @@ class GeminiClient(LLMClient):
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model.
@@ -185,5 +190,8 @@ class GeminiClient(LLMClient):
 
         # Call the internal _generate_response method
         return await self._generate_response(
-            messages=messages, response_model=response_model, max_tokens=max_tokens
+            messages=messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            model_size=model_size,
         )

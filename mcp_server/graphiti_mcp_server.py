@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict, cast
@@ -39,6 +38,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 load_dotenv()
 
 DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
+SMALL_LLM_MODEL = 'gpt-4.1-nano'
 DEFAULT_EMBEDDER_MODEL = 'text-embedding-3-small'
 
 
@@ -188,6 +188,7 @@ class GraphitiLLMConfig(BaseModel):
 
     api_key: str | None = None
     model: str = DEFAULT_LLM_MODEL
+    small_model: str = SMALL_LLM_MODEL
     temperature: float = 0.0
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
@@ -200,6 +201,10 @@ class GraphitiLLMConfig(BaseModel):
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_LLM_MODEL
+
+        # Get small_model from environment, or use default if not set or empty
+        small_model_env = os.environ.get('SMALL_MODEL_NAME', '')
+        small_model = small_model_env if small_model_env.strip() else SMALL_LLM_MODEL
 
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', None)
@@ -223,6 +228,7 @@ class GraphitiLLMConfig(BaseModel):
             return cls(
                 api_key=os.environ.get('OPENAI_API_KEY'),
                 model=model,
+                small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
             )
         else:
@@ -245,6 +251,8 @@ class GraphitiLLMConfig(BaseModel):
                 api_key=api_key,
                 azure_openai_api_version=azure_openai_api_version,
                 azure_openai_deployment_name=azure_openai_deployment_name,
+                model=model,
+                small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
             )
 
@@ -262,6 +270,12 @@ class GraphitiLLMConfig(BaseModel):
             else:
                 # Log that empty model was provided and default is used
                 logger.warning(f'Empty model name provided, using default: {DEFAULT_LLM_MODEL}')
+
+        if hasattr(args, 'small_model') and args.small_model:
+            if args.small_model.strip():
+                config.small_model = args.small_model
+            else:
+                logger.warning(f'Empty small_model name provided, using default: {SMALL_LLM_MODEL}')
 
         if hasattr(args, 'temperature') and args.temperature is not None:
             config.temperature = args.temperature
@@ -301,7 +315,9 @@ class GraphitiLLMConfig(BaseModel):
         if not self.api_key:
             return None
 
-        llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+        llm_client_config = LLMConfig(
+            api_key=self.api_key, model=self.model, small_model=self.small_model
+        )
 
         # Set temperature
         llm_client_config.temperature = self.temperature
@@ -314,7 +330,9 @@ class GraphitiLLMConfig(BaseModel):
             client = self.create_client()
             return OpenAIRerankerClient(client=client)
         else:
-            llm_client_config = LLMConfig(api_key=self.api_key, model=self.model)
+            llm_client_config = LLMConfig(
+                api_key=self.api_key, model=self.model, small_model=self.small_model
+            )
             return OpenAIRerankerClient(config=llm_client_config)
 
 
@@ -408,7 +426,7 @@ class GraphitiEmbedderConfig(BaseModel):
             if not self.api_key:
                 return None
 
-            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, model=self.model)
+            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, embedding_model=self.model)
 
             return OpenAIEmbedder(config=embedder_config)
 
@@ -462,7 +480,7 @@ class GraphitiConfig(BaseModel):
         if args.group_id:
             config.group_id = args.group_id
         else:
-            config.group_id = f'graph_{uuid.uuid4().hex[:8]}'
+            config.group_id = 'default'
 
         config.use_custom_entities = args.use_custom_entities
         config.destroy_graph = args.destroy_graph
@@ -497,7 +515,7 @@ config = GraphitiConfig()
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
-Welcome to Graphiti MCP - a memory service for AI agents built on a knowledge graph. Graphiti performs well
+Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
 with dynamic data such as user interactions, changing enterprise data, and external information.
 
 Graphiti transforms information into a richly connected knowledge network, allowing you to 
@@ -528,7 +546,7 @@ API keys are provided for any language model operations.
 
 # MCP server instance
 mcp = FastMCP(
-    'graphiti',
+    'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
@@ -651,7 +669,7 @@ async def process_episode_queue(group_id: str):
 
 
 @mcp.tool()
-async def add_episode(
+async def add_memory(
     name: str,
     episode_body: str,
     group_id: str | None = None,
@@ -659,16 +677,16 @@ async def add_episode(
     source_description: str = '',
     uuid: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
-    """Add an episode to the Graphiti knowledge graph. This is the primary way to add information to the graph.
+    """Add an episode to memory. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
 
     Args:
         name (str): Name of the episode
-        episode_body (str): The content of the episode. When source='json', this must be a properly escaped JSON string,
-                           not a raw Python dictionary. The JSON data will be automatically processed
-                           to extract entities and relationships.
+        episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
+                           properly escaped JSON string, not a raw Python dictionary. The JSON data will be
+                           automatically processed to extract entities and relationships.
         group_id (str, optional): A unique ID for this graph. If not provided, uses the default group_id from CLI
                                  or a generated one.
         source (str, optional): Source type, must be one of:
@@ -760,9 +778,6 @@ async def add_episode(
                 )
                 logger.info(f"Episode '{name}' added successfully")
 
-                logger.info(f"Building communities after episode '{name}'")
-                await client.build_communities()
-
                 logger.info(f"Episode '{name}' processed successfully")
             except Exception as e:
                 error_msg = str(e)
@@ -792,14 +807,14 @@ async def add_episode(
 
 
 @mcp.tool()
-async def search_nodes(
+async def search_memory_nodes(
     query: str,
     group_ids: list[str] | None = None,
     max_nodes: int = 10,
     center_node_uuid: str | None = None,
     entity: str = '',  # cursor seems to break with None
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search the Graphiti knowledge graph for relevant node summaries.
+    """Search the graph memory for relevant node summaries.
     These contain a summary of all of a node's relationships with other nodes.
 
     Note: entity is a single entity type to filter results (permitted: "Preference", "Procedure").
@@ -873,13 +888,13 @@ async def search_nodes(
 
 
 @mcp.tool()
-async def search_facts(
+async def search_memory_facts(
     query: str,
     group_ids: list[str] | None = None,
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
-    """Search the Graphiti knowledge graph for relevant facts.
+    """Search the graph memory for relevant facts.
 
     Args:
         query: The search query
@@ -924,7 +939,7 @@ async def search_facts(
 
 @mcp.tool()
 async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an entity edge from the Graphiti knowledge graph.
+    """Delete an entity edge from the graph memory.
 
     Args:
         uuid: UUID of the entity edge to delete
@@ -954,7 +969,7 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
 
 @mcp.tool()
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an episode from the Graphiti knowledge graph.
+    """Delete an episode from the graph memory.
 
     Args:
         uuid: UUID of the episode to delete
@@ -984,7 +999,7 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
 
 @mcp.tool()
 async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
-    """Get an entity edge from the Graphiti knowledge graph by its UUID.
+    """Get an entity edge from the graph memory by its UUID.
 
     Args:
         uuid: UUID of the entity edge to retrieve
@@ -1017,7 +1032,7 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 async def get_episodes(
     group_id: str | None = None, last_n: int = 10
 ) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
-    """Get the most recent episodes for a specific group.
+    """Get the most recent memory episodes for a specific group.
 
     Args:
         group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
@@ -1065,7 +1080,7 @@ async def get_episodes(
 
 @mcp.tool()
 async def clear_graph() -> SuccessResponse | ErrorResponse:
-    """Clear all data from the Graphiti knowledge graph and rebuild indices."""
+    """Clear all data from the graph memory and rebuild indices."""
     global graphiti_client
 
     if graphiti_client is None:
@@ -1135,6 +1150,10 @@ async def initialize_server() -> MCPConfig:
     )
     parser.add_argument(
         '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
+    )
+    parser.add_argument(
+        '--small-model',
+        help=f'Small model name to use with the LLM client. (default: {SMALL_LLM_MODEL})',
     )
     parser.add_argument(
         '--temperature',

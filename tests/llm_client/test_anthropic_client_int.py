@@ -78,7 +78,7 @@ async def test_extract_json_from_text():
     # A string with embedded JSON
     text = 'Some text before {"message": "Hello, world!"} and after'
 
-    result = client._extract_json_from_text(text)
+    result = client._extract_json_from_text(text)  # type: ignore # ignore type check for private method
 
     assert isinstance(result, dict)
     assert 'message' in result

@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 from neo4j import AsyncDriver, Query
+from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
@@ -101,7 +102,6 @@ async def get_mentioned_nodes(
             n.uuid As uuid, 
             n.group_id AS group_id,
             n.name AS name,
-            n.name_embedding AS name_embedding,
             n.created_at AS created_at, 
             n.summary AS summary,
             labels(n) AS labels,
@@ -128,7 +128,6 @@ async def get_communities_by_nodes(
         c.uuid As uuid, 
         c.group_id AS group_id,
         c.name AS name,
-        c.name_embedding AS name_embedding
         c.created_at AS created_at, 
         c.summary AS summary
     """,
@@ -160,7 +159,7 @@ async def edge_fulltext_search(
         """
               CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) 
               YIELD relationship AS rel, score
-              MATCH (:Entity)-[r:RELATES_TO]->(:Entity)
+              MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
               WHERE r.group_id IN $group_ids"""
         + filter_query
         + """\nWITH r, score, startNode(r) AS n, endNode(r) AS m
@@ -172,11 +171,11 @@ async def edge_fulltext_search(
                      r.created_at AS created_at,
                      r.name AS name,
                      r.fact AS fact,
-                     r.fact_embedding AS fact_embedding,
                      r.episodes AS episodes,
                      r.expired_at AS expired_at,
                      r.valid_at AS valid_at,
-                     r.invalid_at AS invalid_at
+                     r.invalid_at AS invalid_at,
+                     properties(r) AS attributes
                  ORDER BY score DESC LIMIT $limit
                  """
     )
@@ -212,9 +211,9 @@ async def edge_similarity_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
 
-    group_filter_query: LiteralString = ''
+    group_filter_query: LiteralString = 'WHERE r.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += 'WHERE r.group_id IN $group_ids'
+        group_filter_query += '\nAND r.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
         query_params['source_node_uuid'] = source_node_uuid
         query_params['target_node_uuid'] = target_node_uuid
@@ -228,8 +227,8 @@ async def edge_similarity_search(
     query: LiteralString = (
         RUNTIME_QUERY
         + """
-                                                                                                                                                                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-                                                                                                                                               """
+        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+         """
         + group_filter_query
         + filter_query
         + """\nWITH DISTINCT r, vector.similarity.cosine(r.fact_embedding, $search_vector) AS score
@@ -242,11 +241,11 @@ async def edge_similarity_search(
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
-                    r.fact_embedding AS fact_embedding,
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
                 ORDER BY score DESC
                 LIMIT $limit
         """
@@ -288,7 +287,7 @@ async def edge_bfs_search(
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
                 UNWIND relationships(path) AS rel
-                MATCH ()-[r:RELATES_TO]-()
+                MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
                 WHERE r.uuid = rel.uuid
                 """
         + filter_query
@@ -301,11 +300,11 @@ async def edge_bfs_search(
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
-                    r.fact_embedding AS fact_embedding,
                     r.episodes AS episodes,
                     r.expired_at AS expired_at,
                     r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
                 LIMIT $limit
         """
     )
@@ -341,10 +340,10 @@ async def node_fulltext_search(
 
     query = (
         """
-                                                CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
-                                                YIELD node AS n, score
-                                                WHERE n:Entity
-                                                """
+                                                                                                    CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit}) 
+                                                                                                    YIELD node AS n, score
+                                                                                                    WHERE n:Entity
+                                                                                                    """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -377,9 +376,9 @@ async def node_similarity_search(
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
-    group_filter_query: LiteralString = ''
+    group_filter_query: LiteralString = 'WHERE n.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += 'WHERE n.group_id IN $group_ids'
+        group_filter_query += ' AND n.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
@@ -510,7 +509,6 @@ async def community_fulltext_search(
             comm.uuid AS uuid,
             comm.group_id AS group_id, 
             comm.name AS name, 
-            comm.name_embedding AS name_embedding,
             comm.created_at AS created_at, 
             comm.summary AS summary
         ORDER BY score DESC
@@ -555,7 +553,6 @@ async def community_similarity_search(
                comm.uuid As uuid,
                comm.group_id AS group_id,
                comm.name AS name, 
-               comm.name_embedding AS name_embedding,
                comm.created_at AS created_at, 
                comm.summary AS summary
            ORDER BY score DESC
@@ -672,31 +669,53 @@ async def get_relevant_nodes(
             """
         + filter_query
         + """
-            WITH node, n, vector.similarity.cosine(n.name_embedding, node.name_embedding) AS score
-            WHERE score > $min_score
-            WITH node, n, score
-            ORDER BY score DESC
-        RETURN node.uuid AS search_node_uuid,
-           collect({
-               uuid: n.uuid, 
-               name: n.name,
-               name_embedding: n.name_embedding,
-               group_id: n.group_id,
-               created_at: n.created_at,
-               summary: n.summary,
-               labels: labels(n),
-               attributes: properties(n)
-           })[..$limit] AS matches
+        WITH node, n, vector.similarity.cosine(n.name_embedding, node.name_embedding) AS score
+        WHERE score > $min_score
+        WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
+        
+        CALL db.index.fulltext.queryNodes("node_name_and_summary", node.fulltext_query, {limit: $limit}) 
+        YIELD node AS m
+        WHERE m.group_id = $group_id
+        WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
+        
+        WITH node, 
+             top_vector_nodes, 
+             [m IN fulltext_nodes WHERE NOT m.uuid IN vector_node_uuids] AS filtered_fulltext_nodes
+        
+        WITH node, top_vector_nodes + filtered_fulltext_nodes AS combined_nodes
+        
+        UNWIND combined_nodes AS combined_node
+        WITH node, collect(DISTINCT combined_node) AS deduped_nodes
+        
+        RETURN 
+          node.uuid AS search_node_uuid,
+          [x IN deduped_nodes | {
+            uuid: x.uuid, 
+            name: x.name,
+            name_embedding: x.name_embedding,
+            group_id: x.group_id,
+            created_at: x.created_at,
+            summary: x.summary,
+            labels: labels(x),
+            attributes: properties(x)
+          }] AS matches
         """
     )
+
+    query_nodes = [
+        {
+            'uuid': node.uuid,
+            'name': node.name,
+            'name_embedding': node.name_embedding,
+            'fulltext_query': fulltext_query(node.name, [node.group_id]),
+        }
+        for node in nodes
+    ]
 
     results, _, _ = await driver.execute_query(
         query,
         query_params,
-        nodes=[
-            {'uuid': node.uuid, 'name': node.name, 'name_embedding': node.name_embedding}
-            for node in nodes
-        ],
+        nodes=query_nodes,
         group_id=group_id,
         limit=limit,
         min_score=min_score,
@@ -755,7 +774,8 @@ async def get_relevant_edges(
                     episodes: e.episodes,
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
-                    invalid_at: e.invalid_at
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )
@@ -821,7 +841,8 @@ async def get_edge_invalidation_candidates(
                     episodes: e.episodes,
                     expired_at: e.expired_at,
                     valid_at: e.valid_at,
-                    invalid_at: e.invalid_at
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
                 })[..$limit] AS matches
         """
     )
@@ -884,6 +905,7 @@ async def node_distance_reranker(
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
         database_=DEFAULT_DATABASE,
+        routing_='r',
     )
 
     for result in path_results:
@@ -924,6 +946,7 @@ async def episode_mentions_reranker(
         query,
         node_uuids=sorted_uuids,
         database_=DEFAULT_DATABASE,
+        routing_='r',
     )
 
     for result in results:
@@ -937,15 +960,116 @@ async def episode_mentions_reranker(
 
 def maximal_marginal_relevance(
     query_vector: list[float],
-    candidates: list[tuple[str, list[float]]],
+    candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
-):
-    candidates_with_mmr: list[tuple[str, float]] = []
-    for candidate in candidates:
-        max_sim = max([np.dot(normalize_l2(candidate[1]), normalize_l2(c[1])) for c in candidates])
-        mmr = mmr_lambda * np.dot(candidate[1], query_vector) - (1 - mmr_lambda) * max_sim
-        candidates_with_mmr.append((candidate[0], mmr))
+    min_score: float = -2.0,
+) -> list[str]:
+    start = time()
+    query_array = np.array(query_vector)
+    candidate_arrays: dict[str, NDArray] = {}
+    for uuid, embedding in candidates.items():
+        candidate_arrays[uuid] = normalize_l2(embedding)
 
-    candidates_with_mmr.sort(reverse=True, key=lambda c: c[1])
+    uuids: list[str] = list(candidate_arrays.keys())
 
-    return list(set([candidate[0] for candidate in candidates_with_mmr]))
+    similarity_matrix = np.zeros((len(uuids), len(uuids)))
+
+    for i, uuid_1 in enumerate(uuids):
+        for j, uuid_2 in enumerate(uuids[:i]):
+            u = candidate_arrays[uuid_1]
+            v = candidate_arrays[uuid_2]
+            similarity = np.dot(u, v)
+
+            similarity_matrix[i, j] = similarity
+            similarity_matrix[j, i] = similarity
+
+    mmr_scores: dict[str, float] = {}
+    for i, uuid in enumerate(uuids):
+        max_sim = np.max(similarity_matrix[i, :])
+        mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
+        mmr_scores[uuid] = mmr
+
+    uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
+
+    end = time()
+    logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
+
+    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
+
+
+async def get_embeddings_for_nodes(
+    driver: AsyncDriver, nodes: list[EntityNode]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (n:Entity)
+                              WHERE n.uuid IN $node_uuids
+                              RETURN DISTINCT
+                                n.uuid AS uuid,
+                                n.name_embedding AS name_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query, node_uuids=[node.uuid for node in nodes], database_=DEFAULT_DATABASE, routing_='r'
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('name_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict
+
+
+async def get_embeddings_for_communities(
+    driver: AsyncDriver, communities: list[CommunityNode]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (c:Community)
+                              WHERE c.uuid IN $community_uuids
+                              RETURN DISTINCT
+                                c.uuid AS uuid,
+                                c.name_embedding AS name_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query,
+        community_uuids=[community.uuid for community in communities],
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('name_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict
+
+
+async def get_embeddings_for_edges(
+    driver: AsyncDriver, edges: list[EntityEdge]
+) -> dict[str, list[float]]:
+    query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
+                              WHERE e.uuid IN $edge_uuids
+                              RETURN DISTINCT
+                                e.uuid AS uuid,
+                                e.fact_embedding AS fact_embedding
+                    """
+
+    results, _, _ = await driver.execute_query(
+        query,
+        edge_uuids=[edge.uuid for edge in edges],
+        database_=DEFAULT_DATABASE,
+        routing_='r',
+    )
+
+    embeddings_dict: dict[str, list[float]] = {}
+    for result in results:
+        uuid: str = result.get('uuid')
+        embedding: list[float] = result.get('fact_embedding')
+        if uuid is not None and embedding is not None:
+            embeddings_dict[uuid] = embedding
+
+    return embeddings_dict

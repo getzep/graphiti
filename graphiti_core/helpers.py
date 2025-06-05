@@ -22,6 +22,7 @@ from datetime import datetime
 import numpy as np
 from dotenv import load_dotenv
 from neo4j import time as neo4j_time
+from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
 load_dotenv()
@@ -29,7 +30,7 @@ load_dotenv()
 DEFAULT_DATABASE = os.getenv('DEFAULT_DATABASE', None)
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
-MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 1))
+MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
 DEFAULT_PAGE_LIMIT = 20
 
 RUNTIME_QUERY: LiteralString = (
@@ -78,20 +79,17 @@ def lucene_sanitize(query: str) -> str:
     return sanitized
 
 
-def normalize_l2(embedding: list[float]):
+def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
-    if embedding_array.ndim == 1:
-        norm = np.linalg.norm(embedding_array)
-        if norm == 0:
-            return [0.0] * len(embedding)
-        return (embedding_array / norm).tolist()
-    else:
-        norm = np.linalg.norm(embedding_array, 2, axis=1, keepdims=True)
-        return (np.where(norm == 0, embedding_array, embedding_array / norm)).tolist()
+    norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)
+    return np.where(norm == 0, embedding_array, embedding_array / norm)
 
 
 # Use this instead of asyncio.gather() to bound coroutines
-async def semaphore_gather(*coroutines: Coroutine, max_coroutines: int = SEMAPHORE_LIMIT):
+async def semaphore_gather(
+    *coroutines: Coroutine,
+    max_coroutines: int = SEMAPHORE_LIMIT,
+):
     semaphore = asyncio.Semaphore(max_coroutines)
 
     async def _wrap_coroutine(coroutine):

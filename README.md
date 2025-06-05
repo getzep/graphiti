@@ -205,7 +205,7 @@ Graphiti supports Azure OpenAI for both LLM inference and embeddings. To use Azu
 ```python
 from openai import AsyncAzureOpenAI
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import OpenAIClient
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
@@ -221,12 +221,19 @@ azure_openai_client = AsyncAzureOpenAI(
     azure_endpoint=azure_endpoint
 )
 
+# Create LLM Config with your Azure deployed model names
+azure_llm_config = LLMConfig(
+    small_model="gpt-4.1-nano",
+    model="gpt-4.1-mini",
+)
+
 # Initialize Graphiti with Azure OpenAI clients
 graphiti = Graphiti(
     "bolt://localhost:7687",
     "neo4j",
     "password",
     llm_client=OpenAIClient(
+        llm_config=azure_llm_config,
         client=azure_openai_client
     ),
     embedder=OpenAIEmbedder(
@@ -237,6 +244,7 @@ graphiti = Graphiti(
     ),
     # Optional: Configure the OpenAI cross encoder with Azure OpenAI
     cross_encoder=OpenAIRerankerClient(
+        llm_config=azure_llm_config,
         client=azure_openai_client
     )
 )

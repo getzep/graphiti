@@ -239,7 +239,6 @@ async def determine_entity_community(
     RETURN
         c.uuid As uuid, 
         c.name AS name,
-        c.name_embedding AS name_embedding,
         c.group_id AS group_id,
         c.created_at AS created_at, 
         c.summary AS summary
@@ -258,7 +257,6 @@ async def determine_entity_community(
     RETURN
         c.uuid As uuid, 
         c.name AS name,
-        c.name_embedding AS name_embedding,
         c.group_id AS group_id,
         c.created_at AS created_at, 
         c.summary AS summary
