@@ -85,7 +85,8 @@ def get_query_nodes_query(db_type: str = "neo4j", name: str = None,query: str = 
     
 def get_vector_cosine_func_query(vec1, vec2, db_type: str = "neo4j") -> str:
     if db_type == "falkordb":
-        return f"1 - vec.cosineDistance({vec1}, vecf32({vec2}))"
+        # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
+        return f"(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2"
     else:
         return f"vector.similarity.cosine({vec1}, {vec2})"
 

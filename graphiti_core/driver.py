@@ -40,6 +40,13 @@ class FalkorClientSession(GraphClientSession):
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        # No cleanup needed for Falkor, but method must exist
+        pass
+
     async def execute_write(self, func, *args, **kwargs):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
@@ -89,9 +96,9 @@ class Neo4jClient(GraphClient):
             auth=(user, password),
         )
 
-    def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
         params = kwargs.pop("params", None)
-        result = self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
         
         return result
 
