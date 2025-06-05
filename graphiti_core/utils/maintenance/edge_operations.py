@@ -260,19 +260,18 @@ async def resolve_extracted_edges(
     driver = clients.driver
     llm_client = clients.llm_client
     embedder = clients.embedder
-
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
     search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
-        get_relevant_edges(driver, extracted_edges, SearchFilters()),
-        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
-    )
+    get_relevant_edges(driver, extracted_edges, SearchFilters()),
+    get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
+)
 
     related_edges_lists, edge_invalidation_candidates = search_results
 
     logger.debug(
-        f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
-    )
+    f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
+)
 
     # Build entity hash table
     uuid_entity_map: dict[str, EntityNode] = {entity.uuid: entity for entity in entities}
@@ -338,7 +337,7 @@ async def resolve_extracted_edges(
         create_entity_edge_embeddings(embedder, resolved_edges),
         create_entity_edge_embeddings(embedder, invalidated_edges),
     )
-
+    
     return resolved_edges, invalidated_edges
 
 

@@ -2,7 +2,7 @@
 
 This example demonstrates the basic functionality of Graphiti, including:
 
-1. Connecting to a Neo4j database
+1. Connecting to a Neo4j or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph
 4. Searching the graph with semantic and keyword matching
@@ -11,10 +11,14 @@ This example demonstrates the basic functionality of Graphiti, including:
 
 ## Prerequisites
 
-- Neo4j Desktop installed and running
-- A local DBMS created and started in Neo4j Desktop
-- Python 3.9+
-- OpenAI API key (set as `OPENAI_API_KEY` environment variable)
+- Python 3.9+  
+- OpenAI API key (set as `OPENAI_API_KEY` environment variable)  
+- **For Neo4j**:
+  - Neo4j Desktop installed and running  
+  - A local DBMS created and started in Neo4j Desktop  
+- **For FalkorDB**:
+  - FalkorDB server running (see [FalkorDB documentation](https://falkordb.com/docs/) for setup)
+
 
 ## Setup Instructions
 
@@ -34,17 +38,23 @@ export OPENAI_API_KEY=your_openai_api_key
 export NEO4J_URI=bolt://localhost:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASSWORD=password
+
+# Optional FalkorDB connection parameters (defaults shown)
+export FALKORDB_URI=falkor://localhost:6379
 ```
 
 3. Run the example:
 
 ```bash
-python quickstart.py
+python quickstart_neo4j.py
+
+# For FalkorDB
+python quickstart_falkordb.py
 ```
 
 ## What This Example Demonstrates
 
-- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j
+- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j or FalkorDB
 - **Adding Episodes**: Adding text content that will be analyzed and converted into knowledge graph nodes and edges
 - **Edge Search Functionality**: Performing hybrid searches that combine semantic similarity and BM25 retrieval to find relationships (edges)
 - **Graph-Aware Search**: Using the source node UUID from the top search result to rerank additional search results based on graph distance
