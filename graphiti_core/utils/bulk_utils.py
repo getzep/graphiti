@@ -100,15 +100,18 @@ async def add_nodes_and_edges_bulk(
     embedder: EmbedderClient,
 ):
     session = driver.session(database=DEFAULT_DATABASE)
-    await session.execute_write(
-        add_nodes_and_edges_bulk_tx,
-        episodic_nodes,
-        episodic_edges,
-        entity_nodes,
-        entity_edges,
-        embedder,
-        driver=driver,
-    )
+    try:
+        await session.execute_write(
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
+            driver=driver,
+        )
+    finally:
+        await session.close()
 
 async def add_nodes_and_edges_bulk_tx(
     tx: GraphClientSession,

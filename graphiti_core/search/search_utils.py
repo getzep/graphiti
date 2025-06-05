@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 from numpy._typing import NDArray
 from typing_extensions import LiteralString
-from graphiti_core.graph_queries import get_query_nodes_query, get_vector_cosine_func_query, get_query_relationships_query
+from graphiti_core.graph_queries import get_nodes_query, get_vector_cosine_func_query, get_relationships_query
 from graphiti_core.driver import Driver
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.helpers import (
@@ -164,7 +164,7 @@ async def edge_fulltext_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     
     query = (
-        get_query_relationships_query(driver.provider, "edge_name_and_fact", "$query")
+        get_relationships_query(driver.provider, "edge_name_and_fact", "$query")
         + """
         YIELD relationship AS rel, score
         MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
@@ -349,7 +349,7 @@ async def node_fulltext_search(
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
     query = (
-        get_query_nodes_query(driver.provider, "node_name_and_summary", "$query")
+        get_nodes_query(driver.provider, "node_name_and_summary", "$query")
         + """
         YIELD node AS n, score
             WITH n, score
@@ -484,7 +484,7 @@ async def episode_fulltext_search(
         return []
     
     query = (
-        get_query_nodes_query(driver.provider, "episode_content", "$query")
+        get_nodes_query(driver.provider, "episode_content", "$query")
         + """
         YIELD node AS episode, score
         MATCH (e:Episodic)
@@ -529,7 +529,7 @@ async def community_fulltext_search(
         return []
     
     query = (
-        get_query_nodes_query(driver.provider, "community_name", "$query")
+        get_nodes_query(driver.provider, "community_name", "$query")
         + """
         YIELD node AS comm, score
         RETURN
@@ -711,7 +711,7 @@ async def get_relevant_nodes(
         WHERE score > $min_score
         WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
         """
-        + get_query_nodes_query(driver.provider, "node_name_and_summary", "node.fulltext_query")
+        + get_nodes_query(driver.provider, "node_name_and_summary", "node.fulltext_query")
         + """
         YIELD node AS m
         WHERE m.group_id = $group_id

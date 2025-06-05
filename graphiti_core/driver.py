@@ -24,7 +24,6 @@ from falkordb.asyncio import FalkorDB
 from falkordb import Graph as FalkorGraph
 
 from graphiti_core.helpers import DEFAULT_DATABASE
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,10 @@ class FalkorClientSession(GraphClientSession):
 
     async def __aexit__(self, exc_type, exc, tb):
         # No cleanup needed for Falkor, but method must exist
+        pass
+
+    async def close(self):
+        # No explicit close needed for FalkorDB, but method must exist
         pass
 
     async def execute_write(self, func, *args, **kwargs):
