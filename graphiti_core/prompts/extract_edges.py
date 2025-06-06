@@ -24,8 +24,8 @@ from .models import Message, PromptFunction, PromptVersion
 
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
-    source_entity_name: str = Field(..., description='The name of the source entity of the fact.')
-    target_entity_name: str = Field(..., description='The name of the target entity of the fact.')
+    source_entity_id: int = Field(..., description='The id of the source entity of the fact.')
+    target_entity_id: int = Field(..., description='The id of the target entity of the fact.')
     fact: str = Field(..., description='')
     valid_at: str | None = Field(
         None,
@@ -77,7 +77,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{context['nodes']}  # Each has: id, label (e.g., Person, Org), name, aliases
+{context['nodes']} 
 </ENTITIES>
 
 <REFERENCE_TIME>
@@ -94,8 +94,9 @@ Only extract facts that:
 - involve two DISTINCT ENTITIES from the ENTITIES list,
 - are clearly stated or unambiguously implied in the CURRENT MESSAGE,
     and can be represented as edges in a knowledge graph.
-- The FACT TYPES provide a list of the most important types of facts, make sure to extract any facts that
-    could be classified into one of the provided fact types
+- The FACT TYPES provide a list of the most important types of facts, make sure to extract facts of these types
+- The FACT TYPES are not an exhaustive list, extract all facts from the message even if they do not fit into one
+    of the FACT TYPES
 
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 
