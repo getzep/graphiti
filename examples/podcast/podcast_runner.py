@@ -63,6 +63,10 @@ class Person(BaseModel):
     occupation: str | None = Field(..., description="The person's work occupation")
 
 
+class IsPresidentOf(BaseModel):
+    """Relationship between a person and the entity they are a president of"""
+
+
 async def main():
     setup_logging()
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
@@ -84,6 +88,8 @@ async def main():
             source_description='Podcast Transcript',
             group_id=group_id,
             entity_types={'Person': Person},
+            edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
+            edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
             previous_episode_uuids=episode_uuids,
         )
 

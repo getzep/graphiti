@@ -137,8 +137,12 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         <ENTITIES>
         {json.dumps(context['extracted_nodes'], indent=2)}
         </ENTITIES>
+        
+        <EXISTING ENTITIES>
+        {json.dumps(context['existing_nodes'], indent=2)}
+        </EXISTING ENTITIES>
 
-        For each of the above ENTITIES, determine if the entity is a duplicate of any of its duplication candidates.
+        For each of the above ENTITIES, determine if the entity is a duplicate of any of the EXISTING ENTITIES.
 
         Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
 
@@ -152,9 +156,9 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         For each entity, return the id of the entity as id, the name of the entity as name, and the duplicate_idx
         as an integer.
         
-        - If an entity is a duplicate of one of its duplication_candidates, return the idx of the candidate it is a 
+        - If an entity is a duplicate of one of the EXISTING ENTITIES, return the idx of the candidate it is a 
         duplicate of.
-        - If an entity is not a duplicate of one of its duplication candidates, return the -1 as the duplication_idx
+        - If an entity is not a duplicate of one of the EXISTING ENTITIES, return the -1 as the duplication_idx
         """,
         ),
     ]

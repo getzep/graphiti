@@ -92,8 +92,6 @@ async def extract_edges(
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
-    node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
-
     edge_types_context = (
         [
             {
@@ -109,7 +107,7 @@ async def extract_edges(
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
-        'nodes': [node.name for node in nodes],
+        'nodes': [{'id': idx, 'name': node.name} for idx, node in enumerate(nodes)],
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
@@ -160,14 +158,16 @@ async def extract_edges(
         invalid_at = edge_data.get('invalid_at', None)
         valid_at_datetime = None
         invalid_at_datetime = None
-        source_node_uuid = node_uuids_by_name_map.get(edge_data.get('source_entity_name', ''), '')
-        target_node_uuid = node_uuids_by_name_map.get(edge_data.get('target_entity_name', ''), '')
 
-        if source_node_uuid == '' or target_node_uuid == '':
+        source_node_idx = edge_data.get('source_entity_id', -1)
+        target_node_idx = edge_data.get('target_entity_id', -1)
+        if not (-1 < source_node_idx < len(nodes) and -1 < target_node_idx < len(nodes)):
             logger.warning(
-                f'WARNING: source or target node not filled {edge_data.get("edge_name")}. source_node_uuid: {source_node_uuid} and target_node_uuid: {target_node_uuid} '
+                f'WARNING: source or target node not filled {edge_data.get("edge_name")}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
             )
             continue
+        source_node_uuid = nodes[source_node_idx].uuid
+        target_node_uuid = nodes[edge_data.get('target_entity_id')].uuid
 
         if valid_at:
             try:
