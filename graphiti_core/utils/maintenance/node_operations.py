@@ -29,7 +29,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.prompts import prompt_library
-from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
+from graphiti_core.prompts.dedupe_nodes import NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
     ExtractedEntities,
     ExtractedEntity,

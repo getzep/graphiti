@@ -92,8 +92,6 @@ async def extract_edges(
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
-    node_uuids_by_name_map = {node.name: node.uuid for node in nodes}
-
     edge_types_context = (
         [
             {
