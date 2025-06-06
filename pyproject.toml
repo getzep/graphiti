@@ -13,7 +13,7 @@ requires-python = ">=3.10,<4"
 packages = [{ include = "graphiti_core", from = "." }]
 dependencies = [
     "pydantic>=2.11.5",
-    "neo4j>=5.23.0",
+    "neo4j>=5.26.0",
     "diskcache>=5.6.3",
     "openai>=1.53.0",
     "tenacity>=9.0.0",

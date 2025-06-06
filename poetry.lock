@@ -5354,4 +5354,4 @@ groq = ["groq"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "6dd1656da5c8d6834504053a937cfa2abe85d219df94aaf36611abcb83fe7e41"
+content-hash = "814d067fd2959bfe2db58a22637d86580b66d96f34c433852c67d02089d750ab"
