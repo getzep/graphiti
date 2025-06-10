@@ -1166,6 +1166,11 @@ async def initialize_server() -> MCPConfig:
         action='store_true',
         help='Enable entity extraction using the predefined ENTITY_TYPES',
     )
+    parser.add_argument(
+        '--host',
+        default=os.environ.get('MCP_SERVER_HOST'),
+        help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
+    )
 
     args = parser.parse_args()
 
@@ -1186,6 +1191,11 @@ async def initialize_server() -> MCPConfig:
 
     # Initialize Graphiti
     await initialize_graphiti()
+
+    if args.host:
+        logger.info(f'Setting MCP server host to: {args.host}')
+        # Set MCP server host from CLI or env
+        mcp.settings.host = args.host
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)
