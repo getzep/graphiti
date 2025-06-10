@@ -42,7 +42,9 @@ def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None
     return (
         neo_date.to_native()
         if isinstance(neo_date, neo4j_time.DateTime)
-        else datetime.fromisoformat(neo_date) if neo_date else None
+        else datetime.fromisoformat(neo_date)
+        if neo_date
+        else None
     )
 
 

@@ -46,8 +46,8 @@ load_dotenv()
 
 # Neo4j connection parameters
 # Make sure Neo4j Desktop is running with a local DBMS started
-neo4j_uri = os.environ.get('URI', 'bolt://localhost:7687')
-neo4j_user = os.environ.get('USER', 'neo4j')
+neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
+neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
 neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
 
 if not neo4j_uri or not neo4j_user or not neo4j_password:

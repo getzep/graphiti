@@ -4,7 +4,9 @@ Database query utilities for different graph database backends.
 This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
+
 from typing_extensions import LiteralString
+
 from graphiti_core.models.edges.edge_db_queries import (
     ENTITY_EDGE_SAVE_BULK,
 )
@@ -14,27 +16,28 @@ from graphiti_core.models.nodes.node_db_queries import (
 
 # Mapping from Neo4j fulltext index names to FalkorDB node labels
 NEO4J_TO_FALKORDB_MAPPING = {
-    "node_name_and_summary": "Entity",
-    "community_name": "Community", 
-    "episode_content": "Episodic",
-    "edge_name_and_fact": "RELATES_TO"
+    'node_name_and_summary': 'Entity',
+    'community_name': 'Community',
+    'episode_content': 'Episodic',
+    'edge_name_and_fact': 'RELATES_TO',
 }
 
-def get_range_indices(db_type: str = "neo4j") -> list[LiteralString]:
-    if db_type == "falkordb":
+
+def get_range_indices(db_type: str = 'neo4j') -> list[LiteralString]:
+    if db_type == 'falkordb':
         return [
             # Entity node
-            "CREATE INDEX FOR (n:Entity) ON (n.uuid, n.group_id, n.name, n.created_at)",
+            'CREATE INDEX FOR (n:Entity) ON (n.uuid, n.group_id, n.name, n.created_at)',
             # Episodic node
-            "CREATE INDEX FOR (n:Episodic) ON (n.uuid, n.group_id, n.created_at, n.valid_at)",
+            'CREATE INDEX FOR (n:Episodic) ON (n.uuid, n.group_id, n.created_at, n.valid_at)',
             # Community node
-            "CREATE INDEX FOR (n:Community) ON (n.uuid)",
+            'CREATE INDEX FOR (n:Community) ON (n.uuid)',
             # RELATES_TO edge
-            "CREATE INDEX FOR ()-[e:RELATES_TO]-() ON (e.uuid, e.group_id, e.name, e.created_at, e.expired_at, e.valid_at, e.invalid_at)",
+            'CREATE INDEX FOR ()-[e:RELATES_TO]-() ON (e.uuid, e.group_id, e.name, e.created_at, e.expired_at, e.valid_at, e.invalid_at)',
             # MENTIONS edge
-            "CREATE INDEX FOR ()-[e:MENTIONS]-() ON (e.uuid, e.group_id)",
+            'CREATE INDEX FOR ()-[e:MENTIONS]-() ON (e.uuid, e.group_id)',
             # HAS_MEMBER edge
-            "CREATE INDEX FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)"
+            'CREATE INDEX FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
         ]
     else:
         return [
@@ -59,12 +62,15 @@ def get_range_indices(db_type: str = "neo4j") -> list[LiteralString]:
             'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
         ]
 
-def get_fulltext_indices(db_type: str = "neo4j") -> list[LiteralString]:
-    if db_type == "falkordb":
-        return ["""CREATE FULLTEXT INDEX FOR (e:Episodic) ON (e.content, e.source, e.source_description, e.group_id)""",
+
+def get_fulltext_indices(db_type: str = 'neo4j') -> list[LiteralString]:
+    if db_type == 'falkordb':
+        return [
+            """CREATE FULLTEXT INDEX FOR (e:Episodic) ON (e.content, e.source, e.source_description, e.group_id)""",
             """CREATE FULLTEXT INDEX FOR (n:Entity) ON (n.name, n.summary, n.group_id)""",
             """CREATE FULLTEXT INDEX FOR (n:Community) ON (n.name, n.group_id)""",
-            """CREATE FULLTEXT INDEX FOR ()-[e:RELATES_TO]-() ON (e.name, e.fact, e.group_id)""",]
+            """CREATE FULLTEXT INDEX FOR ()-[e:RELATES_TO]-() ON (e.name, e.fact, e.group_id)""",
+        ]
     else:
         return [
             """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
@@ -76,34 +82,40 @@ def get_fulltext_indices(db_type: str = "neo4j") -> list[LiteralString]:
             """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
             FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
         ]
-    
-def get_nodes_query(db_type: str = "neo4j", name: str = None,query: str = None) -> str:
-    if db_type == "falkordb":
+
+
+def get_nodes_query(db_type: str = 'neo4j', name: str = None, query: str = None) -> str:
+    if db_type == 'falkordb':
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryNodes('{label}', {query})"
     else:
         return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
-    
-def get_vector_cosine_func_query(vec1, vec2, db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
-        # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
-        return f"(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2"
-    else:
-        return f"vector.similarity.cosine({vec1}, {vec2})"
 
-def get_relationships_query(db_type: str = "neo4j", name: str = None, query: str = None) -> str:
-    if db_type == "falkordb":
+
+def get_vector_cosine_func_query(vec1, vec2, db_type: str = 'neo4j') -> str:
+    if db_type == 'falkordb':
+        # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
+        return f'(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2'
+    else:
+        return f'vector.similarity.cosine({vec1}, {vec2})'
+
+
+def get_relationships_query(db_type: str = 'neo4j', name: str = None, query: str = None) -> str:
+    if db_type == 'falkordb':
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
     else:
         return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
-    
-def get_entity_node_save_bulk_query(nodes, db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
+
+
+def get_entity_node_save_bulk_query(nodes, db_type: str = 'neo4j') -> str:
+    if db_type == 'falkordb':
         queries = []
         for node in nodes:
-            for label in node["labels"]:
-                queries.append((f"""
+            for label in node['labels']:
+                queries.append(
+                    (
+                        f"""
                     UNWIND $nodes AS node
                     MERGE (n:Entity {{uuid: node.uuid}})
                     SET n:{label}
@@ -111,13 +123,17 @@ def get_entity_node_save_bulk_query(nodes, db_type: str = "neo4j") -> str:
                     WITH n, node
                     SET n.name_embedding = vecf32(node.name_embedding)
                     RETURN n.uuid AS uuid
-                """, {'nodes': [node]}))
+                """,
+                        {'nodes': [node]},
+                    )
+                )
         return queries
     else:
         return ENTITY_NODE_SAVE_BULK
-    
-def get_entity_edge_save_bulk_query(db_type: str = "neo4j") -> str:
-    if db_type == "falkordb":
+
+
+def get_entity_edge_save_bulk_query(db_type: str = 'neo4j') -> str:
+    if db_type == 'falkordb':
         return """
         UNWIND $entity_edges AS edge
         MATCH (source:Entity {uuid: edge.source_node_uuid}) 
@@ -129,5 +145,3 @@ def get_entity_edge_save_bulk_query(db_type: str = "neo4j") -> str:
         RETURN edge.uuid AS uuid"""
     else:
         return ENTITY_EDGE_SAVE_BULK
-    
-

@@ -18,9 +18,9 @@ import logging
 from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
-from graphiti_core.driver import Driver
 
-from graphiti_core.graph_queries import get_range_indices, get_fulltext_indices
+from graphiti_core.driver import Driver
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
@@ -64,6 +64,7 @@ async def build_indices_and_constraints(driver: Driver, delete_existing: bool = 
         ]
     )
 
+
 async def clear_data(driver: Driver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
@@ -75,6 +76,7 @@ async def clear_data(driver: Driver, group_ids: list[str] | None = None):
                 'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
                 group_ids=group_ids,
             )
+
         if group_ids is None:
             await session.execute_write(delete_all)
         else:

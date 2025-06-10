@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # FalkorDB connection parameters
-# Make sure FalkorDB on premises is running, see https://docs.falkordb.com/ 
+# Make sure FalkorDB on premises is running, see https://docs.falkordb.com/
 falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
 
 if not falkor_uri:

@@ -16,12 +16,12 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Coroutine
 from datetime import datetime
+from typing import Any, Coroutine
 
-from neo4j import AsyncGraphDatabase
-from falkordb.asyncio import FalkorDB
 from falkordb import Graph as FalkorGraph
+from falkordb.asyncio import FalkorDB
+from neo4j import AsyncGraphDatabase
 
 from graphiti_core.helpers import DEFAULT_DATABASE
 
@@ -35,7 +35,6 @@ class GraphClientSession(ABC):
 
 
 class FalkorClientSession(GraphClientSession):
-
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -53,7 +52,8 @@ class FalkorClientSession(GraphClientSession):
     async def execute_write(self, func, *args, **kwargs):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
-    async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
+
+    async def run(self, cypher_query_: str | list, **kwargs: Any) -> Any:
         # FalkorDB does not support argument for Label Set, so it's converted into an array of queries
         if isinstance(cypher_query_, list):
             for cypher, params in cypher_query_:
@@ -68,7 +68,6 @@ class FalkorClientSession(GraphClientSession):
 
 
 class GraphClient(ABC):
-
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
         raise NotImplementedError()
@@ -80,13 +79,13 @@ class GraphClient(ABC):
     @abstractmethod
     def close(self) -> None:
         raise NotImplementedError()
-    
+
     @abstractmethod
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         raise NotImplementedError()
 
-class Neo4jClient(GraphClient):
 
+class Neo4jClient(GraphClient):
     def __init__(
         self,
         uri: str,
@@ -100,9 +99,9 @@ class Neo4jClient(GraphClient):
         )
 
     async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
-        params = kwargs.pop("params", None)
+        params = kwargs.pop('params', None)
         result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
-        
+
         return result
 
     def session(self, database: str) -> GraphClientSession:
@@ -110,12 +109,13 @@ class Neo4jClient(GraphClient):
 
     def close(self) -> None:
         return self.client.close()
-    
+
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self.client.execute_query(
-            "CALL db.indexes() YIELD name DROP INDEX name",
+            'CALL db.indexes() YIELD name DROP INDEX name',
             database_,
         )
+
 
 class FalkorClient(GraphClient):
     def __init__(
@@ -126,9 +126,9 @@ class FalkorClient(GraphClient):
     ):
         super().__init__()
         if user and password:
-            uri_parts = uri.split("://", 1)
-            uri = f"{uri_parts[0]}://{user}:{password}@{uri_parts[1]}"
-            
+            uri_parts = uri.split('://', 1)
+            uri = f'{uri_parts[0]}://{user}:{password}@{uri_parts[1]}'
+
         self.client = FalkorDB.from_url(
             url=uri,
         )
@@ -136,11 +136,11 @@ class FalkorClient(GraphClient):
     def _get_graph(self, graph_name: str) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
         if graph_name is None:
-            graph_name = "DEFAULT_DATABASE"
+            graph_name = 'DEFAULT_DATABASE'
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
-        graph_name = kwargs.pop("database_", DEFAULT_DATABASE)
+        graph_name = kwargs.pop('database_', DEFAULT_DATABASE)
         graph = self._get_graph(graph_name)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
@@ -149,11 +149,11 @@ class FalkorClient(GraphClient):
         try:
             result = await graph.query(cypher_query_, params)
         except Exception as e:
-            if "already indexed" in str(e):
+            if 'already indexed' in str(e):
                 # check if index already exists
-                logger.info(f"Index already exists: {e}")
+                logger.info(f'Index already exists: {e}')
                 return None
-            logger.error(f"Error executing FalkorDB query: {e}")
+            logger.error(f'Error executing FalkorDB query: {e}')
             raise
 
         # Convert the result header to a list of strings
@@ -165,16 +165,15 @@ class FalkorClient(GraphClient):
 
     async def close(self) -> None:
         await self.client.connection.close()
-    
+
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self.client.execute_query(
-            "CALL db.indexes() YIELD name DROP INDEX name",
+            'CALL db.indexes() YIELD name DROP INDEX name',
             database_,
         )
 
 
 class Driver:
-
     _driver: GraphClient
 
     def __init__(
@@ -183,15 +182,15 @@ class Driver:
         user: str,
         password: str,
     ):
-        if uri.startswith("falkor"):
+        if uri.startswith('falkor'):
             # FalkorDB
             self._driver = FalkorClient(uri, user, password)
-            self.provider = "falkordb"
+            self.provider = 'falkordb'
         else:
             # Neo4j
             self._driver = Neo4jClient(uri, user, password)
-            self.provider = "neo4j"
-        
+            self.provider = 'neo4j'
+
     def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
         return self._driver.execute_query(cypher_query_, **kwargs)
 
@@ -200,9 +199,10 @@ class Driver:
 
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self._driver.delete_all_indexes(database_)
-    
+
     def session(self, database: str) -> GraphClientSession:
         return self._driver.session(database)
+
 
 def convert_datetimes_to_strings(obj):
     if isinstance(obj, dict):

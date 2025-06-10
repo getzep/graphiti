@@ -22,9 +22,9 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
-from graphiti_core.driver import Driver
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+from graphiti_core.driver import Driver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients

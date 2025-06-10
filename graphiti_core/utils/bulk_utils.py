@@ -24,10 +24,13 @@ from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
 
-from graphiti_core.graph_queries import get_entity_node_save_bulk_query, get_entity_edge_save_bulk_query
 from graphiti_core.driver import Driver, GraphClientSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.graph_queries import (
+    get_entity_edge_save_bulk_query,
+    get_entity_node_save_bulk_query,
+)
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
@@ -113,6 +116,7 @@ async def add_nodes_and_edges_bulk(
     finally:
         await session.close()
 
+
 async def add_nodes_and_edges_bulk_tx(
     tx: GraphClientSession,
     episodic_nodes: list[EpisodicNode],
@@ -167,7 +171,9 @@ async def add_nodes_and_edges_bulk_tx(
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
     await tx.run(entity_node_save_bulk, nodes=nodes)
-    await tx.run(EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges])
+    await tx.run(
+        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
+    )
     entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
     await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
