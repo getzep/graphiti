@@ -18,9 +18,9 @@ import logging
 from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
-from graphiti_core.driver import Driver
 
-from graphiti_core.graph_queries import get_range_indices, get_fulltext_indices
+from graphiti_core.driver import Driver
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 

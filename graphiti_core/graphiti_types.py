@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from graphiti_core.driver import Driver
 from pydantic import BaseModel, ConfigDict
 
 from graphiti_core.cross_encoder import CrossEncoderClient
+from graphiti_core.driver import Driver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.llm_client import LLMClient
 

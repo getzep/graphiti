@@ -16,12 +16,12 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Coroutine, Union
 from datetime import datetime
+from typing import Any
 
-from neo4j import AsyncGraphDatabase
-from falkordb.asyncio import FalkorDB
 from falkordb import Graph as FalkorGraph
+from falkordb.asyncio import FalkorDB
+from neo4j import AsyncGraphDatabase
 
 from graphiti_core.helpers import DEFAULT_DATABASE
 
@@ -99,7 +99,7 @@ class GraphClient(ABC):
         raise NotImplementedError()
     
     @abstractmethod
-    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+    async def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Any:
         raise NotImplementedError()
 
 class Neo4jClient(GraphClient):
@@ -128,7 +128,7 @@ class Neo4jClient(GraphClient):
     async def close(self) -> None:
         await self.client.close()
     
-    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+    async def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Any:
         return await self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
             {},
@@ -184,7 +184,7 @@ class FalkorClient(GraphClient):
     async def close(self) -> None:
         await self.client.connection.close()
     
-    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+    async def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Any:
         return await self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
             database_,
@@ -216,7 +216,7 @@ class Driver:
     async def close(self):
         return await self._driver.close()
 
-    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+    async def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Any:
         return await self._driver.delete_all_indexes(database_)
     
     def session(self, database: str) -> GraphClientSession:

@@ -5,14 +5,10 @@ This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
 
-from typing import Optional
 from typing_extensions import LiteralString
-from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK,
-)
-from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK,
-)
+
+from graphiti_core.models.edges.edge_db_queries import ENTITY_EDGE_SAVE_BULK
+from graphiti_core.models.nodes.node_db_queries import ENTITY_NODE_SAVE_BULK
 
 # Mapping from Neo4j fulltext index names to FalkorDB node labels
 NEO4J_TO_FALKORDB_MAPPING = {

@@ -24,21 +24,18 @@ from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
 
-from graphiti_core.graph_queries import get_entity_node_save_bulk_query, get_entity_edge_save_bulk_query
 from graphiti_core.driver import Driver, GraphClientSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient
+from graphiti_core.graph_queries import (
+    get_entity_edge_save_bulk_query,
+    get_entity_node_save_bulk_query,
+)
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK,
-    EPISODIC_EDGE_SAVE_BULK,
-)
-from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK,
-    EPISODIC_NODE_SAVE_BULK,
-)
+from graphiti_core.models.edges.edge_db_queries import EPISODIC_EDGE_SAVE_BULK
+from graphiti_core.models.nodes.node_db_queries import EPISODIC_NODE_SAVE_BULK
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes

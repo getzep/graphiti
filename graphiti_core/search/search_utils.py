@@ -22,9 +22,14 @@ from typing import Any
 import numpy as np
 from numpy._typing import NDArray
 from typing_extensions import LiteralString
-from graphiti_core.graph_queries import get_nodes_query, get_vector_cosine_func_query, get_relationships_query
+
 from graphiti_core.driver import Driver
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
+from graphiti_core.graph_queries import (
+    get_nodes_query,
+    get_relationships_query,
+    get_vector_cosine_func_query,
+)
 from graphiti_core.helpers import (
     DEFAULT_DATABASE,
     RUNTIME_QUERY,
@@ -273,7 +278,7 @@ async def edge_similarity_search(
     )
 
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -372,7 +377,7 @@ async def node_fulltext_search(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -426,7 +431,7 @@ async def node_similarity_search(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -951,7 +956,7 @@ async def node_distance_reranker(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        results = [dict(zip(header, row)) for row in results]
+        results = [dict(zip(header, row, strict=True)) for row in results]
 
     for result in results:
         uuid = result['uuid']
