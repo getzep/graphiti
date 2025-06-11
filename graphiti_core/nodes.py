@@ -540,10 +540,13 @@ class CommunityNode(Node):
 
 # Node helpers
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
+    created_at = parse_db_date(record['created_at'])
+    valid_at = parse_db_date(record['valid_at'])
+    
     return EpisodicNode(
         content=record['content'],
-        created_at=parse_db_date(record['created_at']).timestamp(),
-        valid_at=(parse_db_date(record['valid_at'])),
+        created_at=created_at or utc_now(),
+        valid_at=valid_at or utc_now(),
         uuid=record['uuid'],
         group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
@@ -554,12 +557,14 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any) -> EntityNode:
+    created_at = parse_db_date(record['created_at'])
+    
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
         labels=record['labels'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=created_at or utc_now(),
         summary=record['summary'],
         attributes=record['attributes'],
     )
@@ -575,12 +580,14 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
 
 
 def get_community_node_from_record(record: Any) -> CommunityNode:
+    created_at = parse_db_date(record['created_at'])
+    
     return CommunityNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=created_at or utc_now(),
         summary=record['summary'],
     )
 

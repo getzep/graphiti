@@ -16,7 +16,7 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Coroutine
+from typing import Any, Coroutine, Union
 from datetime import datetime
 
 from neo4j import AsyncGraphDatabase
@@ -30,7 +30,23 @@ logger = logging.getLogger(__name__)
 
 class GraphClientSession(ABC):
     @abstractmethod
-    async def run(self, query: str, **kwargs: Any) -> Any:
+    async def run(self, cypher_query_: str | list, **kwargs: Any) -> Any:
+        raise NotImplementedError()
+    
+    @abstractmethod
+    async def __aenter__(self):
+        raise NotImplementedError()
+    
+    @abstractmethod
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        raise NotImplementedError()
+    
+    @abstractmethod
+    async def close(self):
+        raise NotImplementedError()
+    
+    @abstractmethod
+    async def execute_write(self, func, *args, **kwargs):
         raise NotImplementedError()
 
 
@@ -53,7 +69,8 @@ class FalkorClientSession(GraphClientSession):
     async def execute_write(self, func, *args, **kwargs):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
-    async def run(self, cypher_query_: str|list, **kwargs: Any) -> Any:
+    
+    async def run(self, cypher_query_: str | list, **kwargs: Any) -> Any:
         # FalkorDB does not support argument for Label Set, so it's converted into an array of queries
         if isinstance(cypher_query_, list):
             for cypher, params in cypher_query_:
@@ -70,7 +87,7 @@ class FalkorClientSession(GraphClientSession):
 class GraphClient(ABC):
 
     @abstractmethod
-    def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any:
         raise NotImplementedError()
 
     @abstractmethod
@@ -78,11 +95,11 @@ class GraphClient(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def close(self) -> None:
+    async def close(self) -> None:
         raise NotImplementedError()
     
     @abstractmethod
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
         raise NotImplementedError()
 
 class Neo4jClient(GraphClient):
@@ -90,16 +107,16 @@ class Neo4jClient(GraphClient):
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None,
+        password: str | None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
-            auth=(user, password),
+            auth=(user, password) if user and password else None,
         )
 
-    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any:
         params = kwargs.pop("params", None)
         result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
         
@@ -108,21 +125,22 @@ class Neo4jClient(GraphClient):
     def session(self, database: str) -> GraphClientSession:
         return self.client.session(database=database)  # type: ignore
 
-    def close(self) -> None:
-        return self.client.close()
+    async def close(self) -> None:
+        await self.client.close()
     
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self.client.execute_query(
+    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+        return await self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
-            database_,
+            {},
+            database=database_,
         )
 
 class FalkorClient(GraphClient):
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None,
+        password: str | None,
     ):
         super().__init__()
         if user and password:
@@ -139,7 +157,7 @@ class FalkorClient(GraphClient):
             graph_name = "DEFAULT_DATABASE"
         return self.client.select_graph(graph_name)
 
-    async def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Any:
         graph_name = kwargs.pop("database_", DEFAULT_DATABASE)
         graph = self._get_graph(graph_name)
 
@@ -166,8 +184,8 @@ class FalkorClient(GraphClient):
     async def close(self) -> None:
         await self.client.connection.close()
     
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self.client.execute_query(
+    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+        return await self.client.execute_query(
             "CALL db.indexes() YIELD name DROP INDEX name",
             database_,
         )
@@ -180,8 +198,8 @@ class Driver:
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None,
+        password: str | None,
     ):
         if uri.startswith("falkor"):
             # FalkorDB
@@ -192,14 +210,14 @@ class Driver:
             self._driver = Neo4jClient(uri, user, password)
             self.provider = "neo4j"
         
-    def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
-        return self._driver.execute_query(cypher_query_, **kwargs)
+    async def execute_query(self, cypher_query_, **kwargs: Any) -> Any:
+        return await self._driver.execute_query(cypher_query_, **kwargs)
 
     async def close(self):
         return await self._driver.close()
 
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self._driver.delete_all_indexes(database_)
+    async def delete_all_indexes(self, database_: Union[str, None] = DEFAULT_DATABASE) -> Any:
+        return await self._driver.delete_all_indexes(database_)
     
     def session(self, database: str) -> GraphClientSession:
         return self._driver.session(database)

@@ -4,6 +4,8 @@ Database query utilities for different graph database backends.
 This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
+
+from typing import Optional
 from typing_extensions import LiteralString
 from graphiti_core.models.edges.edge_db_queries import (
     ENTITY_EDGE_SAVE_BULK,
@@ -77,7 +79,7 @@ def get_fulltext_indices(db_type: str = "neo4j") -> list[LiteralString]:
             FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
         ]
     
-def get_nodes_query(db_type: str = "neo4j", name: str = None,query: str = None) -> str:
+def get_nodes_query(name: str, query: str, db_type: str = "neo4j") -> str:
     if db_type == "falkordb":
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryNodes('{label}', {query})"
@@ -91,14 +93,14 @@ def get_vector_cosine_func_query(vec1, vec2, db_type: str = "neo4j") -> str:
     else:
         return f"vector.similarity.cosine({vec1}, {vec2})"
 
-def get_relationships_query(db_type: str = "neo4j", name: str = None, query: str = None) -> str:
+def get_relationships_query(name: str, db_type: str = "neo4j") -> str:
     if db_type == "falkordb":
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
     else:
         return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
     
-def get_entity_node_save_bulk_query(nodes, db_type: str = "neo4j") -> str:
+def get_entity_node_save_bulk_query(nodes: list, db_type: str = "neo4j") -> str | list[tuple[str, dict[str, list]]]:
     if db_type == "falkordb":
         queries = []
         for node in nodes:
