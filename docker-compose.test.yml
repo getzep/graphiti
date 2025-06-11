@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   graph:
+    read_only: true
     image: graphiti-service:${GITHUB_SHA}
     ports:
       - "8000:8000"
