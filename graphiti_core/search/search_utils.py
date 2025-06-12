@@ -23,7 +23,7 @@ import numpy as np
 from numpy._typing import NDArray
 from typing_extensions import LiteralString
 
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge, get_entity_edge_from_record
 from graphiti_core.graph_queries import (
     get_nodes_query,
@@ -82,7 +82,7 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
 
 
 async def get_episodes_by_mentions(
-    driver: Driver,
+    driver: GraphDriver,
     nodes: list[EntityNode],
     edges: list[EntityEdge],
     limit: int = RELEVANT_SCHEMA_LIMIT,
@@ -96,7 +96,9 @@ async def get_episodes_by_mentions(
     return episodes
 
 
-async def get_mentioned_nodes(driver: Driver, episodes: list[EpisodicNode]) -> list[EntityNode]:
+async def get_mentioned_nodes(
+    driver: GraphDriver, episodes: list[EpisodicNode]
+) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
 
     query = """
@@ -123,7 +125,9 @@ async def get_mentioned_nodes(driver: Driver, episodes: list[EpisodicNode]) -> l
     return nodes
 
 
-async def get_communities_by_nodes(driver: Driver, nodes: list[EntityNode]) -> list[CommunityNode]:
+async def get_communities_by_nodes(
+    driver: GraphDriver, nodes: list[EntityNode]
+) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
 
     query = """
@@ -149,7 +153,7 @@ async def get_communities_by_nodes(driver: Driver, nodes: list[EntityNode]) -> l
 
 
 async def edge_fulltext_search(
-    driver: Driver,
+    driver: GraphDriver,
     query: str,
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
@@ -204,7 +208,7 @@ async def edge_fulltext_search(
 
 
 async def edge_similarity_search(
-    driver: Driver,
+    driver: GraphDriver,
     search_vector: list[float],
     source_node_uuid: str | None,
     target_node_uuid: str | None,
@@ -283,7 +287,7 @@ async def edge_similarity_search(
 
 
 async def edge_bfs_search(
-    driver: Driver,
+    driver: GraphDriver,
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
     search_filter: SearchFilters,
@@ -297,12 +301,12 @@ async def edge_bfs_search(
 
     query = (
         """
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                WHERE r.uuid = rel.uuid
-                """
+                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                    UNWIND relationships(path) AS rel
+                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                    WHERE r.uuid = rel.uuid
+                    """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -338,7 +342,7 @@ async def edge_bfs_search(
 
 
 async def node_fulltext_search(
-    driver: Driver,
+    driver: GraphDriver,
     query: str,
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
@@ -382,7 +386,7 @@ async def node_fulltext_search(
 
 
 async def node_similarity_search(
-    driver: Driver,
+    driver: GraphDriver,
     search_vector: list[float],
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
@@ -437,7 +441,7 @@ async def node_similarity_search(
 
 
 async def node_bfs_search(
-    driver: Driver,
+    driver: GraphDriver,
     bfs_origin_node_uuids: list[str] | None,
     search_filter: SearchFilters,
     bfs_max_depth: int,
@@ -451,10 +455,10 @@ async def node_bfs_search(
 
     query = (
         """
-        UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-        WHERE n.group_id = origin.group_id
-        """
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+            WHERE n.group_id = origin.group_id
+            """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -476,7 +480,7 @@ async def node_bfs_search(
 
 
 async def episode_fulltext_search(
-    driver: Driver,
+    driver: GraphDriver,
     query: str,
     _search_filter: SearchFilters,
     group_ids: list[str] | None = None,
@@ -522,7 +526,7 @@ async def episode_fulltext_search(
 
 
 async def community_fulltext_search(
-    driver: Driver,
+    driver: GraphDriver,
     query: str,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
@@ -561,7 +565,7 @@ async def community_fulltext_search(
 
 
 async def community_similarity_search(
-    driver: Driver,
+    driver: GraphDriver,
     search_vector: list[float],
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
@@ -614,7 +618,7 @@ async def community_similarity_search(
 async def hybrid_node_search(
     queries: list[str],
     embeddings: list[list[float]],
-    driver: Driver,
+    driver: GraphDriver,
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
@@ -631,7 +635,7 @@ async def hybrid_node_search(
         A list of text queries to search for.
     embeddings : list[list[float]]
         A list of embedding vectors corresponding to the queries. If empty only fulltext search is performed.
-    driver : Driver
+    driver : GraphDriver
         The Neo4j driver instance for database operations.
     group_ids : list[str] | None, optional
         The list of group ids to retrieve nodes from.
@@ -686,7 +690,7 @@ async def hybrid_node_search(
 
 
 async def get_relevant_nodes(
-    driver: Driver,
+    driver: GraphDriver,
     nodes: list[EntityNode],
     search_filter: SearchFilters,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -781,7 +785,7 @@ async def get_relevant_nodes(
 
 
 async def get_relevant_edges(
-    driver: Driver,
+    driver: GraphDriver,
     edges: list[EntityEdge],
     search_filter: SearchFilters,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -851,7 +855,7 @@ async def get_relevant_edges(
 
 
 async def get_edge_invalidation_candidates(
-    driver: Driver,
+    driver: GraphDriver,
     edges: list[EntityEdge],
     search_filter: SearchFilters,
     min_score: float = DEFAULT_MIN_SCORE,
@@ -936,7 +940,7 @@ def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[st
 
 
 async def node_distance_reranker(
-    driver: Driver,
+    driver: GraphDriver,
     node_uuids: list[str],
     center_node_uuid: str,
     min_score: float = 0,
@@ -982,7 +986,7 @@ async def node_distance_reranker(
 
 
 async def episode_mentions_reranker(
-    driver: Driver, node_uuids: list[list[str]], min_score: float = 0
+    driver: GraphDriver, node_uuids: list[list[str]], min_score: float = 0
 ) -> list[str]:
     # use rrf as a preliminary ranker
     sorted_uuids = rrf(node_uuids)
@@ -1050,7 +1054,7 @@ def maximal_marginal_relevance(
 
 
 async def get_embeddings_for_nodes(
-    driver: Driver, nodes: list[EntityNode]
+    driver: GraphDriver, nodes: list[EntityNode]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (n:Entity)
                               WHERE n.uuid IN $node_uuids
@@ -1074,7 +1078,7 @@ async def get_embeddings_for_nodes(
 
 
 async def get_embeddings_for_communities(
-    driver: Driver, communities: list[CommunityNode]
+    driver: GraphDriver, communities: list[CommunityNode]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (c:Community)
                               WHERE c.uuid IN $community_uuids
@@ -1101,7 +1105,7 @@ async def get_embeddings_for_communities(
 
 
 async def get_embeddings_for_edges(
-    driver: Driver, edges: list[EntityEdge]
+    driver: GraphDriver, edges: list[EntityEdge]
 ) -> dict[str, list[float]]:
     query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
                               WHERE e.uuid IN $edge_uuids

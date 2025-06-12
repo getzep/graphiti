@@ -19,7 +19,7 @@ from collections import defaultdict
 from time import time
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.graphiti_types import GraphitiClients
@@ -159,7 +159,7 @@ async def search(
 
 
 async def edge_search(
-    driver: Driver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -259,7 +259,7 @@ async def edge_search(
 
 
 async def node_search(
-    driver: Driver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -341,7 +341,7 @@ async def node_search(
 
 
 async def episode_search(
-    driver: Driver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     _query_vector: list[float],
@@ -388,7 +388,7 @@ async def episode_search(
 
 
 async def community_search(
-    driver: Driver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],

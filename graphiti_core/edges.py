@@ -24,7 +24,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
@@ -62,9 +62,9 @@ class Edge(BaseModel, ABC):
     created_at: datetime
 
     @abstractmethod
-    async def save(self, driver: Driver): ...
+    async def save(self, driver: GraphDriver): ...
 
-    async def delete(self, driver: Driver):
+    async def delete(self, driver: GraphDriver):
         result = await driver.execute_query(
             """
         MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER {uuid: $uuid}]->(m)
@@ -87,11 +87,11 @@ class Edge(BaseModel, ABC):
         return False
 
     @classmethod
-    async def get_by_uuid(cls, driver: Driver, uuid: str): ...
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
 
 
 class EpisodicEdge(Edge):
-    async def save(self, driver: Driver):
+    async def save(self, driver: GraphDriver):
         result = await driver.execute_query(
             EPISODIC_EDGE_SAVE,
             episode_uuid=self.source_node_uuid,
@@ -107,7 +107,7 @@ class EpisodicEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: Driver, uuid: str):
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS {uuid: $uuid}]->(m:Entity)
@@ -130,7 +130,7 @@ class EpisodicEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Episodic)-[e:MENTIONS]->(m:Entity)
@@ -156,7 +156,7 @@ class EpisodicEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: Driver,
+        driver: GraphDriver,
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
@@ -226,7 +226,7 @@ class EntityEdge(Edge):
 
         return self.fact_embedding
 
-    async def load_fact_embedding(self, driver: Driver):
+    async def load_fact_embedding(self, driver: GraphDriver):
         query: LiteralString = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
@@ -240,7 +240,7 @@ class EntityEdge(Edge):
 
         self.fact_embedding = records[0]['fact_embedding']
 
-    async def save(self, driver: Driver):
+    async def save(self, driver: GraphDriver):
         edge_data: dict[str, Any] = {
             'source_uuid': self.source_node_uuid,
             'target_uuid': self.target_node_uuid,
@@ -269,7 +269,7 @@ class EntityEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: Driver, uuid: str):
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
@@ -287,7 +287,7 @@ class EntityEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if len(uuids) == 0:
             return []
 
@@ -309,7 +309,7 @@ class EntityEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: Driver,
+        driver: GraphDriver,
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
@@ -342,11 +342,11 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
-    async def get_by_node_uuid(cls, driver: Driver, node_uuid: str):
+    async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                            MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                            """
+                                                MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                                """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -359,7 +359,7 @@ class EntityEdge(Edge):
 
 
 class CommunityEdge(Edge):
-    async def save(self, driver: Driver):
+    async def save(self, driver: GraphDriver):
         result = await driver.execute_query(
             COMMUNITY_EDGE_SAVE,
             community_uuid=self.source_node_uuid,
@@ -375,7 +375,7 @@ class CommunityEdge(Edge):
         return result
 
     @classmethod
-    async def get_by_uuid(cls, driver: Driver, uuid: str):
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER {uuid: $uuid}]->(m:Entity | Community)
@@ -396,7 +396,7 @@ class CommunityEdge(Edge):
         return edges[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: Driver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
@@ -420,7 +420,7 @@ class CommunityEdge(Edge):
     @classmethod
     async def get_by_group_ids(
         cls,
-        driver: Driver,
+        driver: GraphDriver,
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,

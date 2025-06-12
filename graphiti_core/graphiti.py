@@ -24,7 +24,8 @@ from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
@@ -100,6 +101,7 @@ class Graphiti:
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
+        graph_driver: GraphDriver = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -137,7 +139,9 @@ class Graphiti:
         Make sure to set the OPENAI_API_KEY environment variable before initializing
         Graphiti if you're using the default OpenAIClient.
         """
-        self.driver = Driver(uri, user, password)
+
+        self.driver = graph_driver if graph_driver else Neo4jDriver(uri, user, password)
+
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         if llm_client:

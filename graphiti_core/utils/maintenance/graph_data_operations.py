@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
 
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -29,7 +29,7 @@ EPISODE_WINDOW_LEN = 3
 logger = logging.getLogger(__name__)
 
 
-async def build_indices_and_constraints(driver: Driver, delete_existing: bool = False):
+async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -65,7 +65,7 @@ async def build_indices_and_constraints(driver: Driver, delete_existing: bool = 
     )
 
 
-async def clear_data(driver: Driver, group_ids: list[str] | None = None):
+async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
@@ -84,7 +84,7 @@ async def clear_data(driver: Driver, group_ids: list[str] | None = None):
 
 
 async def retrieve_episodes(
-    driver: Driver,
+    driver: GraphDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
@@ -111,8 +111,8 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                        """
+                            MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                            """
         + group_id_filter
         + source_filter
         + """

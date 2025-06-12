@@ -24,7 +24,7 @@ from numpy import dot, sqrt
 from pydantic import BaseModel
 from typing_extensions import Any
 
-from graphiti_core.driver import Driver, GraphClientSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graph_queries import (
@@ -77,7 +77,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: Driver, episodes: list[EpisodicNode]
+    driver: GraphDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -95,7 +95,7 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: Driver,
+    driver: GraphDriver,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
@@ -118,13 +118,13 @@ async def add_nodes_and_edges_bulk(
 
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: GraphClientSession,
+    tx: GraphDriverSession,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
-    driver: Driver,
+    driver: GraphDriver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -222,7 +222,7 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: Driver,
+    driver: GraphDriver,
     llm_client: LLMClient,
     extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
@@ -258,7 +258,7 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-    driver: Driver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+    driver: GraphDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)

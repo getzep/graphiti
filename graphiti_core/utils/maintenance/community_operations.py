@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
-from graphiti_core.driver import Driver
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
@@ -26,7 +26,7 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: Driver, group_ids: list[str] | None
+    driver: GraphDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -193,7 +193,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: Driver, llm_client: LLMClient, group_ids: list[str] | None
+    driver: GraphDriver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -218,7 +218,7 @@ async def build_communities(
     return community_nodes, community_edges
 
 
-async def remove_communities(driver: Driver):
+async def remove_communities(driver: GraphDriver):
     await driver.execute_query(
         """
     MATCH (c:Community)
@@ -229,7 +229,7 @@ async def remove_communities(driver: Driver):
 
 
 async def determine_entity_community(
-    driver: Driver, entity: EntityNode
+    driver: GraphDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
     records, _, _ = driver.execute_query(
@@ -290,7 +290,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: Driver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
+    driver: GraphDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 
