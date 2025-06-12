@@ -35,11 +35,9 @@ from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK,
     EPISODIC_EDGE_SAVE_BULK,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK,
     EPISODIC_NODE_SAVE_BULK,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode

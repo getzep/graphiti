@@ -15,7 +15,8 @@ limitations under the License.
 """
 
 import logging
-from typing import Any, Coroutine, LiteralString
+from collections.abc import Coroutine
+from typing import Any, LiteralString
 
 from neo4j import AsyncGraphDatabase
 
