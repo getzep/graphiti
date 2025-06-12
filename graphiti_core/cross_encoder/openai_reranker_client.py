@@ -106,7 +106,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
                 if len(top_logprobs) == 0:
                     continue
                 norm_logprobs = np.exp(top_logprobs[0].logprob)
-                if bool(top_logprobs[0].token):
+                if top_logprobs[0].token.strip().split(" ")[0].lower() == "true":
                     scores.append(norm_logprobs)
                 else:
                     scores.append(1 - norm_logprobs)
