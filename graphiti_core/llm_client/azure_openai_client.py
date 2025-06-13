@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 
 class AzureOpenAILLMClient(LLMClient):
     """Wrapper class for AsyncAzureOpenAI that implements the LLMClient interface."""
-    
+
     def __init__(self, azure_client: AsyncAzureOpenAI, config: LLMConfig | None = None):
         super().__init__(config, cache=False)
         self.azure_client = azure_client
-    
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -52,10 +52,10 @@ class AzureOpenAILLMClient(LLMClient):
                 openai_messages.append({'role': 'user', 'content': message.content})
             elif message.role == 'system':
                 openai_messages.append({'role': 'system', 'content': message.content})
-        
+
         # Ensure model is a string
         model_name = self.model if self.model else 'gpt-4o-mini'
-        
+
         try:
             response = await self.azure_client.chat.completions.create(
                 model=model_name,
@@ -65,7 +65,7 @@ class AzureOpenAILLMClient(LLMClient):
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or '{}'
-            
+
             # Parse JSON response
             return json.loads(result)
         except Exception as e:
