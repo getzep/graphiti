@@ -42,17 +42,17 @@ class GraphDriver(ABC):
     provider: str
 
     @abstractmethod
-    def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
         raise NotImplementedError()
 
     @abstractmethod
-    def session(self, database: str) -> GraphDriverSession:
+    async def session(self, database: str) -> GraphDriverSession:
         raise NotImplementedError()
 
     @abstractmethod
-    def close(self):
+    async def close(self):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         raise NotImplementedError()
