@@ -102,7 +102,7 @@ def get_vector_cosine_func_query(vec1, vec2, db_type: str = 'neo4j') -> str:
         return f'vector.similarity.cosine({vec1}, {vec2})'
 
 
-def get_relationships_query(db_type: str = 'neo4j', name: str = '') -> str:
+def get_relationships_query(db_type: str = 'neo4j', name: str) -> str:
     if db_type == 'falkordb':
         label = NEO4J_TO_FALKORDB_MAPPING[name]
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
