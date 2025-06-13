@@ -19,12 +19,12 @@ from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
-from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -36,6 +36,7 @@ from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
+
 
 DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
 SMALL_LLM_MODEL = 'gpt-4.1-nano'
@@ -282,11 +283,11 @@ class GraphitiLLMConfig(BaseModel):
 
         return config
 
-    def create_client(self) -> LLMClient | None:
+    def create_client(self) -> LLMClient:
         """Create an LLM client based on this configuration.
 
         Returns:
-            LLMClient instance if able, None otherwise
+            LLMClient instance
         """
 
         if self.azure_openai_endpoint is not None:
@@ -294,26 +295,41 @@ class GraphitiLLMConfig(BaseModel):
             if self.azure_openai_use_managed_identity:
                 # Use managed identity for authentication
                 token_provider = create_azure_credential_token_provider()
-                return AsyncAzureOpenAI(
-                    azure_endpoint=self.azure_openai_endpoint,
-                    azure_deployment=self.azure_openai_deployment_name,
-                    api_version=self.azure_openai_api_version,
-                    azure_ad_token_provider=token_provider,
+                return AzureOpenAILLMClient(
+                    azure_client=AsyncAzureOpenAI(
+                        azure_endpoint=self.azure_openai_endpoint,
+                        azure_deployment=self.azure_openai_deployment_name,
+                        api_version=self.azure_openai_api_version,
+                        azure_ad_token_provider=token_provider,
+                    ),
+                    config=LLMConfig(
+                        api_key=self.api_key,
+                        model=self.model,
+                        small_model=self.small_model,
+                        temperature=self.temperature,
+                    ),
                 )
             elif self.api_key:
                 # Use API key for authentication
-                return AsyncAzureOpenAI(
-                    azure_endpoint=self.azure_openai_endpoint,
-                    azure_deployment=self.azure_openai_deployment_name,
-                    api_version=self.azure_openai_api_version,
-                    api_key=self.api_key,
+                return AzureOpenAILLMClient(
+                    azure_client=AsyncAzureOpenAI(
+                        azure_endpoint=self.azure_openai_endpoint,
+                        azure_deployment=self.azure_openai_deployment_name,
+                        api_version=self.azure_openai_api_version,
+                        api_key=self.api_key,
+                    ),
+                    config=LLMConfig(
+                        api_key=self.api_key,
+                        model=self.model,
+                        small_model=self.small_model,
+                        temperature=self.temperature,
+                    ),
                 )
             else:
-                logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
-                return None
+                raise ValueError('OPENAI_API_KEY must be set when using Azure OpenAI API')
 
         if not self.api_key:
-            return None
+            raise ValueError('OPENAI_API_KEY must be set when using OpenAI API')
 
         llm_client_config = LLMConfig(
             api_key=self.api_key, model=self.model, small_model=self.small_model
@@ -323,17 +339,6 @@ class GraphitiLLMConfig(BaseModel):
         llm_client_config.temperature = self.temperature
 
         return OpenAIClient(config=llm_client_config)
-
-    def create_cross_encoder_client(self) -> CrossEncoderClient | None:
-        """Create a cross-encoder client based on this configuration."""
-        if self.azure_openai_endpoint is not None:
-            client = self.create_client()
-            return OpenAIRerankerClient(client=client)
-        else:
-            llm_client_config = LLMConfig(
-                api_key=self.api_key, model=self.model, small_model=self.small_model
-            )
-            return OpenAIRerankerClient(config=llm_client_config)
 
 
 class GraphitiEmbedderConfig(BaseModel):
@@ -404,19 +409,25 @@ class GraphitiEmbedderConfig(BaseModel):
             if self.azure_openai_use_managed_identity:
                 # Use managed identity for authentication
                 token_provider = create_azure_credential_token_provider()
-                return AsyncAzureOpenAI(
-                    azure_endpoint=self.azure_openai_endpoint,
-                    azure_deployment=self.azure_openai_deployment_name,
-                    api_version=self.azure_openai_api_version,
-                    azure_ad_token_provider=token_provider,
+                return AzureOpenAIEmbedderClient(
+                    azure_client=AsyncAzureOpenAI(
+                        azure_endpoint=self.azure_openai_endpoint,
+                        azure_deployment=self.azure_openai_deployment_name,
+                        api_version=self.azure_openai_api_version,
+                        azure_ad_token_provider=token_provider,
+                    ),
+                    model=self.model,
                 )
             elif self.api_key:
                 # Use API key for authentication
-                return AsyncAzureOpenAI(
-                    azure_endpoint=self.azure_openai_endpoint,
-                    azure_deployment=self.azure_openai_deployment_name,
-                    api_version=self.azure_openai_api_version,
-                    api_key=self.api_key,
+                return AzureOpenAIEmbedderClient(
+                    azure_client=AsyncAzureOpenAI(
+                        azure_endpoint=self.azure_openai_endpoint,
+                        azure_deployment=self.azure_openai_deployment_name,
+                        api_version=self.azure_openai_api_version,
+                        api_key=self.api_key,
+                    ),
+                    model=self.model,
                 )
             else:
                 logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
@@ -570,7 +581,6 @@ async def initialize_graphiti():
             raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
         embedder_client = config.embedder.create_client()
-        cross_encoder_client = config.llm.create_cross_encoder_client()
 
         # Initialize Graphiti client
         graphiti_client = Graphiti(
@@ -579,7 +589,6 @@ async def initialize_graphiti():
             password=config.neo4j.password,
             llm_client=llm_client,
             embedder=embedder_client,
-            cross_encoder=cross_encoder_client,
         )
 
         # Destroy graph if requested
