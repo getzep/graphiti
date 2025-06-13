@@ -345,8 +345,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         query = (
             """
-                                                            MATCH (n:Entity {uuid: $uuid})
-                                                            """
+                                                                    MATCH (n:Entity {uuid: $uuid})
+                                                                    """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -542,8 +542,8 @@ class CommunityNode(Node):
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     return EpisodicNode(
         content=record['content'],
-        created_at=parse_db_date(record['created_at']).timestamp(),
-        valid_at=(parse_db_date(record['valid_at'])),
+        created_at=parse_db_date(record['created_at']),  # type: ignore
+        valid_at=parse_db_date(record['valid_at']),  # type: ignore
         uuid=record['uuid'],
         group_id=record['group_id'],
         source=EpisodeType.from_str(record['source']),
@@ -559,7 +559,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         name=record['name'],
         group_id=record['group_id'],
         labels=record['labels'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
         attributes=record['attributes'],
     )
@@ -580,7 +580,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
     )
 

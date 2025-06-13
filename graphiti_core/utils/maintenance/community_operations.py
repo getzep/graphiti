@@ -232,7 +232,7 @@ async def determine_entity_community(
     driver: GraphDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
-    records, _, _ = driver.execute_query(
+    records, _, _ = await driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
@@ -250,7 +250,7 @@ async def determine_entity_community(
         return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    records, _, _ = driver.execute_query(
+    records, _, _ = await driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN

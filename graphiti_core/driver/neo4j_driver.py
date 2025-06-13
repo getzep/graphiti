@@ -33,13 +33,13 @@ class Neo4jDriver(GraphDriver):
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None,
+        password: str | None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
-            auth=(user, password),
+            auth=(user or '', password or ''),
         )
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> Coroutine:

@@ -19,8 +19,8 @@ from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any
 
-from falkordb import Graph as FalkorGraph
-from falkordb.asyncio import FalkorDB
+from falkordb import Graph as FalkorGraph  # type: ignore
+from falkordb.asyncio import FalkorDB  # type: ignore
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.helpers import DEFAULT_DATABASE
@@ -28,7 +28,7 @@ from graphiti_core.helpers import DEFAULT_DATABASE
 logger = logging.getLogger(__name__)
 
 
-class FalkorClientSession(GraphDriverSession):
+class FalkorDriverSession(GraphDriverSession):
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -47,16 +47,16 @@ class FalkorClientSession(GraphDriverSession):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
 
-    async def run(self, cypher_query_: str | list, **kwargs: Any) -> Any:
+    async def run(self, query: str | list, **kwargs: Any) -> Any:
         # FalkorDB does not support argument for Label Set, so it's converted into an array of queries
-        if isinstance(cypher_query_, list):
-            for cypher, params in cypher_query_:
+        if isinstance(query, list):
+            for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
                 await self.graph.query(str(cypher), params)
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
-            await self.graph.query(str(cypher_query_), params)
+            await self.graph.query(str(query), params)
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
 
@@ -79,7 +79,7 @@ class FalkorDriver(GraphDriver):
             url=uri,
         )
 
-    def _get_graph(self, graph_name: str) -> FalkorGraph:
+    def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
         if graph_name is None:
             graph_name = 'DEFAULT_DATABASE'
@@ -106,13 +106,13 @@ class FalkorDriver(GraphDriver):
         header = [h[1].decode('utf-8') for h in result.header]
         return result.result_set, header, None
 
-    def session(self, database: str) -> GraphDriverSession:
-        return FalkorClientSession(self._get_graph(database))
+    def session(self, database: str | None) -> GraphDriverSession:
+        return FalkorDriverSession(self._get_graph(database))
 
     async def close(self) -> None:
         await self.client.connection.close()
 
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=database_,
