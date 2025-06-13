@@ -39,7 +39,7 @@ class Neo4jDriver(GraphDriver):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
-            auth=(user, password),
+            auth=(user or '', password or ''),
         )
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> Coroutine:
