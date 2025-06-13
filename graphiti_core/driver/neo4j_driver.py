@@ -48,13 +48,13 @@ class Neo4jDriver(GraphDriver):
 
         return result
 
-    async def session(self, database: str) -> GraphDriverSession:
+    def session(self, database: str) -> GraphDriverSession:
         return self.client.session(database=database)  # type: ignore
 
     async def close(self) -> None:
         return await self.client.close()
 
-    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=database_,
