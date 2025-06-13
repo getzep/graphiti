@@ -85,3 +85,9 @@ ignore = ["E501"]
 quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
+
+[mypy-falkordb]
+ignore_missing_imports = true
+
+[mypy-falkordb.asyncio]
+ignore_missing_imports = true

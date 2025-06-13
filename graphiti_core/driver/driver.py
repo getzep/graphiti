@@ -30,7 +30,7 @@ class GraphDriverSession(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def close(self) -> None:
+    async def close(self):
         raise NotImplementedError()
 
     @abstractmethod
@@ -46,7 +46,7 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def session(self, database: str) -> GraphDriverSession:
+    def session(self, database: str | None) -> GraphDriverSession:
         raise NotImplementedError()
 
     @abstractmethod
