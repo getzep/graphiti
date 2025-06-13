@@ -345,8 +345,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         query = (
             """
-                                                                MATCH (n:Entity {uuid: $uuid})
-                                                                """
+                                                                    MATCH (n:Entity {uuid: $uuid})
+                                                                    """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -542,7 +542,7 @@ class CommunityNode(Node):
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     return EpisodicNode(
         content=record['content'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=parse_db_date(record['created_at']),  # type: ignore
         valid_at=parse_db_date(record['valid_at']),  # type: ignore
         uuid=record['uuid'],
         group_id=record['group_id'],

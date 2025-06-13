@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 
 class GraphDriverSession(ABC):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        # No cleanup needed for Falkor, but method must exist
+        pass
+
     @abstractmethod
     async def run(self, query: str, **kwargs: Any) -> Any:
         raise NotImplementedError()

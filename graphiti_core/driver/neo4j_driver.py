@@ -33,8 +33,8 @@ class Neo4jDriver(GraphDriver):
     def __init__(
         self,
         uri: str,
-        user: str,
-        password: str,
+        user: str | None,
+        password: str | None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(

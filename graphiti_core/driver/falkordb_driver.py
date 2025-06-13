@@ -106,7 +106,7 @@ class FalkorDriver(GraphDriver):
         header = [h[1].decode('utf-8') for h in result.header]
         return result.result_set, header, None
 
-    async def session(self, database: str | None) -> GraphDriverSession:
+    def session(self, database: str | None) -> GraphDriverSession:
         return FalkorDriverSession(self._get_graph(database))
 
     async def close(self) -> None:
