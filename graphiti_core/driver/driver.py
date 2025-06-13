@@ -29,6 +29,14 @@ class GraphDriverSession(ABC):
     async def run(self, query: str, **kwargs: Any) -> Any:
         raise NotImplementedError()
 
+    @abstractmethod
+    async def close(self) -> None:
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def execute_write(self, func, *args, **kwargs):
+        raise NotImplementedError()
+
 
 class GraphDriver(ABC):
     provider: str
@@ -48,34 +56,3 @@ class GraphDriver(ABC):
     @abstractmethod
     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         raise NotImplementedError()
-
-
-# class GraphDriver:
-#     _driver: GraphClient
-#
-#     def __init__(
-#             self,
-#             uri: str,
-#             user: str,
-#             password: str,
-#     ):
-#         if uri.startswith('falkor'):
-#             # FalkorDB
-#             self._driver = FalkorClient(uri, user, password)
-#             self.provider = 'falkordb'
-#         else:
-#             # Neo4j
-#             self._driver = Neo4jClient(uri, user, password)
-#             self.provider = 'neo4j'
-#
-#     def execute_query(self, cypher_query_, **kwargs: Any) -> Coroutine:
-#         return self._driver.execute_query(cypher_query_, **kwargs)
-#
-#     async def close(self):
-#         return await self._driver.close()
-#
-#     def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-#         return self._driver.delete_all_indexes(database_)
-#
-#     def session(self, database: str) -> GraphClientSession:
-#         return self._driver.session(database)

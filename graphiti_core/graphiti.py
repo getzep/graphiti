@@ -95,8 +95,8 @@ class Graphiti:
     def __init__(
         self,
         uri: str,
-        user: str = None,
-        password: str = None,
+        user: str | None = None,
+        password: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
