@@ -16,7 +16,6 @@ limitations under the License.
 
 import logging
 from collections import defaultdict
-from email.policy import strict
 from time import time
 from typing import Any
 
