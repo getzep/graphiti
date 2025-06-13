@@ -19,8 +19,6 @@ from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
-from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
@@ -342,17 +340,6 @@ class GraphitiLLMConfig(BaseModel):
 
         return OpenAIClient(config=llm_client_config)
 
-    def create_cross_encoder_client(self) -> CrossEncoderClient | None:
-        """Create a cross-encoder client based on this configuration."""
-        if self.azure_openai_endpoint is not None:
-            client = self.create_client()
-            return OpenAIRerankerClient(client=client)
-        else:
-            llm_client_config = LLMConfig(
-                api_key=self.api_key, model=self.model, small_model=self.small_model
-            )
-            return OpenAIRerankerClient(config=llm_client_config)
-
 
 class GraphitiEmbedderConfig(BaseModel):
     """Configuration for the embedder client.
@@ -594,7 +581,6 @@ async def initialize_graphiti():
             raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
         embedder_client = config.embedder.create_client()
-        cross_encoder_client = config.llm.create_cross_encoder_client()
 
         # Initialize Graphiti client
         graphiti_client = Graphiti(
@@ -603,7 +589,6 @@ async def initialize_graphiti():
             password=config.neo4j.password,
             llm_client=llm_client,
             embedder=embedder_client,
-            cross_encoder=cross_encoder_client,
         )
 
         # Destroy graph if requested
