@@ -60,7 +60,7 @@ class AzureOpenAILLMClient(LLMClient):
             response = await self.azure_client.chat.completions.create(
                 model=model_name,
                 messages=openai_messages,
-                temperature=float(self.temperature or 0.7),
+                temperature=float(self.temperature) if self.temperature is not None else 0.7,
                 max_tokens=max_tokens,
                 response_format={'type': 'json_object'},
             )
