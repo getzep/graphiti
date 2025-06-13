@@ -345,8 +345,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                                MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                                """
+                                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                                    """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -463,7 +463,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
-        created_at=parse_db_date(record['created_at']),
+        created_at=parse_db_date(record['created_at']),  # type: ignore
     )
 
 
