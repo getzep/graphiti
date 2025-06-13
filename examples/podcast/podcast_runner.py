@@ -76,9 +76,7 @@ async def main():
     group_id = str(uuid4())
 
     for i, message in enumerate(messages[3:14]):
-        episodes = await client.retrieve_episodes(
-            message.actual_timestamp, 3, group_ids=['podcast']
-        )
+        episodes = await client.retrieve_episodes(message.actual_timestamp, 3, group_ids=[group_id])
         episode_uuids = [episode.uuid for episode in episodes]
 
         await client.add_episode(

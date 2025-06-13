@@ -2,9 +2,9 @@ import asyncio
 import logging
 from collections import defaultdict
 
-from neo4j import AsyncDriver
 from pydantic import BaseModel
 
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
@@ -26,7 +26,7 @@ class Neighbor(BaseModel):
 
 
 async def get_community_clusters(
-    driver: AsyncDriver, group_ids: list[str] | None
+    driver: GraphDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
     community_clusters: list[list[EntityNode]] = []
 
@@ -95,7 +95,6 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-
             community_lst = [
                 (count, community) for community, count in community_candidates.items()
             ]
@@ -194,7 +193,7 @@ async def build_community(
 
 
 async def build_communities(
-    driver: AsyncDriver, llm_client: LLMClient, group_ids: list[str] | None
+    driver: GraphDriver, llm_client: LLMClient, group_ids: list[str] | None
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -219,7 +218,7 @@ async def build_communities(
     return community_nodes, community_edges
 
 
-async def remove_communities(driver: AsyncDriver):
+async def remove_communities(driver: GraphDriver):
     await driver.execute_query(
         """
     MATCH (c:Community)
@@ -230,10 +229,10 @@ async def remove_communities(driver: AsyncDriver):
 
 
 async def determine_entity_community(
-    driver: AsyncDriver, entity: EntityNode
+    driver: GraphDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
-    records, _, _ = await driver.execute_query(
+    records, _, _ = driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
@@ -251,7 +250,7 @@ async def determine_entity_community(
         return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    records, _, _ = await driver.execute_query(
+    records, _, _ = driver.execute_query(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN
@@ -291,7 +290,7 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: AsyncDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
+    driver: GraphDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
 ):
     community, is_new = await determine_entity_community(driver, entity)
 

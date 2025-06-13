@@ -105,7 +105,7 @@ Graphiti is specifically designed to address the challenges of dynamic and frequ
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 or higher (serves as the embeddings storage backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 or higher (serves as the embeddings storage backend)
 - OpenAI API key (for LLM inference and embedding)
 
 > [!IMPORTANT]

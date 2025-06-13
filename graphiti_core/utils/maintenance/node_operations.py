@@ -326,7 +326,6 @@ async def extract_attributes_from_nodes(
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
-
     updated_nodes: list[EntityNode] = await semaphore_gather(
         *[
             extract_attributes_from_node(

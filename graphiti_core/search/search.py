@@ -18,9 +18,8 @@ import logging
 from collections import defaultdict
 from time import time
 
-from neo4j import AsyncDriver
-
 from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.graphiti_types import GraphitiClients
@@ -94,7 +93,7 @@ async def search(
     )
 
     # if group_ids is empty, set it to None
-    group_ids = group_ids if group_ids else None
+    group_ids = group_ids if group_ids and group_ids != [''] else None
     edges, nodes, episodes, communities = await semaphore_gather(
         edge_search(
             driver,
@@ -160,7 +159,7 @@ async def search(
 
 
 async def edge_search(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -174,7 +173,6 @@ async def edge_search(
 ) -> list[EntityEdge]:
     if config is None:
         return []
-
     search_results: list[list[EntityEdge]] = list(
         await semaphore_gather(
             *[
@@ -261,7 +259,7 @@ async def edge_search(
 
 
 async def node_search(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],
@@ -275,7 +273,6 @@ async def node_search(
 ) -> list[EntityNode]:
     if config is None:
         return []
-
     search_results: list[list[EntityNode]] = list(
         await semaphore_gather(
             *[
@@ -344,7 +341,7 @@ async def node_search(
 
 
 async def episode_search(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     _query_vector: list[float],
@@ -356,7 +353,6 @@ async def episode_search(
 ) -> list[EpisodicNode]:
     if config is None:
         return []
-
     search_results: list[list[EpisodicNode]] = list(
         await semaphore_gather(
             *[
@@ -392,7 +388,7 @@ async def episode_search(
 
 
 async def community_search(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     cross_encoder: CrossEncoderClient,
     query: str,
     query_vector: list[float],

@@ -260,7 +260,6 @@ async def resolve_extracted_edges(
     driver = clients.driver
     llm_client = clients.llm_client
     embedder = clients.embedder
-
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
     search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(

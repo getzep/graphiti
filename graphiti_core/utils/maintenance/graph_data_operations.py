@@ -17,9 +17,10 @@ limitations under the License.
 import logging
 from datetime import datetime, timezone
 
-from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
+from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
@@ -28,7 +29,7 @@ EPISODE_WINDOW_LEN = 3
 logger = logging.getLogger(__name__)
 
 
-async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
+async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -47,39 +48,9 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
                 for name in index_names
             ]
         )
+    range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    range_indices: list[LiteralString] = [
-        'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
-        'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
-        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
-        'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
-        'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
-        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
-        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
-        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
-        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
-        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
-        'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
-        'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
-        'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
-        'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
-        'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
-        'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
-        'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
-        'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
-        'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
-    ]
-
-    fulltext_indices: list[LiteralString] = [
-        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
-        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
-        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
-        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
-        FOR (n:Community) ON EACH [n.name, n.group_id]""",
-        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
-        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
-    ]
+    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
@@ -94,7 +65,7 @@ async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bo
     )
 
 
-async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
+async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
     async with driver.session(database=DEFAULT_DATABASE) as session:
 
         async def delete_all(tx):
@@ -113,7 +84,7 @@ async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
@@ -123,7 +94,7 @@ async def retrieve_episodes(
     Retrieve the last n episodic nodes from the graph.
 
     Args:
-        driver (AsyncDriver): The Neo4j driver instance.
+        driver (Driver): The Neo4j driver instance.
         reference_time (datetime): The reference time to filter episodes. Only episodes with a valid_at timestamp
                                    less than or equal to this reference_time will be retrieved. This allows for
                                    querying the graph's state at a specific point in time.
@@ -140,8 +111,8 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                        """
+                                MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                                """
         + group_id_filter
         + source_filter
         + """
@@ -157,8 +128,7 @@ async def retrieve_episodes(
         LIMIT $num_episodes
         """
     )
-
-    result = await driver.execute_query(
+    result, _, _ = await driver.execute_query(
         query,
         reference_time=reference_time,
         source=source.name if source is not None else None,
@@ -166,6 +136,7 @@ async def retrieve_episodes(
         group_ids=group_ids,
         database_=DEFAULT_DATABASE,
     )
+
     episodes = [
         EpisodicNode(
             content=record['content'],
@@ -179,6 +150,6 @@ async def retrieve_episodes(
             name=record['name'],
             source_description=record['source_description'],
         )
-        for record in result.records
+        for record in result
     ]
     return list(reversed(episodes))  # Return in chronological order
