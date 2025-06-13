@@ -50,9 +50,9 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def close(self) -> None:
+    def close(self):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Coroutine:
         raise NotImplementedError()

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+# type: ignore
+
 import logging
 from collections.abc import Coroutine
 from datetime import datetime
@@ -106,7 +108,7 @@ class FalkorDriver(GraphDriver):
         header = [h[1].decode('utf-8') for h in result.header]
         return result.result_set, header, None
 
-    def session(self, database: str) -> GraphDriverSession:
+    def session(self, database: str | None) -> GraphDriverSession:
         return FalkorClientSession(self._get_graph(database))
 
     async def close(self) -> None:
