@@ -46,7 +46,7 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def session(self, database: str | None) -> GraphDriverSession:
+    def session(self, database: str) -> GraphDriverSession:
         raise NotImplementedError()
 
     @abstractmethod
@@ -54,5 +54,5 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str | None = DEFAULT_DATABASE) -> Coroutine:
+    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
         raise NotImplementedError()

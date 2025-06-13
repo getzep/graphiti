@@ -167,7 +167,7 @@ async def edge_fulltext_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     query = (
-        get_relationships_query(driver.provider, 'edge_name_and_fact', '$query')
+        get_relationships_query('edge_name_and_fact', db_type=driver.provider)
         + """
         YIELD relationship AS rel, score
         MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
@@ -301,12 +301,12 @@ async def edge_bfs_search(
 
     query = (
         """
-                        UNWIND $bfs_origin_node_uuids AS origin_uuid
-                        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                        UNWIND relationships(path) AS rel
-                        MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                        WHERE r.uuid = rel.uuid
-                        """
+                            UNWIND $bfs_origin_node_uuids AS origin_uuid
+                            MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                            UNWIND relationships(path) AS rel
+                            MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                            WHERE r.uuid = rel.uuid
+                            """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -455,10 +455,10 @@ async def node_bfs_search(
 
     query = (
         """
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                WHERE n.group_id = origin.group_id
-                """
+                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                    MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                    WHERE n.group_id = origin.group_id
+                    """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
