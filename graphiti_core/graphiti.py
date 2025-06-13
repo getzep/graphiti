@@ -101,7 +101,7 @@ class Graphiti:
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
-        graph_driver: GraphDriver = None,
+        graph_driver: GraphDriver | None = None,
     ):
         """
         Initialize a Graphiti instance.
