@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y curl && \
 # Add uv to PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
+ENV MCP_SERVER_HOST="0.0.0.0"
+
 # Copy pyproject.toml and install dependencies
 COPY pyproject.toml .
 RUN uv sync
