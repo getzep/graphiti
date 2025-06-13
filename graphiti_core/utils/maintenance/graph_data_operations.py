@@ -111,8 +111,8 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                            MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                            """
+                                MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                                """
         + group_id_filter
         + source_filter
         + """

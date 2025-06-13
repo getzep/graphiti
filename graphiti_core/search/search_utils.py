@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 from collections import defaultdict
+from email.policy import strict
 from time import time
 from typing import Any
 
@@ -279,7 +280,7 @@ async def edge_similarity_search(
     )
 
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -301,12 +302,12 @@ async def edge_bfs_search(
 
     query = (
         """
-                    UNWIND $bfs_origin_node_uuids AS origin_uuid
-                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                    UNWIND relationships(path) AS rel
-                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                    WHERE r.uuid = rel.uuid
-                    """
+                        UNWIND $bfs_origin_node_uuids AS origin_uuid
+                        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                        UNWIND relationships(path) AS rel
+                        MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                        WHERE r.uuid = rel.uuid
+                        """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -378,7 +379,7 @@ async def node_fulltext_search(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -434,7 +435,7 @@ async def node_similarity_search(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        records = [dict(zip(header, row)) for row in records]
+        records = [dict(zip(header, row, strict=True)) for row in records]
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes
@@ -455,10 +456,10 @@ async def node_bfs_search(
 
     query = (
         """
-            UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-            WHERE n.group_id = origin.group_id
-            """
+                UNWIND $bfs_origin_node_uuids AS origin_uuid
+                MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                WHERE n.group_id = origin.group_id
+                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -963,7 +964,7 @@ async def node_distance_reranker(
         routing_='r',
     )
     if driver.provider == 'falkordb':
-        results = [dict(zip(header, row)) for row in results]
+        results = [dict(zip(header, row, strict=True)) for row in results]
 
     for result in results:
         uuid = result['uuid']

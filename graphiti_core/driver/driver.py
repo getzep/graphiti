@@ -16,7 +16,8 @@ limitations under the License.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Coroutine
+from collections.abc import Coroutine
+from typing import Any
 
 from graphiti_core.helpers import DEFAULT_DATABASE
 

@@ -15,8 +15,9 @@ limitations under the License.
 """
 
 import logging
+from collections.abc import Coroutine
 from datetime import datetime
-from typing import Any, Coroutine
+from typing import Any
 
 from falkordb import Graph as FalkorGraph
 from falkordb.asyncio import FalkorDB
