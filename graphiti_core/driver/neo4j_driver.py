@@ -16,9 +16,10 @@ limitations under the License.
 
 import logging
 from collections.abc import Coroutine
-from typing import Any, LiteralString
+from typing import Any
 
 from neo4j import AsyncGraphDatabase
+from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.helpers import DEFAULT_DATABASE
