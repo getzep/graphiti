@@ -14,13 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from .driver import GraphDriver
+
 class GraphDriverFactory:
     @staticmethod
-    def get_driver(uri: str, user: str, password: str):
-        if uri.startswith("falkor://"):
+    def get_driver(uri: str, user: str, password: str) -> GraphDriver:
+        scheme = uri.lower()
+        if scheme.startswith("falkor://"):
             from .falkordb_driver import FalkorDriver
             return FalkorDriver(uri, user, password)
-        elif uri.startswith("neo4j://"):
+        elif scheme.startswith("neo4j://"):
             from .neo4j_driver import Neo4jDriver
             return Neo4jDriver(uri, user, password)
         else:
