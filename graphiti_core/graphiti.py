@@ -25,7 +25,7 @@ from typing_extensions import LiteralString
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.driver.driver import GraphDriver
-from graphiti_core.driver.neo4j_driver import Neo4jDriver
+from graphiti_core.driver.factory import GraphDriverFactory
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
@@ -106,17 +106,18 @@ class Graphiti:
         """
         Initialize a Graphiti instance.
 
-        This constructor sets up a connection to the Neo4j database and initializes
+        This constructor sets up a connection to the graph database and initializes
         the LLM client for natural language processing tasks.
 
         Parameters
         ----------
         uri : str
-            The URI of the Neo4j database.
+            The URI of the graph database. The scheme (e.g., 'neo4j://', 'falkor://')
+            determines which backend driver is used.
         user : str
-            The username for authenticating with the Neo4j database.
+            The username for authenticating with the graph database.
         password : str
-            The password for authenticating with the Neo4j database.
+            The password for authenticating with the graph database.
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
@@ -127,7 +128,7 @@ class Graphiti:
 
         Notes
         -----
-        This method establishes a connection to the Neo4j database using the provided
+        This method establishes a connection to the graph database using the provided
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
@@ -140,7 +141,7 @@ class Graphiti:
         Graphiti if you're using the default OpenAIClient.
         """
 
-        self.driver = graph_driver if graph_driver else Neo4jDriver(uri, user, password)
+        self.driver = graph_driver if graph_driver else GraphDriverFactory.get_driver(uri, user, password)
 
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
