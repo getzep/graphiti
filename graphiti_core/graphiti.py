@@ -106,17 +106,18 @@ class Graphiti:
         """
         Initialize a Graphiti instance.
 
-        This constructor sets up a connection to the Neo4j database and initializes
+        This constructor sets up a connection to the graph database and initializes
         the LLM client for natural language processing tasks.
 
         Parameters
         ----------
         uri : str
-            The URI of the Neo4j database.
+            The URI of the graph database. The scheme (e.g., 'neo4j://', 'falkor://')
+            determines which backend driver is used.
         user : str
-            The username for authenticating with the Neo4j database.
+            The username for authenticating with the graph database.
         password : str
-            The password for authenticating with the Neo4j database.
+            The password for authenticating with the graph database.
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
@@ -127,7 +128,7 @@ class Graphiti:
 
         Notes
         -----
-        This method establishes a connection to the Neo4j database using the provided
+        This method establishes a connection to the graph database using the provided
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
