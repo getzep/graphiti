@@ -71,13 +71,9 @@ class FalkorDriver(GraphDriver):
         password: str,
     ):
         super().__init__()
-        if user and password:
-            uri_parts = uri.split('://', 1)
-            uri = f'{uri_parts[0]}://{user}:{password}@{uri_parts[1]}'
+        falkor_url = f'falkors://{user}:{password}@{uri}'
 
-        self.client = FalkorDB.from_url(
-            url=uri,
-        )
+        self.client = FalkorDB.from_url(falkor_url)
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
