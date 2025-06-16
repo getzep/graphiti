@@ -48,7 +48,6 @@ load_dotenv()
 # FalkorDB connection parameters
 # Make sure FalkorDB on premises is running, see https://docs.falkordb.com/
 falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
-falkor_port = os.environ.get('FALKORDB_PORT', '6379')
 falkor_user = os.environ.get('FALKORDB_USER', 'falkor')
 falkor_password = os.environ.get('FALKORDB_PASSWORD', '')
 
