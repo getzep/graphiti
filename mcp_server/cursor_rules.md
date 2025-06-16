@@ -9,7 +9,7 @@
 
 ### Always Save New or Updated Information
 
-- **Capture requirements and preferences immediately:** When a user expresses a requirement or preference, use `add_episode` to store it right away.
+- **Capture requirements and preferences immediately:** When a user expresses a requirement or preference, use `add_memory` to store it right away.
   - _Best practice:_ Split very long requirements into shorter, logical chunks.
 - **Be explicit if something is an update to existing knowledge.** Only add what's changed or new to the graph.
 - **Document procedures clearly:** When you discover how a user wants things done, record it as a procedure.
