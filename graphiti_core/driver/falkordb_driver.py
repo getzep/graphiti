@@ -71,12 +71,11 @@ class FalkorDriver(GraphDriver):
         password: str,
     ):
         super().__init__()
-        if user and password:
-            uri_parts = uri.split('://', 1)
-            uri = f'{uri_parts[0]}://{user}:{password}@{uri_parts[1]}'
+        uri_parts = uri.split('://', 1)
+        uri = f'{uri_parts[0]}://{user}:{password}@{uri_parts[1]}'
 
-        self.client = FalkorDB.from_url(
-            url=uri,
+        self.client = FalkorDB(
+            host='your-db.falkor.cloud', port=6380, password='your_password', ssl=True
         )
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:

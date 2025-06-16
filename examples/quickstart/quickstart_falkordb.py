@@ -24,6 +24,7 @@ from logging import INFO
 from dotenv import load_dotenv
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
@@ -47,6 +48,8 @@ load_dotenv()
 # FalkorDB connection parameters
 # Make sure FalkorDB on premises is running, see https://docs.falkordb.com/
 falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
+falkor_user = os.environ.get('FALKORDB_USER', 'falkor')
+falkor_password = os.environ.get('FALKORDB_PASSWORD', '')
 
 if not falkor_uri:
     raise ValueError('FALKORDB_URI must be set')
@@ -62,7 +65,8 @@ async def main():
     #################################################
 
     # Initialize Graphiti with FalkorDB connection
-    graphiti = Graphiti(falkor_uri)
+    falkor_driver = FalkorDriver(uri=falkor_uri, user=falkor_user, password=falkor_password)
+    graphiti = Graphiti(uri=falkor_uri, graph_driver=falkor_driver)
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
