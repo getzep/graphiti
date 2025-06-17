@@ -26,11 +26,15 @@ class NodeDuplicate(BaseModel):
     id: int = Field(..., description='integer id of the entity')
     duplicate_idx: int = Field(
         ...,
-        description='idx of the duplicate node. If no duplicate nodes are found, default to -1.',
+        description='idx of the duplicate entity. If no duplicate entities are found, default to -1.',
     )
     name: str = Field(
         ...,
         description='Name of the entity. Should be the most complete and descriptive name possible.',
+    )
+    additional_duplicates: list[int] = Field(
+        ...,
+        description='idx of additional duplicate entities. Use this list if the entity has multiple duplicates among existing entities.',
     )
 
 
