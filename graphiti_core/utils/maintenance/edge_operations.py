@@ -17,9 +17,9 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
-from typing import LiteralString
 
 from pydantic import BaseModel
+from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import (
@@ -603,8 +603,8 @@ async def filter_existing_duplicate_of_edges(
         UNWIND $duplicate_node_uuids AS duplicate_tuple
         MATCH (n:Entity {uuid: duplicate_tuple[0]})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple[1]})
         RETURN DISTINCT
-            source_uuid AS n.uuid
-            target_uuid AS m.uuid
+            n.uuid AS source_uuid,
+            m.uuid AS target_uuid
     """
 
     duplicate_nodes_map = {
@@ -618,6 +618,7 @@ async def filter_existing_duplicate_of_edges(
         routing_='r',
     )
 
+    # Remove duplicates that already have the IS_DUPLICATE_OF edge
     for record in records:
         duplicate_tuple = (record.get('source_uuid'), record.get('target_uuid'))
         if duplicate_nodes_map.get(duplicate_tuple):
