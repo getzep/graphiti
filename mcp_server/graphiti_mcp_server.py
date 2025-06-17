@@ -539,7 +539,7 @@ Facts contain temporal metadata, allowing you to track the time of creation and 
 (superseded by new information).
 
 Key capabilities:
-1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_episode tool
+1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_memory tool
 2. Search for nodes (entities) in the graph using natural language queries with search_nodes
 3. Find relevant facts (relationships between entities) with search_facts
 4. Retrieve specific entity edges or episodes by UUID
@@ -707,7 +707,7 @@ async def add_memory(
 
     Examples:
         # Adding plain text content
-        add_episode(
+        add_memory(
             name="Company News",
             episode_body="Acme Corp announced a new product line today.",
             source="text",
@@ -717,7 +717,7 @@ async def add_memory(
 
         # Adding structured JSON data
         # NOTE: episode_body must be a properly escaped JSON string. Note the triple backslashes
-        add_episode(
+        add_memory(
             name="Customer Profile",
             episode_body="{\\\"company\\\": {\\\"name\\\": \\\"Acme Technologies\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\", \\\"name\\\": \\\"CloudSync\\\"}, {\\\"id\\\": \\\"P002\\\", \\\"name\\\": \\\"DataMiner\\\"}]}",
             source="json",
@@ -725,7 +725,7 @@ async def add_memory(
         )
 
         # Adding message-style content
-        add_episode(
+        add_memory(
             name="Customer Conversation",
             episode_body="user: What's your return policy?\nassistant: You can return items within 30 days.",
             source="message",
