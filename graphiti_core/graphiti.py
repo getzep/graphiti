@@ -385,7 +385,13 @@ class Graphiti:
                     entity_types,
                 ),
                 extract_edges(
-                    self.clients, episode, extracted_nodes, previous_episodes, group_id, edge_types
+                    self.clients,
+                    episode,
+                    extracted_nodes,
+                    previous_episodes,
+                    edge_type_map or edge_type_map_default,
+                    group_id,
+                    edge_types,
                 ),
             )
 
