@@ -30,7 +30,7 @@ class NodeDuplicate(BaseModel):
     )
     name: str = Field(
         ...,
-        description='Name of the entity. Should be the most complete and descriptive name possible.',
+        description='Name of the entity. Should be the most complete and descriptive name possible. Do not include any JSON formatting in the Entity name.',
     )
     additional_duplicates: list[int] = Field(
         ...,
