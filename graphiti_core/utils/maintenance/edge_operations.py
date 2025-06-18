@@ -108,6 +108,7 @@ async def extract_edges(
     episode: EpisodicNode,
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
+    edge_type_map: dict[tuple[str, str], list[str]],
     group_id: str = '',
     edge_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityEdge]:
@@ -116,10 +117,17 @@ async def extract_edges(
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
+    edge_type_signature_map: dict[str, tuple[str, str]] = {
+        edge_type: signature
+        for signature, edge_types in edge_type_map.items()
+        for edge_type in edge_types
+    }
+
     edge_types_context = (
         [
             {
                 'fact_type_name': type_name,
+                'fact_type_signature': edge_type_signature_map.get(type_name, ('Entity', 'Entity')),
                 'fact_type_description': type_model.__doc__,
             }
             for type_name, type_model in edge_types.items()
@@ -131,7 +139,10 @@ async def extract_edges(
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
-        'nodes': [{'id': idx, 'name': node.name} for idx, node in enumerate(nodes)],
+        'nodes': [
+            {'id': idx, 'name': node.name, 'entity_types': node.labels}
+            for idx, node in enumerate(nodes)
+        ],
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
