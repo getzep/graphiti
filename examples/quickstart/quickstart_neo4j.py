@@ -83,44 +83,36 @@ async def main():
         # Episodes list containing both text and JSON episodes
         episodes = [
             {
-                'content': 'Luke: I have to get my wife tacos later because she likes tacos.',
-                'type': EpisodeType.message,
+                'content': 'Kamala Harris is the Attorney General of California. She was previously '
+                'the district attorney for San Francisco.',
+                'type': EpisodeType.text,
                 'description': 'podcast transcript',
             },
             {
-                'content': 'AI Assistant: Great to hear!',
-                'type': EpisodeType.message,
+                'content': 'As AG, Harris was in office from January 3, 2011 – January 3, 2017',
+                'type': EpisodeType.text,
                 'description': 'podcast transcript',
             },
             {
-                'content': 'Luke: I like dogs.',
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
+                'content': {
+                    'name': 'Gavin Newsom',
+                    'position': 'Governor',
+                    'state': 'California',
+                    'previous_role': 'Lieutenant Governor',
+                    'previous_location': 'San Francisco',
+                },
+                'type': EpisodeType.json,
+                'description': 'podcast metadata',
             },
             {
-                'content': "AI Assistant: That's great! Dogs are wonderful companions.",
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
-            },
-            {
-                'content': 'Luke: Sharon likes cats.',
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
-            },
-            {
-                'content': "AI Assistant: That's nice to know! Cats can be great companions too.",
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
-            },
-            {
-                'content': "Luke: Have you met Sharon? She's my wife.",
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
-            },
-            {
-                'content': "AI Assistant: It's lovely to learn more about your wife! I am here to assist you with anything you need.",
-                'type': EpisodeType.message,
-                'description': 'podcast transcript',
+                'content': {
+                    'name': 'Gavin Newsom',
+                    'position': 'Governor',
+                    'term_start': 'January 7, 2019',
+                    'term_end': 'Present',
+                },
+                'type': EpisodeType.json,
+                'description': 'podcast metadata',
             },
         ]
 
