@@ -86,9 +86,9 @@ class FalkorDriver(GraphDriver):
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
-        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
+        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is DEFAULT_DATABASE
         if graph_name is None:
-            graph_name = 'DEFAULT_DATABASE'
+            graph_name = DEFAULT_DATABASE
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
