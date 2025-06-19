@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from typing_extensions import LiteralString
 
@@ -140,8 +140,8 @@ async def retrieve_episodes(
     episodes = [
         EpisodicNode(
             content=record['content'],
-            created_at=parse_db_date(record['created_at']),
-            valid_at=parse_db_date(record['valid_at']),
+            created_at=parse_db_date(record['created_at']) or datetime.min.replace(tzinfo=timezone.utc),
+            valid_at=parse_db_date(record['valid_at']) or datetime.min.replace(tzinfo=timezone.utc),
             uuid=record['uuid'],
             group_id=record['group_id'],
             source=EpisodeType.from_str(record['source']),

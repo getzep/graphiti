@@ -67,8 +67,8 @@ class FalkorDriver(GraphDriver):
         self,
         host: str = 'localhost',
         port: str = '6379',
-        username: str = None,
-        password: str = None,
+        username: str | None = None,
+        password: str | None = None,
         falkor_db: FalkorDB | None = None,
     ):
         """
