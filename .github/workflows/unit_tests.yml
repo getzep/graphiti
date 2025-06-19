@@ -55,4 +55,4 @@ jobs:
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
         run: |
-          poetry run pytest tests/driver/test_falkordb_driver.py -m "integration"
+          poetry run pytest tests/driver/test_falkordb_driver.py
