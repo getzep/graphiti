@@ -120,6 +120,12 @@ Optional:
 > [!TIP]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
 > interface to manage Neo4j instances and databases.
+> Alternatively, you can use FalkorDB on-premises via Docker and instantly start with the quickstart example:
+```bash
+docker run -p 6379:6379 -p 3000:3000 -it --rm falkordb/falkordb:latest
+
+```
+
 
 ```bash
 pip install graphiti-core
@@ -156,7 +162,7 @@ pip install graphiti-core[anthropic,groq,google-genai]
 
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory. The quickstart demonstrates:
 
-1. Connecting to a Neo4j database
+1. Connecting to a Neo4j or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search

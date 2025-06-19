@@ -95,7 +95,7 @@ class AddEpisodeResults(BaseModel):
 class Graphiti:
     def __init__(
         self,
-        uri: str,
+        uri: str | None = None,
         user: str | None = None,
         password: str | None = None,
         llm_client: LLMClient | None = None,
