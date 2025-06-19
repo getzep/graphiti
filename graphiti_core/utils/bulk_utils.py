@@ -198,6 +198,7 @@ async def extract_nodes_and_edges_bulk(
                 episode,
                 extracted_nodes_bulk[i],
                 previous_episodes_list[i],
+                {},
                 episode.group_id,
             )
             for i, episode in enumerate(episodes)

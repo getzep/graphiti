@@ -90,6 +90,8 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 Instructions:
 
 You are given a conversation context and a CURRENT MESSAGE. Your task is to extract **entity nodes** mentioned **explicitly or implicitly** in the CURRENT MESSAGE.
+Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the 
+reference entities.
 
 1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
    - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
