@@ -1,6 +1,9 @@
 # Build stage
 FROM python:3.12-slim as builder
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
+
 WORKDIR /app
 
 # Install system dependencies
@@ -27,6 +30,9 @@ RUN poetry install --no-interaction --no-ansi --only main --no-root
 
 FROM python:3.12-slim
 
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
+
 # Copy only the necessary files from the builder stage
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
@@ -39,5 +45,8 @@ COPY ./server /app
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 # Command to run the application
+
+# Switch to non-root user
+USER appuser
 
 CMD uvicorn graph_service.main:app --host 0.0.0.0 --port $PORT
