@@ -56,7 +56,7 @@ load_dotenv()
 # The default host and port are 'localhost' and '6379', respectively.
 # You can override these values in your environment variables or directly in the code.
 
-falkor_username = os.environ.get('FALKORDB_USER', None)
+falkor_username = os.environ.get('FALKORDB_USERNAME', None)
 falkor_password = os.environ.get('FALKORDB_PASSWORD', None)
 falkor_host = os.environ.get('FALKORDB_HOST', 'localhost')
 falkor_port = os.environ.get('FALKORDB_PORT', '6379')
