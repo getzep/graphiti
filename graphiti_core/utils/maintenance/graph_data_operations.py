@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from typing_extensions import LiteralString
 

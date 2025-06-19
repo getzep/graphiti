@@ -17,7 +17,6 @@ limitations under the License.
 import os
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -82,7 +81,7 @@ class TestFalkorDriver:
         
         result = self.driver._get_graph(None)
         
-        self.mock_client.select_graph.assert_called_once_with('DEFAULT_DATABASE')
+        self.mock_client.select_graph.assert_called_once_with(DEFAULT_DATABASE)
         assert result is mock_graph
 
     @pytest.mark.asyncio
@@ -177,7 +176,7 @@ class TestFalkorDriver:
         session = self.driver.session(None)
         
         assert isinstance(session, FalkorDriverSession)
-        self.mock_client.select_graph.assert_called_once_with('DEFAULT_DATABASE')
+        self.mock_client.select_graph.assert_called_once_with(DEFAULT_DATABASE)
 
     @pytest.mark.asyncio
     async def test_close_calls_connection_close(self):
