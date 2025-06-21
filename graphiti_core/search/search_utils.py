@@ -278,9 +278,6 @@ async def edge_similarity_search(
         routing_='r',
     )
 
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
-
     edges = [get_entity_edge_from_record(record) for record in records]
 
     return edges
@@ -377,8 +374,6 @@ async def node_fulltext_search(
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -433,8 +428,7 @@ async def node_similarity_search(
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkordb':
-        records = [dict(zip(header, row, strict=True)) for row in records]
+
     nodes = [get_entity_node_from_record(record) for record in records]
 
     return nodes

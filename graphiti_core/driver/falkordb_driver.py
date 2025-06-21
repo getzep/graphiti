@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any
 
@@ -66,22 +65,30 @@ class FalkorDriver(GraphDriver):
 
     def __init__(
         self,
-        uri: str,
-        user: str,
-        password: str,
+        host: str = 'localhost',
+        port: str = '6379',
+        username: str | None = None,
+        password: str | None = None,
+        falkor_db: FalkorDB | None = None,
     ):
-        super().__init__()
-        uri_parts = uri.split('://', 1)
-        uri = f'{uri_parts[0]}://{user}:{password}@{uri_parts[1]}'
+        """
+        Initialize the FalkorDB driver.
 
-        self.client = FalkorDB(
-            host='your-db.falkor.cloud', port=6380, password='your_password', ssl=True
-        )
+        FalkorDB is a multi-tenant graph database.  
+        To connect, provide the host and port.  
+        The default parameters assume a local (on-premises) FalkorDB instance.
+        """
+        super().__init__()
+        if falkor_db is not None:
+            # If a FalkorDB instance is provided, use it directly
+            self.client = falkor_db
+        else:
+            self.client = FalkorDB(host=host, port=port, username=username, password=password)
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
-        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "DEFAULT_DATABASE"
+        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is DEFAULT_DATABASE
         if graph_name is None:
-            graph_name = 'DEFAULT_DATABASE'
+            graph_name = DEFAULT_DATABASE
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
@@ -102,17 +109,36 @@ class FalkorDriver(GraphDriver):
             raise
 
         # Convert the result header to a list of strings
-        header = [h[1].decode('utf-8') for h in result.header]
-        return result.result_set, header, None
+        header = [h[1] for h in result.header]
+        
+        # Convert FalkorDB's result format (list of lists) to the format expected by Graphiti (list of dicts)
+        records = []
+        for row in result.result_set:
+            record = {}
+            for i, field_name in enumerate(header):
+                if i < len(row):
+                    record[field_name] = row[i]
+                else:
+                    # If there are more fields in header than values in row, set to None
+                    record[field_name] = None
+            records.append(record)
+        
+        return records, header, None
 
     def session(self, database: str | None) -> GraphDriverSession:
         return FalkorDriverSession(self._get_graph(database))
 
     async def close(self) -> None:
-        await self.client.connection.close()
+        """Close the driver connection."""
+        if hasattr(self.client, 'aclose'):
+            await self.client.aclose()
+        elif hasattr(self.client.connection, 'aclose'):
+            await self.client.connection.aclose()
+        elif hasattr(self.client.connection, 'close'):
+            await self.client.connection.close()
 
-    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
-        return self.execute_query(
+    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> None:
+        await self.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=database_,
         )

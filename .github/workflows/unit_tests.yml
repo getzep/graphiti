@@ -11,6 +11,12 @@ jobs:
     runs-on: depot-ubuntu-22.04
     environment:
       name: development
+    services:
+      falkordb:
+        image: falkordb/falkordb:latest
+        ports:
+          - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -29,10 +35,24 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
           installer-parallel: true
+      - name: Update lock file
+        run: poetry lock
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --with dev
+      - name: Install redis-cli for FalkorDB health check
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
       - name: Run non-integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           poetry run pytest -m "not integration"
+      - name: Wait for FalkorDB
+        run: |
+          timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
+      - name: Run FalkorDB integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: 6379
+        run: |
+          poetry run pytest tests/driver/test_falkordb_driver.py
