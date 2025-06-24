@@ -94,9 +94,9 @@ def normalize_l2(embedding: list[float]) -> NDArray:
 # Use this instead of asyncio.gather() to bound coroutines
 async def semaphore_gather(
     *coroutines: Coroutine,
-    max_coroutines: int = SEMAPHORE_LIMIT,
+    max_coroutines: int | None = None,
 ):
-    semaphore = asyncio.Semaphore(max_coroutines)
+    semaphore = asyncio.Semaphore(max_coroutines or SEMAPHORE_LIMIT)
 
     async def _wrap_coroutine(coroutine):
         async with semaphore:
