@@ -21,8 +21,8 @@ from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from .openai_base_client import BaseOpenAIClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
+from .openai_base_client import BaseOpenAIClient
 
 logger = logging.getLogger(__name__)
 
