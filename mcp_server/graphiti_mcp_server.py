@@ -628,12 +628,14 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
     Returns:
         A dictionary representation of the edge with serialized dates and excluded embeddings
     """
-    return edge.model_dump(
+    result = edge.model_dump(
         mode='json',
         exclude={
             'fact_embedding',
         },
     )
+    result.get('attributes', {}).pop('fact_embedding', None)
+    return result
 
 
 # Dictionary to store queues for each group_id
