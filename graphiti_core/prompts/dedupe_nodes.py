@@ -30,7 +30,7 @@ class NodeDuplicate(BaseModel):
     )
     name: str = Field(
         ...,
-        description='Name of the entity. Should be the most complete and descriptive name possible. Do not include any JSON formatting in the Entity name.',
+        description='Name of the entity. Should be the most complete and descriptive name of the entity. Do not include any JSON formatting in the Entity name such as {}.',
     )
     additional_duplicates: list[int] = Field(
         ...,
@@ -91,12 +91,15 @@ def node(context: dict[str, Any]) -> list[Message]:
 
         Task:
         If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
-        id of the EXISTING ENTITY that is the duplicate. 
+        idx of the EXISTING ENTITY that is the duplicate. 
         
         If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
         duplicate_entity_id should be set to -1.
         
-        Also return the name that best describes the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
+        If the NEW ENTITIY is a duplicate of multiple EXISTING ENTITIES, provide the idx's of the additional duplicate
+        entities in additional_duplicates.
+        
+        Also return the full name of the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
         is a duplicate of, or a combination of the two).
         """,
         ),
