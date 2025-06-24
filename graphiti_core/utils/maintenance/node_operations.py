@@ -310,7 +310,7 @@ async def resolve_extracted_nodes(
             else extracted_node
         )
 
-        resolved_node.name = resolution.get('name')
+        # resolved_node.name = resolution.get('name')
 
         resolved_nodes.append(resolved_node)
         uuid_map[extracted_node.uuid] = resolved_node.uuid

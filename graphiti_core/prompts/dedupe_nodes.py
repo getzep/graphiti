@@ -84,20 +84,17 @@ def node(context: dict[str, Any]) -> list[Message]:
         is a duplicate entity of one of the EXISTING ENTITIES.
         
         Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+        Semantic Equivalence: if a descriptive label in existing_entities clearly refers to a named entity in context, treat them as duplicates.
 
         Do NOT mark entities as duplicates if:
         - They are related but distinct.
         - They have similar names or purposes but refer to separate instances or concepts.
 
-        Task:
-        If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
-        idx of the EXISTING ENTITY that is the duplicate. 
-        
-        If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
-        duplicate_entity_id should be set to -1.
-        
-        If the NEW ENTITIY is a duplicate of multiple EXISTING ENTITIES, provide the idx's of the additional duplicate
-        entities in additional_duplicates.
+         TASK:
+         1. Compare `new_entity` against each item in `existing_entities`.
+         2. If it refers to the same real‐world object or concept, collect its index.
+         3. Let `duplicate_idx` = the *first* collected index, or –1 if none.
+         4. Let `additional_duplicates` = the list of *any other* collected indices (empty list if none).
         
         Also return the full name of the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
         is a duplicate of, or a combination of the two).
