@@ -111,6 +111,13 @@ Available arguments:
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
+### Concurrency and LLM Provider 429 Rate Limit Errors
+
+Graphiti's ingestion pipelines are designed for high concurrency, controlled by the `SEMAPHORE_LIMIT` environment variable.
+By default, `SEMAPHORE_LIMIT` is set to `10` concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try lowering this value.
+
+If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion performance.
+
 ### Docker Deployment
 
 The Graphiti MCP server can be deployed using Docker. The Dockerfile uses `uv` for package management, ensuring

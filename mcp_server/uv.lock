@@ -459,6 +459,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.21.0" },
+    { name = "graphiti-core" },
     { name = "graphiti-core", specifier = ">=0.13.0" },
     { name = "mcp", specifier = ">=1.5.0" },
     { name = "openai", specifier = ">=1.68.2" },
