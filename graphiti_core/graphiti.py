@@ -29,7 +29,7 @@ from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
+from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather, validate_group_id
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -351,6 +351,7 @@ class Graphiti:
             now = utc_now()
 
             validate_entity_types(entity_types)
+            validate_group_id(group_id)
 
             previous_episodes = (
                 await self.retrieve_episodes(
@@ -502,6 +503,8 @@ class Graphiti:
         try:
             start = time()
             now = utc_now()
+
+            validate_group_id(group_id)
 
             episodes = [
                 EpisodicNode(

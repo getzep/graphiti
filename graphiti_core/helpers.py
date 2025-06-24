@@ -16,6 +16,7 @@ limitations under the License.
 
 import asyncio
 import os
+import re
 from collections.abc import Coroutine
 from datetime import datetime
 
@@ -24,6 +25,8 @@ from dotenv import load_dotenv
 from neo4j import time as neo4j_time
 from numpy._typing import NDArray
 from typing_extensions import LiteralString
+
+from graphiti_core.errors import GroupIdValidationError
 
 load_dotenv()
 
@@ -103,3 +106,29 @@ async def semaphore_gather(
             return await coroutine
 
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
+
+
+def validate_group_id(group_id: str) -> bool:
+    """
+    Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
+
+    Args:
+        group_id: The group_id to validate
+
+    Returns:
+        True if valid, False otherwise
+
+    Raises:
+        GroupIdValidationError: If group_id contains invalid characters
+    """
+
+    # Allow empty string (default case)
+    if not group_id:
+        return True
+
+    # Check if string contains only ASCII alphanumeric characters, dashes, or underscores
+    # Pattern matches: letters (a-z, A-Z), digits (0-9), hyphens (-), and underscores (_)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', group_id):
+        raise GroupIdValidationError(group_id)
+
+    return True
