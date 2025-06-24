@@ -35,7 +35,7 @@ ENTITY_EDGE_SAVE = """
         MATCH (target:Entity {uuid: $target_uuid}) 
         MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
         SET r = $edge_data
-        WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $fact_embedding)
+        WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $edge_data.fact_embedding)
         RETURN r.uuid AS uuid"""
 
 ENTITY_EDGE_SAVE_BULK = """

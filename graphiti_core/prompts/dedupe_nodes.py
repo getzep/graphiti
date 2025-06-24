@@ -30,7 +30,7 @@ class NodeDuplicate(BaseModel):
     )
     name: str = Field(
         ...,
-        description='Name of the entity. Should be the most complete and descriptive name possible. Do not include any JSON formatting in the Entity name.',
+        description='Name of the entity. Should be the most complete and descriptive name of the entity. Do not include any JSON formatting in the Entity name such as {}.',
     )
     additional_duplicates: list[int] = Field(
         ...,
@@ -84,19 +84,19 @@ def node(context: dict[str, Any]) -> list[Message]:
         is a duplicate entity of one of the EXISTING ENTITIES.
         
         Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+        Semantic Equivalence: if a descriptive label in existing_entities clearly refers to a named entity in context, treat them as duplicates.
 
         Do NOT mark entities as duplicates if:
         - They are related but distinct.
         - They have similar names or purposes but refer to separate instances or concepts.
 
-        Task:
-        If the NEW ENTITY represents a duplicate entity of any entity in EXISTING ENTITIES, set duplicate_entity_id to the
-        id of the EXISTING ENTITY that is the duplicate. 
+         TASK:
+         1. Compare `new_entity` against each item in `existing_entities`.
+         2. If it refers to the same real‐world object or concept, collect its index.
+         3. Let `duplicate_idx` = the *first* collected index, or –1 if none.
+         4. Let `additional_duplicates` = the list of *any other* collected indices (empty list if none).
         
-        If the NEW ENTITY is not a duplicate of any of the EXISTING ENTITIES,
-        duplicate_entity_id should be set to -1.
-        
-        Also return the name that best describes the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
+        Also return the full name of the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
         is a duplicate of, or a combination of the two).
         """,
         ),
