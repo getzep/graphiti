@@ -63,7 +63,7 @@ MAX_QUERY_LENGTH = 32
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
-        [f"group_id-'{lucene_sanitize(g)}'" for g in group_ids] if group_ids is not None else []
+        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:
@@ -301,12 +301,12 @@ async def edge_bfs_search(
 
     query = (
         """
-                            UNWIND $bfs_origin_node_uuids AS origin_uuid
-                            MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                            UNWIND relationships(path) AS rel
-                            MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                            WHERE r.uuid = rel.uuid
-                            """
+                                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                                    UNWIND relationships(path) AS rel
+                                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                                    WHERE r.uuid = rel.uuid
+                                    """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -455,10 +455,10 @@ async def node_bfs_search(
 
     query = (
         """
-                    UNWIND $bfs_origin_node_uuids AS origin_uuid
-                    MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                    WHERE n.group_id = origin.group_id
-                    """
+                            UNWIND $bfs_origin_node_uuids AS origin_uuid
+                            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                            WHERE n.group_id = origin.group_id
+                            """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
