@@ -586,6 +586,8 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
+    if not nodes:  # Handle empty list case
+        return
     name_embeddings = await embedder.create_batch([node.name for node in nodes])
     for node, name_embedding in zip(nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

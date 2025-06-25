@@ -24,6 +24,7 @@ import numpy as np
 from dotenv import load_dotenv
 from neo4j import time as neo4j_time
 from numpy._typing import NDArray
+from pydantic import BaseModel
 from typing_extensions import LiteralString
 
 from graphiti_core.errors import GroupIdValidationError
@@ -130,5 +131,39 @@ def validate_group_id(group_id: str) -> bool:
     # Pattern matches: letters (a-z, A-Z), digits (0-9), hyphens (-), and underscores (_)
     if not re.match(r'^[a-zA-Z0-9_-]+$', group_id):
         raise GroupIdValidationError(group_id)
+
+    return True
+
+
+def validate_excluded_entity_types(
+    excluded_entity_types: list[str] | None, entity_types: dict[str, BaseModel] | None = None
+) -> bool:
+    """
+    Validate that excluded entity types are valid type names.
+
+    Args:
+        excluded_entity_types: List of entity type names to exclude
+        entity_types: Dictionary of available custom entity types
+
+    Returns:
+        True if valid
+
+    Raises:
+        ValueError: If any excluded type names are invalid
+    """
+    if not excluded_entity_types:
+        return True
+
+    # Build set of available type names
+    available_types = {'Entity'}  # Default type is always available
+    if entity_types:
+        available_types.update(entity_types.keys())
+
+    # Check for invalid type names
+    invalid_types = set(excluded_entity_types) - available_types
+    if invalid_types:
+        raise ValueError(
+            f'Invalid excluded entity types: {sorted(invalid_types)}. Available types: {sorted(available_types)}'
+        )
 
     return True

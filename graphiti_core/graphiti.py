@@ -29,7 +29,12 @@ from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather, validate_group_id
+from graphiti_core.helpers import (
+    DEFAULT_DATABASE,
+    semaphore_gather,
+    validate_excluded_entity_types,
+    validate_group_id,
+)
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -293,6 +298,7 @@ class Graphiti:
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
@@ -321,6 +327,12 @@ class Graphiti:
             Optional uuid of the episode.
         update_communities : bool
             Optional. Whether to update communities with new node information
+        entity_types : dict[str, BaseModel] | None
+            Optional. Dictionary mapping entity type names to their Pydantic model definitions.
+        excluded_entity_types : list[str] | None
+            Optional. List of entity type names to exclude from the graph. Entities classified
+            into these types will not be added to the graph. Can include 'Entity' to exclude
+            the default entity type.
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
@@ -351,6 +363,7 @@ class Graphiti:
             now = utc_now()
 
             validate_entity_types(entity_types)
+            validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
 
             previous_episodes = (
@@ -389,7 +402,7 @@ class Graphiti:
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
-                self.clients, episode, previous_episodes, entity_types
+                self.clients, episode, previous_episodes, entity_types, excluded_entity_types
             )
 
             # Extract edges and resolve nodes
@@ -534,7 +547,7 @@ class Graphiti:
                 extracted_nodes,
                 extracted_edges,
                 episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs)
+            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs, None, None)
 
             # Generate embeddings
             await semaphore_gather(
