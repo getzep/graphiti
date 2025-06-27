@@ -71,6 +71,7 @@ async def extract_nodes(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, BaseModel] | None = None,
+    excluded_entity_types: list[str] | None = None,
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
@@ -153,6 +154,11 @@ async def extract_nodes(
         entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
             'entity_type_name'
         )
+
+        # Check if this entity type should be excluded
+        if excluded_entity_types and entity_type_name in excluded_entity_types:
+            logger.debug(f'Excluding entity "{extracted_entity.name}" of type "{entity_type_name}"')
+            continue
 
         labels: list[str] = list({'Entity', str(entity_type_name)})
 
