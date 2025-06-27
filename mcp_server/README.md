@@ -349,6 +349,32 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
 - OpenAI API key (for LLM operations and embeddings)
 - MCP-compatible client
 
+## Telemetry
+
+The Graphiti MCP server uses the Graphiti core library, which includes anonymous telemetry collection. When you initialize the Graphiti MCP server, anonymous usage statistics are collected to help improve the framework.
+
+### What's Collected
+
+- Anonymous identifier and system information (OS, Python version)
+- Graphiti version and configuration choices (LLM provider, database backend, embedder type)
+- **No personal data, API keys, or actual graph content is ever collected**
+
+### How to Disable
+
+To disable telemetry in the MCP server, set the environment variable:
+
+```bash
+export GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+Or add it to your `.env` file:
+
+```
+GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+For complete details about what's collected and why, see the [Telemetry section in the main Graphiti README](../README.md#telemetry).
+
 ## License
 
 This project is licensed under the same license as the parent Graphiti project.
