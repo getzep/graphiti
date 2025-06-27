@@ -2,7 +2,6 @@
 Telemetry client for Graphiti.
 
 Collects anonymous usage statistics to help improve the product.
-Based on PostHog implementation pattern from OpenLLMetry.
 """
 
 import contextlib
@@ -63,19 +62,6 @@ def get_anonymous_id() -> str:
         return 'UNKNOWN'
 
 
-def get_system_info() -> dict[str, Any]:
-    """Get system information for telemetry."""
-    try:
-        return {
-            'os': platform.system(),
-            'os_version': platform.release(),
-            'python_version': f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}',
-            'architecture': platform.machine(),
-        }
-    except Exception:
-        return {}
-
-
 def get_graphiti_version() -> str:
     """Get Graphiti version."""
     try:
@@ -131,7 +117,7 @@ def capture_event(event_name: str, properties: dict[str, Any] | None = None) -> 
         event_properties = {
             '$process_person_profile': False,
             'graphiti_version': get_graphiti_version(),
-            **get_system_info(),
+            'architecture': platform.machine(),
             **(properties or {}),
         }
 
