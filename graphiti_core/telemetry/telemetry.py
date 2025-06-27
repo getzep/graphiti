@@ -70,17 +70,6 @@ def get_graphiti_version() -> str:
 
         return importlib.metadata.version('graphiti-core')
     except Exception:
-        try:
-            # Fallback: try to read from pyproject.toml in parent directory
-            import tomllib
-
-            pyproject_path = Path(__file__).parent.parent.parent / 'pyproject.toml'
-            if pyproject_path.exists():
-                with open(pyproject_path, 'rb') as f:
-                    data = tomllib.load(f)
-                    return data.get('tool', {}).get('poetry', {}).get('version', 'unknown')
-        except Exception:
-            pass
         return 'unknown'
 
 
