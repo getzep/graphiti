@@ -9,3 +9,11 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/server" # Location of server package manifests
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/mcp_server" # Location of server package manifests
+    schedule:
+      interval: "weekly"

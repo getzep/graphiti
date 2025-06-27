@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   graph:
     image: graphiti-service:${GITHUB_SHA}

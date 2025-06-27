@@ -128,7 +128,7 @@ pip install graphiti-core
 or
 
 ```bash
-poetry add graphiti-core
+uv add graphiti-core
 ```
 
 You can also install optional LLM providers as extras:
@@ -261,11 +261,11 @@ Graphiti supports Google's Gemini models for both LLM inference and embeddings. 
 Install Graphiti:
 
 ```bash
-poetry add "graphiti-core[google-genai]"
+uv add "graphiti-core[google-genai]"
 
 # or
 
-uv add "graphiti-core[google-genai]"
+pip install "graphiti-core[google-genai]"
 ```
 
 ```python
@@ -302,10 +302,9 @@ graphiti = Graphiti(
 
 Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal for privacy-focused applications or when you want to avoid API costs.
 
-
 Install the models:
-ollama pull deepseek-r1:7b         # LLM
-ollama pull nomic-embed-text       # embeddings
+ollama pull deepseek-r1:7b # LLM
+ollama pull nomic-embed-text # embeddings
 
 ```python
 from graphiti_core import Graphiti
@@ -345,7 +344,6 @@ graphiti = Graphiti(
 ```
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
-
 
 ## Documentation
 

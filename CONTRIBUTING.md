@@ -20,11 +20,11 @@ For **feature requests**, tell us the story of what you're trying to accomplish.
 
 For **bug reports**, we need enough context to reproduce the problem. Use the [GitHub issue tracker](https://github.com/getzep/graphiti/issues) and include:
 
--   A clear title that summarizes the specific problem
--   What you were trying to do when you encountered the bug
--   What you expected to happen
--   What actually happened
--   A code sample or test case that demonstrates the issue
+- A clear title that summarizes the specific problem
+- What you were trying to do when you encountered the bug
+- What you expected to happen
+- What actually happened
+- A code sample or test case that demonstrates the issue
 
 ### Share Your Use Cases
 
@@ -46,78 +46,78 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 
 1. Fork the repository on GitHub.
 2. Clone your fork locally:
-    ```
-    git clone https://github.com/getzep/graphiti
-    cd graphiti
-    ```
+   ```
+   git clone https://github.com/getzep/graphiti
+   cd graphiti
+   ```
 3. Set up your development environment:
 
-    - Ensure you have Python 3.10+ installed.
-    - Install Poetry: https://python-poetry.org/docs/#installation
-    - Install project dependencies:
-        ```
-        make install
-        ```
-    - To run integration tests, set the appropriate environment variables
+   - Ensure you have Python 3.10+ installed.
+   - Install uv: https://docs.astral.sh/uv/getting-started/installation/
+   - Install project dependencies:
+     ```
+     make install
+     ```
+   - To run integration tests, set the appropriate environment variables
 
-        ```
-        export TEST_OPENAI_API_KEY=...
-        export TEST_OPENAI_MODEL=...
-        export TEST_ANTHROPIC_API_KEY=...
-        
-        # For Neo4j
-        export TEST_URI=neo4j://...
-        export TEST_USER=...
-        export TEST_PASSWORD=...
-        ```
+     ```
+     export TEST_OPENAI_API_KEY=...
+     export TEST_OPENAI_MODEL=...
+     export TEST_ANTHROPIC_API_KEY=...
+
+     # For Neo4j
+     export TEST_URI=neo4j://...
+     export TEST_USER=...
+     export TEST_PASSWORD=...
+     ```
 
 ## Making Changes
 
 1. Create a new branch for your changes:
-    ```
-    git checkout -b your-branch-name
-    ```
+   ```
+   git checkout -b your-branch-name
+   ```
 2. Make your changes in the codebase.
 3. Write or update tests as necessary.
 4. Run the tests to ensure they pass:
-    ```
-    make test
-    ```
+   ```
+   make test
+   ```
 5. Format your code:
-    ```
-    make format
-    ```
+   ```
+   make format
+   ```
 6. Run linting checks:
-    ```
-    make lint
-    ```
+   ```
+   make lint
+   ```
 
 ## Submitting Changes
 
 1. Commit your changes:
-    ```
-    git commit -m "Your detailed commit message"
-    ```
+   ```
+   git commit -m "Your detailed commit message"
+   ```
 2. Push to your fork:
-    ```
-    git push origin your-branch-name
-    ```
+   ```
+   git push origin your-branch-name
+   ```
 3. Submit a pull request through the GitHub website to https://github.com/getzep/graphiti.
 
 ## Pull Request Guidelines
 
--   Provide a clear title and description of your changes.
--   Include any relevant issue numbers in the PR description.
--   Ensure all tests pass and there are no linting errors.
--   Update documentation if you're changing functionality.
+- Provide a clear title and description of your changes.
+- Include any relevant issue numbers in the PR description.
+- Ensure all tests pass and there are no linting errors.
+- Update documentation if you're changing functionality.
 
 ## Code Style and Quality
 
 We use several tools to maintain code quality:
 
--   Ruff for linting and formatting
--   Mypy for static type checking
--   Pytest for testing
+- Ruff for linting and formatting
+- Mypy for static type checking
+- Pytest for testing
 
 Before submitting a pull request, please run:
 
