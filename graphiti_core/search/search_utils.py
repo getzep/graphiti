@@ -67,7 +67,7 @@ def fulltext_query(query: str, group_ids: list[str] | None = None):
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:
-        group_ids_filter += f if not group_ids_filter else f'OR {f}'
+        group_ids_filter += f if not group_ids_filter else f' OR {f}'
 
     group_ids_filter += ' AND ' if group_ids_filter else ''
 
