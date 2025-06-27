@@ -37,7 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY graphiti_mcp_server.py ./
 
 # Change ownership to app user
-RUN chown -R app:app /app
+RUN chown -Rv app:app /app
 
 # Switch to non-root user
 USER app

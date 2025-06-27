@@ -56,6 +56,15 @@ wheels = [
 ]
 
 [[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148 },
+]
+
+[[package]]
 name = "certifi"
 version = "2025.6.15"
 source = { registry = "https://pypi.org/simple" }
@@ -282,20 +291,21 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.13.0"
+version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
     { name = "neo4j" },
     { name = "numpy" },
     { name = "openai" },
+    { name = "posthog" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f1/f0/79907a8b28bfb9bcaa4f2a85955065ce7ffbf628a7c9813df4a2ef7833ea/graphiti_core-0.13.0.tar.gz", hash = "sha256:39374df1073e20fc5dcb8490c4110729e7c93619f0a8cdf3f521e7c00314ed3f", size = 78811 }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/fa/7590617c012ba2d4ccd9ff7f4c7fe8bc4e33a47f091b3e1906333faf6a64/graphiti_core-0.14.0.tar.gz", hash = "sha256:63e8a5cd971da204d91f1e6e68e279c6fed0816e3fdeef42e8e296f91471c73a", size = 6434269 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/21/645b54d8e55b0a0c88a704d36d75497f1381ead4276657ae5430aa76e3a6/graphiti_core-0.13.0-py3-none-any.whl", hash = "sha256:95987a38d6c33e626eb6bde003332ba6156c1c6af7932ff52adcfa5549434be7", size = 123594 },
+    { url = "https://files.pythonhosted.org/packages/02/46/765209a1d81dfc93db26b90014624fbdb7ca0a751ae3e9761c1d6ef51cc7/graphiti_core-0.14.0-py3-none-any.whl", hash = "sha256:62d359765d6b8d1db466676e8d306f0fc40c4a6619e4c653539ebe5b5e2d4e21", size = 129425 },
 ]
 
 [[package]]
@@ -460,7 +470,7 @@ dependencies = [
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.21.0" },
     { name = "graphiti-core" },
-    { name = "graphiti-core", specifier = ">=0.13.0" },
+    { name = "graphiti-core", specifier = ">=0.14.0" },
     { name = "mcp", specifier = ">=1.5.0" },
     { name = "openai", specifier = ">=1.68.2" },
 ]
@@ -582,6 +592,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0f/e2/a22f2973b729eff3f1f429017bdf717930c5de0fbf9e14017bae330e4e7a/openai-1.91.0.tar.gz", hash = "sha256:d6b07730d2f7c6745d0991997c16f85cddfc90ddcde8d569c862c30716b9fc90", size = 472529 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/d2/f99bdd6fc737d6b3cf0df895508d621fc9a386b375a1230ee81d46c5436e/openai-1.91.0-py3-none-any.whl", hash = "sha256:207f87aa3bc49365e014fac2f7e291b99929f4fe126c4654143440e0ad446a5f", size = 735837 },
+]
+
+[[package]]
+name = "posthog"
+version = "6.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f3/c3/c83883af8cc5e3b45d1bee85edce546a4db369fb8dc8eb6339fad764178b/posthog-6.0.0.tar.gz", hash = "sha256:b7bfa0da03bd9240891885d3e44b747e62192ac9ee6da280f45320f4ad3479e0", size = 88066 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/ec/7a44533c9fe7046ffcfe48ca0e7472ada2633854f474be633f4afed7b044/posthog-6.0.0-py3-none-any.whl", hash = "sha256:01f5d11046a6267d4384f552e819f0f4a7dc885eb19f606c36d44d662df9ff89", size = 104945 },
 ]
 
 [[package]]
@@ -721,6 +748,18 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892 },
 ]
 
 [[package]]
