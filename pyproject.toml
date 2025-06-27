@@ -10,7 +10,6 @@ authors = [
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10,<4"
-packages = [{ include = "graphiti_core", from = "." }]
 dependencies = [
     "pydantic>=2.11.5",
     "neo4j>=5.26.0",
@@ -29,34 +28,31 @@ Repository = "https://github.com/getzep/graphiti"
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
-falkord-db = ["falkordb (>=1.1.2,<2.0.0)"]
-
-[tool.poetry.group.dev.dependencies]
-mypy = ">=1.11.1"
-groq = ">=0.2.0"
-anthropic = ">=0.49.0"
-google-genai = ">=1.8.0"
-ipykernel = ">=6.29.5"
-jupyterlab = ">=4.2.4"
-diskcache-stubs = ">=5.6.3.6.20240818"
-langgraph = ">=0.2.15"
-langchain-anthropic = ">=0.2.4"
-langsmith = ">=0.1.108"
-langchain-openai = ">=0.2.6"
-sentence-transformers = ">=3.2.1"
-transformers = ">=4.45.2"
-voyageai = ">=0.2.3"
-pytest = ">=8.3.3"
-pytest-asyncio = ">=0.24.0"
-pytest-xdist = ">=3.6.1"
-ruff = ">=0.7.1"
+falkord-db = ["falkordb>=1.1.2,<2.0.0"]
+dev = [
+    "mypy>=1.11.1",
+    "groq>=0.2.0",
+    "anthropic>=0.49.0",
+    "google-genai>=1.8.0",
+    "ipykernel>=6.29.5",
+    "jupyterlab>=4.2.4",
+    "diskcache-stubs>=5.6.3.6.20240818",
+    "langgraph>=0.2.15",
+    "langchain-anthropic>=0.2.4",
+    "langsmith>=0.1.108",
+    "langchain-openai>=0.2.6",
+    "sentence-transformers>=3.2.1",
+    "transformers>=4.45.2",
+    "voyageai>=0.2.3",
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-xdist>=3.6.1",
+    "ruff>=0.7.1",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
-requires-poetry = ">=2.0"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -86,8 +82,13 @@ quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
-[mypy-falkordb]
+[tool.mypy]
+packages = ["graphiti_core"]
+
+[[tool.mypy.overrides]]
+module = "falkordb"
 ignore_missing_imports = true
 
-[mypy-falkordb.asyncio]
+[[tool.mypy.overrides]]
+module = "falkordb.asyncio"
 ignore_missing_imports = true
