@@ -29,15 +29,7 @@ from .errors import RateLimitError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gemini-2.0-flash'
-DEFAULT_THINKING_BUDGET = 0
-
-# Gemini models that support thinking capabilities
-GEMINI_THINKING_MODELS = [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-]
+DEFAULT_MODEL = 'gemini-2.5-flash'
 
 
 class GeminiClient(LLMClient):
@@ -140,17 +132,6 @@ class GeminiClient(LLMClient):
                     types.Content(role=m.role, parts=[types.Part.from_text(text=m.content)])
                 )
 
-            # Determine the model to be used
-            model_to_use = self.model or DEFAULT_MODEL
-
-            # Conditionally create thinking_config for models that support thinking
-            thinking_config_arg = None
-            if model_to_use in GEMINI_THINKING_MODELS:
-                thinking_config_arg = types.ThinkingConfig(
-                    include_thoughts=False,
-                    thinking_budget=self.thinking_budget,
-                )
-
             # Create generation config
             generation_config = types.GenerateContentConfig(
                 temperature=self.temperature,
@@ -163,7 +144,7 @@ class GeminiClient(LLMClient):
 
             # Generate content using the simple string approach
             response = await self.client.aio.models.generate_content(
-                model=model_to_use,
+                model=self.model or DEFAULT_MODEL,
                 contents=gemini_messages,
                 config=generation_config,
             )
