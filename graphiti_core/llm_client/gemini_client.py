@@ -154,7 +154,7 @@ class GeminiClient(LLMClient):
             Exception: If there is an error generating the response or content is blocked.
         """
         try:
-            gemini_messages: list[types.Content] = []
+            gemini_messages: typing.Any = []
             # If a response model is provided, add schema for structured output
             system_prompt = ''
             if response_model is not None:
