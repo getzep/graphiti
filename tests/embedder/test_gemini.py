@@ -80,7 +80,8 @@ def gemini_embedder(mock_gemini_client: Any) -> GeminiEmbedder:
 class TestGeminiEmbedderInitialization:
     """Tests for GeminiEmbedder initialization."""
 
-    def test_init_with_config(self):
+    @patch('google.genai.Client')
+    def test_init_with_config(self, mock_client):
         """Test initialization with a config object."""
         config = GeminiEmbedderConfig(
             api_key='test_api_key', embedding_model='custom-model', embedding_dim=768
@@ -92,14 +93,16 @@ class TestGeminiEmbedderInitialization:
         assert embedder.config.api_key == 'test_api_key'
         assert embedder.config.embedding_dim == 768
 
-    def test_init_without_config(self):
+    @patch('google.genai.Client')
+    def test_init_without_config(self, mock_client):
         """Test initialization without a config uses defaults."""
         embedder = GeminiEmbedder()
 
         assert embedder.config is not None
         assert embedder.config.embedding_model == DEFAULT_EMBEDDING_MODEL
 
-    def test_init_with_partial_config(self):
+    @patch('google.genai.Client')
+    def test_init_with_partial_config(self, mock_client):
         """Test initialization with partial config."""
         config = GeminiEmbedderConfig(api_key='test_api_key')
         embedder = GeminiEmbedder(config=config)
@@ -135,8 +138,9 @@ class TestGeminiEmbedderCreate:
         assert result == mock_gemini_response.embeddings[0].values
 
     @pytest.mark.asyncio
+    @patch('google.genai.Client')
     async def test_create_with_custom_model(
-        self, mock_gemini_client: Any, mock_gemini_response: MagicMock
+        self, mock_client_class, mock_gemini_client: Any, mock_gemini_response: MagicMock
     ) -> None:
         """Test create method with custom embedding model."""
         # Setup embedder with custom model
@@ -153,7 +157,10 @@ class TestGeminiEmbedderCreate:
         assert kwargs['model'] == 'custom-model'
 
     @pytest.mark.asyncio
-    async def test_create_with_custom_dimension(self, mock_gemini_client: Any) -> None:
+    @patch('google.genai.Client')
+    async def test_create_with_custom_dimension(
+        self, mock_client_class, mock_gemini_client: Any
+    ) -> None:
         """Test create method with custom embedding dimension."""
         # Setup embedder with custom dimension
         config = GeminiEmbedderConfig(api_key='test_api_key', embedding_dim=768)
@@ -337,8 +344,9 @@ class TestGeminiEmbedderCreateBatch:
         assert 'Empty embedding values returned' in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @patch('google.genai.Client')
     async def test_create_batch_with_custom_model_and_dimension(
-        self, mock_gemini_client: Any
+        self, mock_client_class, mock_gemini_client: Any
     ) -> None:
         """Test create_batch method with custom model and dimension."""
         # Setup embedder with custom settings
