@@ -134,7 +134,7 @@ pip install graphiti-core
 or
 
 ```bash
-poetry add graphiti-core
+uv add graphiti-core
 ```
 
 You can also install optional LLM providers as extras:
@@ -267,11 +267,11 @@ Graphiti supports Google's Gemini models for both LLM inference and embeddings. 
 Install Graphiti:
 
 ```bash
-poetry add "graphiti-core[google-genai]"
+uv add "graphiti-core[google-genai]"
 
 # or
 
-uv add "graphiti-core[google-genai]"
+pip install "graphiti-core[google-genai]"
 ```
 
 ```python
@@ -304,11 +304,139 @@ graphiti = Graphiti(
 # Now you can use Graphiti with Google Gemini
 ```
 
+## Using Graphiti with Ollama (Local LLM)
+
+Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal for privacy-focused applications or when you want to avoid API costs.
+
+Install the models:
+ollama pull deepseek-r1:7b # LLM
+ollama pull nomic-embed-text # embeddings
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
+# Configure Ollama LLM client
+llm_config = LLMConfig(
+    api_key="abc",  # Ollama doesn't require a real API key
+    model="deepseek-r1:7b",
+    small_model="deepseek-r1:7b",
+    base_url="http://localhost:11434/v1", # Ollama provides this port
+)
+
+llm_client = OpenAIClient(config=llm_config)
+
+# Initialize Graphiti with Ollama clients
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=llm_client,
+    embedder=OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            api_key="abc",
+            embedding_model="nomic-embed-text",
+            embedding_dim=768,
+            base_url="http://localhost:11434/v1",
+        )
+    ),
+    cross_encoder=OpenAIRerankerClient(client=llm_client, config=llm_config),
+)
+
+# Now you can use Graphiti with local Ollama models
+```
+
+Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
 - [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
 - [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+
+## Telemetry
+
+Graphiti collects anonymous usage statistics to help us understand how the framework is being used and improve it for everyone. We believe transparency is important, so here's exactly what we collect and why.
+
+### What We Collect
+
+When you initialize a Graphiti instance, we collect:
+
+- **Anonymous identifier**: A randomly generated UUID stored locally in `~/.cache/graphiti/telemetry_anon_id`
+- **System information**: Operating system, Python version, and system architecture
+- **Graphiti version**: The version you're using
+- **Configuration choices**:
+  - LLM provider type (OpenAI, Azure, Anthropic, etc.)
+  - Database backend (Neo4j, FalkorDB)
+  - Embedder provider (OpenAI, Azure, Voyage, etc.)
+
+### What We Don't Collect
+
+We are committed to protecting your privacy. We **never** collect:
+
+- Personal information or identifiers
+- API keys or credentials
+- Your actual data, queries, or graph content
+- IP addresses or hostnames
+- File paths or system-specific information
+- Any content from your episodes, nodes, or edges
+
+### Why We Collect This Data
+
+This information helps us:
+
+- Understand which configurations are most popular to prioritize support and testing
+- Identify which LLM and database providers to focus development efforts on
+- Track adoption patterns to guide our roadmap
+- Ensure compatibility across different Python versions and operating systems
+
+By sharing this anonymous information, you help us make Graphiti better for everyone in the community.
+
+### View the Telemetry Code
+
+The Telemetry code [may be found here](graphiti_core/telemetry/telemetry.py).
+
+### How to Disable Telemetry
+
+Telemetry is **opt-out** and can be disabled at any time. To disable telemetry collection:
+
+**Option 1: Environment Variable**
+
+```bash
+export GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+**Option 2: Set in your shell profile**
+
+```bash
+# For bash users (~/.bashrc or ~/.bash_profile)
+echo 'export GRAPHITI_TELEMETRY_ENABLED=false' >> ~/.bashrc
+
+# For zsh users (~/.zshrc)
+echo 'export GRAPHITI_TELEMETRY_ENABLED=false' >> ~/.zshrc
+```
+
+**Option 3: Set for a specific Python session**
+
+```python
+import os
+os.environ['GRAPHITI_TELEMETRY_ENABLED'] = 'false'
+
+# Then initialize Graphiti as usual
+from graphiti_core import Graphiti
+graphiti = Graphiti(...)
+```
+
+Telemetry is automatically disabled during test runs (when `pytest` is detected).
+
+### Technical Details
+
+- Telemetry uses PostHog for anonymous analytics collection
+- All telemetry operations are designed to fail silently - they will never interrupt your application or affect Graphiti functionality
+- The anonymous ID is stored locally and is not tied to any personal information
 
 ## Status and Roadmap
 

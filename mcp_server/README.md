@@ -78,12 +78,15 @@ The server uses the following environment variables:
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
 - `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI deployment name
-- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
+- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
+- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
+- `AZURE_OPENAI_EMBEDDING_API_KEY`: Optional Azure OpenAI Embedding deployment key (if other than `OPENAI_API_KEY`)
+- `AZURE_OPENAI_EMBEDDING_ENDPOINT`: Optional Azure OpenAI Embedding endpoint URL
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
 - `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+- `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
 
@@ -110,6 +113,13 @@ Available arguments:
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
+
+### Concurrency and LLM Provider 429 Rate Limit Errors
+
+Graphiti's ingestion pipelines are designed for high concurrency, controlled by the `SEMAPHORE_LIMIT` environment variable.
+By default, `SEMAPHORE_LIMIT` is set to `10` concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try lowering this value.
+
+If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion performance.
 
 ### Docker Deployment
 
@@ -338,6 +348,32 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
 - Neo4j database (version 5.26 or later required)
 - OpenAI API key (for LLM operations and embeddings)
 - MCP-compatible client
+
+## Telemetry
+
+The Graphiti MCP server uses the Graphiti core library, which includes anonymous telemetry collection. When you initialize the Graphiti MCP server, anonymous usage statistics are collected to help improve the framework.
+
+### What's Collected
+
+- Anonymous identifier and system information (OS, Python version)
+- Graphiti version and configuration choices (LLM provider, database backend, embedder type)
+- **No personal data, API keys, or actual graph content is ever collected**
+
+### How to Disable
+
+To disable telemetry in the MCP server, set the environment variable:
+
+```bash
+export GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+Or add it to your `.env` file:
+
+```
+GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+For complete details about what's collected and why, see the [Telemetry section in the main Graphiti README](../README.md#telemetry).
 
 ## License
 

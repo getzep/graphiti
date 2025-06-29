@@ -14,60 +14,64 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
-from typing import Any
+from typing import ClassVar
 
 from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from ..prompts.models import Message
-from .client import LLMClient
-from .config import LLMConfig, ModelSize
+from .config import DEFAULT_MAX_TOKENS, LLMConfig
+from .openai_base_client import BaseOpenAIClient
 
 logger = logging.getLogger(__name__)
 
 
-class AzureOpenAILLMClient(LLMClient):
+class AzureOpenAILLMClient(BaseOpenAIClient):
     """Wrapper class for AsyncAzureOpenAI that implements the LLMClient interface."""
 
-    def __init__(self, azure_client: AsyncAzureOpenAI, config: LLMConfig | None = None):
-        super().__init__(config, cache=False)
-        self.azure_client = azure_client
+    # Class-level constants
+    MAX_RETRIES: ClassVar[int] = 2
 
-    async def _generate_response(
+    def __init__(
         self,
-        messages: list[Message],
+        azure_client: AsyncAzureOpenAI,
+        config: LLMConfig | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+    ):
+        super().__init__(config, cache=False, max_tokens=max_tokens)
+        self.client = azure_client
+
+    async def _create_structured_completion(
+        self,
+        model: str,
+        messages: list[ChatCompletionMessageParam],
+        temperature: float | None,
+        max_tokens: int,
+        response_model: type[BaseModel],
+    ):
+        """Create a structured completion using Azure OpenAI's beta parse API."""
+        return await self.client.beta.chat.completions.parse(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_model,  # type: ignore
+        )
+
+    async def _create_completion(
+        self,
+        model: str,
+        messages: list[ChatCompletionMessageParam],
+        temperature: float | None,
+        max_tokens: int,
         response_model: type[BaseModel] | None = None,
-        max_tokens: int = 1024,
-        model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, Any]:
-        """Generate response using Azure OpenAI client."""
-        # Convert messages to OpenAI format
-        openai_messages: list[ChatCompletionMessageParam] = []
-        for message in messages:
-            message.content = self._clean_input(message.content)
-            if message.role == 'user':
-                openai_messages.append({'role': 'user', 'content': message.content})
-            elif message.role == 'system':
-                openai_messages.append({'role': 'system', 'content': message.content})
-
-        # Ensure model is a string
-        model_name = self.model if self.model else 'gpt-4o-mini'
-
-        try:
-            response = await self.azure_client.chat.completions.create(
-                model=model_name,
-                messages=openai_messages,
-                temperature=float(self.temperature) if self.temperature is not None else 0.7,
-                max_tokens=max_tokens,
-                response_format={'type': 'json_object'},
-            )
-            result = response.choices[0].message.content or '{}'
-
-            # Parse JSON response
-            return json.loads(result)
-        except Exception as e:
-            logger.error(f'Error in Azure OpenAI LLM response: {e}')
-            raise
+    ):
+        """Create a regular completion with JSON format using Azure OpenAI."""
+        return await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={'type': 'json_object'},
+        )

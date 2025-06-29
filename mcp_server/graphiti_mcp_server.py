@@ -42,6 +42,11 @@ DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
 SMALL_LLM_MODEL = 'gpt-4.1-nano'
 DEFAULT_EMBEDDER_MODEL = 'text-embedding-3-small'
 
+# Semaphore limit for concurrent Graphiti operations.
+# Decrease this if you're experiencing 429 rate limit errors from your LLM provider.
+# Increase if you have high rate limits.
+SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
+
 
 class Requirement(BaseModel):
     """A Requirement represents a specific need, feature, or functionality that a product or service must fulfill.
@@ -362,7 +367,7 @@ class GraphitiEmbedderConfig(BaseModel):
         model_env = os.environ.get('EMBEDDER_MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_EMBEDDER_MODEL
 
-        azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', None)
+        azure_openai_endpoint = os.environ.get('AZURE_OPENAI_EMBEDDING_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None)
         azure_openai_deployment_name = os.environ.get(
             'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None
@@ -385,7 +390,9 @@ class GraphitiEmbedderConfig(BaseModel):
 
             if not azure_openai_use_managed_identity:
                 # api key
-                api_key = os.environ.get('OPENAI_API_KEY', None)
+                api_key = os.environ.get('AZURE_OPENAI_EMBEDDING_API_KEY', None) or os.environ.get(
+                    'OPENAI_API_KEY', None
+                )
             else:
                 # Managed identity
                 api_key = None
@@ -589,6 +596,7 @@ async def initialize_graphiti():
             password=config.neo4j.password,
             llm_client=llm_client,
             embedder=embedder_client,
+            max_coroutines=SEMAPHORE_LIMIT,
         )
 
         # Destroy graph if requested
@@ -611,6 +619,7 @@ async def initialize_graphiti():
         logger.info(
             f'Custom entity extraction: {"enabled" if config.use_custom_entities else "disabled"}'
         )
+        logger.info(f'Using concurrency limit: {SEMAPHORE_LIMIT}')
 
     except Exception as e:
         logger.error(f'Failed to initialize Graphiti: {str(e)}')

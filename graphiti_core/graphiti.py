@@ -29,7 +29,12 @@ from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
+from graphiti_core.helpers import (
+    DEFAULT_DATABASE,
+    semaphore_gather,
+    validate_excluded_entity_types,
+    validate_group_id,
+)
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search import SearchConfig, search
@@ -46,6 +51,7 @@ from graphiti_core.search.search_utils import (
     get_mentioned_nodes,
     get_relevant_edges,
 )
+from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
     RawEpisode,
     add_nodes_and_edges_bulk,
@@ -103,6 +109,7 @@ class Graphiti:
         cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
+        max_coroutines: int | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -121,6 +128,20 @@ class Graphiti:
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
+        embedder : EmbedderClient | None, optional
+            An instance of EmbedderClient for embedding tasks.
+            If not provided, a default OpenAIEmbedder will be initialized.
+        cross_encoder : CrossEncoderClient | None, optional
+            An instance of CrossEncoderClient for reranking tasks.
+            If not provided, a default OpenAIRerankerClient will be initialized.
+        store_raw_episode_content : bool, optional
+            Whether to store the raw content of episodes. Defaults to True.
+        graph_driver : GraphDriver | None, optional
+            An instance of GraphDriver for database operations.
+            If not provided, a default Neo4jDriver will be initialized.
+        max_coroutines : int | None, optional
+            The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
+            If not set, the Graphiti default is used.
 
         Returns
         -------
@@ -150,6 +171,7 @@ class Graphiti:
 
         self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
+        self.max_coroutines = max_coroutines
         if llm_client:
             self.llm_client = llm_client
         else:
@@ -169,6 +191,61 @@ class Graphiti:
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
         )
+
+        # Capture telemetry event
+        self._capture_initialization_telemetry()
+
+    def _capture_initialization_telemetry(self):
+        """Capture telemetry event for Graphiti initialization."""
+        try:
+            # Detect provider types from class names
+            llm_provider = self._get_provider_type(self.llm_client)
+            embedder_provider = self._get_provider_type(self.embedder)
+            reranker_provider = self._get_provider_type(self.cross_encoder)
+            database_provider = self._get_provider_type(self.driver)
+
+            properties = {
+                'llm_provider': llm_provider,
+                'embedder_provider': embedder_provider,
+                'reranker_provider': reranker_provider,
+                'database_provider': database_provider,
+            }
+
+            capture_event('graphiti_initialized', properties)
+        except Exception:
+            # Silently handle telemetry errors
+            pass
+
+    def _get_provider_type(self, client) -> str:
+        """Get provider type from client class name."""
+        if client is None:
+            return 'none'
+
+        class_name = client.__class__.__name__.lower()
+
+        # LLM providers
+        if 'openai' in class_name:
+            return 'openai'
+        elif 'azure' in class_name:
+            return 'azure'
+        elif 'anthropic' in class_name:
+            return 'anthropic'
+        elif 'crossencoder' in class_name:
+            return 'crossencoder'
+        elif 'gemini' in class_name:
+            return 'gemini'
+        elif 'groq' in class_name:
+            return 'groq'
+        # Database providers
+        elif 'neo4j' in class_name:
+            return 'neo4j'
+        elif 'falkor' in class_name:
+            return 'falkordb'
+        # Embedder providers
+        elif 'voyage' in class_name:
+            return 'voyage'
+        else:
+            return 'unknown'
 
     async def close(self):
         """
@@ -282,6 +359,7 @@ class Graphiti:
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
@@ -310,6 +388,12 @@ class Graphiti:
             Optional uuid of the episode.
         update_communities : bool
             Optional. Whether to update communities with new node information
+        entity_types : dict[str, BaseModel] | None
+            Optional. Dictionary mapping entity type names to their Pydantic model definitions.
+        excluded_entity_types : list[str] | None
+            Optional. List of entity type names to exclude from the graph. Entities classified
+            into these types will not be added to the graph. Can include 'Entity' to exclude
+            the default entity type.
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
@@ -340,6 +424,8 @@ class Graphiti:
             now = utc_now()
 
             validate_entity_types(entity_types)
+            validate_excluded_entity_types(excluded_entity_types, entity_types)
+            validate_group_id(group_id)
 
             previous_episodes = (
                 await self.retrieve_episodes(
@@ -377,7 +463,7 @@ class Graphiti:
             # Extract entities as nodes
 
             extracted_nodes = await extract_nodes(
-                self.clients, episode, previous_episodes, entity_types
+                self.clients, episode, previous_episodes, entity_types, excluded_entity_types
             )
 
             # Extract edges and resolve nodes
@@ -398,6 +484,7 @@ class Graphiti:
                     group_id,
                     edge_types,
                 ),
+                max_coroutines=self.max_coroutines,
             )
 
             edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -414,6 +501,7 @@ class Graphiti:
                 extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
                 ),
+                max_coroutines=self.max_coroutines,
             )
 
             duplicate_of_edges = build_duplicate_of_edges(episode, now, node_duplicates)
@@ -437,7 +525,8 @@ class Graphiti:
                     *[
                         update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
-                    ]
+                    ],
+                    max_coroutines=self.max_coroutines,
                 )
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
@@ -489,6 +578,8 @@ class Graphiti:
             start = time()
             now = utc_now()
 
+            validate_group_id(group_id)
+
             episodes = [
                 EpisodicNode(
                     name=episode.name,
@@ -504,7 +595,10 @@ class Graphiti:
             ]
 
             # Save all the episodes
-            await semaphore_gather(*[episode.save(self.driver) for episode in episodes])
+            await semaphore_gather(
+                *[episode.save(self.driver) for episode in episodes],
+                max_coroutines=self.max_coroutines,
+            )
 
             # Get previous episode context for each episode
             episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
@@ -514,22 +608,27 @@ class Graphiti:
                 extracted_nodes,
                 extracted_edges,
                 episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs)
+            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs, None, None)
 
             # Generate embeddings
             await semaphore_gather(
                 *[node.generate_name_embedding(self.embedder) for node in extracted_nodes],
                 *[edge.generate_embedding(self.embedder) for edge in extracted_edges],
+                max_coroutines=self.max_coroutines,
             )
 
             # Dedupe extracted nodes, compress extracted edges
             (nodes, uuid_map), extracted_edges_timestamped = await semaphore_gather(
                 dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
                 extract_edge_dates_bulk(self.llm_client, extracted_edges, episode_pairs),
+                max_coroutines=self.max_coroutines,
             )
 
             # save nodes to KG
-            await semaphore_gather(*[node.save(self.driver) for node in nodes])
+            await semaphore_gather(
+                *[node.save(self.driver) for node in nodes],
+                max_coroutines=self.max_coroutines,
+            )
 
             # re-map edge pointers so that they don't point to discard dupe nodes
             extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
@@ -541,7 +640,8 @@ class Graphiti:
 
             # save episodic edges to KG
             await semaphore_gather(
-                *[edge.save(self.driver) for edge in episodic_edges_with_resolved_pointers]
+                *[edge.save(self.driver) for edge in episodic_edges_with_resolved_pointers],
+                max_coroutines=self.max_coroutines,
             )
 
             # Dedupe extracted edges
@@ -553,7 +653,10 @@ class Graphiti:
             # invalidate edges
 
             # save edges to KG
-            await semaphore_gather(*[edge.save(self.driver) for edge in edges])
+            await semaphore_gather(
+                *[edge.save(self.driver) for edge in edges],
+                max_coroutines=self.max_coroutines,
+            )
 
             end = time()
             logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
@@ -577,11 +680,18 @@ class Graphiti:
         )
 
         await semaphore_gather(
-            *[node.generate_name_embedding(self.embedder) for node in community_nodes]
+            *[node.generate_name_embedding(self.embedder) for node in community_nodes],
+            max_coroutines=self.max_coroutines,
         )
 
-        await semaphore_gather(*[node.save(self.driver) for node in community_nodes])
-        await semaphore_gather(*[edge.save(self.driver) for edge in community_edges])
+        await semaphore_gather(
+            *[node.save(self.driver) for node in community_nodes],
+            max_coroutines=self.max_coroutines,
+        )
+        await semaphore_gather(
+            *[edge.save(self.driver) for edge in community_edges],
+            max_coroutines=self.max_coroutines,
+        )
 
         return community_nodes
 
@@ -688,7 +798,8 @@ class Graphiti:
         episodes = await EpisodicNode.get_by_uuids(self.driver, episode_uuids)
 
         edges_list = await semaphore_gather(
-            *[EntityEdge.get_by_uuids(self.driver, episode.entity_edges) for episode in episodes]
+            *[EntityEdge.get_by_uuids(self.driver, episode.entity_edges) for episode in episodes],
+            max_coroutines=self.max_coroutines,
         )
 
         edges: list[EntityEdge] = [edge for lst in edges_list for edge in lst]
@@ -764,6 +875,12 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        await semaphore_gather(*[node.delete(self.driver) for node in nodes_to_delete])
-        await semaphore_gather(*[edge.delete(self.driver) for edge in edges_to_delete])
+        await semaphore_gather(
+            *[node.delete(self.driver) for node in nodes_to_delete],
+            max_coroutines=self.max_coroutines,
+        )
+        await semaphore_gather(
+            *[edge.delete(self.driver) for edge in edges_to_delete],
+            max_coroutines=self.max_coroutines,
+        )
         await episode.delete(self.driver)

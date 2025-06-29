@@ -97,8 +97,7 @@ Only extract facts that:
 - The FACT TYPES provide a list of the most important types of facts, make sure to extract facts of these types
 - The FACT TYPES are not an exhaustive list, extract all facts from the message even if they do not fit into one
     of the FACT TYPES
-- The FACT TYPES each contain their fact_type_signature which represents the entity types which that fact_type is defined for.
-    A Type of Entity in the signature represents any extracted entity (it is a generic universal type for all entities).
+- The FACT TYPES each contain their fact_type_signature which represents the source and target entity types.
 
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 
