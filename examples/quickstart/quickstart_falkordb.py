@@ -46,14 +46,20 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # FalkorDB connection parameters
-# Make sure FalkorDB on premises is running, see https://docs.falkordb.com/
-falkor_uri = os.environ.get('FALKORDB_URI', 'falkor://localhost:6379')
-falkor_user = os.environ.get('FALKORDB_USER', 'falkor')
-falkor_password = os.environ.get('FALKORDB_PASSWORD', '')
+# Make sure FalkorDB (on-premises) is running — see https://docs.falkordb.com/
+# By default, FalkorDB does not require a username or password,
+# but you can set them via environment variables for added security.
+# 
+# If you're using FalkorDB Cloud, set the environment variables accordingly.
+# For on-premises use, you can leave them as None or set them to your preferred values.
+#
+# The default host and port are 'localhost' and '6379', respectively.
+# You can override these values in your environment variables or directly in the code.
 
-if not falkor_uri:
-    raise ValueError('FALKORDB_URI must be set')
-
+falkor_username = os.environ.get('FALKORDB_USERNAME', None)
+falkor_password = os.environ.get('FALKORDB_PASSWORD', None)
+falkor_host = os.environ.get('FALKORDB_HOST', 'localhost')
+falkor_port = os.environ.get('FALKORDB_PORT', '6379')
 
 async def main():
     #################################################
@@ -65,8 +71,8 @@ async def main():
     #################################################
 
     # Initialize Graphiti with FalkorDB connection
-    falkor_driver = FalkorDriver(uri=falkor_uri, user=falkor_user, password=falkor_password)
-    graphiti = Graphiti(uri=falkor_uri, graph_driver=falkor_driver)
+    falkor_driver = FalkorDriver(host=falkor_host, port=falkor_port, username=falkor_username, password=falkor_password)
+    graphiti = Graphiti(graph_driver=falkor_driver)
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
