@@ -20,12 +20,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
-          version: 2.1.2
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Update lock file
-        run: poetry lock
+          version: "latest"
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Run MyPy for graphiti-core
