@@ -5,7 +5,7 @@ PYTHON = python3
 UV = uv
 PYTEST = $(UV) run pytest
 RUFF = $(UV) run ruff
-MYPY = $(UV) run mypy
+PYRIGHT = $(UV) run pyright
 
 # Default target
 all: format lint test
@@ -22,7 +22,7 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) . --show-column-numbers --show-error-codes --pretty 
+	$(PYRIGHT) . 
 
 # Run tests
 test:
