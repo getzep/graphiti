@@ -297,7 +297,7 @@ async def resolve_extracted_edges(
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    search_results: tuple[list[list[EntityEdge]], list[list[EntityEdge]]] = await semaphore_gather(
+    search_results = await semaphore_gather(
         get_relevant_edges(driver, extracted_edges, SearchFilters()),
         get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
     )

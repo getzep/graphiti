@@ -38,7 +38,7 @@ class VoyageAIEmbedder(EmbedderClient):
         if config is None:
             config = VoyageAIEmbedderConfig()
         self.config = config
-        self.client = voyageai.AsyncClient(api_key=config.api_key)
+        self.client = voyageai.AsyncClient(api_key=config.api_key)  # type: ignore[reportUnknownMemberType]
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]

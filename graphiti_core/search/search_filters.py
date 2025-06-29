@@ -19,7 +19,6 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
-from typing_extensions import LiteralString
 
 
 class ComparisonOperator(Enum):
@@ -53,8 +52,8 @@ class SearchFilters(BaseModel):
 
 def node_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[LiteralString, dict[str, Any]]:
-    filter_query: LiteralString = ''
+) -> tuple[str, dict[str, Any]]:
+    filter_query: str = ''
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
@@ -67,8 +66,8 @@ def node_search_filter_query_constructor(
 
 def edge_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[LiteralString, dict[str, Any]]:
-    filter_query: LiteralString = ''
+) -> tuple[str, dict[str, Any]]:
+    filter_query: str = ''
     filter_params: dict[str, Any] = {}
 
     if filters.edge_types is not None:

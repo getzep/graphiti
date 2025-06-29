@@ -18,7 +18,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from neo4j import AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
@@ -42,7 +42,7 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
 
-    async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> Coroutine:
+    async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         params = kwargs.pop('params', None)
         result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
 
@@ -54,7 +54,9 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    def delete_all_indexes(
+        self, database_: str = DEFAULT_DATABASE
+    ) -> Coroutine[Any, Any, EagerResult]:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=database_,

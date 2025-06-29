@@ -19,6 +19,7 @@ import os
 import re
 from collections.abc import Coroutine
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -99,7 +100,7 @@ def normalize_l2(embedding: list[float]) -> NDArray:
 async def semaphore_gather(
     *coroutines: Coroutine,
     max_coroutines: int | None = None,
-):
+) -> list[Any]:
     semaphore = asyncio.Semaphore(max_coroutines or SEMAPHORE_LIMIT)
 
     async def _wrap_coroutine(coroutine):

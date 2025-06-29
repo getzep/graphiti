@@ -31,7 +31,7 @@ groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
 falkord-db = ["falkordb>=1.1.2,<2.0.0"]
 dev = [
-    "mypy>=1.11.1",
+    "pyright>=1.1.380",
     "groq>=0.2.0",
     "anthropic>=0.49.0",
     "google-genai>=1.8.0",
@@ -83,13 +83,11 @@ quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
-[tool.mypy]
-packages = ["graphiti_core"]
+[tool.pyright]
+include = ["graphiti_core"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
 
-[[tool.mypy.overrides]]
-module = "falkordb"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "falkordb.asyncio"
-ignore_missing_imports = true
+[[tool.pyright.overrides]]
+include = ["**/falkordb*"]
+reportMissingImports = false

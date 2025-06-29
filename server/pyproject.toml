@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pydantic>=2.8.2",
-    "mypy>=1.11.1",
+    "pyright>=1.1.380",
     "pytest>=8.3.2",
     "python-dotenv>=1.0.1",
     "pytest-asyncio>=0.24.0",
@@ -61,3 +61,8 @@ ignore = ["E501"]
 quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.pyright]
+include = ["."]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"

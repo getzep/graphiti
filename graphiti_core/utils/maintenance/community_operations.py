@@ -40,7 +40,7 @@ async def get_community_clusters(
             database_=DEFAULT_DATABASE,
         )
 
-        group_ids = group_id_values[0]['group_ids']
+        group_ids = group_id_values[0]['group_ids'] if group_id_values else []
 
     for group_id in group_ids:
         projection: dict[str, list[Neighbor]] = {}
