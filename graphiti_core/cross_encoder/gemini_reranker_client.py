@@ -15,8 +15,7 @@ limitations under the License.
 """
 
 import logging
-import math
-from typing import Any
+import re
 
 from google import genai  # type: ignore
 from google.genai import types  # type: ignore
@@ -39,8 +38,9 @@ class GeminiRerankerClient(CrossEncoderClient):
         """
         Initialize the GeminiRerankerClient with the provided configuration and client.
 
-        This reranker uses the Gemini API to run a simple boolean classifier prompt concurrently
-        for each passage. Log-probabilities are used to rank the passages, equivalent to the OpenAI approach.
+        The Gemini Developer API does not yet support logprobs. Unlike the OpenAI reranker,
+        this reranker uses the Gemini API to perform direct relevance scoring of passages.
+        Each passage is scored individually on a 0-100 scale.
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
@@ -57,147 +57,77 @@ class GeminiRerankerClient(CrossEncoderClient):
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         """
-        Rank passages based on their relevance to the query using Gemini.
+        Rank passages based on their relevance to the query using direct scoring.
 
-        Uses log probabilities from boolean classification responses, equivalent to the OpenAI approach.
-        The model responds with "True" or "False" and we use the log probabilities of these tokens.
+        Each passage is scored individually on a 0-100 scale, then normalized to [0,1].
         """
-        gemini_messages_list: Any = [
-            [
-                types.Content(
-                    role='system',
-                    parts=[
-                        types.Part.from_text(
-                            text='You are an expert tasked with determining whether the passage is relevant to the query'
-                        )
-                    ],
-                ),
-                types.Content(
-                    role='user',
-                    parts=[
-                        types.Part.from_text(
-                            text=f"""Respond with "True" if PASSAGE is relevant to QUERY and "False" otherwise.
-<PASSAGE>
-{passage}
-</PASSAGE>
-<QUERY>
-{query}
-</QUERY>"""
-                        )
-                    ],
-                ),
-            ]
-            for passage in passages
-        ]
+        if len(passages) <= 1:
+            return [(passage, 1.0) for passage in passages]
+
+        # Generate scoring prompts for each passage
+        scoring_prompts = []
+        for passage in passages:
+            prompt = f"""Rate how well this passage answers or relates to the query. Use a scale from 0 to 100.
+
+Query: {query}
+
+Passage: {passage}
+
+Provide only a number between 0 and 100 (no explanation, just the number):"""
+
+            scoring_prompts.append(
+                [
+                    types.Content(
+                        role='user',
+                        parts=[types.Part.from_text(text=prompt)],
+                    ),
+                ]
+            )
 
         try:
+            # Execute all scoring requests concurrently - O(n) API calls
             responses = await semaphore_gather(
                 *[
                     self.client.aio.models.generate_content(
                         model=self.config.model or DEFAULT_MODEL,
-                        contents=gemini_messages,
+                        contents=prompt_messages,  # type: ignore
                         config=types.GenerateContentConfig(
+                            system_instruction='You are an expert at rating passage relevance. Respond with only a number from 0-100.',
                             temperature=0.0,
-                            max_output_tokens=1,
-                            response_logprobs=True,
-                            logprobs=5,  # Get top 5 candidate tokens for better coverage
+                            max_output_tokens=3,
                         ),
                     )
-                    for gemini_messages in gemini_messages_list
+                    for prompt_messages in scoring_prompts
                 ]
             )
 
-            scores: list[float] = []
-            for response in responses:
+            # Extract scores and create results
+            results = []
+            for passage, response in zip(passages, responses, strict=True):
                 try:
-                    # Check if we have logprobs result in the response
-                    if (
-                        hasattr(response, 'candidates')
-                        and response.candidates
-                        and len(response.candidates) > 0
-                        and hasattr(response.candidates[0], 'logprobs_result')
-                        and response.candidates[0].logprobs_result
-                    ):
-                        logprobs_result = response.candidates[0].logprobs_result
-
-                        # Get the chosen candidates (tokens actually selected by the model)
-                        if (
-                            hasattr(logprobs_result, 'chosen_candidates')
-                            and logprobs_result.chosen_candidates
-                            and len(logprobs_result.chosen_candidates) > 0
-                        ):
-                            # Get the first token's log probability
-                            first_token = logprobs_result.chosen_candidates[0]
-
-                            if hasattr(first_token, 'log_probability') and hasattr(
-                                first_token, 'token'
-                            ):
-                                # Convert log probability to probability (similar to OpenAI approach)
-                                log_prob = first_token.log_probability
-                                probability = math.exp(log_prob)
-
-                                # Check if the token indicates relevance (starts with "True" or similar)
-                                token_text = first_token.token.strip().lower()
-                                if token_text.startswith(('true', 't')):
-                                    scores.append(probability)
-                                else:
-                                    # For "False" or other tokens, use 1 - probability
-                                    scores.append(1.0 - probability)
-                            else:
-                                # Fallback: try to get from top candidates
-                                if (
-                                    hasattr(logprobs_result, 'top_candidates')
-                                    and logprobs_result.top_candidates
-                                    and len(logprobs_result.top_candidates) > 0
-                                ):
-                                    top_step = logprobs_result.top_candidates[0]
-                                    if (
-                                        hasattr(top_step, 'candidates')
-                                        and top_step.candidates
-                                        and len(top_step.candidates) > 0
-                                    ):
-                                        # Look for "True" or "False" in top candidates
-                                        true_prob = 0.0
-                                        false_prob = 0.0
-
-                                        for candidate in top_step.candidates:
-                                            if hasattr(candidate, 'token') and hasattr(
-                                                candidate, 'log_probability'
-                                            ):
-                                                token_text = candidate.token.strip().lower()
-                                                prob = math.exp(candidate.log_probability)
-
-                                                if token_text.startswith(('true', 't')):
-                                                    true_prob = max(true_prob, prob)
-                                                elif token_text.startswith(('false', 'f')):
-                                                    false_prob = max(false_prob, prob)
-
-                                        # Use the probability of "True" as the relevance score
-                                        scores.append(true_prob)
-                                    else:
-                                        scores.append(0.0)
-                                else:
-                                    scores.append(0.0)
+                    if hasattr(response, 'text') and response.text:
+                        # Extract numeric score from response
+                        score_text = response.text.strip()
+                        # Handle cases where model might return non-numeric text
+                        score_match = re.search(r'\b(\d{1,3})\b', score_text)
+                        if score_match:
+                            score = float(score_match.group(1))
+                            # Normalize to [0, 1] range and clamp to valid range
+                            normalized_score = max(0.0, min(1.0, score / 100.0))
+                            results.append((passage, normalized_score))
                         else:
-                            scores.append(0.0)
+                            logger.warning(
+                                f'Could not extract numeric score from response: {score_text}'
+                            )
+                            results.append((passage, 0.0))
                     else:
-                        # Fallback: parse the response text if no logprobs available
-                        if hasattr(response, 'text') and response.text:
-                            response_text = response.text.strip().lower()
-                            if response_text.startswith(('true', 't')):
-                                scores.append(0.9)  # High confidence for "True"
-                            elif response_text.startswith(('false', 'f')):
-                                scores.append(0.1)  # Low confidence for "False"
-                            else:
-                                scores.append(0.0)
-                        else:
-                            scores.append(0.0)
-
+                        logger.warning('Empty response from Gemini for passage scoring')
+                        results.append((passage, 0.0))
                 except (ValueError, AttributeError) as e:
-                    logger.warning(f'Error parsing log probabilities from Gemini response: {e}')
-                    scores.append(0.0)
+                    logger.warning(f'Error parsing score from Gemini response: {e}')
+                    results.append((passage, 0.0))
 
-            results = [(passage, score) for passage, score in zip(passages, scores, strict=True)]
+            # Sort by score in descending order (highest relevance first)
             results.sort(reverse=True, key=lambda x: x[1])
             return results
 
