@@ -17,17 +17,25 @@ limitations under the License.
 import logging
 import os
 import sys
+import unittest
 from datetime import datetime, timezone
 
 import pytest
 from dotenv import load_dotenv
 
-from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_helpers import search_results_to_context_string
+
+try:
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    HAS_FALKORDB = True
+except ImportError:
+    FalkorDriver = None
+    HAS_FALKORDB = False
 
 pytestmark = pytest.mark.integration
 
@@ -63,16 +71,17 @@ def setup_logging():
 
 
 @pytest.mark.asyncio
+@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
 async def test_graphiti_falkordb_init():
     logger = setup_logging()
-    
+
     falkor_driver = FalkorDriver(
         host=FALKORDB_HOST,
         port=FALKORDB_PORT,
         username=FALKORDB_USER,
         password=FALKORDB_PASSWORD
     )
-    
+
     graphiti = Graphiti(graph_driver=falkor_driver)
 
     results = await graphiti.search_(query='Who is the user?')
@@ -85,6 +94,7 @@ async def test_graphiti_falkordb_init():
 
 
 @pytest.mark.asyncio
+@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
 async def test_graph_falkordb_integration():
     falkor_driver = FalkorDriver(
         host=FALKORDB_HOST,
@@ -92,7 +102,7 @@ async def test_graph_falkordb_integration():
         username=FALKORDB_USER,
         password=FALKORDB_PASSWORD
     )
-    
+
     client = Graphiti(graph_driver=falkor_driver)
     embedder = client.embedder
     driver = client.driver
