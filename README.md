@@ -106,7 +106,7 @@ Requirements:
 
 - Python 3.10 or higher
 - Neo4j 5.26 / FalkorDB 1.1.2 or higher (serves as the embeddings storage backend)
-- OpenAI API key (for LLM inference and embedding)
+- OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
 > Graphiti works best with LLM services that support Structured Output (such as OpenAI and Gemini).
@@ -121,11 +121,11 @@ Optional:
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
 > interface to manage Neo4j instances and databases.
 > Alternatively, you can use FalkorDB on-premises via Docker and instantly start with the quickstart example:
+
 ```bash
 docker run -p 6379:6379 -p 3000:3000 -it --rm falkordb/falkordb:latest
 
 ```
-
 
 ```bash
 pip install graphiti-core
@@ -156,7 +156,7 @@ pip install graphiti-core[anthropic,groq,google-genai]
 ## Quick Start
 
 > [!IMPORTANT]
-> Graphiti uses OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
+> Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
 > Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
 > compatible APIs.
 
@@ -206,7 +206,7 @@ as such this feature is off by default.
 
 ## Using Graphiti with Azure OpenAI
 
-Graphiti supports Azure OpenAI for both LLM inference and embeddings. To use Azure OpenAI, you'll need to configure both the LLM client and embedder with your Azure OpenAI credentials.
+Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different endpoints for LLM and embedding services, and separate deployments for default and small models.
 
 ```python
 from openai import AsyncAzureOpenAI
@@ -215,19 +215,26 @@ from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
-# Azure OpenAI configuration
+# Azure OpenAI configuration - use separate endpoints for different services
 api_key = "<your-api-key>"
 api_version = "<your-api-version>"
-azure_endpoint = "<your-azure-endpoint>"
+llm_endpoint = "<your-llm-endpoint>"  # e.g., "https://your-llm-resource.openai.azure.com/"
+embedding_endpoint = "<your-embedding-endpoint>"  # e.g., "https://your-embedding-resource.openai.azure.com/"
 
-# Create Azure OpenAI client for LLM
-azure_openai_client = AsyncAzureOpenAI(
+# Create separate Azure OpenAI clients for different services
+llm_client_azure = AsyncAzureOpenAI(
     api_key=api_key,
     api_version=api_version,
-    azure_endpoint=azure_endpoint
+    azure_endpoint=llm_endpoint
 )
 
-# Create LLM Config with your Azure deployed model names
+embedding_client_azure = AsyncAzureOpenAI(
+    api_key=api_key,
+    api_version=api_version,
+    azure_endpoint=embedding_endpoint
+)
+
+# Create LLM Config with your Azure deployment names
 azure_llm_config = LLMConfig(
     small_model="gpt-4.1-nano",
     model="gpt-4.1-mini",
@@ -240,24 +247,26 @@ graphiti = Graphiti(
     "password",
     llm_client=OpenAIClient(
         llm_config=azure_llm_config,
-        client=azure_openai_client
+        client=llm_client_azure
     ),
     embedder=OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
-            embedding_model="text-embedding-3-small"  # Use your Azure deployed embedding model name
+            embedding_model="text-embedding-3-small-deployment"  # Your Azure embedding deployment name
         ),
-        client=azure_openai_client
+        client=embedding_client_azure
     ),
     cross_encoder=OpenAIRerankerClient(
-        llm_config=azure_llm_config,
-        client=azure_openai_client
+        llm_config=LLMConfig(
+            model=azure_llm_config.small_model  # Use small model for reranking
+        ),
+        client=llm_client_azure
     )
 )
 
 # Now you can use Graphiti with Azure OpenAI
 ```
 
-Make sure to replace the placeholder values with your actual Azure OpenAI credentials and specify the correct embedding model name that's deployed in your Azure OpenAI service.
+Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names that match your Azure OpenAI service configuration.
 
 ## Using Graphiti with Google Gemini
 
