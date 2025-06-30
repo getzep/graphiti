@@ -51,11 +51,11 @@ class FalkorDriverSession(GraphDriverSession):
         if isinstance(query, list):
             for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
-                await self.graph.query(str(cypher), params)
+                await self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
-            await self.graph.query(str(query), params)
+            await self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
 
@@ -99,7 +99,7 @@ class FalkorDriver(GraphDriver):
         params = convert_datetimes_to_strings(dict(kwargs))
 
         try:
-            result = await graph.query(cypher_query_, params)
+            result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
             if 'already indexed' in str(e):
                 # check if index already exists

@@ -1,4 +1,4 @@
-name: MyPy Type Check
+name: Pyright Type Check
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  mypy:
+  pyright:
     runs-on: depot-ubuntu-22.04
     environment: development
     steps:
@@ -22,26 +22,18 @@ jobs:
         with:
           version: "latest"
       - name: Install dependencies
-        run: uv sync --extra dev
-      - name: Run MyPy for graphiti-core
+        run: uv sync --all-extras
+      - name: Run Pyright for graphiti-core
         shell: bash
         run: |
-          set -o pipefail
-          uv run mypy ./graphiti_core --show-column-numbers --show-error-codes | sed -E '
-            s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
-            s/^(.*):([0-9]+):([0-9]+): note: (.+)/::notice file=\1,line=\2,endLine=\2,col=\3,title=Note::\4/;
-          '
+          uv run pyright ./graphiti_core
       - name: Install graph-service dependencies
         shell: bash
         run: |
           cd server
-          uv sync --extra dev
-      - name: Run MyPy for graph-service
+          uv sync --all-extras
+      - name: Run Pyright for graph-service
         shell: bash
         run: |
           cd server
-          set -o pipefail
-          uv run mypy . --show-column-numbers --show-error-codes | sed -E '
-            s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
-            s/^(.*):([0-9]+):([0-9]+): note: (.+)/::notice file=\1,line=\2,endLine=\2,col=\3,title=Note::\4/;
-          '
+          uv run pyright .

@@ -30,7 +30,7 @@ jobs:
       - name: Install redis-cli for FalkorDB health check
         run: sudo apt-get update && sudo apt-get install -y redis-tools
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --all-extras
       - name: Run non-integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
