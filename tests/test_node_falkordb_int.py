@@ -15,12 +15,12 @@ limitations under the License.
 """
 
 import os
+import unittest
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 
-from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -32,6 +32,14 @@ FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
 FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
+
+try:
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    HAS_FALKORDB = True
+except ImportError:
+    FalkorDriver = None
+    HAS_FALKORDB = False
 
 
 @pytest.fixture
@@ -72,6 +80,7 @@ def sample_community_node():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
 async def test_entity_node_save_get_and_delete(sample_entity_node):
     falkor_driver = FalkorDriver(
         host=FALKORDB_HOST,
@@ -79,9 +88,9 @@ async def test_entity_node_save_get_and_delete(sample_entity_node):
         username=FALKORDB_USER,
         password=FALKORDB_PASSWORD
     )
-    
+
     await sample_entity_node.save(falkor_driver)
-    
+
     retrieved = await EntityNode.get_by_uuid(falkor_driver, sample_entity_node.uuid)
     assert retrieved.uuid == sample_entity_node.uuid
     assert retrieved.name == 'Test Entity'
@@ -93,6 +102,7 @@ async def test_entity_node_save_get_and_delete(sample_entity_node):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
 async def test_community_node_save_get_and_delete(sample_community_node):
     falkor_driver = FalkorDriver(
         host=FALKORDB_HOST,
@@ -115,6 +125,7 @@ async def test_community_node_save_get_and_delete(sample_community_node):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
 async def test_episodic_node_save_get_and_delete(sample_episodic_node):
     falkor_driver = FalkorDriver(
         host=FALKORDB_HOST,
