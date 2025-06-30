@@ -66,7 +66,7 @@ class FalkorDriver(GraphDriver):
     def __init__(
         self,
         host: str = 'localhost',
-        port: str = '6379',
+        port: int = 6379,
         username: str | None = None,
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
@@ -74,8 +74,8 @@ class FalkorDriver(GraphDriver):
         """
         Initialize the FalkorDB driver.
 
-        FalkorDB is a multi-tenant graph database.  
-        To connect, provide the host and port.  
+        FalkorDB is a multi-tenant graph database.
+        To connect, provide the host and port.
         The default parameters assume a local (on-premises) FalkorDB instance.
         """
         super().__init__()
@@ -110,7 +110,7 @@ class FalkorDriver(GraphDriver):
 
         # Convert the result header to a list of strings
         header = [h[1] for h in result.header]
-        
+
         # Convert FalkorDB's result format (list of lists) to the format expected by Graphiti (list of dicts)
         records = []
         for row in result.result_set:
@@ -122,7 +122,7 @@ class FalkorDriver(GraphDriver):
                     # If there are more fields in header than values in row, set to None
                     record[field_name] = None
             records.append(record)
-        
+
         return records, header, None
 
     def session(self, database: str | None) -> GraphDriverSession:
@@ -131,7 +131,7 @@ class FalkorDriver(GraphDriver):
     async def close(self) -> None:
         """Close the driver connection."""
         if hasattr(self.client, 'aclose'):
-            await self.client.aclose()
+            await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
             await self.client.connection.aclose()
         elif hasattr(self.client.connection, 'close'):
