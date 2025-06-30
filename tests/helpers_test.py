@@ -24,7 +24,7 @@ def test_lucene_sanitize():
     queries = [
         (
             'This has every escape character + - && || ! ( ) { } [ ] ^ " ~ * ? : \\ /',
-            '\This has every escape character \+ \- \&\& \|\| \! \( \) \{ \} \[ \] \^ \\" \~ \* \? \: \\\ \/',
+            '\\This has every escape character \\+ \\- \\&\\& \\|\\| \\! \\( \\) \\{ \\} \\[ \\] \\^ \\" \\~ \\* \\? \\: \\\\ \\/',
         ),
         ('this has no escape characters', 'this has no escape characters'),
     ]

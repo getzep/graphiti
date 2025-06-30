@@ -21,7 +21,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
+from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -140,10 +140,8 @@ async def retrieve_episodes(
     episodes = [
         EpisodicNode(
             content=record['content'],
-            created_at=datetime.fromtimestamp(
-                record['created_at'].to_native().timestamp(), timezone.utc
-            ),
-            valid_at=(record['valid_at'].to_native()),
+            created_at=parse_db_date(record['created_at']) or datetime.min.replace(tzinfo=timezone.utc),
+            valid_at=parse_db_date(record['valid_at']) or datetime.min.replace(tzinfo=timezone.utc),
             uuid=record['uuid'],
             group_id=record['group_id'],
             source=EpisodeType.from_str(record['source']),
