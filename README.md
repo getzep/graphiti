@@ -248,7 +248,6 @@ graphiti = Graphiti(
         ),
         client=azure_openai_client
     ),
-    # Optional: Configure the OpenAI cross encoder with Azure OpenAI
     cross_encoder=OpenAIRerankerClient(
         llm_config=azure_llm_config,
         client=azure_openai_client
@@ -262,7 +261,7 @@ Make sure to replace the placeholder values with your actual Azure OpenAI creden
 
 ## Using Graphiti with Google Gemini
 
-Graphiti supports Google's Gemini models for both LLM inference and embeddings. To use Gemini, you'll need to configure both the LLM client and embedder with your Google API key.
+Graphiti supports Google's Gemini models for LLM inference, embeddings, and cross-encoding/reranking. To use Gemini, you'll need to configure the LLM client, embedder, and the cross-encoder with your Google API key.
 
 Install Graphiti:
 
@@ -278,6 +277,7 @@ pip install "graphiti-core[google-genai]"
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig
 from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
 
 # Google API key configuration
 api_key = "<your-google-api-key>"
@@ -298,11 +298,19 @@ graphiti = Graphiti(
             api_key=api_key,
             embedding_model="embedding-001"
         )
+    ),
+    cross_encoder=GeminiRerankerClient(
+        config=LLMConfig(
+            api_key=api_key,
+            model="gemini-2.5-flash-lite-preview-06-17"
+        )
     )
 )
 
-# Now you can use Graphiti with Google Gemini
+# Now you can use Graphiti with Google Gemini for all components
 ```
+
+The Gemini reranker uses the `gemini-2.5-flash-lite-preview-06-17` model by default, which is optimized for cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
 ## Using Graphiti with Ollama (Local LLM)
 
