@@ -166,7 +166,7 @@ class Graphiti:
             self.driver = graph_driver
         else:
             if uri is None:
-                raise ValueError("uri must be provided when graph_driver is None")
+                raise ValueError('uri must be provided when graph_driver is None')
             self.driver = Neo4jDriver(uri, user, password)
 
         self.database = DEFAULT_DATABASE

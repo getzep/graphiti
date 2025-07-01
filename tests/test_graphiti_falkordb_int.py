@@ -71,15 +71,12 @@ def setup_logging():
 
 
 @pytest.mark.asyncio
-@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
+@unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
 async def test_graphiti_falkordb_init():
     logger = setup_logging()
 
     falkor_driver = FalkorDriver(
-        host=FALKORDB_HOST,
-        port=FALKORDB_PORT,
-        username=FALKORDB_USER,
-        password=FALKORDB_PASSWORD
+        host=FALKORDB_HOST, port=FALKORDB_PORT, username=FALKORDB_USER, password=FALKORDB_PASSWORD
     )
 
     graphiti = Graphiti(graph_driver=falkor_driver)
@@ -94,13 +91,10 @@ async def test_graphiti_falkordb_init():
 
 
 @pytest.mark.asyncio
-@unittest.skipIf(not HAS_FALKORDB, "FalkorDB is not installed")
+@unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
 async def test_graph_falkordb_integration():
     falkor_driver = FalkorDriver(
-        host=FALKORDB_HOST,
-        port=FALKORDB_PORT,
-        username=FALKORDB_USER,
-        password=FALKORDB_PASSWORD
+        host=FALKORDB_HOST, port=FALKORDB_PORT, username=FALKORDB_USER, password=FALKORDB_PASSWORD
     )
 
     client = Graphiti(graph_driver=falkor_driver)

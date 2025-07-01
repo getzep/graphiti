@@ -140,7 +140,8 @@ async def retrieve_episodes(
     episodes = [
         EpisodicNode(
             content=record['content'],
-            created_at=parse_db_date(record['created_at']) or datetime.min.replace(tzinfo=timezone.utc),
+            created_at=parse_db_date(record['created_at'])
+            or datetime.min.replace(tzinfo=timezone.utc),
             valid_at=parse_db_date(record['valid_at']) or datetime.min.replace(tzinfo=timezone.utc),
             uuid=record['uuid'],
             group_id=record['group_id'],
