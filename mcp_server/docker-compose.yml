@@ -20,6 +20,7 @@ services:
       start_period: 30s
 
   graphiti-mcp:
+    image: zepai/knowledge-graph-mcp:latest
     build:
       context: .
       dockerfile: Dockerfile

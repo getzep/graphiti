@@ -163,6 +163,8 @@ The Docker Compose setup includes a Neo4j container with the following default c
 
 #### Running with Docker Compose
 
+A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
+
 Start the services using Docker Compose:
 
 ```bash
