@@ -11,6 +11,13 @@ on:
       - "mcp_server/pyproject.toml"
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: "Push image to registry (unchecked for testing)"
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: docker.io
