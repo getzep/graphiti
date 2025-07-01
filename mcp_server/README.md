@@ -21,9 +21,9 @@ The Graphiti MCP server exposes the following key high-level functions of Graphi
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
 
-## Quick Start for Claude Desktop, Cursor, and other clients
+## Quick Start
 
-1. Clone the Graphiti GitHub repo
+### Clone the Graphiti GitHub repo
 
 ```bash
 git clone https://github.com/getzep/graphiti.git
@@ -35,7 +35,9 @@ or
 gh repo clone getzep/graphiti
 ```
 
-Note the full path to this directory.
+### For Claude Desktop and other `stdio` only clients
+
+1. Note the full path to this directory.
 
 ```
 cd graphiti && pwd
@@ -44,6 +46,18 @@ cd graphiti && pwd
 2. Install the [Graphiti prerequisites](#prerequisites).
 
 3. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
+
+### For Cursor and other `sse`-enabled clients
+
+1. Change directory to the `mcp_server` directory
+
+`cd graphiti/mcp_server`
+
+2. Start the service using Docker Compose
+
+`docker compose up`
+
+3. Point your MCP client to `http://localhost:8000/sse`
 
 ## Installation
 
@@ -162,6 +176,8 @@ The Docker Compose setup includes a Neo4j container with the following default c
 - Memory settings optimized for development use
 
 #### Running with Docker Compose
+
+A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
 
 Start the services using Docker Compose:
 
