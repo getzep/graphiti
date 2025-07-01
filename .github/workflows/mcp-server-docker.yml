@@ -29,9 +29,7 @@ jobs:
     environment: development
     permissions:
       contents: read
-      packages: write
-      actions: read
-      security-events: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
