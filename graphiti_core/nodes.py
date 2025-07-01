@@ -542,12 +542,12 @@ class CommunityNode(Node):
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     created_at = parse_db_date(record['created_at'])
     valid_at = parse_db_date(record['valid_at'])
-    
+
     if created_at is None:
-        raise ValueError(f"created_at cannot be None for episode {record.get('uuid', 'unknown')}")
+        raise ValueError(f'created_at cannot be None for episode {record.get("uuid", "unknown")}')
     if valid_at is None:
-        raise ValueError(f"valid_at cannot be None for episode {record.get('uuid', 'unknown')}")
-    
+        raise ValueError(f'valid_at cannot be None for episode {record.get("uuid", "unknown")}')
+
     return EpisodicNode(
         content=record['content'],
         created_at=created_at,
