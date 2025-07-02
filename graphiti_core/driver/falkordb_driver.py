@@ -138,7 +138,7 @@ class FalkorDriver(GraphDriver):
         elif hasattr(self.client.connection, 'close'):
             await self.client.connection.close()
 
-    async def delete_all_indexes(self, database_: str | None) -> None:
+    async def delete_all_indexes(self, database_: str | None = None) -> None:
         database = database_ or self._database
         await self.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
