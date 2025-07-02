@@ -28,7 +28,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
+from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE,
     ENTITY_NODE_SAVE,
@@ -103,7 +103,6 @@ class Node(BaseModel, ABC):
         DETACH DELETE n
         """,
             uuid=self.uuid,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Deleted Node: {self.uuid}')
@@ -126,7 +125,6 @@ class Node(BaseModel, ABC):
         DETACH DELETE n
         """,
             group_id=group_id,
-            database_=DEFAULT_DATABASE,
         )
 
         return 'SUCCESS'
@@ -162,7 +160,6 @@ class EpisodicNode(Node):
             created_at=self.created_at,
             valid_at=self.valid_at,
             source=self.source.value,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -185,7 +182,6 @@ class EpisodicNode(Node):
             e.entity_edges AS entity_edges
         """,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -213,7 +209,6 @@ class EpisodicNode(Node):
             e.entity_edges AS entity_edges
         """,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -254,7 +249,6 @@ class EpisodicNode(Node):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -279,7 +273,6 @@ class EpisodicNode(Node):
             e.entity_edges AS entity_edges
         """,
             entity_node_uuid=entity_node_uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -310,7 +303,7 @@ class EntityNode(Node):
             RETURN n.name_embedding AS name_embedding
         """
         records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
+            query, uuid=self.uuid, routing_='r'
         )
 
         if len(records) == 0:
@@ -334,7 +327,6 @@ class EntityNode(Node):
             ENTITY_NODE_SAVE,
             labels=self.labels + ['Entity'],
             entity_data=entity_data,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -352,7 +344,6 @@ class EntityNode(Node):
         records, _, _ = await driver.execute_query(
             query,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -371,7 +362,6 @@ class EntityNode(Node):
         """
             + ENTITY_NODE_RETURN,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -403,7 +393,6 @@ class EntityNode(Node):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -425,7 +414,6 @@ class CommunityNode(Node):
             summary=self.summary,
             name_embedding=self.name_embedding,
             created_at=self.created_at,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -447,7 +435,7 @@ class CommunityNode(Node):
             RETURN c.name_embedding AS name_embedding
         """
         records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
+            query, uuid=self.uuid, routing_='r'
         )
 
         if len(records) == 0:
@@ -468,7 +456,6 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -492,7 +479,6 @@ class CommunityNode(Node):
             n.summary AS summary
         """,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -529,7 +515,6 @@ class CommunityNode(Node):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
