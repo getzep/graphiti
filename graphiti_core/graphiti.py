@@ -865,9 +865,7 @@ class Graphiti:
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
             query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(
-                query, uuid=node.uuid, routing_='r'
-            )
+            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
 
             for record in records:
                 if record['episode_count'] == 1:

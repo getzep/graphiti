@@ -302,9 +302,7 @@ class EntityNode(Node):
             MATCH (n:Entity {uuid: $uuid})
             RETURN n.name_embedding AS name_embedding
         """
-        records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, uuid=self.uuid, routing_='r')
 
         if len(records) == 0:
             raise NodeNotFoundError(self.uuid)
@@ -434,9 +432,7 @@ class CommunityNode(Node):
             MATCH (c:Community {uuid: $uuid})
             RETURN c.name_embedding AS name_embedding
         """
-        records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, uuid=self.uuid, routing_='r')
 
         if len(records) == 0:
             raise NodeNotFoundError(self.uuid)

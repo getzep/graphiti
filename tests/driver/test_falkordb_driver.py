@@ -87,7 +87,7 @@ class TestFalkorDriver:
 
         result = self.driver._get_graph(None)
 
-        self.mock_client.select_graph.assert_called_once_with("default_db")
+        self.mock_client.select_graph.assert_called_once_with('default_db')
         assert result is mock_graph
 
     @pytest.mark.asyncio
@@ -182,7 +182,7 @@ class TestFalkorDriver:
         session = self.driver.session(None)
 
         assert isinstance(session, FalkorDriverSession)
-        self.mock_client.select_graph.assert_called_once_with("default_db")
+        self.mock_client.select_graph.assert_called_once_with('default_db')
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')

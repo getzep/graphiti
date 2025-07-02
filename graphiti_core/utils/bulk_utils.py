@@ -32,7 +32,7 @@ from graphiti_core.graph_queries import (
     get_entity_node_save_bulk_query,
 )
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import  semaphore_gather
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,

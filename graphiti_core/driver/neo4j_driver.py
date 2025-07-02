@@ -29,13 +29,7 @@ logger = logging.getLogger(__name__)
 class Neo4jDriver(GraphDriver):
     provider: str = 'neo4j'
 
-    def __init__(
-        self,
-        uri: str,
-        user: str | None,
-        password: str | None,
-        database: str = "neo4j"
-    ):
+    def __init__(self, uri: str, user: str | None, password: str | None, database: str = 'neo4j'):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
@@ -55,9 +49,7 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(
-        self 
-    ) -> Coroutine[Any, Any, EagerResult]:
+    def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=self._database,
