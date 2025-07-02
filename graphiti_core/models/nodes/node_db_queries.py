@@ -31,7 +31,10 @@ EPISODIC_NODE_SAVE_BULK = """
 
 ENTITY_NODE_SAVE = """
         MERGE (n:Entity {uuid: $entity_data.uuid})
-        SET n:$($labels)
+        WITH n, $labels
+        WITH n, $labels AS labels_list
+        // Workaround: Si APOC/addLabels no está disponible, usar Cypher puro para etiquetas dinámicas
+        FOREACH (label IN CASE WHEN labels_list IS NOT NULL AND size(labels_list) > 0 THEN labels_list ELSE [] END | SET n:label)
         SET n = $entity_data
         WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
         RETURN n.uuid AS uuid"""
@@ -39,7 +42,10 @@ ENTITY_NODE_SAVE = """
 ENTITY_NODE_SAVE_BULK = """
     UNWIND $nodes AS node
     MERGE (n:Entity {uuid: node.uuid})
-    SET n:$(node.labels)
+    WITH n, node
+    WITH n, node, node.labels AS labels_list
+    // Workaround: Si APOC/addLabels no está disponible, usar Cypher puro para etiquetas dinámicas
+    FOREACH (label IN CASE WHEN labels_list IS NOT NULL AND size(labels_list) > 0 THEN labels_list ELSE [] END | SET n:label)
     SET n = node
     WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)
     RETURN n.uuid AS uuid
