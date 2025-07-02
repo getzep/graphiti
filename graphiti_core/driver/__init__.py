@@ -18,13 +18,15 @@ __all__ = []
 
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDB
+
     __all__.append('FalkorDB')
     FALKORDB_AVAILABLE = True
-except ImportError: 
+except ImportError:
     FALKORDB_AVAILABLE = False
 
 try:
     from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
     __all__.append('Neo4jDriver')
     NEO4J_AVAILABLE = True
 except ImportError:
