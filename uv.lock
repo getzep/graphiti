@@ -739,7 +739,11 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
+<<<<<<< HEAD
 version = "0.16.0"
+=======
+version = "0.15.0"
+>>>>>>> 0505d80 (fix: make falkordb support optional)
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -829,7 +833,11 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
+<<<<<<< HEAD
 provides-extras = ["anthropic", "groq", "google-genai", "falkordb", "voyageai", "sentence-transformers", "dev"]
+=======
+provides-extras = ["anthropic", "groq", "google-genai", "falkord-db", "dev"]
+>>>>>>> 0505d80 (fix: make falkordb support optional)
 
 [[package]]
 name = "groq"
