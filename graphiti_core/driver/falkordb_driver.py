@@ -80,7 +80,7 @@ class FalkorDriver(GraphDriver):
         username: str | None = None,
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
-        database: str = "default_db",
+        database: str = 'default_db',
     ):
         """
         Initialize the FalkorDB driver.

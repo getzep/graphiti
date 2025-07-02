@@ -226,9 +226,7 @@ class EntityEdge(Edge):
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
         """
-        records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, uuid=self.uuid, routing_='r')
 
         if len(records) == 0:
             raise EdgeNotFoundError(self.uuid)
@@ -340,9 +338,7 @@ class EntityEdge(Edge):
                                                         """
             + ENTITY_EDGE_RETURN
         )
-        records, _, _ = await driver.execute_query(
-            query, node_uuid=node_uuid, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, node_uuid=node_uuid, routing_='r')
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
