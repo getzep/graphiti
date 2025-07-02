@@ -14,7 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from falkordb import FalkorDB
-from neo4j import Neo4jDriver
+__all__ = []
 
-__all__ = ['Neo4jDriver', 'FalkorDB']
+try:
+    from graphiti_core.driver.falkordb_driver import FalkorDB
+    __all__.append('FalkorDB')
+    FALKORDB_AVAILABLE = True
+except ImportError: 
+    FALKORDB_AVAILABLE = False
+
+try:
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+    __all__.append('Neo4jDriver')
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
