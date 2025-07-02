@@ -539,7 +539,8 @@ async def community_fulltext_search(
             comm.group_id AS group_id, 
             comm.name AS name, 
             comm.created_at AS created_at, 
-            comm.summary AS summary
+            comm.summary AS summary,
+            comm.name_embedding AS name_embedding
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -589,7 +590,8 @@ async def community_similarity_search(
                comm.group_id AS group_id,
                comm.name AS name, 
                comm.created_at AS created_at, 
-               comm.summary AS summary
+               comm.summary AS summary,
+               comm.name_embedding AS name_embedding
            ORDER BY score DESC
            LIMIT $limit
         """
