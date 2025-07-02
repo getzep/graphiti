@@ -39,12 +39,16 @@ class Neo4jDriver(GraphDriver):
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         params = kwargs.pop('params', None)
+        # check if database_ is provided in kwargs, if not poulated it to retain compatibility
+        params.setdefault('database_', self._database)
+
         result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
 
         return result
 
-    def session(self, database: str) -> GraphDriverSession:
-        return self.client.session(database=database)  # type: ignore
+    def session(self, database: str | None = None) -> GraphDriverSession:
+        _database = database or self._database
+        return self.client.session(database=_database)  # type: ignore
 
     async def close(self) -> None:
         return await self.client.close()
