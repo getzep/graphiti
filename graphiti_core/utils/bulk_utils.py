@@ -68,14 +68,22 @@ CHUNK_SIZE = 10
 
 class RawEpisode(BaseModel):
     name: str
+    uuid: str | None = None
     content: str
     source_description: str
     source: EpisodeType
     reference_time: datetime
 
 
+class AddEpisodeConfig(BaseModel):
+    entity_types: dict[str, BaseModel] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, BaseModel] | None = None,
+    edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+
+
 async def retrieve_previous_episodes_bulk(
-    driver: GraphDriver, episodes: list[EpisodicNode]
+        driver: GraphDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -93,12 +101,12 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: GraphDriver,
-    episodic_nodes: list[EpisodicNode],
-    episodic_edges: list[EpisodicEdge],
-    entity_nodes: list[EntityNode],
-    entity_edges: list[EntityEdge],
-    embedder: EmbedderClient,
+        driver: GraphDriver,
+        episodic_nodes: list[EpisodicNode],
+        episodic_edges: list[EpisodicEdge],
+        entity_nodes: list[EntityNode],
+        entity_edges: list[EntityEdge],
+        embedder: EmbedderClient,
 ):
     session = driver.session(database=DEFAULT_DATABASE)
     try:
@@ -116,13 +124,13 @@ async def add_nodes_and_edges_bulk(
 
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: GraphDriverSession,
-    episodic_nodes: list[EpisodicNode],
-    episodic_edges: list[EpisodicEdge],
-    entity_nodes: list[EntityNode],
-    entity_edges: list[EntityEdge],
-    embedder: EmbedderClient,
-    driver: GraphDriver,
+        tx: GraphDriverSession,
+        episodic_nodes: list[EpisodicNode],
+        episodic_edges: list[EpisodicEdge],
+        entity_nodes: list[EntityNode],
+        entity_edges: list[EntityEdge],
+        embedder: EmbedderClient,
+        driver: GraphDriver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -177,10 +185,10 @@ async def add_nodes_and_edges_bulk_tx(
 
 
 async def extract_nodes_and_edges_bulk(
-    clients: GraphitiClients,
-    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-    entity_types: dict[str, BaseModel] | None = None,
-    excluded_entity_types: list[str] | None = None,
+        clients: GraphitiClients,
+        episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+        entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
 ) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
     extracted_nodes_bulk = await semaphore_gather(
         *[
@@ -224,16 +232,16 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-    driver: GraphDriver,
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
+        driver: GraphDriver,
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # Compress nodes
     nodes, uuid_map = node_name_match(extracted_nodes)
 
     compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
 
-    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
+    node_chunks = [nodes[i: i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
 
     existing_nodes_chunks: list[list[EntityNode]] = list(
         await semaphore_gather(
@@ -260,13 +268,13 @@ async def dedupe_nodes_bulk(
 
 
 async def dedupe_edges_bulk(
-    driver: GraphDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
+        driver: GraphDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
 ) -> list[EntityEdge]:
     # First compress edges
     compressed_edges = await compress_edges(llm_client, extracted_edges)
 
     edge_chunks = [
-        compressed_edges[i : i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
+        compressed_edges[i: i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
     ]
 
     relevant_edges_chunks: list[list[EntityEdge]] = list(
@@ -302,7 +310,7 @@ def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str
 
 
 async def compress_nodes(
-    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
+        llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
 ) -> tuple[list[EntityNode], dict[str, str]]:
     # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
     if len(nodes) == 0:
@@ -423,9 +431,9 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
 
 
 async def extract_edge_dates_bulk(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
+        llm_client: LLMClient,
+        extracted_edges: list[EntityEdge],
+        episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
 ) -> list[EntityEdge]:
     edges: list[EntityEdge] = []
     # confirm that all of our edges have at least one episode
