@@ -18,8 +18,15 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from falkordb import Graph as FalkorGraph  # type: ignore
-from falkordb.asyncio import FalkorDB  # type: ignore
+try:
+    from falkordb import Graph as FalkorGraph
+    from falkordb.asyncio import FalkorDB
+except ImportError:
+    # If falkordb is not installed, raise an ImportError
+    raise ImportError(
+        'falkordb is required for FalkorDriver. '
+        'Install it with: pip install graphiti-core[falkordb]'
+    ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.helpers import DEFAULT_DATABASE

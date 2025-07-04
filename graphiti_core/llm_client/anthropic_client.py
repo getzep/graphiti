@@ -21,9 +21,15 @@ import typing
 from json import JSONDecodeError
 from typing import Literal
 
-import anthropic
-from anthropic import AsyncAnthropic
-from anthropic.types import MessageParam, ToolChoiceParam, ToolUnionParam
+try:
+    import anthropic
+    from anthropic import AsyncAnthropic
+    from anthropic.types import MessageParam, ToolChoiceParam, ToolUnionParam
+except ImportError:
+    raise ImportError(
+        'anthropic is required for AnthropicClient. '
+        'Install it with: pip install graphiti-core[anthropic]'
+    ) from None
 from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message

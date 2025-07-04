@@ -14,8 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from typing import TYPE_CHECKING
+
 from .client import CrossEncoderClient
-from .gemini_reranker_client import GeminiRerankerClient
 from .openai_reranker_client import OpenAIRerankerClient
 
-__all__ = ['CrossEncoderClient', 'GeminiRerankerClient', 'OpenAIRerankerClient']
+if TYPE_CHECKING:
+    from .gemini_reranker_client import GeminiRerankerClient
+
+__all__ = ['CrossEncoderClient', 'OpenAIRerankerClient']
+
+# Optional imports
+try:
+    from .gemini_reranker_client import GeminiRerankerClient  # noqa: F401
+
+    __all__.append('GeminiRerankerClient')
+except ImportError:
+    pass

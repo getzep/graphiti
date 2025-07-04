@@ -18,9 +18,14 @@ import json
 import logging
 import typing
 
-import groq
-from groq import AsyncGroq
-from groq.types.chat import ChatCompletionMessageParam
+try:
+    import groq
+    from groq import AsyncGroq
+    from groq.types.chat import ChatCompletionMessageParam
+except ImportError:
+    raise ImportError(
+        'groq is required for GroqClient. Install it with: pip install graphiti-core[groq]'
+    ) from None
 from pydantic import BaseModel
 
 from ..prompts.models import Message

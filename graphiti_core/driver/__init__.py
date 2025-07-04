@@ -14,7 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from falkordb import FalkorDB
+from typing import TYPE_CHECKING
+
 from neo4j import Neo4jDriver
 
-__all__ = ['Neo4jDriver', 'FalkorDB']
+if TYPE_CHECKING:
+    from falkordb import FalkorDB
+
+__all__ = ['Neo4jDriver']
+
+# Optional imports
+try:
+    from falkordb import FalkorDB  # noqa: F401
+
+    __all__.append('FalkorDB')
+except ImportError:
+    pass
