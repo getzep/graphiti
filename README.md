@@ -137,7 +137,18 @@ or
 uv add graphiti-core
 ```
 
-You can also install optional LLM providers as extras:
+### Installing with FalkorDB Support
+
+If you plan to use FalkorDB as your graph database backend, install with the FalkorDB extra:
+
+```bash
+pip install graphiti-core[falkordb]
+
+# or with uv
+uv add graphiti-core[falkordb]
+```
+
+### You can also install optional LLM providers as extras:
 
 ```bash
 # Install with Anthropic support
@@ -151,6 +162,9 @@ pip install graphiti-core[google-genai]
 
 # Install with multiple providers
 pip install graphiti-core[anthropic,groq,google-genai]
+
+# Install with FalkorDB and LLM providers
+pip install graphiti-core[falkordb,anthropic,google-genai]
 ```
 
 ## Quick Start
