@@ -15,8 +15,18 @@ limitations under the License.
 """
 
 import asyncio
+from typing import TYPE_CHECKING
 
-from sentence_transformers import CrossEncoder
+if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+else:
+    try:
+        from sentence_transformers import CrossEncoder
+    except ImportError:
+        raise ImportError(
+            'sentence-transformers is required for BGERerankerClient. '
+            'Install it with: pip install graphiti-core[sentence-transformers]'
+        ) from None
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 

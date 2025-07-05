@@ -15,9 +15,21 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from google import genai  # type: ignore
-from google.genai import types  # type: ignore
+if TYPE_CHECKING:
+    from google import genai
+    from google.genai import types
+else:
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        raise ImportError(
+            'google-genai is required for GeminiEmbedder. '
+            'Install it with: pip install graphiti-core[google-genai]'
+        ) from None
+
 from pydantic import Field
 
 from .client import EmbedderClient, EmbedderConfig

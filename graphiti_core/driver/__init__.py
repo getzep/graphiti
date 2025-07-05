@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from falkordb import FalkorDB
 from neo4j import Neo4jDriver
 
-__all__ = ['Neo4jDriver', 'FalkorDB']
+__all__ = ['Neo4jDriver']
