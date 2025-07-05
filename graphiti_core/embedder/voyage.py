@@ -15,14 +15,19 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-try:
+if TYPE_CHECKING:
     import voyageai
-except ImportError:
-    raise ImportError(
-        'voyageai is required for VoyageAIEmbedderClient. '
-        'Install it with: pip install graphiti-core[voyageai]'
-    ) from None
+else:
+    try:
+        import voyageai
+    except ImportError:
+        raise ImportError(
+            'voyageai is required for VoyageAIEmbedderClient. '
+            'Install it with: pip install graphiti-core[voyageai]'
+        ) from None
+
 from pydantic import Field
 
 from .client import EmbedderClient, EmbedderConfig

@@ -17,16 +17,29 @@ limitations under the License.
 import json
 import logging
 import typing
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from google import genai  # type: ignore
-from google.genai import types  # type: ignore
 from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
+
+if TYPE_CHECKING:
+    from google import genai
+    from google.genai import types
+else:
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        # If gemini client is not installed, raise an ImportError
+        raise ImportError(
+            'google-genai is required for GeminiClient. '
+            'Install it with: pip install graphiti-core[google-genai]'
+        ) from None
+
 
 logger = logging.getLogger(__name__)
 

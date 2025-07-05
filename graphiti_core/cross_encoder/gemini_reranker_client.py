@@ -30,8 +30,10 @@ else:
         from google import genai
         from google.genai import types
     except ImportError:
-        genai = None
-        types = None
+        raise ImportError(
+            'google-genai is required for GeminiRerankerClient. '
+            'Install it with: pip install graphiti-core[google-genai]'
+        ) from None
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +57,6 @@ class GeminiRerankerClient(CrossEncoderClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
-        if genai is None:
-            raise ImportError(
-                'google-genai is required for GeminiRerankerClient. '
-                'Install it with: pip install graphiti-core[google-genai]'
-            )
 
         if config is None:
             config = LLMConfig()
