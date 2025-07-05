@@ -29,7 +29,7 @@ Repository = "https://github.com/getzep/graphiti"
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
-falkord-db = ["falkordb>=1.1.2,<2.0.0"]
+falkordb = ["falkordb>=1.1.2,<2.0.0"]
 dev = [
     "pyright>=1.1.380",
     "groq>=0.2.0",
