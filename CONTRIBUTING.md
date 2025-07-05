@@ -116,7 +116,7 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 We use several tools to maintain code quality:
 
 - Ruff for linting and formatting
-- PyRight for static type checking
+- Pyright for static type checking
 - Pytest for testing
 
 Before submitting a pull request, please run:
