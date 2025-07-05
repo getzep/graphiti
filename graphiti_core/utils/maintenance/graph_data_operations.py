@@ -21,7 +21,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date, semaphore_gather
+from graphiti_core.helpers import parse_db_date, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 
 EPISODE_WINDOW_LEN = 3
@@ -35,7 +35,6 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
             """
         SHOW INDEXES YIELD name
         """,
-            database_=DEFAULT_DATABASE,
         )
         index_names = [record['name'] for record in records]
         await semaphore_gather(
@@ -43,7 +42,6 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
                 driver.execute_query(
                     """DROP INDEX $name""",
                     name=name,
-                    database_=DEFAULT_DATABASE,
                 )
                 for name in index_names
             ]
@@ -58,7 +56,6 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
         *[
             driver.execute_query(
                 query,
-                database_=DEFAULT_DATABASE,
             )
             for query in index_queries
         ]
@@ -66,7 +63,7 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
-    async with driver.session(database=DEFAULT_DATABASE) as session:
+    async with driver.session() as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
@@ -134,7 +131,6 @@ async def retrieve_episodes(
         source=source.name if source is not None else None,
         num_episodes=last_n,
         group_ids=group_ids,
-        database_=DEFAULT_DATABASE,
     )
 
     episodes = [

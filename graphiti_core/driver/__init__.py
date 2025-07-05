@@ -14,7 +14,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from falkordb import FalkorDB
-from neo4j import Neo4jDriver
+from logging import getLogger
 
-__all__ = ['Neo4jDriver', 'FalkorDB']
+logger = getLogger(__name__)
+
+__all__ = []
+
+FALKORDB_AVAILABLE = False
+NEO4J_AVAILABLE = False
+
+try:
+    # ruff: noqa: F401
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    __all__.append('FalkorDriver')
+    FALKORDB_AVAILABLE = True
+except ImportError:
+    logger.debug(
+        "FalkorDB driver not available. Ensure 'falkordb' package is installed.",
+        exc_info=True,
+    )
+
+try:
+    # ruff: noqa: F401
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+    __all__.append('Neo4jDriver')
+    NEO4J_AVAILABLE = True
+except ImportError:
+    logger.debug(
+        "Neo4j driver not available. Ensure 'neo4j' package is installed.",
+        exc_info=True,
+    )

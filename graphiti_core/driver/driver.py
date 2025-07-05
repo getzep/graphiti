@@ -19,8 +19,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from typing import Any
 
-from graphiti_core.helpers import DEFAULT_DATABASE
-
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +52,7 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def session(self, database: str) -> GraphDriverSession:
+    def session(self, database: str | None = None) -> GraphDriverSession:
         raise NotImplementedError()
 
     @abstractmethod
@@ -62,5 +60,5 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> Coroutine:
+    def delete_all_indexes(self, database_: str | None = None) -> Coroutine:
         raise NotImplementedError()

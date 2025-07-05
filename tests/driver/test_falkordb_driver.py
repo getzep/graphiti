@@ -21,8 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from graphiti_core.helpers import DEFAULT_DATABASE
-
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
 
@@ -83,13 +81,13 @@ class TestFalkorDriver:
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_get_graph_with_none_defaults_to_default_database(self):
-        """Test _get_graph with None defaults to DEFAULT_DATABASE."""
+        """Test _get_graph with None defaults to default_db."""
         mock_graph = MagicMock()
         self.mock_client.select_graph.return_value = mock_graph
 
         result = self.driver._get_graph(None)
 
-        self.mock_client.select_graph.assert_called_once_with(DEFAULT_DATABASE)
+        self.mock_client.select_graph.assert_called_once_with('default_db')
         assert result is mock_graph
 
     @pytest.mark.asyncio
@@ -184,7 +182,7 @@ class TestFalkorDriver:
         session = self.driver.session(None)
 
         assert isinstance(session, FalkorDriverSession)
-        self.mock_client.select_graph.assert_called_once_with(DEFAULT_DATABASE)
+        self.mock_client.select_graph.assert_called_once_with('default_db')
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
