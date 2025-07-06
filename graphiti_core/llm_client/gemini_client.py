@@ -76,6 +76,7 @@ class GeminiClient(LLMClient):
         cache: bool = False,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         thinking_config: types.ThinkingConfig | None = None,
+        client: 'genai.Client | None' = None,
     ):
         """
         Initialize the GeminiClient with the provided configuration, cache setting, and optional thinking config.
@@ -85,7 +86,7 @@ class GeminiClient(LLMClient):
             cache (bool): Whether to use caching for responses. Defaults to False.
             thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
                 Only use with models that support thinking (gemini-2.5+). Defaults to None.
-
+            client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
         if config is None:
             config = LLMConfig()
@@ -93,10 +94,12 @@ class GeminiClient(LLMClient):
         super().__init__(config, cache)
 
         self.model = config.model
-        # Configure the Gemini API
-        self.client = genai.Client(
-            api_key=config.api_key,
-        )
+
+        if client is None:
+            self.client = genai.Client(api_key=config.api_key)
+        else:
+            self.client = client
+
         self.max_tokens = max_tokens
         self.thinking_config = thinking_config
 

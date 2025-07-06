@@ -41,6 +41,9 @@ DEFAULT_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
 
 
 class GeminiRerankerClient(CrossEncoderClient):
+    """
+    Google Gemini Reranker Client
+    """
     def __init__(
         self,
         config: LLMConfig | None = None,
@@ -57,7 +60,6 @@ class GeminiRerankerClient(CrossEncoderClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
-
         if config is None:
             config = LLMConfig()
 

@@ -46,16 +46,27 @@ class GeminiEmbedder(EmbedderClient):
     """
     Google Gemini Embedder Client
     """
+    def __init__(
+        self,
+        config: GeminiEmbedderConfig | None = None,
+        client: 'genai.Client | None' = None,
+    ):
+        """
+        Initialize the GeminiEmbedder with the provided configuration and client.
 
-    def __init__(self, config: GeminiEmbedderConfig | None = None):
+        Args:
+            config (GeminiEmbedderConfig | None): The configuration for the GeminiEmbedder, including API key, model, base URL, temperature, and max tokens.
+            client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
+        """
         if config is None:
             config = GeminiEmbedderConfig()
+
         self.config = config
 
-        # Configure the Gemini API
-        self.client = genai.Client(
-            api_key=config.api_key,
-        )
+        if client is None:
+            self.client = genai.Client(api_key=config.api_key)
+        else:
+            self.client = client
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
