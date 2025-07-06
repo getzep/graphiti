@@ -44,7 +44,7 @@ else:
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gemini-2.5-flash'
-DEFAULT_SMALL_MODEL = 'models/gemini-2.5-flash-lite-preview-06-17'
+DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
 
 
 class GeminiClient(LLMClient):
