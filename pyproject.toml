@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.15.0"
+version = "0.15.1"
 authors = [
     { "name" = "Paul Paliychuk", "email" = "paul@getzep.com" },
     { "name" = "Preston Rasmussen", "email" = "preston@getzep.com" },
@@ -29,12 +29,15 @@ Repository = "https://github.com/getzep/graphiti"
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
-falkord-db = ["falkordb>=1.1.2,<2.0.0"]
+falkordb = ["falkordb>=1.1.2,<2.0.0"]
+voyageai = ["voyageai>=0.2.3"]
+sentence-transformers = ["sentence-transformers>=3.2.1"]
 dev = [
     "pyright>=1.1.380",
     "groq>=0.2.0",
     "anthropic>=0.49.0",
     "google-genai>=1.8.0",
+    "falkordb>=1.1.2,<2.0.0",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "diskcache-stubs>=5.6.3.6.20240818",

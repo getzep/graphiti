@@ -15,9 +15,21 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from google import genai  # type: ignore
-from google.genai import types  # type: ignore
+if TYPE_CHECKING:
+    from google import genai
+    from google.genai import types
+else:
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        raise ImportError(
+            'google-genai is required for GeminiEmbedder. '
+            'Install it with: pip install graphiti-core[google-genai]'
+        ) from None
+
 from pydantic import Field
 
 from .client import EmbedderClient, EmbedderConfig
@@ -34,16 +46,27 @@ class GeminiEmbedder(EmbedderClient):
     """
     Google Gemini Embedder Client
     """
+    def __init__(
+        self,
+        config: GeminiEmbedderConfig | None = None,
+        client: 'genai.Client | None' = None,
+    ):
+        """
+        Initialize the GeminiEmbedder with the provided configuration and client.
 
-    def __init__(self, config: GeminiEmbedderConfig | None = None):
+        Args:
+            config (GeminiEmbedderConfig | None): The configuration for the GeminiEmbedder, including API key, model, base URL, temperature, and max tokens.
+            client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
+        """
         if config is None:
             config = GeminiEmbedderConfig()
+
         self.config = config
 
-        # Configure the Gemini API
-        self.client = genai.Client(
-            api_key=config.api_key,
-        )
+        if client is None:
+            self.client = genai.Client(api_key=config.api_key)
+        else:
+            self.client = client
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]

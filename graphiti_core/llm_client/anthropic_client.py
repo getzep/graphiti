@@ -19,17 +19,30 @@ import logging
 import os
 import typing
 from json import JSONDecodeError
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import anthropic
-from anthropic import AsyncAnthropic
-from anthropic.types import MessageParam, ToolChoiceParam, ToolUnionParam
 from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+
+if TYPE_CHECKING:
+    import anthropic
+    from anthropic import AsyncAnthropic
+    from anthropic.types import MessageParam, ToolChoiceParam, ToolUnionParam
+else:
+    try:
+        import anthropic
+        from anthropic import AsyncAnthropic
+        from anthropic.types import MessageParam, ToolChoiceParam, ToolUnionParam
+    except ImportError:
+        raise ImportError(
+            'anthropic is required for AnthropicClient. '
+            'Install it with: pip install graphiti-core[anthropic]'
+        ) from None
+
 
 logger = logging.getLogger(__name__)
 

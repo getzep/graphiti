@@ -17,16 +17,29 @@ limitations under the License.
 import json
 import logging
 import typing
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from google import genai  # type: ignore
-from google.genai import types  # type: ignore
 from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
+
+if TYPE_CHECKING:
+    from google import genai
+    from google.genai import types
+else:
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        # If gemini client is not installed, raise an ImportError
+        raise ImportError(
+            'google-genai is required for GeminiClient. '
+            'Install it with: pip install graphiti-core[google-genai]'
+        ) from None
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +76,7 @@ class GeminiClient(LLMClient):
         cache: bool = False,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         thinking_config: types.ThinkingConfig | None = None,
+        client: 'genai.Client | None' = None,
     ):
         """
         Initialize the GeminiClient with the provided configuration, cache setting, and optional thinking config.
@@ -72,7 +86,7 @@ class GeminiClient(LLMClient):
             cache (bool): Whether to use caching for responses. Defaults to False.
             thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
                 Only use with models that support thinking (gemini-2.5+). Defaults to None.
-
+            client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
         if config is None:
             config = LLMConfig()
@@ -80,10 +94,12 @@ class GeminiClient(LLMClient):
         super().__init__(config, cache)
 
         self.model = config.model
-        # Configure the Gemini API
-        self.client = genai.Client(
-            api_key=config.api_key,
-        )
+
+        if client is None:
+            self.client = genai.Client(api_key=config.api_key)
+        else:
+            self.client = client
+
         self.max_tokens = max_tokens
         self.thinking_config = thinking_config
 

@@ -17,10 +17,21 @@ limitations under the License.
 import json
 import logging
 import typing
+from typing import TYPE_CHECKING
 
-import groq
-from groq import AsyncGroq
-from groq.types.chat import ChatCompletionMessageParam
+if TYPE_CHECKING:
+    import groq
+    from groq import AsyncGroq
+    from groq.types.chat import ChatCompletionMessageParam
+else:
+    try:
+        import groq
+        from groq import AsyncGroq
+        from groq.types.chat import ChatCompletionMessageParam
+    except ImportError:
+        raise ImportError(
+            'groq is required for GroqClient. Install it with: pip install graphiti-core[groq]'
+        ) from None
 from pydantic import BaseModel
 
 from ..prompts.models import Message
