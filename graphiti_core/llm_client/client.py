@@ -168,17 +168,18 @@ class LLMClient(ABC):
 
         return response
 
-    def _log_failed_generation(self, messages: list[Message], output: str | None, exception: Exception) -> None:
+    def _get_failed_generation_log(self, messages: list[Message], output: str | None) -> str:
         """
         Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
         """
-        logger.error("🦀 LLM generation failed after all retries.")
-        logger.error(f"Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}")
+        log = ""
+        log += "🦀 LLM generation failed after all retries.\n"
+        log += f"Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n"
         if output is not None:
             if len(output) > 4000:
-                logger.error(f"Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}")
+                log += f"Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}\n"
             else:
-                logger.error(f"Raw output: {output}")
+                log += f"Raw output: {output}\n"
         else:
-            logger.error("No raw output available")
-        logger.error(f"Exception: {exception}")
+            log += "No raw output available"
+        return log

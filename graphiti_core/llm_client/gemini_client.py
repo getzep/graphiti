@@ -256,10 +256,7 @@ class GeminiClient(LLMClient):
                     return validated_model.model_dump()
                 except Exception as e:
                     if raw_output:
-                        if len(raw_output) > 1000:
-                            logger.error(f"Raw LLM output [len {len(raw_output)}] (truncated): {raw_output[:500]} ... (truncated) {raw_output[-500:]}")
-                        else:
-                            logger.error(f"Raw LLM output [len {len(raw_output)}]: {raw_output}")
+                        logger.error(self._get_failed_generation_log(gemini_messages, raw_output))
                         # Try to salvage
                         salvaged = self.salvage_json(raw_output)
                         if salvaged is not None:
@@ -353,6 +350,7 @@ class GeminiClient(LLMClient):
                 )
 
                 if retry_count >= self.MAX_RETRIES:
-                    self._log_failed_generation(messages, last_output, last_error)
+                    logger.error(self._get_failed_generation_log(messages, last_output))
                     logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+                    logger.error(last_error)
                     raise last_error or Exception('Max retries exceeded with no specific error')
