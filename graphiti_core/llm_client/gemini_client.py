@@ -16,9 +16,9 @@ limitations under the License.
 
 import json
 import logging
+import re
 import typing
 from typing import TYPE_CHECKING, ClassVar
-import re
 
 from pydantic import BaseModel
 
@@ -147,8 +147,21 @@ class GeminiClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
-    def salvage_json(self, raw_output):
-        # Try to find the last closing bracket for an array or object
+    def salvage_json(self, raw_output: str) -> dict[str, typing.Any] | None:
+        """
+        Attempt to salvage a JSON object if the raw output is truncated.
+
+        This is accomplished by looking for the last closing bracket for an array or object.
+        If found, it will try to load the JSON object from the raw output.
+        If the JSON object is not valid, it will return None.
+
+        Args:
+            raw_output (str): The raw output from the LLM.
+
+        Returns:
+            dict[str, typing.Any]: The salvaged JSON object.
+            None: If no salvage is possible.
+        """
         if not raw_output:
             return None
         # Try to salvage a JSON array
@@ -280,7 +293,7 @@ class GeminiClient(LLMClient):
                 raise RateLimitError from e
 
             logger.error(f'Error in generating LLM response: {e}')
-            raise
+            raise Exception from e
 
     async def generate_response(
         self,
@@ -322,16 +335,16 @@ class GeminiClient(LLMClient):
                 )
                 last_output = response.get('content') if isinstance(response, dict) and 'content' in response else None
                 return response
-            except RateLimitError:
+            except RateLimitError as e:
                 # Rate limit errors should not trigger retries (fail fast)
-                raise
+                raise e
             except Exception as e:
                 last_error = e
 
                 # Check if this is a safety block - these typically shouldn't be retried
                 if 'safety' in str(e).lower() or 'blocked' in str(e).lower():
                     logger.warning(f'Content blocked by safety filters: {e}')
-                    raise
+                    raise Exception(f'Content blocked by safety filters: {e}') from e
 
                 retry_count += 1
 
@@ -355,4 +368,4 @@ class GeminiClient(LLMClient):
                     logger.error(self._get_failed_generation_log(messages, last_output))
                     logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
                     logger.error(last_error)
-                    raise last_error or Exception('Max retries exceeded with no specific error')
+                    raise e from e
