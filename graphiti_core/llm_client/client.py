@@ -173,7 +173,6 @@ class LLMClient(ABC):
         Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
         """
         log = ""
-        log += "🦀 LLM generation failed after all retries.\n"
         log += f"Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n"
         if output is not None:
             if len(output) > 4000:
