@@ -162,14 +162,15 @@ class GeminiEmbedder(EmbedderClient):
                             config=types.EmbedContentConfig(output_dimensionality=self.config.embedding_dim),
                         )
                         
-                        if not result.embeddings or len(result.embeddings) == 0 or not result.embeddings[0].values:
+                        if not result.embeddings or len(result.embeddings) == 0:
                             raise ValueError('No embeddings returned from Gemini API')
+                        if not result.embeddings[0].values:
+                            raise ValueError('Empty embedding values returned')
                             
                         all_embeddings.append(result.embeddings[0].values)
                         
                     except Exception as individual_error:
                         logger.error(f"Failed to embed individual item: {individual_error}")
-                        # Add a zero vector as fallback (or raise the error)
                         raise individual_error
         
         return all_embeddings

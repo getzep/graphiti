@@ -18,6 +18,7 @@ import json
 import logging
 import typing
 from typing import TYPE_CHECKING, ClassVar
+import re
 
 from pydantic import BaseModel
 
@@ -146,6 +147,26 @@ class GeminiClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
+    def salvage_json(self, raw_output):
+        # Try to find the last closing bracket for an array or object
+        if not raw_output:
+            return None
+        # Try to salvage a JSON array
+        array_match = re.search(r'\]\s*$', raw_output)
+        if array_match:
+            try:
+                return json.loads(raw_output[:array_match.end()])
+            except Exception:
+                pass
+        # Try to salvage a JSON object
+        obj_match = re.search(r'\}\s*$', raw_output)
+        if obj_match:
+            try:
+                return json.loads(raw_output[:obj_match.end()])
+            except Exception:
+                pass
+        return None
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -216,6 +237,9 @@ class GeminiClient(LLMClient):
                 config=generation_config,
             )
 
+            # Always capture the raw output for debugging
+            raw_output = getattr(response, 'text', None)
+
             # Check for safety and prompt blocks
             self._check_safety_blocks(response)
             self._check_prompt_blocks(response)
@@ -223,18 +247,28 @@ class GeminiClient(LLMClient):
             # If this was a structured output request, parse the response into the Pydantic model
             if response_model is not None:
                 try:
-                    if not response.text:
+                    if not raw_output:
                         raise ValueError('No response text')
 
-                    validated_model = response_model.model_validate(json.loads(response.text))
+                    validated_model = response_model.model_validate(json.loads(raw_output))
 
                     # Return as a dictionary for API consistency
                     return validated_model.model_dump()
                 except Exception as e:
+                    if raw_output:
+                        if len(raw_output) > 1000:
+                            logger.error(f"Raw LLM output [len {len(raw_output)}] (truncated): {raw_output[:500]} ... (truncated) {raw_output[-500:]}")
+                        else:
+                            logger.error(f"Raw LLM output [len {len(raw_output)}]: {raw_output}")
+                        # Try to salvage
+                        salvaged = self.salvage_json(raw_output)
+                        if salvaged is not None:
+                            logger.warning("Salvaged partial JSON from truncated/malformed output.")
+                            return salvaged
                     raise Exception(f'Failed to parse structured response: {e}') from e
 
             # Otherwise, return the response text as a dictionary
-            return {'content': response.text}
+            return {'content': raw_output}
 
         except Exception as e:
             # Check if it's a rate limit error based on Gemini API error codes
@@ -275,6 +309,7 @@ class GeminiClient(LLMClient):
 
         retry_count = 0
         last_error = None
+        last_output = None
 
         # Add multilingual extraction instructions
         messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
@@ -287,6 +322,7 @@ class GeminiClient(LLMClient):
                     max_tokens=max_tokens,
                     model_size=model_size,
                 )
+                last_output = response.get('content') if isinstance(response, dict) and 'content' in response else None
                 return response
             except RateLimitError:
                 # Rate limit errors should not trigger retries (fail fast)
@@ -297,11 +333,6 @@ class GeminiClient(LLMClient):
                 # Check if this is a safety block - these typically shouldn't be retried
                 if 'safety' in str(e).lower() or 'blocked' in str(e).lower():
                     logger.warning(f'Content blocked by safety filters: {e}')
-                    raise
-
-                # Don't retry if we've hit the max retries
-                if retry_count >= self.MAX_RETRIES:
-                    logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
                     raise
 
                 retry_count += 1
@@ -321,5 +352,7 @@ class GeminiClient(LLMClient):
                     f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
                 )
 
-        # If we somehow get here, raise the last error
-        raise last_error or Exception('Max retries exceeded with no specific error')
+                if retry_count >= self.MAX_RETRIES:
+                    self._log_failed_generation(messages, last_output, last_error)
+                    logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+                    raise last_error or Exception('Max retries exceeded with no specific error')

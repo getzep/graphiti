@@ -167,3 +167,18 @@ class LLMClient(ABC):
             self.cache_dir.set(cache_key, response)
 
         return response
+
+    def _log_failed_generation(self, messages: list[Message], output: str | None, exception: Exception) -> None:
+        """
+        Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
+        """
+        logger.error("🦀 LLM generation failed after all retries.")
+        logger.error(f"Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}")
+        if output is not None:
+            if len(output) > 4000:
+                logger.error(f"Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}")
+            else:
+                logger.error(f"Raw output: {output}")
+        else:
+            logger.error("No raw output available")
+        logger.error(f"Exception: {exception}")
