@@ -342,7 +342,8 @@ class GeminiClient(LLMClient):
                 last_error = e
 
                 # Check if this is a safety block - these typically shouldn't be retried
-                if 'safety' in str(e).lower() or 'blocked' in str(e).lower():
+                error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
+                if 'safety' in error_text.lower() or 'blocked' in error_text.lower():
                     logger.warning(f'Content blocked by safety filters: {e}')
                     raise Exception(f'Content blocked by safety filters: {e}') from e
 
