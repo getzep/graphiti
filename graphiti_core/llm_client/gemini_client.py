@@ -325,7 +325,7 @@ class GeminiClient(LLMClient):
         # Add multilingual extraction instructions
         messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
 
-        while retry_count <= self.MAX_RETRIES:
+        while retry_count < self.MAX_RETRIES:
             try:
                 response = await self._generate_response(
                     messages=messages,
@@ -363,9 +363,8 @@ class GeminiClient(LLMClient):
                     f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
                 )
 
-                if retry_count >= self.MAX_RETRIES:
-                    logger.error("🦀 LLM generation failed and retries are exhausted.")
-                    logger.error(self._get_failed_generation_log(messages, last_output))
-                    logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
-                    logger.error(last_error)
-                    raise e from e
+        # If we exit the loop without returning, all retries are exhausted
+        logger.error("🦀 LLM generation failed and retries are exhausted.")
+        logger.error(self._get_failed_generation_log(messages, last_output))
+        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
+        raise last_error or Exception("Max retries exceeded")
