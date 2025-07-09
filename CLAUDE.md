@@ -24,7 +24,7 @@ uv sync --extra dev
 # Format code (ruff import sorting + formatting)
 make format
 
-# Lint code (ruff + mypy type checking)
+# Lint code (ruff + pyright type checking)
 make lint
 
 # Run tests
@@ -111,7 +111,8 @@ docker-compose up
 - Use Ruff for formatting and linting (configured in pyproject.toml)
 - Line length: 100 characters
 - Quote style: single quotes
-- Type checking with MyPy is enforced
+- Type checking with Pyright is enforced
+- Main project uses `typeCheckingMode = "basic"`, server uses `typeCheckingMode = "standard"`
 
 ### Testing Requirements
 
