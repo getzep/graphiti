@@ -11,3 +11,9 @@ dependencies = [
     "azure-identity>=1.21.0",
     "graphiti-core",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mcp>=1.9.4",
+]
