@@ -28,10 +28,9 @@ from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+from .provider_defaults import get_provider_defaults
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = 'gpt-4.1-mini'
 
 
 class OpenAIGenericClient(LLMClient):
@@ -99,8 +98,9 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
+            model = self.model or get_provider_defaults('openai').model
             response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
+                model=model,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,

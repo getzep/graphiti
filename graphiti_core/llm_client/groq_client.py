@@ -38,10 +38,10 @@ from ..prompts.models import Message
 from .client import LLMClient
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
+from .provider_defaults import get_provider_defaults
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'llama-3.1-70b-versatile'
 DEFAULT_MAX_TOKENS = 2048
 
 
@@ -69,8 +69,9 @@ class GroqClient(LLMClient):
             elif m.role == 'system':
                 msgs.append({'role': 'system', 'content': m.content})
         try:
+            model = self.model or get_provider_defaults('groq').model
             response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
+                model=model,
                 messages=msgs,
                 temperature=self.temperature,
                 max_tokens=max_tokens or self.max_tokens,

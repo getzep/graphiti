@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
+from ..llm_client.provider_defaults import get_provider_defaults
 from .client import CrossEncoderClient
 
 if TYPE_CHECKING:
@@ -36,8 +37,6 @@ else:
         ) from None
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
 
 
 class GeminiRerankerClient(CrossEncoderClient):
@@ -103,7 +102,7 @@ Provide only a number between 0 and 100 (no explanation, just the number):"""
             responses = await semaphore_gather(
                 *[
                     self.client.aio.models.generate_content(
-                        model=self.config.model or DEFAULT_MODEL,
+                        model=self.config.model or get_provider_defaults('gemini').model,
                         contents=prompt_messages,  # type: ignore
                         config=types.GenerateContentConfig(
                             system_instruction='You are an expert at rating passage relevance. Respond with only a number from 0-100.',

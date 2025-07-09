@@ -27,6 +27,7 @@ from ..prompts.models import Message
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+from .provider_defaults import get_provider_defaults
 
 if TYPE_CHECKING:
     import anthropic
@@ -61,8 +62,6 @@ AnthropicModel = Literal[
     'claude-2.1',
     'claude-2.0',
 ]
-
-DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
 
 
 class AnthropicClient(LLMClient):
@@ -99,7 +98,7 @@ class AnthropicClient(LLMClient):
             config.max_tokens = max_tokens
 
         if config.model is None:
-            config.model = DEFAULT_MODEL
+            config.model = get_provider_defaults('anthropic').model
 
         super().__init__(config, cache)
         # Explicitly set the instance model to the config model to prevent type checking errors

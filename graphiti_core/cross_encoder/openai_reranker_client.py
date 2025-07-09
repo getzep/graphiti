@@ -23,12 +23,11 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, OpenAIClient, RateLimitError
+from ..llm_client.provider_defaults import get_provider_defaults
 from ..prompts import Message
 from .client import CrossEncoderClient
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = 'gpt-4.1-nano'
 
 
 class OpenAIRerankerClient(CrossEncoderClient):
@@ -84,7 +83,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
             responses = await semaphore_gather(
                 *[
                     self.client.chat.completions.create(
-                        model=DEFAULT_MODEL,
+                        model=self.config.model or get_provider_defaults('openai').model,
                         messages=openai_messages,
                         temperature=0,
                         max_tokens=1,

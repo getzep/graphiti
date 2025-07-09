@@ -28,11 +28,9 @@ from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+from .provider_defaults import get_model_for_size
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = 'gpt-4.1-mini'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
 
 
 class BaseOpenAIClient(LLMClient):
@@ -100,10 +98,12 @@ class BaseOpenAIClient(LLMClient):
 
     def _get_model_for_size(self, model_size: ModelSize) -> str:
         """Get the appropriate model name based on the requested size."""
-        if model_size == ModelSize.small:
-            return self.small_model or DEFAULT_SMALL_MODEL
-        else:
-            return self.model or DEFAULT_MODEL
+        return get_model_for_size(
+            provider='openai',
+            model_size=model_size.value,
+            user_model=self.model,
+            user_small_model=self.small_model
+        )
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation."""

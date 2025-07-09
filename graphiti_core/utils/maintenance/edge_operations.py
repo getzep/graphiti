@@ -32,6 +32,7 @@ from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
+from graphiti_core.llm_client.provider_defaults import get_extract_edges_max_tokens_default
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
@@ -114,7 +115,7 @@ async def extract_edges(
 ) -> list[EntityEdge]:
     start = time()
 
-    extract_edges_max_tokens = 16384
+    extract_edges_max_tokens = get_extract_edges_max_tokens_default()
     llm_client = clients.llm_client
 
     edge_type_signature_map: dict[str, tuple[str, str]] = {

@@ -25,6 +25,7 @@ from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
+from .provider_defaults import get_model_for_size
 
 if TYPE_CHECKING:
     from google import genai
@@ -42,9 +43,6 @@ else:
 
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = 'gemini-2.5-flash'
-DEFAULT_SMALL_MODEL = 'models/gemini-2.5-flash-lite-preview-06-17'
 
 
 class GeminiClient(LLMClient):
@@ -141,10 +139,12 @@ class GeminiClient(LLMClient):
 
     def _get_model_for_size(self, model_size: ModelSize) -> str:
         """Get the appropriate model name based on the requested size."""
-        if model_size == ModelSize.small:
-            return self.small_model or DEFAULT_SMALL_MODEL
-        else:
-            return self.model or DEFAULT_MODEL
+        return get_model_for_size(
+            provider='gemini',
+            model_size=model_size.value,
+            user_model=self.model,
+            user_small_model=self.small_model
+        )
 
     async def _generate_response(
         self,
