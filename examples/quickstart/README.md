@@ -41,6 +41,9 @@ export NEO4J_PASSWORD=password
 
 # Optional FalkorDB connection parameters (defaults shown)
 export FALKORDB_URI=falkor://localhost:6379
+
+# Database configuration (required for Neo4j 5+)
+export DEFAULT_DATABASE=neo4j
 ```
 
 3. Run the example:
@@ -70,6 +73,26 @@ After running this example, you can:
 3. Experiment with different center nodes for graph-distance-based reranking
 4. Try other predefined search recipes from `graphiti_core.search.search_config_recipes`
 5. Explore the more advanced examples in the other directories
+
+## Troubleshooting
+
+### "Graph not found: default_db" Error
+
+If you encounter the error `Neo.ClientError.Database.DatabaseNotFound: Graph not found: default_db`, this typically occurs with Neo4j 5+ where the default database name is `neo4j` instead of `default_db`.
+
+**Solution:**
+Set the `DEFAULT_DATABASE` environment variable to `neo4j`:
+
+```bash
+export DEFAULT_DATABASE=neo4j
+```
+
+Or add it to your `.env` file:
+```
+DEFAULT_DATABASE=neo4j
+```
+
+This tells Graphiti to use the correct database name for your Neo4j version.
 
 ## Understanding the Output
 
