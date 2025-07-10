@@ -279,7 +279,7 @@ async def edge_search(
 
     if config.reranker == EdgeReranker.episode_mentions:
         for edge in reranked_edges:
-            edge.score = float(len(edge.episodes))
+            edge.score = float(len(edge.episodes or []))
         reranked_edges.sort(reverse=True, key=lambda edge: edge.score or 0.0)
 
     return reranked_edges[:limit]
