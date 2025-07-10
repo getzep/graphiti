@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.nodes import EpisodeType
+from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -75,21 +77,41 @@ async def main():
     messages = parse_podcast_messages()
     group_id = str(uuid4())
 
-    for i, message in enumerate(messages[3:14]):
-        episodes = await client.retrieve_episodes(message.actual_timestamp, 3, group_ids=[group_id])
-        episode_uuids = [episode.uuid for episode in episodes]
-
-        await client.add_episode(
-            name=f'Message {i}',
-            episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
-            reference_time=message.actual_timestamp,
-            source_description='Podcast Transcript',
-            group_id=group_id,
-            entity_types={'Person': Person},
-            edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
-            edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
-            previous_episode_uuids=episode_uuids,
+    raw_episodes: list[RawEpisode] = []
+    for i, message in enumerate(messages[3:7]):
+        raw_episodes.append(
+            RawEpisode(
+                name=f'Message {i}',
+                content=f'{message.speaker_name} ({message.role}): {message.content}',
+                reference_time=message.actual_timestamp,
+                source=EpisodeType.message,
+                source_description='Podcast Transcript',
+            )
         )
+
+    await client.add_episode_bulk(
+        raw_episodes,
+        group_id=group_id,
+        entity_types={'Person': Person},
+        edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
+        edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
+    )
+
+    # for i, message in enumerate(messages[3:14]):
+    #     episodes = await client.retrieve_episodes(message.actual_timestamp, 3, group_ids=[group_id])
+    #     episode_uuids = [episode.uuid for episode in episodes]
+    #
+    #     await client.add_episode(
+    #         name=f'Message {i}',
+    #         episode_body=f'{message.speaker_name} ({message.role}): {message.content}',
+    #         reference_time=message.actual_timestamp,
+    #         source_description='Podcast Transcript',
+    #         group_id=group_id,
+    #         entity_types={'Person': Person},
+    #         edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
+    #         edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
+    #         previous_episode_uuids=episode_uuids,
+    #     )
 
 
 asyncio.run(main())

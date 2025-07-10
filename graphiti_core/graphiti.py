@@ -53,7 +53,6 @@ from graphiti_core.search.search_utils import (
 )
 from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
-    AddEpisodeConfig,
     RawEpisode,
     add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
@@ -540,8 +539,11 @@ class Graphiti:
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
-        add_episode_config: AddEpisodeConfig,
         group_id: str = '',
+        entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -607,7 +609,12 @@ class Graphiti:
 
             # Save all episodes
             await add_nodes_and_edges_bulk(
-                driver=self.driver, episodic_nodes=[episodes], embedder=self.embedder
+                driver=self.driver,
+                episodic_nodes=episodes,
+                episodic_edges=[],
+                entity_nodes=[],
+                entity_edges=[],
+                embedder=self.embedder,
             )
 
             # Get previous episode context for each episode
@@ -617,15 +624,15 @@ class Graphiti:
             extracted_nodes_bulk, extracted_edges_bulk = await extract_nodes_and_edges_bulk(
                 self.clients,
                 episode_context,
-                edge_type_map=add_episode_config.edge_type_map,
-                edge_types=add_episode_config.edge_types,
-                entity_types=add_episode_config.entity_types,
-                excluded_entity_types=add_episode_config.excluded_entity_types,
+                edge_type_map=edge_type_map,
+                edge_types=edge_types,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
             )
 
             # Dedupe extracted nodes in memory
             nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
-                self.clients, extracted_nodes_bulk, episode_context, add_episode_config.entity_types
+                self.clients, extracted_nodes_bulk, episode_context, entity_types
             )
 
             episodic_edges: list[EpisodicEdge] = []
@@ -643,8 +650,8 @@ class Graphiti:
                 extracted_edges_bulk_updated,
                 episode_context,
                 [],
-                add_episode_config.edge_types,
-                add_episode_config.edge_type_map,
+                edge_types,
+                edge_type_map,
             )
 
             # Extract node attributes
@@ -652,7 +659,7 @@ class Graphiti:
                 node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
             }
 
-            hydrated_nodes: list[EntityNode] = []
+            extract_attributes_params: list[tuple[EntityNode, list[EpisodicNode]]] = []
             for node in nodes_by_uuid.values():
                 episode_uuids: list[str] = []
                 for episode_uuid, mentioned_nodes in nodes_by_episode.items():
@@ -666,14 +673,22 @@ class Graphiti:
                 ]
                 episode_mentions.sort(key=lambda x: x.valid_at, reverse=True)
 
-                new_hydrated_nodes = await extract_attributes_from_nodes(
-                    self.clients,
-                    [node],
-                    episode_mentions[0],
-                    episode_mentions[0:],
-                    add_episode_config.entity_types,
-                )
-                hydrated_nodes.extend(new_hydrated_nodes)
+                extract_attributes_params.append((node, episode_mentions))
+
+            new_hydrated_nodes: list[list[EntityNode]] = await semaphore_gather(
+                *[
+                    extract_attributes_from_nodes(
+                        self.clients,
+                        [params[0]],
+                        params[1][0],
+                        params[1][0:],
+                        entity_types,
+                    )
+                    for params in extract_attributes_params
+                ]
+            )
+
+            hydrated_nodes = [node for nodes in new_hydrated_nodes for node in nodes]
 
             # TODO: Resolve nodes and edges against the existing graph
             edges_by_uuid: dict[str, EntityEdge] = {

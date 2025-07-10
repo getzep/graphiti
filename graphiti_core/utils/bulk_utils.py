@@ -16,14 +16,10 @@ limitations under the License.
 
 import logging
 import typing
-from collections import defaultdict
 from datetime import datetime
-from html import entities
-from math import ceil
 
 import numpy as np
-from numpy import dot, sqrt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import Any
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
@@ -35,7 +31,6 @@ from graphiti_core.graph_queries import (
 )
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import DEFAULT_DATABASE, normalize_l2, semaphore_gather
-from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
 )
@@ -43,12 +38,7 @@ from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_SAVE_BULK,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
-from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
-from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import (
-    build_episodic_edges,
-    dedupe_edge_list,
     extract_edges,
     resolve_extracted_edge,
 )
@@ -57,11 +47,9 @@ from graphiti_core.utils.maintenance.graph_data_operations import (
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
-    dedupe_node_list,
     extract_nodes,
     resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
 
 logger = logging.getLogger(__name__)
 
@@ -70,18 +58,11 @@ CHUNK_SIZE = 10
 
 class RawEpisode(BaseModel):
     name: str
-    uuid: str | None = None
+    uuid: str | None = Field(default=None)
     content: str
     source_description: str
     source: EpisodeType
     reference_time: datetime
-
-
-class AddEpisodeConfig(BaseModel):
-    entity_types: dict[str, BaseModel] | None = (None,)
-    excluded_entity_types: list[str] | None = (None,)
-    edge_types: dict[str, BaseModel] | None = (None,)
-    edge_type_map: dict[tuple[str, str], list[str]] | None = (None,)
 
 
 async def retrieve_previous_episodes_bulk(
@@ -247,8 +228,8 @@ async def dedupe_nodes_bulk(
             for existing_node in existing_nodes:
                 # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
                 # This approach will cast a wider net than BM25, which is ideal for this use case
-                node_words = set(node.lower().split())
-                existing_node_words = set(existing_node.lower().split())
+                node_words = set(node.name.lower().split())
+                existing_node_words = set(existing_node.name.lower().split())
                 has_overlap = not node_words.isdisjoint(existing_node_words)
                 if has_overlap:
                     candidates_i.append(existing_node)
@@ -261,7 +242,7 @@ async def dedupe_nodes_bulk(
                 if similarity >= min_score:
                     candidates_i.append(existing_node)
 
-            dedupe_tuples.append((nodes_i, candidates_i))
+        dedupe_tuples.append((nodes_i, candidates_i))
 
     # Determine Node Resolutions
     bulk_node_resolutions: list[
@@ -295,7 +276,7 @@ async def dedupe_nodes_bulk(
     for value, key in duplicate_pairs:
         if key.uuid in duplicate_map:
             existing_value = duplicate_map[key.uuid]
-            duplicate_map[key.uuid] = value if value.uuid < existing_value else existing_value
+            duplicate_map[key.uuid] = value.uuid if value.uuid < existing_value else existing_value
         else:
             duplicate_map[key.uuid] = value.uuid
 
@@ -311,7 +292,8 @@ async def dedupe_nodes_bulk(
         episode = episode_tuples[i][0]
 
         nodes_by_episode[episode.uuid] = [
-            node_uuid_map[compressed_map[node.uuid]] for node in nodes
+            node_uuid_map[compressed_map[node.uuid] if node.uuid in compressed_map else node.uuid]
+            for node in nodes
         ]
 
     return nodes_by_episode, compressed_map
@@ -347,8 +329,8 @@ async def dedupe_edges_bulk(
             for existing_edge in existing_edges:
                 # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
                 # This approach will cast a wider net than BM25, which is ideal for this use case
-                edge_words = set(edge.lower().split())
-                existing_edge_words = set(existing_edge.lower().split())
+                edge_words = set(edge.fact.lower().split())
+                existing_edge_words = set(existing_edge.fact.lower().split())
                 has_overlap = not edge_words.isdisjoint(existing_edge_words)
                 if has_overlap:
                     candidates.append(existing_edge)
@@ -388,7 +370,7 @@ async def dedupe_edges_bulk(
     for value, key in duplicate_pairs:
         if key.uuid in duplicate_map:
             existing_value = duplicate_map[key.uuid]
-            duplicate_map[key.uuid] = value if value.uuid < existing_value else existing_value
+            duplicate_map[key.uuid] = value.uuid if value.uuid < existing_value else existing_value
         else:
             duplicate_map[key.uuid] = value.uuid
 
@@ -404,7 +386,8 @@ async def dedupe_edges_bulk(
         episode = episode_tuples[i][0]
 
         edges_by_episode[episode.uuid] = [
-            edge_uuid_map[compressed_map[edge.uuid]] for edge in edges
+            edge_uuid_map[compressed_map[edge.uuid] if edge.uuid in compressed_map else edge.uuid]
+            for edge in edges
         ]
 
     return edges_by_episode

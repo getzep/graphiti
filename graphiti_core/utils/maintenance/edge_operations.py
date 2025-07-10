@@ -70,7 +70,7 @@ def build_duplicate_of_edges(
 ) -> list[EntityEdge]:
     is_duplicate_of_edges: list[EntityEdge] = []
     for source_node, target_node in duplicate_nodes:
-        if source_node.uuid == episode.uuid:
+        if source_node.uuid == target_node.uuid:
             continue
 
         is_duplicate_of_edges.append(
@@ -426,7 +426,7 @@ async def resolve_extracted_edge(
         resolved_edge = related_edges[duplicate_fact_id]
         break
 
-    if len(duplicate_fact_ids) >= 0 and episode is not None:
+    if duplicate_fact_ids and episode is not None:
         resolved_edge.episodes.append(episode.uuid)
 
     contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
