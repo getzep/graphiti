@@ -657,7 +657,7 @@ class Graphiti:
                 extracted_edges_bulk_updated,
                 episode_context,
                 [],
-                edge_types,
+                edge_types or {},
                 edge_type_map or edge_type_map_default,
             )
 
