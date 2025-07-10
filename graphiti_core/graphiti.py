@@ -30,7 +30,6 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
-    DEFAULT_DATABASE,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
@@ -168,7 +167,6 @@ class Graphiti:
                 raise ValueError('uri must be provided when graph_driver is None')
             self.driver = Neo4jDriver(uri, user, password)
 
-        self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
         if llm_client:
@@ -921,9 +919,7 @@ class Graphiti:
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
             query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(
-                query, uuid=node.uuid, database_=DEFAULT_DATABASE, routing_='r'
-            )
+            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
 
             for record in records:
                 if record['episode_count'] == 1:

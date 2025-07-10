@@ -42,8 +42,7 @@ export NEO4J_PASSWORD=password
 # Optional FalkorDB connection parameters (defaults shown)
 export FALKORDB_URI=falkor://localhost:6379
 
-# Database configuration (required for Neo4j 5+)
-export DEFAULT_DATABASE=neo4j
+# To use a different database, modify the driver constructor in the script
 ```
 
 3. Run the example:
@@ -78,21 +77,18 @@ After running this example, you can:
 
 ### "Graph not found: default_db" Error
 
-If you encounter the error `Neo.ClientError.Database.DatabaseNotFound: Graph not found: default_db`, this typically occurs with Neo4j 5+ where the default database name is `neo4j` instead of `default_db`.
+If you encounter the error `Neo.ClientError.Database.DatabaseNotFound: Graph not found: default_db`, this occurs when the driver is trying to connect to a database that doesn't exist.
 
 **Solution:**
-Set the `DEFAULT_DATABASE` environment variable to `neo4j`:
+The Neo4j driver defaults to using `neo4j` as the database name. If you need to use a different database, modify the driver constructor in the script:
 
-```bash
-export DEFAULT_DATABASE=neo4j
-```
+```python
+# In quickstart_neo4j.py, change:
+driver = Neo4jDriver(uri=neo4j_uri, user=neo4j_user, password=neo4j_password)
 
-Or add it to your `.env` file:
+# To specify a different database:
+driver = Neo4jDriver(uri=neo4j_uri, user=neo4j_user, password=neo4j_password, database="your_db_name")
 ```
-DEFAULT_DATABASE=neo4j
-```
-
-This tells Graphiti to use the correct database name for your Neo4j version.
 
 ## Understanding the Output
 

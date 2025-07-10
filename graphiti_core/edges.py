@@ -27,7 +27,7 @@ from typing_extensions import LiteralString
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
-from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
+from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_SAVE,
     ENTITY_EDGE_SAVE,
@@ -71,7 +71,6 @@ class Edge(BaseModel, ABC):
         DELETE e
         """,
             uuid=self.uuid,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Deleted Edge: {self.uuid}')
@@ -99,7 +98,6 @@ class EpisodicEdge(Edge):
             uuid=self.uuid,
             group_id=self.group_id,
             created_at=self.created_at,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
@@ -119,7 +117,6 @@ class EpisodicEdge(Edge):
             e.created_at AS created_at
         """,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -143,7 +140,6 @@ class EpisodicEdge(Edge):
             e.created_at AS created_at
         """,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -183,7 +179,6 @@ class EpisodicEdge(Edge):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -231,9 +226,7 @@ class EntityEdge(Edge):
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
         """
-        records, _, _ = await driver.execute_query(
-            query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, uuid=self.uuid, routing_='r')
 
         if len(records) == 0:
             raise EdgeNotFoundError(self.uuid)
@@ -261,7 +254,6 @@ class EntityEdge(Edge):
         result = await driver.execute_query(
             ENTITY_EDGE_SAVE,
             edge_data=edge_data,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
@@ -276,7 +268,6 @@ class EntityEdge(Edge):
         """
             + ENTITY_EDGE_RETURN,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -298,7 +289,6 @@ class EntityEdge(Edge):
         """
             + ENTITY_EDGE_RETURN,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -331,7 +321,6 @@ class EntityEdge(Edge):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -349,9 +338,7 @@ class EntityEdge(Edge):
                                                         """
             + ENTITY_EDGE_RETURN
         )
-        records, _, _ = await driver.execute_query(
-            query, node_uuid=node_uuid, database_=DEFAULT_DATABASE, routing_='r'
-        )
+        records, _, _ = await driver.execute_query(query, node_uuid=node_uuid, routing_='r')
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -367,7 +354,6 @@ class CommunityEdge(Edge):
             uuid=self.uuid,
             group_id=self.group_id,
             created_at=self.created_at,
-            database_=DEFAULT_DATABASE,
         )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
@@ -387,7 +373,6 @@ class CommunityEdge(Edge):
             e.created_at AS created_at
         """,
             uuid=uuid,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -409,7 +394,6 @@ class CommunityEdge(Edge):
             e.created_at AS created_at
         """,
             uuids=uuids,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 
@@ -447,7 +431,6 @@ class CommunityEdge(Edge):
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
-            database_=DEFAULT_DATABASE,
             routing_='r',
         )
 

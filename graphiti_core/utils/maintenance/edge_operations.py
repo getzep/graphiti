@@ -29,7 +29,7 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, MAX_REFLEXION_ITERATIONS, semaphore_gather
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
@@ -539,7 +539,6 @@ async def filter_existing_duplicate_of_edges(
     records, _, _ = await driver.execute_query(
         query,
         duplicate_node_uuids=list(duplicate_nodes_map.keys()),
-        database_=DEFAULT_DATABASE,
         routing_='r',
     )
 

@@ -33,7 +33,6 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
-from graphiti_core.helpers import DEFAULT_DATABASE
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +80,7 @@ class FalkorDriver(GraphDriver):
         username: str | None = None,
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
+        database: str = 'default_db',
     ):
         """
         Initialize the FalkorDB driver.
@@ -95,15 +95,16 @@ class FalkorDriver(GraphDriver):
             self.client = falkor_db
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
+            self._database = database
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
-        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is DEFAULT_DATABASE
+        # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
         if graph_name is None:
-            graph_name = DEFAULT_DATABASE
+            graph_name = self._database
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
-        graph_name = kwargs.pop('database_', DEFAULT_DATABASE)
+        graph_name = kwargs.pop('database_', self._database)
         graph = self._get_graph(graph_name)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
@@ -136,7 +137,7 @@ class FalkorDriver(GraphDriver):
 
         return records, header, None
 
-    def session(self, database: str | None) -> GraphDriverSession:
+    def session(self, database: str | None = None) -> GraphDriverSession:
         return FalkorDriverSession(self._get_graph(database))
 
     async def close(self) -> None:
@@ -148,10 +149,11 @@ class FalkorDriver(GraphDriver):
         elif hasattr(self.client.connection, 'close'):
             await self.client.connection.close()
 
-    async def delete_all_indexes(self, database_: str = DEFAULT_DATABASE) -> None:
+    async def delete_all_indexes(self, database_: str | None = None) -> None:
+        database = database_ or self._database
         await self.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
-            database_=database_,
+            database_=database,
         )
 
 

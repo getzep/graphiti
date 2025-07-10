@@ -30,7 +30,7 @@ from graphiti_core.graph_queries import (
     get_entity_node_save_bulk_query,
 )
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, normalize_l2, semaphore_gather
+from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
 )
@@ -91,7 +91,7 @@ async def add_nodes_and_edges_bulk(
     entity_edges: list[EntityEdge],
     embedder: EmbedderClient,
 ):
-    session = driver.session(database=DEFAULT_DATABASE)
+    session = driver.session()
     try:
         await session.execute_write(
             add_nodes_and_edges_bulk_tx,
