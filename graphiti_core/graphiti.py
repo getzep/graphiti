@@ -53,6 +53,7 @@ from graphiti_core.search.search_utils import (
 )
 from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
+    AddEpisodeConfig,
     RawEpisode,
     add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
@@ -60,7 +61,7 @@ from graphiti_core.utils.bulk_utils import (
     extract_edge_dates_bulk,
     extract_nodes_and_edges_bulk,
     resolve_edge_pointers,
-    retrieve_previous_episodes_bulk, AddEpisodeConfig,
+    retrieve_previous_episodes_bulk,
 )
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.community_operations import (
@@ -537,9 +538,12 @@ class Graphiti:
             raise e
 
     #### WIP: USE AT YOUR OWN RISK ####
-    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], add_episode_config: AddEpisodeConfig,
-                               group_id: str = '',
-                               ):
+    async def add_episode_bulk(
+            self,
+            bulk_episodes: list[RawEpisode],
+            add_episode_config: AddEpisodeConfig,
+            group_id: str = '',
+    ):
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -582,20 +586,21 @@ class Graphiti:
 
             validate_group_id(group_id)
 
-            episodes = [await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
-                        if episode.uuid is not None
-                        else EpisodicNode(
-                name=episode.name,
-                labels=[],
-                source=episode.source,
-                content=episode.content,
-                source_description=episode.source_description,
-                group_id=group_id,
-                created_at=now,
-                valid_at=episode.reference_time,
-            )
-                        for episode in bulk_episodes
-                        ]
+            episodes = [
+                await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
+                if episode.uuid is not None
+                else EpisodicNode(
+                    name=episode.name,
+                    labels=[],
+                    source=episode.source,
+                    content=episode.content,
+                    source_description=episode.source_description,
+                    group_id=group_id,
+                    created_at=now,
+                    valid_at=episode.reference_time,
+                )
+                for episode in bulk_episodes
+            ]
 
             # Save all episodes
             await add_nodes_and_edges_bulk(
@@ -606,45 +611,25 @@ class Graphiti:
             episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
 
             # Extract all nodes and edges for each episode
-            (
-                extracted_nodes,
-                extracted_edges,
-                episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.clients, episode_context, None, None)
-
-            # Generate embeddings
-            await semaphore_gather(
-                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes],
-                *[edge.generate_embedding(self.embedder) for edge in extracted_edges],
-                max_coroutines=self.max_coroutines,
+            extracted_nodes_bulk, extracted_edges_bulk = await extract_nodes_and_edges_bulk(
+                self.clients,
+                episode_context,
+                edge_type_map=add_episode_config.edge_type_map,
+                edge_types=add_episode_config.edge_types,
+                entity_types=add_episode_config.entity_types,
+                excluded_entity_types=add_episode_config.excluded_entity_types,
             )
 
-            # Dedupe extracted nodes, compress extracted edges
-            (nodes, uuid_map), extracted_edges_timestamped = await semaphore_gather(
-                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
-                extract_edge_dates_bulk(self.llm_client, extracted_edges, episode_context),
-                max_coroutines=self.max_coroutines,
-            )
-
-            # save nodes to KG
-            await semaphore_gather(
-                *[node.save(self.driver) for node in nodes],
-                max_coroutines=self.max_coroutines,
-            )
+            # Dedupe extracted nodes in memory
+            nodes_by_episode, uuid_map = await dedupe_nodes_bulk(self.clients, extracted_nodes_bulk, episode_context,
+                                                                 add_episode_config.entity_types)
 
             # re-map edge pointers so that they don't point to discard dupe nodes
-            extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
-                extracted_edges_timestamped, uuid_map
-            )
-            episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
-                episodic_edges, uuid_map
-            )
+            extracted_edges_bulk_updated: list[list[EntityEdge]] = [resolve_edge_pointers(
+                edges, uuid_map
+            ) for edges in extracted_edges_bulk]
 
-            # save episodic edges to KG
-            await semaphore_gather(
-                *[edge.save(self.driver) for edge in episodic_edges_with_resolved_pointers],
-                max_coroutines=self.max_coroutines,
-            )
+            episodic_edges = build_episodic_edges(nodes, episode, now)
 
             # Dedupe extracted edges
             edges = await dedupe_edges_bulk(
@@ -652,9 +637,11 @@ class Graphiti:
             )
             logger.debug(f'extracted edge length: {len(edges)}')
 
-            # invalidate edges
+            # Extract node attributes
 
-            # save edges to KG
+            # Resolve nodes and edges against the existing graph
+
+            # save data to KG
             await semaphore_gather(
                 *[edge.save(self.driver) for edge in edges],
                 max_coroutines=self.max_coroutines,
@@ -830,7 +817,7 @@ class Graphiti:
             await get_edge_invalidation_candidates(self.driver, [updated_edge], SearchFilters())
         )[0]
 
-        resolved_edge, invalidated_edges = await resolve_extracted_edge(
+        resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,
             updated_edge,
             related_edges,

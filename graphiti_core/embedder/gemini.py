@@ -46,6 +46,7 @@ class GeminiEmbedder(EmbedderClient):
     """
     Google Gemini Embedder Client
     """
+
     def __init__(
         self,
         config: GeminiEmbedderConfig | None = None,

@@ -44,9 +44,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-    entity_nodes: list[EntityNode],
-    episode: EpisodicNode,
-    created_at: datetime,
+        entity_nodes: list[EntityNode],
+        episode: EpisodicNode,
+        created_at: datetime,
 ) -> list[EpisodicEdge]:
     episodic_edges: list[EpisodicEdge] = [
         EpisodicEdge(
@@ -64,31 +64,34 @@ def build_episodic_edges(
 
 
 def build_duplicate_of_edges(
-    episode: EpisodicNode,
-    created_at: datetime,
-    duplicate_nodes: list[tuple[EntityNode, EntityNode]],
+        episode: EpisodicNode,
+        created_at: datetime,
+        duplicate_nodes: list[tuple[EntityNode, EntityNode]],
 ) -> list[EntityEdge]:
-    is_duplicate_of_edges: list[EntityEdge] = [
-        EntityEdge(
-            source_node_uuid=source_node.uuid,
-            target_node_uuid=target_node.uuid,
-            name='IS_DUPLICATE_OF',
-            group_id=episode.group_id,
-            fact=f'{source_node.name} is a duplicate of {target_node.name}',
-            episodes=[episode.uuid],
-            created_at=created_at,
-            valid_at=created_at,
-        )
-        for source_node, target_node in duplicate_nodes
-    ]
+    is_duplicate_of_edges: list[EntityEdge] = []
+    for source_node, target_node in duplicate_nodes:
+        if source_node.uuid == episode.uuid:
+            continue
+
+        is_duplicate_of_edges.append(
+            EntityEdge(
+                source_node_uuid=source_node.uuid,
+                target_node_uuid=target_node.uuid,
+                name='IS_DUPLICATE_OF',
+                group_id=episode.group_id,
+                fact=f'{source_node.name} is a duplicate of {target_node.name}',
+                episodes=[episode.uuid],
+                created_at=created_at,
+                valid_at=created_at,
+            ))
 
     return is_duplicate_of_edges
 
 
 def build_community_edges(
-    entity_nodes: list[EntityNode],
-    community_node: CommunityNode,
-    created_at: datetime,
+        entity_nodes: list[EntityNode],
+        community_node: CommunityNode,
+        created_at: datetime,
 ) -> list[CommunityEdge]:
     edges: list[CommunityEdge] = [
         CommunityEdge(
@@ -104,13 +107,13 @@ def build_community_edges(
 
 
 async def extract_edges(
-    clients: GraphitiClients,
-    episode: EpisodicNode,
-    nodes: list[EntityNode],
-    previous_episodes: list[EpisodicNode],
-    edge_type_map: dict[tuple[str, str], list[str]],
-    group_id: str = '',
-    edge_types: dict[str, BaseModel] | None = None,
+        clients: GraphitiClients,
+        episode: EpisodicNode,
+        nodes: list[EntityNode],
+        previous_episodes: list[EpisodicNode],
+        edge_type_map: dict[tuple[str, str], list[str]],
+        group_id: str = '',
+        edge_types: dict[str, BaseModel] | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -240,57 +243,13 @@ async def extract_edges(
     return edges
 
 
-async def dedupe_extracted_edges(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
-) -> list[EntityEdge]:
-    # Create edge map
-    edge_map: dict[str, EntityEdge] = {}
-    for edge in existing_edges:
-        edge_map[edge.uuid] = edge
-
-    # Prepare context for LLM
-    context = {
-        'extracted_edges': [
-            {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in extracted_edges
-        ],
-        'existing_edges': [
-            {'uuid': edge.uuid, 'name': edge.name, 'fact': edge.fact} for edge in existing_edges
-        ],
-    }
-
-    llm_response = await llm_client.generate_response(prompt_library.dedupe_edges.edge(context))
-    duplicate_data = llm_response.get('duplicates', [])
-    logger.debug(f'Extracted unique edges: {duplicate_data}')
-
-    duplicate_uuid_map: dict[str, str] = {}
-    for duplicate in duplicate_data:
-        uuid_value = duplicate['duplicate_of']
-        duplicate_uuid_map[duplicate['uuid']] = uuid_value
-
-    # Get full edge data
-    edges: list[EntityEdge] = []
-    for edge in extracted_edges:
-        if edge.uuid in duplicate_uuid_map:
-            existing_uuid = duplicate_uuid_map[edge.uuid]
-            existing_edge = edge_map[existing_uuid]
-            # Add current episode to the episodes list
-            existing_edge.episodes += edge.episodes
-            edges.append(existing_edge)
-        else:
-            edges.append(edge)
-
-    return edges
-
-
 async def resolve_extracted_edges(
-    clients: GraphitiClients,
-    extracted_edges: list[EntityEdge],
-    episode: EpisodicNode,
-    entities: list[EntityNode],
-    edge_types: dict[str, BaseModel],
-    edge_type_map: dict[tuple[str, str], list[str]],
+        clients: GraphitiClients,
+        extracted_edges: list[EntityEdge],
+        episode: EpisodicNode,
+        entities: list[EntityNode],
+        edge_types: dict[str, BaseModel],
+        edge_type_map: dict[tuple[str, str], list[str]],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
     llm_client = clients.llm_client
@@ -335,7 +294,7 @@ async def resolve_extracted_edges(
         edge_types_lst.append(extracted_edge_types)
 
     # resolve edges with related edges in the graph and find invalidation candidates
-    results: list[tuple[EntityEdge, list[EntityEdge]]] = list(
+    results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]] = list(
         await semaphore_gather(
             *[
                 resolve_extracted_edge(
@@ -377,7 +336,7 @@ async def resolve_extracted_edges(
 
 
 def resolve_edge_contradictions(
-    resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
+        resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
     if len(invalidation_candidates) == 0:
         return []
@@ -387,20 +346,20 @@ def resolve_edge_contradictions(
     for edge in invalidation_candidates:
         # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
         if (
-            edge.invalid_at is not None
-            and resolved_edge.valid_at is not None
-            and edge.invalid_at <= resolved_edge.valid_at
+                edge.invalid_at is not None
+                and resolved_edge.valid_at is not None
+                and edge.invalid_at <= resolved_edge.valid_at
         ) or (
-            edge.valid_at is not None
-            and resolved_edge.invalid_at is not None
-            and resolved_edge.invalid_at <= edge.valid_at
+                edge.valid_at is not None
+                and resolved_edge.invalid_at is not None
+                and resolved_edge.invalid_at <= edge.valid_at
         ):
             continue
         # New edge invalidates edge
         elif (
-            edge.valid_at is not None
-            and resolved_edge.valid_at is not None
-            and edge.valid_at < resolved_edge.valid_at
+                edge.valid_at is not None
+                and resolved_edge.valid_at is not None
+                and edge.valid_at < resolved_edge.valid_at
         ):
             edge.invalid_at = resolved_edge.valid_at
             edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
@@ -410,15 +369,15 @@ def resolve_edge_contradictions(
 
 
 async def resolve_extracted_edge(
-    llm_client: LLMClient,
-    extracted_edge: EntityEdge,
-    related_edges: list[EntityEdge],
-    existing_edges: list[EntityEdge],
-    episode: EpisodicNode,
-    edge_types: dict[str, BaseModel] | None = None,
-) -> tuple[EntityEdge, list[EntityEdge]]:
+        llm_client: LLMClient,
+        extracted_edge: EntityEdge,
+        related_edges: list[EntityEdge],
+        existing_edges: list[EntityEdge],
+        episode: EpisodicNode,
+        edge_types: dict[str, BaseModel] | None = None,
+) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
-        return extracted_edge, []
+        return extracted_edge, [], []
 
     start = time()
 
@@ -457,15 +416,16 @@ async def resolve_extracted_edge(
         model_size=ModelSize.small,
     )
 
-    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
-
-    resolved_edge = (
-        related_edges[duplicate_fact_id]
-        if 0 <= duplicate_fact_id < len(related_edges)
-        else extracted_edge
+    duplicate_fact_ids: list[int] = list(
+        filter(lambda i: 0 <= i < len(related_edges), llm_response.get('duplicate_facts', []))
     )
 
-    if duplicate_fact_id >= 0 and episode is not None:
+    resolved_edge = extracted_edge
+    for duplicate_fact_id in duplicate_fact_ids:
+        resolved_edge = related_edges[duplicate_fact_id]
+        break
+
+    if len(duplicate_fact_ids) >= 0 and episode is not None:
         resolved_edge.episodes.append(episode.uuid)
 
     contradicted_facts: list[int] = llm_response.get('contradicted_facts', [])
@@ -507,11 +467,11 @@ async def resolve_extracted_edge(
         invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
         for candidate in invalidation_candidates:
             if (
-                candidate.valid_at
-                and resolved_edge.valid_at
-                and candidate.valid_at.tzinfo
-                and resolved_edge.valid_at.tzinfo
-                and candidate.valid_at > resolved_edge.valid_at
+                    candidate.valid_at
+                    and resolved_edge.valid_at
+                    and candidate.valid_at.tzinfo
+                    and resolved_edge.valid_at.tzinfo
+                    and candidate.valid_at > resolved_edge.valid_at
             ):
                 # Expire new edge since we have information about more recent events
                 resolved_edge.invalid_at = candidate.valid_at
@@ -519,64 +479,17 @@ async def resolve_extracted_edge(
                 break
 
     # Determine which contradictory edges need to be expired
-    invalidated_edges = resolve_edge_contradictions(resolved_edge, invalidation_candidates)
-
-    return resolved_edge, invalidated_edges
-
-
-async def dedupe_extracted_edge(
-    llm_client: LLMClient,
-    extracted_edge: EntityEdge,
-    related_edges: list[EntityEdge],
-    episode: EpisodicNode | None = None,
-) -> EntityEdge:
-    if len(related_edges) == 0:
-        return extracted_edge
-
-    start = time()
-
-    # Prepare context for LLM
-    related_edges_context = [
-        {'id': edge.uuid, 'fact': edge.fact} for i, edge in enumerate(related_edges)
-    ]
-
-    extracted_edge_context = {
-        'fact': extracted_edge.fact,
-    }
-
-    context = {
-        'related_edges': related_edges_context,
-        'extracted_edges': extracted_edge_context,
-    }
-
-    llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_edges.edge(context),
-        response_model=EdgeDuplicate,
-        model_size=ModelSize.small,
+    invalidated_edges: list[EntityEdge] = resolve_edge_contradictions(
+        resolved_edge, invalidation_candidates
     )
+    duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
 
-    duplicate_fact_id: int = llm_response.get('duplicate_fact_id', -1)
-
-    edge = (
-        related_edges[duplicate_fact_id]
-        if 0 <= duplicate_fact_id < len(related_edges)
-        else extracted_edge
-    )
-
-    if duplicate_fact_id >= 0 and episode is not None:
-        edge.episodes.append(episode.uuid)
-
-    end = time()
-    logger.debug(
-        f'Resolved Edge: {extracted_edge.name} is {edge.name}, in {(end - start) * 1000} ms'
-    )
-
-    return edge
+    return resolved_edge, invalidated_edges, duplicate_edges
 
 
 async def dedupe_edge_list(
-    llm_client: LLMClient,
-    edges: list[EntityEdge],
+        llm_client: LLMClient,
+        edges: list[EntityEdge],
 ) -> list[EntityEdge]:
     start = time()
 
@@ -608,7 +521,7 @@ async def dedupe_edge_list(
 
 
 async def filter_existing_duplicate_of_edges(
-    driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
+        driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
 ) -> list[tuple[EntityNode, EntityNode]]:
     query: LiteralString = """
         UNWIND $duplicate_node_uuids AS duplicate_tuple
