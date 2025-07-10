@@ -268,6 +268,9 @@ async def edge_search(
         return temp_reranked_edges[:limit]
 
     reranked_edges: list[EntityEdge] = []
+    # Initialize all edges with None score first
+    for edge in edge_uuid_map.values():
+        edge.score = None
     for uuid, score in reranked_results:
         edge = edge_uuid_map.get(uuid)
         if edge:
