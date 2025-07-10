@@ -100,16 +100,16 @@ class AddEpisodeResults(BaseModel):
 
 class Graphiti:
     def __init__(
-            self,
-            uri: str | None = None,
-            user: str | None = None,
-            password: str | None = None,
-            llm_client: LLMClient | None = None,
-            embedder: EmbedderClient | None = None,
-            cross_encoder: CrossEncoderClient | None = None,
-            store_raw_episode_content: bool = True,
-            graph_driver: GraphDriver | None = None,
-            max_coroutines: int | None = None,
+        self,
+        uri: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        llm_client: LLMClient | None = None,
+        embedder: EmbedderClient | None = None,
+        cross_encoder: CrossEncoderClient | None = None,
+        store_raw_episode_content: bool = True,
+        graph_driver: GraphDriver | None = None,
+        max_coroutines: int | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -315,11 +315,11 @@ class Graphiti:
         await build_indices_and_constraints(self.driver, delete_existing)
 
     async def retrieve_episodes(
-            self,
-            reference_time: datetime,
-            last_n: int = EPISODE_WINDOW_LEN,
-            group_ids: list[str] | None = None,
-            source: EpisodeType | None = None,
+        self,
+        reference_time: datetime,
+        last_n: int = EPISODE_WINDOW_LEN,
+        group_ids: list[str] | None = None,
+        source: EpisodeType | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -349,20 +349,20 @@ class Graphiti:
         return await retrieve_episodes(self.driver, reference_time, last_n, group_ids, source)
 
     async def add_episode(
-            self,
-            name: str,
-            episode_body: str,
-            source_description: str,
-            reference_time: datetime,
-            source: EpisodeType = EpisodeType.message,
-            group_id: str = '',
-            uuid: str | None = None,
-            update_communities: bool = False,
-            entity_types: dict[str, BaseModel] | None = None,
-            excluded_entity_types: list[str] | None = None,
-            previous_episode_uuids: list[str] | None = None,
-            edge_types: dict[str, BaseModel] | None = None,
-            edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        self,
+        name: str,
+        episode_body: str,
+        source_description: str,
+        reference_time: datetime,
+        source: EpisodeType = EpisodeType.message,
+        group_id: str = '',
+        uuid: str | None = None,
+        update_communities: bool = False,
+        entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
+        previous_episode_uuids: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -538,10 +538,10 @@ class Graphiti:
 
     ##### EXPERIMENTAL #####
     async def add_episode_bulk(
-            self,
-            bulk_episodes: list[RawEpisode],
-            add_episode_config: AddEpisodeConfig,
-            group_id: str = '',
+        self,
+        bulk_episodes: list[RawEpisode],
+        add_episode_config: AddEpisodeConfig,
+        group_id: str = '',
     ):
         """
         Process multiple episodes in bulk and update the graph.
@@ -601,7 +601,9 @@ class Graphiti:
                 for episode in bulk_episodes
             ]
 
-            episodes_by_uuid: dict[str, EpisodicNode] = {episode.uuid: episode for episode in episodes}
+            episodes_by_uuid: dict[str, EpisodicNode] = {
+                episode.uuid: episode for episode in episodes
+            }
 
             # Save all episodes
             await add_nodes_and_edges_bulk(
@@ -622,38 +624,70 @@ class Graphiti:
             )
 
             # Dedupe extracted nodes in memory
-            nodes_by_episode, uuid_map = await dedupe_nodes_bulk(self.clients, extracted_nodes_bulk, episode_context,
-                                                                 add_episode_config.entity_types)
+            nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
+                self.clients, extracted_nodes_bulk, episode_context, add_episode_config.entity_types
+            )
 
             episodic_edges: list[EpisodicEdge] = []
             for episode_uuid, nodes in nodes_by_episode.items():
                 episodic_edges.extend(build_episodic_edges(nodes, episode_uuid, now))
 
             # re-map edge pointers so that they don't point to discard dupe nodes
-            extracted_edges_bulk_updated: list[list[EntityEdge]] = [resolve_edge_pointers(
-                edges, uuid_map
-            ) for edges in extracted_edges_bulk]
+            extracted_edges_bulk_updated: list[list[EntityEdge]] = [
+                resolve_edge_pointers(edges, uuid_map) for edges in extracted_edges_bulk
+            ]
 
             # Dedupe extracted edges in memory
             edges_by_episode = await dedupe_edges_bulk(
-                self.clients, extracted_edges_bulk_updated, episode_context, [],
-                add_episode_config.edge_types, add_episode_config.edge_type_map
+                self.clients,
+                extracted_edges_bulk_updated,
+                episode_context,
+                [],
+                add_episode_config.edge_types,
+                add_episode_config.edge_type_map,
             )
 
             # Extract node attributes
-            nodes_by_uuid: dict[str, EntityNode] = {node.uuid: node for nodes in nodes_by_episode.values() for node in
-                                                    nodes}
-            hydrated_nodes: list[EntityNode] = []
+            nodes_by_uuid: dict[str, EntityNode] = {
+                node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
+            }
 
-            await extract_attributes_from_nodes(
-                self.clients, nodes, episode, previous_episodes, add_episode_config.entity_types
-            ),
+            hydrated_nodes: list[EntityNode] = []
+            for node in nodes_by_uuid.values():
+                episode_uuids: list[str] = []
+                for episode_uuid, mentioned_nodes in nodes_by_episode.items():
+                    for mentioned_node in mentioned_nodes:
+                        if node.uuid == mentioned_node.uuid:
+                            episode_uuids.append(episode_uuid)
+                            break
+
+                episode_mentions: list[EpisodicNode] = [
+                    episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids
+                ]
+                episode_mentions.sort(key=lambda x: x.valid_at, reverse=True)
+
+                new_hydrated_nodes = await extract_attributes_from_nodes(
+                    self.clients,
+                    [node],
+                    episode_mentions[0],
+                    episode_mentions[0:],
+                    add_episode_config.entity_types,
+                )
+                hydrated_nodes.extend(new_hydrated_nodes)
 
             # TODO: Resolve nodes and edges against the existing graph
+            edges_by_uuid: dict[str, EntityEdge] = {
+                edge.uuid: edge for edges in edges_by_episode.values() for edge in edges
+            }
 
             # save data to KG
             await add_nodes_and_edges_bulk(
-                self.driver, episodes, episodic_edges, hydrated_nodes, entity_edges, self.embedder
+                self.driver,
+                episodes,
+                episodic_edges,
+                hydrated_nodes,
+                list(edges_by_uuid.values()),
+                self.embedder,
             )
 
             end = time()
@@ -694,12 +728,12 @@ class Graphiti:
         return community_nodes
 
     async def search(
-            self,
-            query: str,
-            center_node_uuid: str | None = None,
-            group_ids: list[str] | None = None,
-            num_results=DEFAULT_SEARCH_LIMIT,
-            search_filter: SearchFilters | None = None,
+        self,
+        query: str,
+        center_node_uuid: str | None = None,
+        group_ids: list[str] | None = None,
+        num_results=DEFAULT_SEARCH_LIMIT,
+        search_filter: SearchFilters | None = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -753,13 +787,13 @@ class Graphiti:
         return edges
 
     async def _search(
-            self,
-            query: str,
-            config: SearchConfig,
-            group_ids: list[str] | None = None,
-            center_node_uuid: str | None = None,
-            bfs_origin_node_uuids: list[str] | None = None,
-            search_filter: SearchFilters | None = None,
+        self,
+        query: str,
+        config: SearchConfig,
+        group_ids: list[str] | None = None,
+        center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
+        search_filter: SearchFilters | None = None,
     ) -> SearchResults:
         """DEPRECATED"""
         return await self.search_(
@@ -767,13 +801,13 @@ class Graphiti:
         )
 
     async def search_(
-            self,
-            query: str,
-            config: SearchConfig = COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
-            group_ids: list[str] | None = None,
-            center_node_uuid: str | None = None,
-            bfs_origin_node_uuids: list[str] | None = None,
-            search_filter: SearchFilters | None = None,
+        self,
+        query: str,
+        config: SearchConfig = COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
+        group_ids: list[str] | None = None,
+        center_node_uuid: str | None = None,
+        bfs_origin_node_uuids: list[str] | None = None,
+        search_filter: SearchFilters | None = None,
     ) -> SearchResults:
         """search_ (replaces _search) is our advanced search method that returns Graph objects (nodes and edges) rather
         than a list of facts. This endpoint allows the end user to utilize more advanced features such as filters and

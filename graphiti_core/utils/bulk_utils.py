@@ -49,7 +49,8 @@ from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.edge_operations import (
     build_episodic_edges,
     dedupe_edge_list,
-    extract_edges, resolve_extracted_edge,
+    extract_edges,
+    resolve_extracted_edge,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
@@ -84,7 +85,7 @@ class AddEpisodeConfig(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-        driver: GraphDriver, episodes: list[EpisodicNode]
+    driver: GraphDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -102,12 +103,12 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-        driver: GraphDriver,
-        episodic_nodes: list[EpisodicNode],
-        episodic_edges: list[EpisodicEdge],
-        entity_nodes: list[EntityNode],
-        entity_edges: list[EntityEdge],
-        embedder: EmbedderClient,
+    driver: GraphDriver,
+    episodic_nodes: list[EpisodicNode],
+    episodic_edges: list[EpisodicEdge],
+    entity_nodes: list[EntityNode],
+    entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
 ):
     session = driver.session(database=DEFAULT_DATABASE)
     try:
@@ -125,13 +126,13 @@ async def add_nodes_and_edges_bulk(
 
 
 async def add_nodes_and_edges_bulk_tx(
-        tx: GraphDriverSession,
-        episodic_nodes: list[EpisodicNode],
-        episodic_edges: list[EpisodicEdge],
-        entity_nodes: list[EntityNode],
-        entity_edges: list[EntityEdge],
-        embedder: EmbedderClient,
-        driver: GraphDriver,
+    tx: GraphDriverSession,
+    episodic_nodes: list[EpisodicNode],
+    episodic_edges: list[EpisodicEdge],
+    entity_nodes: list[EntityNode],
+    entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
@@ -186,12 +187,12 @@ async def add_nodes_and_edges_bulk_tx(
 
 
 async def extract_nodes_and_edges_bulk(
-        clients: GraphitiClients,
-        episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-        edge_type_map: dict[tuple[str, str], list[str]],
-        entity_types: dict[str, BaseModel] | None = None,
-        excluded_entity_types: list[str] | None = None,
-        edge_types: dict[str, BaseModel] | None = None,
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, BaseModel] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, BaseModel] | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
         *[
@@ -219,10 +220,10 @@ async def extract_nodes_and_edges_bulk(
 
 
 async def dedupe_nodes_bulk(
-        clients: GraphitiClients,
-        extracted_nodes: list[list[EntityNode]],
-        episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-        entity_types: dict[str, BaseModel] | None = None,
+    clients: GraphitiClients,
+    extracted_nodes: list[list[EntityNode]],
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    entity_types: dict[str, BaseModel] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     embedder = clients.embedder
     min_score = 0.8
@@ -301,24 +302,28 @@ async def dedupe_nodes_bulk(
     # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
     compressed_map: dict[str, str] = compress_uuid_map(duplicate_map)
 
-    node_uuid_map: dict[str, EntityNode] = {node.uuid: node for nodes in extracted_nodes for node in nodes}
+    node_uuid_map: dict[str, EntityNode] = {
+        node.uuid: node for nodes in extracted_nodes for node in nodes
+    }
 
     nodes_by_episode: dict[str, list[EntityNode]] = {}
     for i, nodes in enumerate(extracted_nodes):
         episode = episode_tuples[i][0]
 
-        nodes_by_episode[episode.uuid] = [node_uuid_map[compressed_map[node.uuid]] for node in nodes]
+        nodes_by_episode[episode.uuid] = [
+            node_uuid_map[compressed_map[node.uuid]] for node in nodes
+        ]
 
     return nodes_by_episode, compressed_map
 
 
 async def dedupe_edges_bulk(
-        clients: GraphitiClients,
-        extracted_edges: list[list[EntityEdge]],
-        episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-        _entities: list[EntityNode],
-        edge_types: dict[str, BaseModel],
-        _edge_type_map: dict[tuple[str, str], list[str]],
+    clients: GraphitiClients,
+    extracted_edges: list[list[EntityEdge]],
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    _entities: list[EntityNode],
+    edge_types: dict[str, BaseModel],
+    _edge_type_map: dict[tuple[str, str], list[str]],
 ) -> dict[str, list[EntityEdge]]:
     embedder = clients.embedder
     min_score = 0.6
@@ -358,10 +363,16 @@ async def dedupe_edges_bulk(
 
                 dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
-    bulk_edge_resolutions: list[tuple[tuple[EntityEdge, EntityEdge, list[EntityEdge]]]] = await semaphore_gather(
-        *[resolve_extracted_edge(clients.llm_client, edge, candidates, candidates, episode, edge_types) for
-          episode, edge, candidates in
-          dedupe_tuples])
+    bulk_edge_resolutions: list[
+        tuple[tuple[EntityEdge, EntityEdge, list[EntityEdge]]]
+    ] = await semaphore_gather(
+        *[
+            resolve_extracted_edge(
+                clients.llm_client, edge, candidates, candidates, episode, edge_types
+            )
+            for episode, edge, candidates in dedupe_tuples
+        ]
+    )
 
     duplicate_pairs: list[tuple[EntityEdge, EntityEdge]] = []
     for i, (resolved_edge, invalidated_edges, duplicates) in enumerate(bulk_edge_resolutions):
@@ -384,13 +395,17 @@ async def dedupe_edges_bulk(
     # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
     compressed_map: dict[str, str] = compress_uuid_map(duplicate_map)
 
-    edge_uuid_map: dict[str, EntityEdge] = {edge.uuid: edge for edges in extracted_edges for edge in edges}
+    edge_uuid_map: dict[str, EntityEdge] = {
+        edge.uuid: edge for edges in extracted_edges for edge in edges
+    }
 
     edges_by_episode: dict[str, list[EntityEdge]] = {}
     for i, edges in enumerate(extracted_edges):
         episode = episode_tuples[i][0]
 
-        edges_by_episode[episode.uuid] = [edge_uuid_map[compressed_map[edge.uuid]] for edge in edges]
+        edges_by_episode[episode.uuid] = [
+            edge_uuid_map[compressed_map[edge.uuid]] for edge in edges
+        ]
 
     return edges_by_episode
 
