@@ -58,7 +58,6 @@ from graphiti_core.utils.bulk_utils import (
     add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
-    extract_edge_dates_bulk,
     extract_nodes_and_edges_bulk,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
@@ -509,7 +508,7 @@ class Graphiti:
 
             entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
 
-            episodic_edges = build_episodic_edges(nodes, episode, now)
+            episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -537,7 +536,6 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    #### WIP: USE AT YOUR OWN RISK ####
     async def add_episode_bulk(
             self,
             bulk_episodes: list[RawEpisode],
@@ -624,27 +622,33 @@ class Graphiti:
             nodes_by_episode, uuid_map = await dedupe_nodes_bulk(self.clients, extracted_nodes_bulk, episode_context,
                                                                  add_episode_config.entity_types)
 
+            episodic_edges: list[EpisodicEdge] = []
+            for episode_uuid, nodes in nodes_by_episode.items():
+                episodic_edges.extend(build_episodic_edges(nodes, episode_uuid, now))
+
             # re-map edge pointers so that they don't point to discard dupe nodes
             extracted_edges_bulk_updated: list[list[EntityEdge]] = [resolve_edge_pointers(
                 edges, uuid_map
             ) for edges in extracted_edges_bulk]
 
-            episodic_edges = build_episodic_edges(nodes, episode, now)
-
-            # Dedupe extracted edges
+            # Dedupe extracted edges in memory TODO
             edges = await dedupe_edges_bulk(
-                self.driver, self.llm_client, extracted_edges_with_resolved_pointers
+                self.driver, self.llm_client, extracted_edges_bulk_updated
             )
             logger.debug(f'extracted edge length: {len(edges)}')
 
             # Extract node attributes
+            hydrated_nodes: list[EntityNode] = []
+
+            await extract_attributes_from_nodes(
+                self.clients, nodes, episode, previous_episodes, add_episode_config.entity_types
+            ),
 
             # Resolve nodes and edges against the existing graph
 
             # save data to KG
-            await semaphore_gather(
-                *[edge.save(self.driver) for edge in edges],
-                max_coroutines=self.max_coroutines,
+            await add_nodes_and_edges_bulk(
+                self.driver, episodes, episodic_edges, hydrated_nodes, entity_edges, self.embedder
             )
 
             end = time()

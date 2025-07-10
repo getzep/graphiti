@@ -289,7 +289,7 @@ async def dedupe_nodes_bulk(
             else:
                 duplicate_pairs.append((m, n))
 
-    # Build full deduplication map favoring creation date
+    # Build full deduplication map
     duplicate_map: dict[str, str] = {}
     for value, key in duplicate_pairs:
         if key.uuid in duplicate_map:
@@ -303,13 +303,13 @@ async def dedupe_nodes_bulk(
 
     node_uuid_map: dict[str, EntityNode] = {node.uuid: node for nodes in extracted_nodes for node in nodes}
 
-    nodes_by_episode_uuid: dict[str, list[EntityNode]] = {}
+    nodes_by_episode: dict[str, list[EntityNode]] = {}
     for i, nodes in enumerate(extracted_nodes):
         episode = episode_tuples[i][0]
 
-        nodes_by_episode_uuid[episode.uuid] = [node_uuid_map[compressed_map[node.uuid]] for node in nodes]
+        nodes_by_episode[episode.uuid] = [node_uuid_map[compressed_map[node.uuid]] for node in nodes]
 
-    return nodes_by_episode_uuid, compressed_map
+    return nodes_by_episode, compressed_map
 
 
 async def dedupe_edges_bulk(
@@ -319,7 +319,7 @@ async def dedupe_edges_bulk(
         _entities: list[EntityNode],
         edge_types: dict[str, BaseModel],
         _edge_type_map: dict[tuple[str, str], list[str]],
-) -> list[EntityEdge]:
+) -> dict[str, list[EntityEdge]]:
     embedder = clients.embedder
     min_score = 0.6
 
@@ -363,119 +363,36 @@ async def dedupe_edges_bulk(
           episode, edge, candidates in
           dedupe_tuples])
 
+    duplicate_pairs: list[tuple[EntityEdge, EntityEdge]] = []
     for i, (resolved_edge, invalidated_edges, duplicates) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]
+        for duplicate in duplicates:
+            if edge.uuid < duplicate.uuid:
+                duplicate_pairs.append((edge, duplicate))
+            else:
+                duplicate_pairs.append((duplicate, edge))
 
-    return edges
-
-
-def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str, str]]:
-    uuid_map: dict[str, str] = {}
-    name_map: dict[str, EntityNode] = {}
-    for node in nodes:
-        if node.name in name_map:
-            uuid_map[node.uuid] = name_map[node.name].uuid
-            continue
-
-        name_map[node.name] = node
-
-    return [node for node in name_map.values()], uuid_map
-
-
-async def compress_nodes(
-        llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
-) -> tuple[list[EntityNode], dict[str, str]]:
-    # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
-    if len(nodes) == 0:
-        return nodes, uuid_map
-
-    # Our approach involves us deduplicating chunks of nodes in parallel.
-    # We want n chunks of size n so that n ** 2 == len(nodes).
-    # We want chunk sizes to be at least 10 for optimizing LLM processing time
-    chunk_size = max(int(sqrt(len(nodes))), CHUNK_SIZE)
-
-    # First calculate similarity scores between nodes
-    similarity_scores: list[tuple[int, int, float]] = [
-        (i, j, dot(n.name_embedding or [], m.name_embedding or []))
-        for i, n in enumerate(nodes)
-        for j, m in enumerate(nodes[:i])
-    ]
-
-    # We now sort by semantic similarity
-    similarity_scores.sort(key=lambda score_tuple: score_tuple[2])
-
-    # initialize our chunks based on chunk size
-    node_chunks: list[list[EntityNode]] = [[] for _ in range(ceil(len(nodes) / chunk_size))]
-
-    # Draft the most similar nodes into the same chunk
-    while len(similarity_scores) > 0:
-        i, j, _ = similarity_scores.pop()
-        # determine if any of the nodes have already been drafted into a chunk
-        n = nodes[i]
-        m = nodes[j]
-        # make sure the shortest chunks get preference
-        node_chunks.sort(reverse=True, key=lambda chunk: len(chunk))
-
-        n_chunk = max([i if n in chunk else -1 for i, chunk in enumerate(node_chunks)])
-        m_chunk = max([i if m in chunk else -1 for i, chunk in enumerate(node_chunks)])
-
-        # both nodes already in a chunk
-        if n_chunk > -1 and m_chunk > -1:
-            continue
-
-        # n has a chunk and that chunk is not full
-        elif n_chunk > -1 and len(node_chunks[n_chunk]) < chunk_size:
-            # put m in the same chunk as n
-            node_chunks[n_chunk].append(m)
-
-        # m has a chunk and that chunk is not full
-        elif m_chunk > -1 and len(node_chunks[m_chunk]) < chunk_size:
-            # put n in the same chunk as m
-            node_chunks[m_chunk].append(n)
-
-        # neither node has a chunk or the chunk is full
+    # Build full deduplication map
+    duplicate_map: dict[str, str] = {}
+    for value, key in duplicate_pairs:
+        if key.uuid in duplicate_map:
+            existing_value = duplicate_map[key.uuid]
+            duplicate_map[key.uuid] = value if value.uuid < existing_value else existing_value
         else:
-            # add both nodes to the shortest chunk
-            node_chunks[-1].extend([n, m])
+            duplicate_map[key.uuid] = value.uuid
 
-    results = await semaphore_gather(
-        *[dedupe_node_list(llm_client, chunk) for chunk in node_chunks]
-    )
+    # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
+    compressed_map: dict[str, str] = compress_uuid_map(duplicate_map)
 
-    extended_map = dict(uuid_map)
-    compressed_nodes: list[EntityNode] = []
-    for node_chunk, uuid_map_chunk in results:
-        compressed_nodes += node_chunk
-        extended_map.update(uuid_map_chunk)
+    edge_uuid_map: dict[str, EntityEdge] = {edge.uuid: edge for edges in extracted_edges for edge in edges}
 
-    # Check if we have removed all duplicates
-    if len(compressed_nodes) == len(nodes):
-        compressed_uuid_map = compress_uuid_map(extended_map)
-        return compressed_nodes, compressed_uuid_map
+    edges_by_episode: dict[str, list[EntityEdge]] = {}
+    for i, edges in enumerate(extracted_edges):
+        episode = episode_tuples[i][0]
 
-    return await compress_nodes(llm_client, compressed_nodes, extended_map)
+        edges_by_episode[episode.uuid] = [edge_uuid_map[compressed_map[edge.uuid]] for edge in edges]
 
-
-async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
-    if len(edges) == 0:
-        return edges
-    # We only want to dedupe edges that are between the same pair of nodes
-    # We build a map of the edges based on their source and target nodes.
-    edge_chunks = chunk_edges_by_nodes(edges)
-
-    results = await semaphore_gather(
-        *[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks]
-    )
-
-    compressed_edges: list[EntityEdge] = []
-    for edge_chunk in results:
-        compressed_edges += edge_chunk
-
-    # Check if we have removed all duplicates
-    if len(compressed_edges) == len(edges):
-        return compressed_edges
-
-    return await compress_edges(llm_client, compressed_edges)
+    return edges_by_episode
 
 
 def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
@@ -501,63 +418,3 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
 
     return edges
-
-
-async def extract_edge_dates_bulk(
-        llm_client: LLMClient,
-        extracted_edges: list[EntityEdge],
-        episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
-) -> list[EntityEdge]:
-    edges: list[EntityEdge] = []
-    # confirm that all of our edges have at least one episode
-    for edge in extracted_edges:
-        if edge.episodes is not None and len(edge.episodes) > 0:
-            edges.append(edge)
-
-    episode_uuid_map: dict[str, tuple[EpisodicNode, list[EpisodicNode]]] = {
-        episode.uuid: (episode, previous_episodes) for episode, previous_episodes in episode_pairs
-    }
-
-    results = await semaphore_gather(
-        *[
-            extract_edge_dates(
-                llm_client,
-                edge,
-                episode_uuid_map[edge.episodes[0]][0],  # type: ignore
-                episode_uuid_map[edge.episodes[0]][1],  # type: ignore
-            )
-            for edge in edges
-        ]
-    )
-
-    for i, result in enumerate(results):
-        valid_at = result[0]
-        invalid_at = result[1]
-        edge = edges[i]
-
-        edge.valid_at = valid_at
-        edge.invalid_at = invalid_at
-        if edge.invalid_at:
-            edge.expired_at = utc_now()
-
-    return edges
-
-
-def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
-    # We only want to dedupe edges that are between the same pair of nodes
-    # We build a map of the edges based on their source and target nodes.
-    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
-    for edge in edges:
-        # We drop loop edges
-        if edge.source_node_uuid == edge.target_node_uuid:
-            continue
-
-        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
-        pointers = [edge.source_node_uuid, edge.target_node_uuid]
-        pointers.sort()
-
-        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
-
-    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
-
-    return edge_chunks

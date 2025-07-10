@@ -45,15 +45,15 @@ logger = logging.getLogger(__name__)
 
 def build_episodic_edges(
         entity_nodes: list[EntityNode],
-        episode: EpisodicNode,
+        episode_uuid: str,
         created_at: datetime,
 ) -> list[EpisodicEdge]:
     episodic_edges: list[EpisodicEdge] = [
         EpisodicEdge(
-            source_node_uuid=episode.uuid,
+            source_node_uuid=episode_uuid,
             target_node_uuid=node.uuid,
             created_at=created_at,
-            group_id=episode.group_id,
+            group_id=node.group_id,
         )
         for node in entity_nodes
     ]
