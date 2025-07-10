@@ -31,7 +31,6 @@ from graphiti_core.graph_queries import (
 )
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import normalize_l2, semaphore_gather
-from graphiti_core.llm_client import LLMClient
 from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
 )
