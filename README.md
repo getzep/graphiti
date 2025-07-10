@@ -215,22 +215,18 @@ must be set.
 
 ### Database Configuration
 
-`DEFAULT_DATABASE` specifies the database name to use for graph operations. This is particularly important for Neo4j 5+ users:
+Database names are configured directly in the driver constructors:
 
-- **Neo4j 5+**: The default database name is `neo4j` (not `default_db`)
-- **Neo4j 4**: The default database name is `default_db`
-- **FalkorDB**: The default graph name is `default_db`
+- **Neo4j**: Database name defaults to `neo4j` (hardcoded in Neo4jDriver)
+- **FalkorDB**: Database name defaults to `default_db` (hardcoded in FalkorDriver)
 
-If you encounter the error `Graph not found: default_db` when using Neo4j 5, set:
+To use a different database name, pass the `database` parameter when creating the driver:
 
-```bash
-export DEFAULT_DATABASE=neo4j
-```
+```python
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
-Or add to your `.env` file:
-
-```
-DEFAULT_DATABASE=neo4j
+# Use custom database name
+driver = Neo4jDriver(uri="bolt://localhost:7687", user="neo4j", password="password", database="my_db")
 ```
 
 ### Performance Configuration
