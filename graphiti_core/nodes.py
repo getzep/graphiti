@@ -92,6 +92,7 @@ class Node(BaseModel, ABC):
     group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
+    score: float | None = Field(default=None, description='Search relevance score.')
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
@@ -465,7 +466,8 @@ class CommunityNode(Node):
             n.name AS name,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            n.name_embedding AS name_embedding
         """,
             uuid=uuid,
             database_=DEFAULT_DATABASE,
@@ -489,7 +491,8 @@ class CommunityNode(Node):
             n.name AS name,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            n.name_embedding AS name_embedding
         """,
             uuids=uuids,
             database_=DEFAULT_DATABASE,
@@ -522,7 +525,8 @@ class CommunityNode(Node):
             n.name AS name,
             n.group_id AS group_id,
             n.created_at AS created_at, 
-            n.summary AS summary
+            n.summary AS summary,
+            n.name_embedding AS name_embedding
         ORDER BY n.uuid DESC
         """
             + limit_query,
@@ -558,6 +562,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         name=record['name'],
         source_description=record['source_description'],
         entity_edges=record['entity_edges'],
+        score=record.get('score'),
     )
 
 
@@ -570,6 +575,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
         attributes=record['attributes'],
+        score=record.get('score'),
     )
 
     entity_node.attributes.pop('uuid', None)
@@ -590,6 +596,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name_embedding=record['name_embedding'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
+        score=record.get('score'),
     )
 
 

@@ -137,7 +137,8 @@ async def get_communities_by_nodes(
         c.group_id AS group_id,
         c.name AS name,
         c.created_at AS created_at, 
-        c.summary AS summary
+        c.summary AS summary,
+        c.name_embedding AS name_embedding
     """
 
     records, _, _ = await driver.execute_query(
@@ -169,12 +170,13 @@ async def edge_fulltext_search(
     query = (
         get_relationships_query('edge_name_and_fact', db_type=driver.provider)
         + """
-        YIELD relationship AS rel, score
-        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-        WHERE r.group_id IN $group_ids """
+        YIELD relationship AS r, score
+        WITH r, score
+        WHERE r.group_id IN $group_ids
+        WITH r, score, startNode(r) AS n, endNode(r) AS m
+        """
         + filter_query
         + """
-        WITH r, score, startNode(r) AS n, endNode(r) AS m
         RETURN
             r.uuid AS uuid,
             r.group_id AS group_id,
@@ -187,7 +189,8 @@ async def edge_fulltext_search(
             r.expired_at AS expired_at,
             r.valid_at AS valid_at,
             r.invalid_at AS invalid_at,
-            properties(r) AS attributes
+            properties(r) AS attributes,
+            score
         ORDER BY score DESC LIMIT $limit
         """
     )
@@ -260,7 +263,8 @@ async def edge_similarity_search(
             r.expired_at AS expired_at,
             r.valid_at AS valid_at,
             r.invalid_at AS invalid_at,
-            properties(r) AS attributes
+            properties(r) AS attributes,
+            score
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -355,14 +359,22 @@ async def node_fulltext_search(
         get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
         + """
         YIELD node AS n, score
-            WITH n, score
-            LIMIT $limit
-            WHERE n:Entity
+        WITH n, score
+        WHERE n:Entity
         """
         + filter_query
-        + ENTITY_NODE_RETURN
         + """
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes,
+            score
         ORDER BY score DESC
+        LIMIT $limit
         """
     )
     records, header, _ = await driver.execute_query(
@@ -410,9 +422,16 @@ async def node_similarity_search(
         WITH n, """
         + get_vector_cosine_func_query('n.name_embedding', '$search_vector', driver.provider)
         + """ AS score
-        WHERE score > $min_score"""
-        + ENTITY_NODE_RETURN
-        + """
+        WHERE score > $min_score
+        RETURN
+            n.uuid As uuid, 
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at, 
+            n.summary AS summary,
+            labels(n) AS labels,
+            properties(n) AS attributes,
+            score
         ORDER BY score DESC
         LIMIT $limit
             """
@@ -500,7 +519,8 @@ async def episode_fulltext_search(
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source,
-            e.entity_edges AS entity_edges
+            e.entity_edges AS entity_edges,
+            score
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -540,7 +560,8 @@ async def community_fulltext_search(
             comm.name AS name, 
             comm.created_at AS created_at, 
             comm.summary AS summary,
-            comm.name_embedding AS name_embedding
+            comm.name_embedding AS name_embedding,
+            score
         ORDER BY score DESC
         LIMIT $limit
         """
@@ -591,7 +612,8 @@ async def community_similarity_search(
                comm.name AS name, 
                comm.created_at AS created_at, 
                comm.summary AS summary,
-               comm.name_embedding AS name_embedding
+               comm.name_embedding AS name_embedding,
+               score
            ORDER BY score DESC
            LIMIT $limit
         """
@@ -676,12 +698,17 @@ async def hybrid_node_search(
     }
     result_uuids = [[node.uuid for node in result] for result in results]
 
-    ranked_uuids = rrf(result_uuids)
+    ranked_results = rrf(result_uuids)
 
-    relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
+    relevant_nodes: list[EntityNode] = []
+    for uuid, score in ranked_results:
+        node = node_uuid_map.get(uuid)
+        if node:
+            node.score = score
+            relevant_nodes.append(node)
 
     end = time()
-    logger.debug(f'Found relevant nodes: {ranked_uuids} in {(end - start) * 1000} ms')
+    logger.debug(f'Found relevant nodes: {[r[0] for r in ranked_results]} in {(end - start) * 1000} ms')
     return relevant_nodes
 
 
@@ -823,7 +850,8 @@ async def get_relevant_edges(
                 expired_at: e.expired_at,
                 valid_at: e.valid_at,
                 invalid_at: e.invalid_at,
-                attributes: properties(e)
+                attributes: properties(e),
+                score: score
             })[..$limit] AS matches
         """
     )
@@ -894,7 +922,8 @@ async def get_edge_invalidation_candidates(
                 expired_at: e.expired_at,
                 valid_at: e.valid_at,
                 invalid_at: e.invalid_at,
-                attributes: properties(e)
+                attributes: properties(e),
+                score: score
             })[..$limit] AS matches
         """
     )
@@ -921,7 +950,7 @@ async def get_edge_invalidation_candidates(
 
 
 # takes in a list of rankings of uuids
-def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[str]:
+def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[tuple[str, float]]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
@@ -930,9 +959,7 @@ def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[st
     scored_uuids = [term for term in scores.items()]
     scored_uuids.sort(reverse=True, key=lambda term: term[1])
 
-    sorted_uuids = [term[0] for term in scored_uuids]
-
-    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
+    return [(uuid, score) for uuid, score in scored_uuids if score >= min_score]
 
 
 async def node_distance_reranker(
@@ -940,55 +967,65 @@ async def node_distance_reranker(
     node_uuids: list[str],
     center_node_uuid: str,
     min_score: float = 0,
-) -> list[str]:
-    # filter out node_uuid center node node uuid
-    filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
-    scores: dict[str, float] = {center_node_uuid: 0.0}
+) -> list[tuple[str, float]]:
+    """
+    Reranks nodes based on their distance from a center node.
+    The score is calculated as 1 / (1 + distance).
+    - A score of 1.0 for the center node (distance 0).
+    - A score of 0.5 for direct neighbors (distance 1).
+    - A score of 0 for unreachable nodes.
+    """
+    if not node_uuids:
+        return []
 
-    # Find the shortest path to center node
+    filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
+    # The distances dict stores the shortest path distance from the center node.
+    distances: dict[str, float] = {uuid: float('inf') for uuid in filtered_uuids}
+
+    # This query only finds direct neighbors (distance 1).
+    # For a more comprehensive distance calculation, a shortestPath algorithm would be needed.
     query = """
         UNWIND $node_uuids AS node_uuid
         MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
-        RETURN 1 AS score, node_uuid AS uuid
+        RETURN 1.0 AS distance, node_uuid AS uuid
         """
-    results, header, _ = await driver.execute_query(
+    results, _, _ = await driver.execute_query(
         query,
         node_uuids=filtered_uuids,
         center_uuid=center_node_uuid,
         database_=DEFAULT_DATABASE,
         routing_='r',
     )
-    if driver.provider == 'falkordb':
-        results = [dict(zip(header, row, strict=True)) for row in results]
 
     for result in results:
-        uuid = result['uuid']
-        score = result['score']
-        scores[uuid] = score
+        distances[result['uuid']] = result['distance']
+
+    # Convert distances to scores
+    scored_results: list[tuple[str, float]] = []
+    if center_node_uuid in node_uuids:
+        scored_results.append((center_node_uuid, 1.0))
 
     for uuid in filtered_uuids:
-        if uuid not in scores:
-            scores[uuid] = float('inf')
+        distance = distances.get(uuid, float('inf'))
+        score = 1.0 / (1.0 + distance)
+        if score >= min_score:
+            scored_results.append((uuid, score))
 
-    # rerank on shortest distance
-    filtered_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    # Sort by score descending
+    scored_results.sort(key=lambda x: x[1], reverse=True)
 
-    # add back in filtered center uuid if it was filtered out
-    if center_node_uuid in node_uuids:
-        scores[center_node_uuid] = 0.1
-        filtered_uuids = [center_node_uuid] + filtered_uuids
-
-    return [uuid for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score]
+    return scored_results
 
 
 async def episode_mentions_reranker(
     driver: GraphDriver, node_uuids: list[list[str]], min_score: float = 0
-) -> list[str]:
+) -> list[tuple[str, float]]:
     # use rrf as a preliminary ranker
-    sorted_uuids = rrf(node_uuids)
+    sorted_uuids_with_scores = rrf(node_uuids)
+    sorted_uuids = [uuid for uuid, _ in sorted_uuids_with_scores]
     scores: dict[str, float] = {}
 
-    # Find the shortest path to center node
+    # Find the mention count for each node
     query = """
         UNWIND $node_uuids AS node_uuid 
         MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
@@ -1002,12 +1039,12 @@ async def episode_mentions_reranker(
     )
 
     for result in results:
-        scores[result['uuid']] = result['score']
+        scores[result['uuid']] = float(result['score'])
 
-    # rerank on shortest distance
-    sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+    # rerank on mention count
+    sorted_uuids.sort(reverse=True, key=lambda cur_uuid: scores.get(cur_uuid, 0))
 
-    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
+    return [(uuid, scores.get(uuid, 0)) for uuid in sorted_uuids if scores.get(uuid, 0) >= min_score]
 
 
 def maximal_marginal_relevance(
@@ -1015,7 +1052,7 @@ def maximal_marginal_relevance(
     candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
     min_score: float = -2.0,
-) -> list[str]:
+) -> list[tuple[str, float]]:
     start = time()
     query_array = np.array(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
@@ -1046,7 +1083,7 @@ def maximal_marginal_relevance(
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
-    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
+    return [(uuid, mmr_scores[uuid]) for uuid in uuids if mmr_scores[uuid] >= min_score]
 
 
 async def get_embeddings_for_nodes(

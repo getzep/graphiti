@@ -60,6 +60,7 @@ class Edge(BaseModel, ABC):
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime
+    score: float | None = Field(default=None, description='Search relevance score.')
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
@@ -464,6 +465,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
+        score=record.get('score'),
     )
 
 
@@ -481,6 +483,7 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
         attributes=record['attributes'],
+        score=record.get('score'),
     )
 
     edge.attributes.pop('uuid', None)
@@ -505,6 +508,7 @@ def get_community_edge_from_record(record: Any):
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
+        score=record.get('score'),
     )
 
 
