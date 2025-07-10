@@ -587,6 +587,13 @@ class Graphiti:
 
             validate_group_id(group_id)
 
+            # Create default edge type map
+            edge_type_map_default = (
+                {('Entity', 'Entity'): list(edge_types.keys())}
+                if edge_types is not None
+                else {('Entity', 'Entity'): []}
+            )
+
             episodes = [
                 await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
                 if episode.uuid is not None
@@ -624,7 +631,7 @@ class Graphiti:
             extracted_nodes_bulk, extracted_edges_bulk = await extract_nodes_and_edges_bulk(
                 self.clients,
                 episode_context,
-                edge_type_map=edge_type_map,
+                edge_type_map=edge_type_map or edge_type_map_default,
                 edge_types=edge_types,
                 entity_types=entity_types,
                 excluded_entity_types=excluded_entity_types,
@@ -651,7 +658,7 @@ class Graphiti:
                 episode_context,
                 [],
                 edge_types,
-                edge_type_map,
+                edge_type_map or edge_type_map_default,
             )
 
             # Extract node attributes

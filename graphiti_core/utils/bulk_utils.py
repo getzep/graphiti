@@ -237,7 +237,8 @@ async def dedupe_nodes_bulk(
 
                 # Check for semantic similarity even if there is no overlap
                 similarity = np.dot(
-                    normalize_l2(node.name_embedding), normalize_l2(existing_node.name_embedding)
+                    normalize_l2(node.name_embedding or []),
+                    normalize_l2(existing_node.name_embedding or []),
                 )
                 if similarity >= min_score:
                     candidates_i.append(existing_node)
@@ -292,8 +293,7 @@ async def dedupe_nodes_bulk(
         episode = episode_tuples[i][0]
 
         nodes_by_episode[episode.uuid] = [
-            node_uuid_map[compressed_map[node.uuid] if node.uuid in compressed_map else node.uuid]
-            for node in nodes
+            node_uuid_map[compressed_map.get(node.uuid, node.uuid)] for node in nodes
         ]
 
     return nodes_by_episode, compressed_map
@@ -338,15 +338,16 @@ async def dedupe_edges_bulk(
 
                 # Check for semantic similarity even if there is no overlap
                 similarity = np.dot(
-                    normalize_l2(edge.fact_embedding), normalize_l2(existing_edge.fact_embedding)
+                    normalize_l2(edge.fact_embedding or []),
+                    normalize_l2(existing_edge.fact_embedding or []),
                 )
                 if similarity >= min_score:
                     candidates.append(existing_edge)
 
-                dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
+            dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
 
     bulk_edge_resolutions: list[
-        tuple[tuple[EntityEdge, EntityEdge, list[EntityEdge]]]
+        tuple[EntityEdge, EntityEdge, list[EntityEdge]]
     ] = await semaphore_gather(
         *[
             resolve_extracted_edge(
@@ -357,7 +358,7 @@ async def dedupe_edges_bulk(
     )
 
     duplicate_pairs: list[tuple[EntityEdge, EntityEdge]] = []
-    for i, (resolved_edge, invalidated_edges, duplicates) in enumerate(bulk_edge_resolutions):
+    for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]
         for duplicate in duplicates:
             if edge.uuid < duplicate.uuid:
@@ -386,22 +387,41 @@ async def dedupe_edges_bulk(
         episode = episode_tuples[i][0]
 
         edges_by_episode[episode.uuid] = [
-            edge_uuid_map[compressed_map[edge.uuid] if edge.uuid in compressed_map else edge.uuid]
-            for edge in edges
+            edge_uuid_map[compressed_map.get(edge.uuid, edge.uuid)] for edge in edges
         ]
 
     return edges_by_episode
 
 
 def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
-    # make sure all uuid values aren't mapped to other uuids
     compressed_map = {}
-    for key, uuid in uuid_map.items():
-        curr_value = uuid
-        while curr_value in uuid_map:
-            curr_value = uuid_map[curr_value]
 
-        compressed_map[key] = curr_value
+    def find_min_uuid(start: str) -> str:
+        path = []
+        visited = set()
+        curr = start
+
+        while curr in uuid_map and curr not in visited:
+            visited.add(curr)
+            path.append(curr)
+            curr = uuid_map[curr]
+
+        # Also include the last resolved value (could be outside the map)
+        path.append(curr)
+
+        # Resolve to lex smallest UUID in the path
+        min_uuid = min(path)
+
+        # Assign all UUIDs in the path to the min_uuid
+        for node in path:
+            compressed_map[node] = min_uuid
+
+        return min_uuid
+
+    for key in uuid_map:
+        if key not in compressed_map:
+            find_min_uuid(key)
+
     return compressed_map
 
 
