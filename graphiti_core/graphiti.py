@@ -536,6 +536,7 @@ class Graphiti:
         except Exception as e:
             raise e
 
+    ##### EXPERIMENTAL #####
     async def add_episode_bulk(
             self,
             bulk_episodes: list[RawEpisode],
@@ -600,6 +601,8 @@ class Graphiti:
                 for episode in bulk_episodes
             ]
 
+            episodes_by_uuid: dict[str, EpisodicNode] = {episode.uuid: episode for episode in episodes}
+
             # Save all episodes
             await add_nodes_and_edges_bulk(
                 driver=self.driver, episodic_nodes=[episodes], embedder=self.embedder
@@ -631,20 +634,22 @@ class Graphiti:
                 edges, uuid_map
             ) for edges in extracted_edges_bulk]
 
-            # Dedupe extracted edges in memory TODO
-            edges = await dedupe_edges_bulk(
-                self.driver, self.llm_client, extracted_edges_bulk_updated
+            # Dedupe extracted edges in memory
+            edges_by_episode = await dedupe_edges_bulk(
+                self.clients, extracted_edges_bulk_updated, episode_context, [],
+                add_episode_config.edge_types, add_episode_config.edge_type_map
             )
-            logger.debug(f'extracted edge length: {len(edges)}')
 
             # Extract node attributes
+            nodes_by_uuid: dict[str, EntityNode] = {node.uuid: node for nodes in nodes_by_episode.values() for node in
+                                                    nodes}
             hydrated_nodes: list[EntityNode] = []
 
             await extract_attributes_from_nodes(
                 self.clients, nodes, episode, previous_episodes, add_episode_config.entity_types
             ),
 
-            # Resolve nodes and edges against the existing graph
+            # TODO: Resolve nodes and edges against the existing graph
 
             # save data to KG
             await add_nodes_and_edges_bulk(
