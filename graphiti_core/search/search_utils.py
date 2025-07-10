@@ -952,7 +952,7 @@ async def get_edge_invalidation_candidates(
 
 
 # takes in a list of rankings of uuids
-def rrf(results: list[list[str]], rank_const=60, min_score: float = 0) -> list[tuple[str, float]]:
+def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[tuple[str, float]]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
