@@ -303,9 +303,11 @@ async def edge_bfs_search(
     query = (
         """
                                     UNWIND $bfs_origin_node_uuids AS origin_uuid
-                                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1.."""
+        + str(bfs_max_depth)
+        + """]-(n:Entity)
                                     UNWIND relationships(path) AS rel
-                                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                                    MATCH (source:Entity)-[r:RELATES_TO]-(target:Entity)
                                     WHERE r.uuid = rel.uuid
                                     """
         + filter_query
@@ -313,8 +315,8 @@ async def edge_bfs_search(
                 RETURN DISTINCT
                     r.uuid AS uuid,
                     r.group_id AS group_id,
-                    startNode(r).uuid AS source_node_uuid,
-                    endNode(r).uuid AS target_node_uuid,
+                    source.uuid AS source_node_uuid,
+                    target.uuid AS target_node_uuid,
                     r.created_at AS created_at,
                     r.name AS name,
                     r.fact AS fact,
@@ -331,7 +333,6 @@ async def edge_bfs_search(
         query,
         params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
         routing_='r',
@@ -461,7 +462,7 @@ async def node_bfs_search(
     limit: int,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
-    if bfs_origin_node_uuids is None:
+    if not bfs_origin_node_uuids:
         return []
 
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
@@ -469,7 +470,9 @@ async def node_bfs_search(
     query = (
         """
                             UNWIND $bfs_origin_node_uuids AS origin_uuid
-                            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1.."""
+        + str(bfs_max_depth)
+        + """]-(n:Entity)
                             WHERE n.group_id = origin.group_id
                             """
         + filter_query
@@ -482,7 +485,6 @@ async def node_bfs_search(
         query,
         params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         limit=limit,
         database_=DEFAULT_DATABASE,
         routing_='r',
@@ -950,13 +952,13 @@ async def get_edge_invalidation_candidates(
 
 
 # takes in a list of rankings of uuids
-def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[tuple[str, float]]:
+def rrf(results: list[list[str]], rank_const=60, min_score: float = 0) -> list[tuple[str, float]]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
             scores[uuid] += 1 / (i + rank_const)
 
-    scored_uuids = [term for term in scores.items()]
+    scored_uuids = list(scores.items())
     scored_uuids.sort(reverse=True, key=lambda term: term[1])
 
     return [(uuid, score) for uuid, score in scored_uuids if score >= min_score]
@@ -1054,36 +1056,59 @@ def maximal_marginal_relevance(
     min_score: float = -2.0,
 ) -> list[tuple[str, float]]:
     start = time()
-    query_array = np.array(query_vector)
+    if not candidates:
+        return []
+    query_array = normalize_l2(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
     for uuid, embedding in candidates.items():
         candidate_arrays[uuid] = normalize_l2(embedding)
 
     uuids: list[str] = list(candidate_arrays.keys())
+    selected_uuids: list[str] = []
+    remaining_uuids = uuids.copy()
 
-    similarity_matrix = np.zeros((len(uuids), len(uuids)))
+    # Select the most relevant item first
+    initial_similarities = {
+        uuid: np.dot(query_array, candidate_arrays[uuid]) for uuid in remaining_uuids
+    }
+    if not initial_similarities:
+        return []
+    first_uuid = max(initial_similarities, key=lambda k: initial_similarities[k])
+    selected_uuids.append(first_uuid)
+    remaining_uuids.remove(first_uuid)
 
-    for i, uuid_1 in enumerate(uuids):
-        for j, uuid_2 in enumerate(uuids[:i]):
-            u = candidate_arrays[uuid_1]
-            v = candidate_arrays[uuid_2]
-            similarity = np.dot(u, v)
+    mmr_scores: dict[str, float] = {first_uuid: initial_similarities[first_uuid]}
 
-            similarity_matrix[i, j] = similarity
-            similarity_matrix[j, i] = similarity
+    while remaining_uuids:
+        best_uuid = ''
+        best_mmr = -float('inf')
 
-    mmr_scores: dict[str, float] = {}
-    for i, uuid in enumerate(uuids):
-        max_sim = np.max(similarity_matrix[i, :])
-        mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
-        mmr_scores[uuid] = mmr
+        for uuid in remaining_uuids:
+            relevance = initial_similarities[uuid]
+            max_similarity_with_selected = 0.0
+            if selected_uuids:
+                similarities = [
+                    np.dot(candidate_arrays[uuid], candidate_arrays[s_uuid])
+                    for s_uuid in selected_uuids
+                ]
+                max_similarity_with_selected = max(similarities) if similarities else 0.0
 
-    uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
+            mmr = mmr_lambda * relevance - (1 - mmr_lambda) * max_similarity_with_selected
+            if mmr > best_mmr:
+                best_mmr = mmr
+                best_uuid = uuid
+
+        if best_uuid:
+            mmr_scores[best_uuid] = best_mmr
+            selected_uuids.append(best_uuid)
+            remaining_uuids.remove(best_uuid)
+        else:
+            break  # No more items to select
 
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
-    return [(uuid, mmr_scores[uuid]) for uuid in uuids if mmr_scores[uuid] >= min_score]
+    return [(uuid, mmr_scores[uuid]) for uuid in selected_uuids if mmr_scores[uuid] >= min_score]
 
 
 async def get_embeddings_for_nodes(

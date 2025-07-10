@@ -226,7 +226,6 @@ async def edge_search(
             uuid
             for uuid, _ in rrf(
                 [[edge.uuid for edge in result] for result in search_results],
-                min_score=reranker_min_score,
             )
         ]
         candidates = [edge_uuid_map[uuid] for uuid in initial_ranked_uuids[:limit]]
@@ -246,7 +245,6 @@ async def edge_search(
             uuid
             for uuid, _ in rrf(
                 [[edge.uuid for edge in result] for result in search_results],
-                min_score=reranker_min_score,
             )
         ]
         sorted_results = [edge_uuid_map[uuid] for uuid in sorted_result_uuids]
@@ -344,7 +342,6 @@ async def node_search(
             uuid
             for uuid, _ in rrf(
                 [[node.uuid for node in result] for result in search_results],
-                min_score=reranker_min_score,
             )
         ]
         candidates = [node_uuid_map[uuid] for uuid in initial_ranked_uuids[:limit]]
@@ -417,7 +414,6 @@ async def episode_search(
             uuid
             for uuid, _ in rrf(
                 [[episode.uuid for episode in result] for result in search_results],
-                min_score=reranker_min_score,
             )
         ]
         candidates = [episode_uuid_map[uuid] for uuid in initial_ranked_uuids[:limit]]
@@ -486,7 +482,6 @@ async def community_search(
             uuid
             for uuid, _ in rrf(
                 [[community.uuid for community in result] for result in search_results],
-                min_score=reranker_min_score,
             )
         ]
         candidates = [community_uuid_map[uuid] for uuid in initial_ranked_uuids[:limit]]
