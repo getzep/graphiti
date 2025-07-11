@@ -220,14 +220,65 @@ Database names are configured directly in the driver constructors:
 - **Neo4j**: Database name defaults to `neo4j` (hardcoded in Neo4jDriver)
 - **FalkorDB**: Database name defaults to `default_db` (hardcoded in FalkorDriver)
 
-To use a different database name, pass the `database` parameter when creating the driver:
+As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it to the Graphiti constructor using the `graph_driver` parameter.
+
+#### Neo4j with Custom Database Name
 
 ```python
+from graphiti_core import Graphiti
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
-# Use custom database name
-driver = Neo4jDriver(uri="bolt://localhost:7687", user="neo4j", password="password", database="my_db")
+# Create a Neo4j driver with custom database name
+driver = Neo4jDriver(
+    uri="bolt://localhost:7687",
+    user="neo4j",
+    password="password",
+    database="my_custom_database"  # Custom database name
+)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
 ```
+
+#### FalkorDB with Custom Database Name
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+# Create a FalkorDB driver with custom database name
+driver = FalkorDriver(
+    host="localhost",
+    port=6379,
+    username="falkor_user",  # Optional
+    password="falkor_password",  # Optional
+    database="my_custom_graph"  # Custom database name
+)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
+**Best Practices:**
+
+1. **Always use the graph_driver parameter** when you need custom database configuration instead of passing connection parameters directly to Graphiti
+2. **Initialize the driver first** before creating the Graphiti instance
+3. **Use environment variables** for sensitive connection details:
+   ```python
+   import os
+   from graphiti_core.driver.neo4j_driver import Neo4jDriver
+   
+   driver = Neo4jDriver(
+       uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+       user=os.getenv("NEO4J_USER", "neo4j"),
+       password=os.getenv("NEO4J_PASSWORD"),
+       database=os.getenv("NEO4J_DATABASE", "neo4j")
+   )
+   ```
+4. **Remember to close the connection** when done:
+   ```python
+   await graphiti.close()
+   ```
 
 ### Performance Configuration
 
