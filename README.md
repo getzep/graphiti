@@ -259,26 +259,6 @@ driver = FalkorDriver(
 graphiti = Graphiti(graph_driver=driver)
 ```
 
-**Best Practices:**
-
-1. **Always use the graph_driver parameter** when you need custom database configuration instead of passing connection parameters directly to Graphiti
-2. **Initialize the driver first** before creating the Graphiti instance
-3. **Use environment variables** for sensitive connection details:
-   ```python
-   import os
-   from graphiti_core.driver.neo4j_driver import Neo4jDriver
-   
-   driver = Neo4jDriver(
-       uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-       user=os.getenv("NEO4J_USER", "neo4j"),
-       password=os.getenv("NEO4J_PASSWORD"),
-       database=os.getenv("NEO4J_DATABASE", "neo4j")
-   )
-   ```
-4. **Remember to close the connection** when done:
-   ```python
-   await graphiti.close()
-   ```
 
 ### Performance Configuration
 
