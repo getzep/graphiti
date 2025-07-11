@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.neptune_driver import NeptuneDriver
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date, semaphore_gather
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if isinstance(driver, NeptuneDriver):
+        await driver.create_aoss_indices()
+        return
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """

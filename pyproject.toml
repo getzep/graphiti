@@ -19,6 +19,9 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
     "posthog>=3.0.0",
+    "langchain-aws>=0.2.27",
+    "boto3>=1.39.4",
+    "opensearch-py>=3.0.0",
 ]
 
 [project.urls]
@@ -26,6 +29,8 @@ Homepage = "https://help.getzep.com/graphiti/graphiti/overview"
 Repository = "https://github.com/getzep/graphiti"
 
 [project.optional-dependencies]
+neptune = ["langchain_aws>=0.2.27",
+"opensearch-py>=3.0.0"]
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
