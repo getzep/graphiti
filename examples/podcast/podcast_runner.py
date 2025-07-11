@@ -116,4 +116,4 @@ async def main(use_bulk: bool = False):
             )
 
 
-asyncio.run(main(True))
+asyncio.run(main(False))
