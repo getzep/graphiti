@@ -37,7 +37,7 @@ from .client import EmbedderClient, EmbedderConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_EMBEDDING_MODEL = 'text-embedding-005' # gemini-embedding-001 or text-embedding-005
+DEFAULT_EMBEDDING_MODEL = 'text-embedding-001' # gemini-embedding-001 or text-embedding-005
 
 DEFAULT_BATCH_SIZE = 100
 
