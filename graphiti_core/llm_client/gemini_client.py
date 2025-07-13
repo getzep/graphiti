@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
 if TYPE_CHECKING:
@@ -46,6 +46,25 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gemini-2.5-flash'
 DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
+
+# Maximum output tokens for different Gemini models
+GEMINI_MODEL_MAX_TOKENS = {
+    # Gemini 2.5 models
+    'gemini-2.5-pro': 65536,
+    'gemini-2.5-flash': 65536,
+    'gemini-2.5-flash-lite': 64000,
+    'models/gemini-2.5-flash-lite-preview-06-17': 64000,
+    # Gemini 2.0 models
+    'gemini-2.0-flash': 8192,
+    'gemini-2.0-flash-lite': 8192,
+    # Gemini 1.5 models
+    'gemini-1.5-pro': 8192,
+    'gemini-1.5-flash': 8192,
+    'gemini-1.5-flash-8b': 8192,
+}
+
+# Default max tokens for models not in the mapping
+DEFAULT_GEMINI_MAX_TOKENS = 8192
 
 
 class GeminiClient(LLMClient):
@@ -75,7 +94,7 @@ class GeminiClient(LLMClient):
         self,
         config: LLMConfig | None = None,
         cache: bool = False,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: int | None = None,
         thinking_config: types.ThinkingConfig | None = None,
         client: 'genai.Client | None' = None,
     ):
@@ -147,6 +166,38 @@ class GeminiClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
+    def _get_max_tokens_for_model(self, model: str) -> int:
+        """Get the maximum output tokens for a specific Gemini model."""
+        return GEMINI_MODEL_MAX_TOKENS.get(model, DEFAULT_GEMINI_MAX_TOKENS)
+
+    def _resolve_max_tokens(self, requested_max_tokens: int | None, model: str) -> int:
+        """
+        Resolve the maximum output tokens to use based on precedence rules.
+
+        Precedence order (highest to lowest):
+        1. Explicit max_tokens parameter passed to generate_response()
+        2. Instance max_tokens set during client initialization
+        3. Model-specific maximum tokens from GEMINI_MODEL_MAX_TOKENS mapping
+        4. DEFAULT_MAX_TOKENS as final fallback
+
+        Args:
+            requested_max_tokens: The max_tokens parameter passed to generate_response()
+            model: The model name to look up model-specific limits
+
+        Returns:
+            int: The resolved maximum tokens to use
+        """
+        # 1. Use explicit parameter if provided
+        if requested_max_tokens is not None:
+            return requested_max_tokens
+
+        # 2. Use instance max_tokens if set during initialization
+        if self.max_tokens is not None:
+            return self.max_tokens
+
+        # 3. Use model-specific maximum or return DEFAULT_GEMINI_MAX_TOKENS
+        return self._get_max_tokens_for_model(model)
+
     def salvage_json(self, raw_output: str) -> dict[str, typing.Any] | None:
         """
         Attempt to salvage a JSON object if the raw output is truncated.
@@ -184,7 +235,7 @@ class GeminiClient(LLMClient):
         self,
         messages: list[Message],
         response_model: type[BaseModel] | None = None,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
         """
@@ -193,7 +244,7 @@ class GeminiClient(LLMClient):
         Args:
             messages (list[Message]): A list of messages to send to the language model.
             response_model (type[BaseModel] | None): An optional Pydantic model to parse the response into.
-            max_tokens (int): The maximum number of tokens to generate in the response.
+            max_tokens (int | None): The maximum number of tokens to generate in the response. If None, uses precedence rules.
             model_size (ModelSize): The size of the model to use (small or medium).
 
         Returns:
@@ -233,10 +284,13 @@ class GeminiClient(LLMClient):
             # Get the appropriate model for the requested size
             model = self._get_model_for_size(model_size)
 
+            # Resolve max_tokens using precedence rules (see _resolve_max_tokens for details)
+            resolved_max_tokens = self._resolve_max_tokens(max_tokens, model)
+
             # Create generation config
             generation_config = types.GenerateContentConfig(
                 temperature=self.temperature,
-                max_output_tokens=max_tokens or self.max_tokens,
+                max_output_tokens=resolved_max_tokens,
                 response_mime_type='application/json' if response_model else None,
                 response_schema=response_model if response_model else None,
                 system_instruction=system_prompt,
@@ -315,9 +369,6 @@ class GeminiClient(LLMClient):
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
-        if max_tokens is None:
-            max_tokens = self.max_tokens
-
         retry_count = 0
         last_error = None
         last_output = None

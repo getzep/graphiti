@@ -369,7 +369,7 @@ class TestGeminiClientGenerateResponse:
 
     @pytest.mark.asyncio
     async def test_custom_max_tokens(self, gemini_client, mock_gemini_client):
-        """Test response generation with custom max tokens."""
+        """Test that explicit max_tokens parameter takes precedence over all other values."""
         # Setup mock response
         mock_response = MagicMock()
         mock_response.text = 'Test response'
@@ -377,14 +377,53 @@ class TestGeminiClientGenerateResponse:
         mock_response.prompt_feedback = None
         mock_gemini_client.aio.models.generate_content.return_value = mock_response
 
-        # Call method with custom max tokens
+        # Call method with custom max tokens (should take precedence)
         messages = [Message(role='user', content='Test message')]
         await gemini_client.generate_response(messages, max_tokens=500)
 
-        # Verify max tokens is passed in config
+        # Verify explicit max_tokens parameter takes precedence
         call_args = mock_gemini_client.aio.models.generate_content.call_args
         config = call_args[1]['config']
+        # Explicit parameter should override everything else
         assert config.max_output_tokens == 500
+
+    @pytest.mark.asyncio
+    async def test_max_tokens_precedence_fallback(self, mock_gemini_client):
+        """Test max_tokens precedence when no explicit parameter is provided."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.text = 'Test response'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        # Test case 1: No explicit max_tokens, has instance max_tokens
+        config = LLMConfig(
+            api_key='test_api_key', model='test-model', temperature=0.5, max_tokens=1000
+        )
+        client = GeminiClient(
+            config=config, cache=False, max_tokens=2000, client=mock_gemini_client
+        )
+
+        messages = [Message(role='user', content='Test message')]
+        await client.generate_response(messages)
+
+        call_args = mock_gemini_client.aio.models.generate_content.call_args
+        config = call_args[1]['config']
+        # Instance max_tokens should be used
+        assert config.max_output_tokens == 2000
+
+        # Test case 2: No explicit max_tokens, no instance max_tokens, uses model mapping
+        config = LLMConfig(api_key='test_api_key', model='gemini-2.5-flash', temperature=0.5)
+        client = GeminiClient(config=config, cache=False, client=mock_gemini_client)
+
+        messages = [Message(role='user', content='Test message')]
+        await client.generate_response(messages)
+
+        call_args = mock_gemini_client.aio.models.generate_content.call_args
+        config = call_args[1]['config']
+        # Model mapping should be used
+        assert config.max_output_tokens == 65536
 
     @pytest.mark.asyncio
     async def test_model_size_selection(self, gemini_client, mock_gemini_client):
@@ -403,6 +442,44 @@ class TestGeminiClientGenerateResponse:
         # Verify correct model is used
         call_args = mock_gemini_client.aio.models.generate_content.call_args
         assert call_args[1]['model'] == DEFAULT_SMALL_MODEL
+
+    @pytest.mark.asyncio
+    async def test_gemini_model_max_tokens_mapping(self, mock_gemini_client):
+        """Test that different Gemini models use their correct max tokens."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.text = 'Test response'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        # Test data: (model_name, expected_max_tokens)
+        test_cases = [
+            ('gemini-2.5-flash', 65536),
+            ('gemini-2.5-pro', 65536),
+            ('gemini-2.5-flash-lite', 64000),
+            ('models/gemini-2.5-flash-lite-preview-06-17', 64000),
+            ('gemini-2.0-flash', 8192),
+            ('gemini-1.5-pro', 8192),
+            ('gemini-1.5-flash', 8192),
+            ('unknown-model', 8192),  # Fallback case
+        ]
+
+        for model_name, expected_max_tokens in test_cases:
+            # Create client with specific model, no explicit max_tokens to test mapping
+            config = LLMConfig(api_key='test_api_key', model=model_name, temperature=0.5)
+            client = GeminiClient(config=config, cache=False, client=mock_gemini_client)
+
+            # Call method without explicit max_tokens to test model mapping fallback
+            messages = [Message(role='user', content='Test message')]
+            await client.generate_response(messages)
+
+            # Verify correct max tokens is used from model mapping
+            call_args = mock_gemini_client.aio.models.generate_content.call_args
+            config = call_args[1]['config']
+            assert config.max_output_tokens == expected_max_tokens, (
+                f'Model {model_name} should use {expected_max_tokens} tokens'
+            )
 
 
 if __name__ == '__main__':
