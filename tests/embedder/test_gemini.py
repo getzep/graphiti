@@ -21,13 +21,13 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from embedder_fixtures import create_embedding_values
 
 from graphiti_core.embedder.gemini import (
     DEFAULT_EMBEDDING_MODEL,
     GeminiEmbedder,
     GeminiEmbedderConfig,
 )
-from tests.embedder.embedder_fixtures import create_embedding_values
 
 
 def create_gemini_embedding(multiplier: float = 0.1, dimension: int = 1536) -> MagicMock:
@@ -299,10 +299,9 @@ class TestGeminiEmbedderCreateBatch:
 
         input_batch = []
 
-        with pytest.raises(Exception) as exc_info:
-            await gemini_embedder.create_batch(input_batch)
-
-        assert 'No embeddings returned' in str(exc_info.value)
+        result = await gemini_embedder.create_batch(input_batch)
+        assert result == []
+        mock_gemini_client.aio.models.embed_content.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_create_batch_no_embeddings_error(
@@ -316,10 +315,10 @@ class TestGeminiEmbedderCreateBatch:
 
         input_batch = ['Input 1', 'Input 2']
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await gemini_embedder.create_batch(input_batch)
 
-        assert 'No embeddings returned' in str(exc_info.value)
+        assert 'No embeddings returned from Gemini API' in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_create_batch_empty_values_error(
@@ -332,9 +331,24 @@ class TestGeminiEmbedderCreateBatch:
         mock_embedding2 = MagicMock()
         mock_embedding2.values = None  # Empty values
 
-        mock_response = MagicMock()
-        mock_response.embeddings = [mock_embedding1, mock_embedding2]
-        mock_gemini_client.aio.models.embed_content.return_value = mock_response
+        # Mock response for the initial batch call
+        mock_batch_response = MagicMock()
+        mock_batch_response.embeddings = [mock_embedding1, mock_embedding2]
+
+        # Mock response for individual processing of 'Input 1'
+        mock_individual_response_1 = MagicMock()
+        mock_individual_response_1.embeddings = [mock_embedding1]
+
+        # Mock response for individual processing of 'Input 2' (which has empty values)
+        mock_individual_response_2 = MagicMock()
+        mock_individual_response_2.embeddings = [mock_embedding2]
+
+        # Set side_effect for embed_content to control return values for each call
+        mock_gemini_client.aio.models.embed_content.side_effect = [
+            mock_batch_response,          # First call for the batch
+            mock_individual_response_1,   # Second call for individual item 1
+            mock_individual_response_2    # Third call for individual item 2
+        ]
 
         input_batch = ['Input 1', 'Input 2']
 
