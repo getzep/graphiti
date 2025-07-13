@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
 if TYPE_CHECKING:
@@ -195,13 +195,8 @@ class GeminiClient(LLMClient):
         if self.max_tokens is not None:
             return self.max_tokens
 
-        # 3. Use model-specific maximum
-        model_max = self._get_max_tokens_for_model(model)
-        if model_max is not None:
-            return model_max
-
-        # 4. Final fallback to DEFAULT_MAX_TOKENS
-        return DEFAULT_MAX_TOKENS
+        # 3. Use model-specific maximum or return DEFAULT_GEMINI_MAX_TOKENS
+        return self._get_max_tokens_for_model(model)
 
     def salvage_json(self, raw_output: str) -> dict[str, typing.Any] | None:
         """
