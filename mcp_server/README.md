@@ -82,11 +82,24 @@ uv sync
 
 ## Configuration
 
-The server uses the following environment variables:
+The server supports both Neo4j and FalkorDB as database backends. Use the `DATABASE_TYPE` environment variable to choose between them.
 
+### Database Configuration
+
+#### Neo4j Configuration (default)
+- `DATABASE_TYPE`: Set to `neo4j` or omit (default)
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
+
+#### FalkorDB Configuration
+- `DATABASE_TYPE`: Set to `falkordb`
+- `FALKORDB_HOST`: FalkorDB host (default: `localhost`)
+- `FALKORDB_PORT`: FalkorDB port (default: `6379`)
+- `FALKORDB_USERNAME`: FalkorDB username (optional)
+- `FALKORDB_PASSWORD`: FalkorDB password (optional)
+
+### Common Configuration
 - `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
@@ -115,7 +128,7 @@ uv run graphiti_mcp_server.py
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
+uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse --database-type falkordb
 ```
 
 Available arguments:
@@ -124,6 +137,7 @@ Available arguments:
 - `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
 - `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
+- `--database-type`: Choose database backend (neo4j or falkordb, default: neo4j)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
@@ -175,29 +189,57 @@ The Docker Compose setup includes a Neo4j container with the following default c
 - URI: `bolt://neo4j:7687` (from within the Docker network)
 - Memory settings optimized for development use
 
+#### FalkorDB Configuration
+
+The Docker Compose setup includes a FalkorDB container with the following default configuration:
+
+- Host: `falkordb`
+- Port: `6379`
+- No authentication by default
+- Redis-compatible protocol
+
+To run with FalkorDB instead of Neo4j, use the FalkorDB-specific compose file:
+
+```bash
+docker compose -f docker-compose.falkordb.yml up
+```
+
+Or run both databases simultaneously:
+
+```bash
+docker compose up  # This runs both Neo4j and FalkorDB services
+```
+
+The main compose file now includes both databases:
+- Neo4j MCP server on port 8000
+- FalkorDB MCP server on port 8001
+
 #### Running with Docker Compose
 
 A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
 
-Start the services using Docker Compose:
+**For Neo4j (default):**
+```bash
+docker compose up graphiti-mcp
+```
 
+**For FalkorDB:**
+```bash
+docker compose up graphiti-mcp-falkordb
+```
+
+**For both databases:**
 ```bash
 docker compose up
 ```
 
-Or if you're using an older version of Docker Compose:
-
-```bash
-docker-compose up
-```
-
-This will start both the Neo4j database and the Graphiti MCP server. The Docker setup:
+This will start the database(s) and the Graphiti MCP server(s). The Docker setup:
 
 - Uses `uv` for package management and running the server
 - Installs dependencies from the `pyproject.toml` file
-- Connects to the Neo4j container using the environment variables
-- Exposes the server on port 8000 for HTTP-based SSE transport
-- Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
+- Connects to the database container using the environment variables
+- Exposes the server on port 8000 (Neo4j) or 8001 (FalkorDB) for HTTP-based SSE transport
+- Includes healthchecks to ensure databases are fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
 
