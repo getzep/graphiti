@@ -23,32 +23,42 @@ Graph service is a fast api server implementing the [graphiti](https://github.co
    An example of docker compose setup may look like this:
 
    ```yml
-      version: '3.8'
-
-      services:
-      graph:
-         image: zepai/graphiti:latest
-         ports:
-            - "8000:8000"
-         
-         environment:
-            - OPENAI_API_KEY=${OPENAI_API_KEY}
-            - NEO4J_URI=bolt://neo4j:${NEO4J_PORT}
-            - NEO4J_USER=${NEO4J_USER}
-            - NEO4J_PASSWORD=${NEO4J_PASSWORD}
-      neo4j:
-         image: neo4j:5.22.0
-         
-         ports:
-            - "7474:7474"  # HTTP
-            - "${NEO4J_PORT}:${NEO4J_PORT}"  # Bolt
-         volumes:
-            - neo4j_data:/data
-         environment:
-            - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
-
-      volumes:
-      neo4j_data:
+   version: '3.8'
+   
+   services:
+     graph:
+       image: zepai/graphiti:latest
+       ports:
+         - "8000:8000"
+       depends_on:
+         neo4j:
+           condition: service_healthy
+       restart: unless-stopped
+       environment:
+         - OPENAI_API_KEY=${OPENAI_API_KEY}
+         - NEO4J_URI="bolt://neo4j:${NEO4J_PORT}"
+         - NEO4J_USER=neo4j
+         - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+   
+     neo4j:
+       image: neo4j:5.22.0
+       ports:
+         - "7474:7474"
+         - "${NEO4J_PORT}:${NEO4J_PORT}"
+       volumes:
+         - neo4j_data:/data
+       environment:
+         - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+       restart: unless-stopped
+       healthcheck:
+         test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+         interval: 30s
+         timeout: 10s
+         retries: 5
+         start_period: 30s
+   
+   volumes:
+     neo4j_data:
    ```
 
 5. Once you start the service, it will be available at `http://localhost:8000` (or the port you have specified in the docker compose file).
