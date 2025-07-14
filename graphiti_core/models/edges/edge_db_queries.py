@@ -33,7 +33,7 @@ EPISODIC_EDGE_SAVE_BULK = """
 ENTITY_EDGE_SAVE = """
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 
-        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
+        CALL apoc.create.relationship(source, $edge_data.name, {uuid: $uuid}, target) YIELD rel as r
         SET r = $edge_data
         WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $edge_data.fact_embedding)
         RETURN r.uuid AS uuid"""
@@ -42,7 +42,7 @@ ENTITY_EDGE_SAVE_BULK = """
     UNWIND $entity_edges AS edge
     MATCH (source:Entity {uuid: edge.source_node_uuid}) 
     MATCH (target:Entity {uuid: edge.target_node_uuid}) 
-    MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
+    CALL apoc.create.relationship(source, edge.name, {uuid: edge.uuid}, target) YIELD rel as r
     SET r = edge
     WITH r, edge CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", edge.fact_embedding)
     RETURN edge.uuid AS uuid
