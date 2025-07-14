@@ -345,9 +345,9 @@ class TestGeminiEmbedderCreateBatch:
 
         # Set side_effect for embed_content to control return values for each call
         mock_gemini_client.aio.models.embed_content.side_effect = [
-            mock_batch_response,          # First call for the batch
-            mock_individual_response_1,   # Second call for individual item 1
-            mock_individual_response_2    # Third call for individual item 2
+            mock_batch_response,  # First call for the batch
+            mock_individual_response_1,  # Second call for individual item 1
+            mock_individual_response_2,  # Third call for individual item 2
         ]
 
         input_batch = ['Input 1', 'Input 2']

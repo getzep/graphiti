@@ -172,13 +172,13 @@ class LLMClient(ABC):
         """
         Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
         """
-        log = ""
-        log += f"Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n"
+        log = ''
+        log += f'Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n'
         if output is not None:
             if len(output) > 4000:
-                log += f"Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}\n"
+                log += f'Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}\n'
             else:
-                log += f"Raw output: {output}\n"
+                log += f'Raw output: {output}\n'
         else:
-            log += "No raw output available"
+            log += 'No raw output available'
         return log

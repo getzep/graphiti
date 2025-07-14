@@ -219,14 +219,14 @@ class GeminiClient(LLMClient):
         array_match = re.search(r'\]\s*$', raw_output)
         if array_match:
             try:
-                return json.loads(raw_output[:array_match.end()])
+                return json.loads(raw_output[: array_match.end()])
             except Exception:
                 pass
         # Try to salvage a JSON object
         obj_match = re.search(r'\}\s*$', raw_output)
         if obj_match:
             try:
-                return json.loads(raw_output[:obj_match.end()])
+                return json.loads(raw_output[: obj_match.end()])
             except Exception:
                 pass
         return None
@@ -323,12 +323,14 @@ class GeminiClient(LLMClient):
                     return validated_model.model_dump()
                 except Exception as e:
                     if raw_output:
-                        logger.error("🦀 LLM generation failed parsing as JSON, will try to salvage.")
+                        logger.error(
+                            '🦀 LLM generation failed parsing as JSON, will try to salvage.'
+                        )
                         logger.error(self._get_failed_generation_log(gemini_messages, raw_output))
                         # Try to salvage
                         salvaged = self.salvage_json(raw_output)
                         if salvaged is not None:
-                            logger.warning("Salvaged partial JSON from truncated/malformed output.")
+                            logger.warning('Salvaged partial JSON from truncated/malformed output.')
                             return salvaged
                     raise Exception(f'Failed to parse structured response: {e}') from e
 
@@ -384,7 +386,11 @@ class GeminiClient(LLMClient):
                     max_tokens=max_tokens,
                     model_size=model_size,
                 )
-                last_output = response.get('content') if isinstance(response, dict) and 'content' in response else None
+                last_output = (
+                    response.get('content')
+                    if isinstance(response, dict) and 'content' in response
+                    else None
+                )
                 return response
             except RateLimitError as e:
                 # Rate limit errors should not trigger retries (fail fast)
@@ -416,7 +422,7 @@ class GeminiClient(LLMClient):
                 )
 
         # If we exit the loop without returning, all retries are exhausted
-        logger.error("🦀 LLM generation failed and retries are exhausted.")
+        logger.error('🦀 LLM generation failed and retries are exhausted.')
         logger.error(self._get_failed_generation_log(messages, last_output))
         logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
-        raise last_error or Exception("Max retries exceeded")
+        raise last_error or Exception('Max retries exceeded')
