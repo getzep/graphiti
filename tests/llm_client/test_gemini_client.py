@@ -273,7 +273,7 @@ class TestGeminiClientGenerateResponse:
         messages = [Message(role='user', content='Test message')]
         with pytest.raises(Exception):  # noqa: B017
             await gemini_client.generate_response(messages, response_model=ResponseModel)
-        
+
         # Should have called generate_content MAX_RETRIES times (2 attempts total)
         assert mock_gemini_client.aio.models.generate_content.call_count == GeminiClient.MAX_RETRIES
 
@@ -344,10 +344,7 @@ class TestGeminiClientGenerateResponse:
             await gemini_client.generate_response(messages, response_model=ResponseModel)
 
         # Should have called generate_content MAX_RETRIES times (2 attempts total)
-        assert (
-            mock_gemini_client.aio.models.generate_content.call_count
-            == GeminiClient.MAX_RETRIES
-        )
+        assert mock_gemini_client.aio.models.generate_content.call_count == GeminiClient.MAX_RETRIES
 
     @pytest.mark.asyncio
     async def test_empty_response_handling(self, gemini_client, mock_gemini_client):
@@ -363,7 +360,7 @@ class TestGeminiClientGenerateResponse:
         messages = [Message(role='user', content='Test message')]
         with pytest.raises(Exception):  # noqa: B017
             await gemini_client.generate_response(messages, response_model=ResponseModel)
-        
+
         # Should have exhausted retries due to empty response (2 attempts total)
         assert mock_gemini_client.aio.models.generate_content.call_count == GeminiClient.MAX_RETRIES
 

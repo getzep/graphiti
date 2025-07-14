@@ -31,9 +31,9 @@ EPISODIC_EDGE_SAVE_BULK = """
 """
 
 ENTITY_EDGE_SAVE = """
-        MATCH (source:Entity {uuid: $source_uuid}) 
-        MATCH (target:Entity {uuid: $target_uuid}) 
-        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
+        MATCH (source:Entity {uuid: $edge_data.source_uuid}) 
+        MATCH (target:Entity {uuid: $edge_data.target_uuid}) 
+        MERGE (source)-[r:RELATES_TO {uuid: $edge_data.uuid}]->(target)
         SET r = $edge_data
         WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $edge_data.fact_embedding)
         RETURN r.uuid AS uuid"""
