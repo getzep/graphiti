@@ -108,11 +108,12 @@ class Graphiti:
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
         max_coroutines: int | None = None,
+        graph_name: str | None = None,
     ):
         """
         Initialize a Graphiti instance.
 
-        This constructor sets up a connection to the Neo4j database and initializes
+        This constructor sets up a connection to a graph database and initializes
         the LLM client for natural language processing tasks.
 
         Parameters
@@ -140,6 +141,8 @@ class Graphiti:
         max_coroutines : int | None, optional
             The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
             If not set, the Graphiti default is used.
+        graph_name : str | None, optional
+            The name of the graph database to connect to. When it is None, the default database name defined in the graph_driver.
 
         Returns
         -------
@@ -147,11 +150,11 @@ class Graphiti:
 
         Notes
         -----
-        This method establishes a connection to the Neo4j database using the provided
+        This method establishes a connection to a graph database (Neo4j by default) using the provided
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
-        The default database name is set to 'neo4j'. If a different database name
+        The default database name is defined during the driver’s construction. If a different database name
         is required, it should be specified in the URI or set separately after
         initialization.
 
@@ -161,11 +164,13 @@ class Graphiti:
         """
 
         if graph_driver:
-            self.driver = graph_driver
+            self.driver = graph_driver.with_database(graph_name) if graph_name else graph_driver
         else:
             if uri is None:
                 raise ValueError('uri must be provided when graph_driver is None')
-            self.driver = Neo4jDriver(uri, user, password)
+            self.driver = Neo4jDriver(uri, user, password, database=graph_name) if graph_name else Neo4jDriver(
+                uri, user, password
+            )
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines

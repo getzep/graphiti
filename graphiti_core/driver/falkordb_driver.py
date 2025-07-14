@@ -90,12 +90,13 @@ class FalkorDriver(GraphDriver):
         The default parameters assume a local (on-premises) FalkorDB instance.
         """
         super().__init__()
+
+        self._database = database
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
-            self._database = database
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
@@ -104,8 +105,7 @@ class FalkorDriver(GraphDriver):
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
-        graph_name = kwargs.pop('database_', self._database)
-        graph = self._get_graph(graph_name)
+        graph = self._get_graph(self._database)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
         params = convert_datetimes_to_strings(dict(kwargs))
