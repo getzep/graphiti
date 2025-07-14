@@ -18,6 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from typing import Any
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class GraphDriver(ABC):
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
+    _database: str
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -65,3 +67,13 @@ class GraphDriver(ABC):
     @abstractmethod
     def delete_all_indexes(self, database_: str | None = None) -> Coroutine:
         raise NotImplementedError()
+
+    def with_database(self, database: str) -> 'GraphDriver':
+        """
+        Returns a shallow copy of this driver with a different default database.
+        Reuses the same connection (e.g. FalkorDB, Neo4j).
+        """
+        cloned = copy.copy(self)
+        cloned._database = database
+
+        return cloned
