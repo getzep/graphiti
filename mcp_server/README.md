@@ -196,7 +196,7 @@ The Docker Compose setup includes a FalkorDB container with the following defaul
 - Host: `falkordb`
 - Port: `6379`
 - No authentication by default
-- Redis-compatible protocol
+- Bolt connection protocol
 
 To run with FalkorDB instead of Neo4j, use the FalkorDB-specific compose file:
 
