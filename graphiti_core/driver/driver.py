@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
@@ -64,13 +63,3 @@ class GraphDriver(ABC):
     @abstractmethod
     def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
-    
-    def with_database(self, database: str) -> "GraphDriver":
-        """
-        Returns a shallow copy of this driver with a different default database.
-        Reuses the same connection (e.g. FalkorDB, Neo4j).
-        """
-        cloned = copy.copy(self)
-        cloned._database = database
-
-        return cloned

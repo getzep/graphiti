@@ -75,7 +75,7 @@ async def main():
     falkor_driver = FalkorDriver(
         host=falkor_host, port=falkor_port, username=falkor_username, password=falkor_password
     )
-    graphiti = Graphiti(graph_driver=falkor_driver, database='gal_1')
+    graphiti = Graphiti(graph_driver=falkor_driver)
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
@@ -126,21 +126,7 @@ async def main():
                 'description': 'podcast metadata',
             },
         ]
-        # Add episodes to the graph
-        for i, episode in enumerate(episodes):
-            await graphiti.add_episode(
-                name=f'Freakonomics Radio {i}',
-                episode_body=episode['content']
-                if isinstance(episode['content'], str)
-                else json.dumps(episode['content']),
-                source=episode['type'],
-                source_description=episode['description'],
-                reference_time=datetime.now(timezone.utc),
-            )
-            print(f'Added episode: Freakonomics Radio {i} ({episode["type"].value})')
-        
 
-        graphiti = Graphiti(graph_driver=falkor_driver, database='gal_1')
         # Add episodes to the graph
         for i, episode in enumerate(episodes):
             await graphiti.add_episode(
