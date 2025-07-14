@@ -1,0 +1,42 @@
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+    command: ["falkordb-server", "--loadmodule", "/FalkorDB/bin/src/falkordb.so"]
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  graphiti-mcp-falkordb:
+    image: zepai/knowledge-graph-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    environment:
+      - DATABASE_TYPE=falkordb
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_USERNAME=${FALKORDB_USERNAME:-}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MODEL_NAME=${MODEL_NAME}
+      - PATH=/root/.local/bin:${PATH}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+    ports:
+      - "8000:8000"
+    command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--database-type", "falkordb"]
+
+volumes:
+  falkordb_data:
