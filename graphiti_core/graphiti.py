@@ -30,7 +30,6 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
-    DEFAULT_DATABASE,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
@@ -57,7 +56,6 @@ from graphiti_core.utils.bulk_utils import (
     add_nodes_and_edges_bulk,
     dedupe_edges_bulk,
     dedupe_nodes_bulk,
-    extract_edge_dates_bulk,
     extract_nodes_and_edges_bulk,
     resolve_edge_pointers,
     retrieve_previous_episodes_bulk,
@@ -169,7 +167,6 @@ class Graphiti:
                 raise ValueError('uri must be provided when graph_driver is None')
             self.driver = Neo4jDriver(uri, user, password)
 
-        self.database = DEFAULT_DATABASE
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
         if llm_client:
@@ -508,7 +505,7 @@ class Graphiti:
 
             entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
 
-            episodic_edges = build_episodic_edges(nodes, episode, now)
+            episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
 
             episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -536,8 +533,16 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    #### WIP: USE AT YOUR OWN RISK ####
-    async def add_episode_bulk(self, bulk_episodes: list[RawEpisode], group_id: str = ''):
+    ##### EXPERIMENTAL #####
+    async def add_episode_bulk(
+        self,
+        bulk_episodes: list[RawEpisode],
+        group_id: str = '',
+        entity_types: dict[str, BaseModel] | None = None,
+        excluded_entity_types: list[str] | None = None,
+        edge_types: dict[str, BaseModel] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+    ):
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -580,8 +585,17 @@ class Graphiti:
 
             validate_group_id(group_id)
 
+            # Create default edge type map
+            edge_type_map_default = (
+                {('Entity', 'Entity'): list(edge_types.keys())}
+                if edge_types is not None
+                else {('Entity', 'Entity'): []}
+            )
+
             episodes = [
-                EpisodicNode(
+                await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
+                if episode.uuid is not None
+                else EpisodicNode(
                     name=episode.name,
                     labels=[],
                     source=episode.source,
@@ -594,68 +608,106 @@ class Graphiti:
                 for episode in bulk_episodes
             ]
 
-            # Save all the episodes
-            await semaphore_gather(
-                *[episode.save(self.driver) for episode in episodes],
-                max_coroutines=self.max_coroutines,
+            episodes_by_uuid: dict[str, EpisodicNode] = {
+                episode.uuid: episode for episode in episodes
+            }
+
+            # Save all episodes
+            await add_nodes_and_edges_bulk(
+                driver=self.driver,
+                episodic_nodes=episodes,
+                episodic_edges=[],
+                entity_nodes=[],
+                entity_edges=[],
+                embedder=self.embedder,
             )
 
             # Get previous episode context for each episode
-            episode_pairs = await retrieve_previous_episodes_bulk(self.driver, episodes)
+            episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
 
-            # Extract all nodes and edges
-            (
-                extracted_nodes,
-                extracted_edges,
-                episodic_edges,
-            ) = await extract_nodes_and_edges_bulk(self.clients, episode_pairs, None, None)
-
-            # Generate embeddings
-            await semaphore_gather(
-                *[node.generate_name_embedding(self.embedder) for node in extracted_nodes],
-                *[edge.generate_embedding(self.embedder) for edge in extracted_edges],
-                max_coroutines=self.max_coroutines,
+            # Extract all nodes and edges for each episode
+            extracted_nodes_bulk, extracted_edges_bulk = await extract_nodes_and_edges_bulk(
+                self.clients,
+                episode_context,
+                edge_type_map=edge_type_map or edge_type_map_default,
+                edge_types=edge_types,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
             )
 
-            # Dedupe extracted nodes, compress extracted edges
-            (nodes, uuid_map), extracted_edges_timestamped = await semaphore_gather(
-                dedupe_nodes_bulk(self.driver, self.llm_client, extracted_nodes),
-                extract_edge_dates_bulk(self.llm_client, extracted_edges, episode_pairs),
-                max_coroutines=self.max_coroutines,
+            # Dedupe extracted nodes in memory
+            nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
+                self.clients, extracted_nodes_bulk, episode_context, entity_types
             )
 
-            # save nodes to KG
-            await semaphore_gather(
-                *[node.save(self.driver) for node in nodes],
-                max_coroutines=self.max_coroutines,
-            )
+            episodic_edges: list[EpisodicEdge] = []
+            for episode_uuid, nodes in nodes_by_episode.items():
+                episodic_edges.extend(build_episodic_edges(nodes, episode_uuid, now))
 
             # re-map edge pointers so that they don't point to discard dupe nodes
-            extracted_edges_with_resolved_pointers: list[EntityEdge] = resolve_edge_pointers(
-                extracted_edges_timestamped, uuid_map
-            )
-            episodic_edges_with_resolved_pointers: list[EpisodicEdge] = resolve_edge_pointers(
-                episodic_edges, uuid_map
+            extracted_edges_bulk_updated: list[list[EntityEdge]] = [
+                resolve_edge_pointers(edges, uuid_map) for edges in extracted_edges_bulk
+            ]
+
+            # Dedupe extracted edges in memory
+            edges_by_episode = await dedupe_edges_bulk(
+                self.clients,
+                extracted_edges_bulk_updated,
+                episode_context,
+                [],
+                edge_types or {},
+                edge_type_map or edge_type_map_default,
             )
 
-            # save episodic edges to KG
-            await semaphore_gather(
-                *[edge.save(self.driver) for edge in episodic_edges_with_resolved_pointers],
-                max_coroutines=self.max_coroutines,
+            # Extract node attributes
+            nodes_by_uuid: dict[str, EntityNode] = {
+                node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
+            }
+
+            extract_attributes_params: list[tuple[EntityNode, list[EpisodicNode]]] = []
+            for node in nodes_by_uuid.values():
+                episode_uuids: list[str] = []
+                for episode_uuid, mentioned_nodes in nodes_by_episode.items():
+                    for mentioned_node in mentioned_nodes:
+                        if node.uuid == mentioned_node.uuid:
+                            episode_uuids.append(episode_uuid)
+                            break
+
+                episode_mentions: list[EpisodicNode] = [
+                    episodes_by_uuid[episode_uuid] for episode_uuid in episode_uuids
+                ]
+                episode_mentions.sort(key=lambda x: x.valid_at, reverse=True)
+
+                extract_attributes_params.append((node, episode_mentions))
+
+            new_hydrated_nodes: list[list[EntityNode]] = await semaphore_gather(
+                *[
+                    extract_attributes_from_nodes(
+                        self.clients,
+                        [params[0]],
+                        params[1][0],
+                        params[1][0:],
+                        entity_types,
+                    )
+                    for params in extract_attributes_params
+                ]
             )
 
-            # Dedupe extracted edges
-            edges = await dedupe_edges_bulk(
-                self.driver, self.llm_client, extracted_edges_with_resolved_pointers
-            )
-            logger.debug(f'extracted edge length: {len(edges)}')
+            hydrated_nodes = [node for nodes in new_hydrated_nodes for node in nodes]
 
-            # invalidate edges
+            # TODO: Resolve nodes and edges against the existing graph
+            edges_by_uuid: dict[str, EntityEdge] = {
+                edge.uuid: edge for edges in edges_by_episode.values() for edge in edges
+            }
 
-            # save edges to KG
-            await semaphore_gather(
-                *[edge.save(self.driver) for edge in edges],
-                max_coroutines=self.max_coroutines,
+            # save data to KG
+            await add_nodes_and_edges_bulk(
+                self.driver,
+                episodes,
+                episodic_edges,
+                hydrated_nodes,
+                list(edges_by_uuid.values()),
+                self.embedder,
             )
 
             end = time()
@@ -828,7 +880,7 @@ class Graphiti:
             await get_edge_invalidation_candidates(self.driver, [updated_edge], SearchFilters())
         )[0]
 
-        resolved_edge, invalidated_edges = await resolve_extracted_edge(
+        resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,
             updated_edge,
             related_edges,
@@ -867,9 +919,7 @@ class Graphiti:
         nodes_to_delete: list[EntityNode] = []
         for node in nodes:
             query: LiteralString = 'MATCH (e:Episodic)-[:MENTIONS]->(n:Entity {uuid: $uuid}) RETURN count(*) AS episode_count'
-            records, _, _ = await self.driver.execute_query(
-                query, uuid=node.uuid, database_=DEFAULT_DATABASE, routing_='r'
-            )
+            records, _, _ = await self.driver.execute_query(query, uuid=node.uuid, routing_='r')
 
             for record in records:
                 if record['episode_count'] == 1:

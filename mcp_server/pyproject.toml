@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server"
-version = "0.2.1"
+version = "0.4.0"
 description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"

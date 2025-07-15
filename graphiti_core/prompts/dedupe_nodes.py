@@ -32,9 +32,9 @@ class NodeDuplicate(BaseModel):
         ...,
         description='Name of the entity. Should be the most complete and descriptive name of the entity. Do not include any JSON formatting in the Entity name such as {}.',
     )
-    additional_duplicates: list[int] = Field(
+    duplicates: list[int] = Field(
         ...,
-        description='idx of additional duplicate entities. Use this list if the entity has multiple duplicates among existing entities.',
+        description='idx of all duplicate entities.',
     )
 
 
@@ -94,7 +94,7 @@ def node(context: dict[str, Any]) -> list[Message]:
          1. Compare `new_entity` against each item in `existing_entities`.
          2. If it refers to the same real‐world object or concept, collect its index.
          3. Let `duplicate_idx` = the *first* collected index, or –1 if none.
-         4. Let `additional_duplicates` = the list of *any other* collected indices (empty list if none).
+         4. Let `duplicates` = the list of *all* collected indices (empty list if none).
         
         Also return the full name of the NEW ENTITY (whether it is the name of the NEW ENTITY, a node it
         is a duplicate of, or a combination of the two).

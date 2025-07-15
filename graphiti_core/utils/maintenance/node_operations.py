@@ -176,62 +176,13 @@ async def extract_nodes(
     return extracted_nodes
 
 
-async def dedupe_extracted_nodes(
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
-    existing_nodes: list[EntityNode],
-) -> tuple[list[EntityNode], dict[str, str]]:
-    start = time()
-
-    # build existing node map
-    node_map: dict[str, EntityNode] = {}
-    for node in existing_nodes:
-        node_map[node.uuid] = node
-
-    # Prepare context for LLM
-    existing_nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in existing_nodes
-    ]
-
-    extracted_nodes_context = [
-        {'uuid': node.uuid, 'name': node.name, 'summary': node.summary} for node in extracted_nodes
-    ]
-
-    context = {
-        'existing_nodes': existing_nodes_context,
-        'extracted_nodes': extracted_nodes_context,
-    }
-
-    llm_response = await llm_client.generate_response(prompt_library.dedupe_nodes.node(context))
-
-    duplicate_data = llm_response.get('duplicates', [])
-
-    end = time()
-    logger.debug(f'Deduplicated nodes: {duplicate_data} in {(end - start) * 1000} ms')
-
-    uuid_map: dict[str, str] = {}
-    for duplicate in duplicate_data:
-        uuid_value = duplicate['duplicate_of']
-        uuid_map[duplicate['uuid']] = uuid_value
-
-    nodes: list[EntityNode] = []
-    for node in extracted_nodes:
-        if node.uuid in uuid_map:
-            existing_uuid = uuid_map[node.uuid]
-            existing_node = node_map[existing_uuid]
-            nodes.append(existing_node)
-        else:
-            nodes.append(node)
-
-    return nodes, uuid_map
-
-
 async def resolve_extracted_nodes(
     clients: GraphitiClients,
     extracted_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, BaseModel] | None = None,
+    existing_nodes_override: list[EntityNode] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     llm_client = clients.llm_client
     driver = clients.driver
@@ -249,9 +200,13 @@ async def resolve_extracted_nodes(
         ]
     )
 
-    existing_nodes_dict: dict[str, EntityNode] = {
-        node.uuid: node for result in search_results for node in result.nodes
-    }
+    candidate_nodes: list[EntityNode] = (
+        [node for result in search_results for node in result.nodes]
+        if existing_nodes_override is None
+        else existing_nodes_override
+    )
+
+    existing_nodes_dict: dict[str, EntityNode] = {node.uuid: node for node in candidate_nodes}
 
     existing_nodes: list[EntityNode] = list(existing_nodes_dict.values())
 
@@ -321,13 +276,11 @@ async def resolve_extracted_nodes(
         resolved_nodes.append(resolved_node)
         uuid_map[extracted_node.uuid] = resolved_node.uuid
 
-        additional_duplicates: list[int] = resolution.get('additional_duplicates', [])
-        for idx in additional_duplicates:
+        duplicates: list[int] = resolution.get('duplicates', [])
+        for idx in duplicates:
             existing_node = existing_nodes[idx] if idx < len(existing_nodes) else resolved_node
-            if existing_node == resolved_node:
-                continue
 
-            node_duplicates.append((resolved_node, existing_nodes[idx]))
+            node_duplicates.append((resolved_node, existing_node))
 
     logger.debug(f'Resolved nodes: {[(n.name, n.uuid) for n in resolved_nodes]}')
 

@@ -157,7 +157,7 @@ def edge_search_filter_query_constructor(
         filter_query += created_at_filter
 
     if filters.expired_at is not None:
-        expired_at_filter = 'AND ('
+        expired_at_filter = ' AND ('
         for i, or_list in enumerate(filters.expired_at):
             for j, date_filter in enumerate(or_list):
                 filter_params['expired_at_' + str(j)] = date_filter.date
