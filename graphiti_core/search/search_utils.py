@@ -62,7 +62,7 @@ MAX_QUERY_LENGTH = 32
 
 def fulltext_query(query: str, group_ids: list[str] | None = None):
     group_ids_filter_list = (
-        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids] if group_ids is not None else []
+        [f'group_id:"{lucene_sanitize(g)}"' for g in group_ids if g is not None] if group_ids is not None else []
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:

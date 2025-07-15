@@ -352,7 +352,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
+        group_id: str | None = None,
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
@@ -537,7 +537,7 @@ class Graphiti:
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
-        group_id: str = '',
+        group_id: str | None = None,
         entity_types: dict[str, BaseModel] | None = None,
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
