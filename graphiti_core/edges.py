@@ -18,7 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from time import time
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -55,7 +55,7 @@ ENTITY_EDGE_RETURN: LiteralString = """
 
 class Edge(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
-    group_id: str = Field(description='partition of the graph')
+    group_id: Optional[str] = Field(default=None, description='partition of the graph')
     source_node_uuid: str
     target_node_uuid: str
     created_at: datetime
