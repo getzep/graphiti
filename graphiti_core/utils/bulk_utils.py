@@ -16,7 +16,6 @@ limitations under the License.
 
 import logging
 import typing
-from collections import defaultdict, deque
 from datetime import datetime
 
 import numpy as np
