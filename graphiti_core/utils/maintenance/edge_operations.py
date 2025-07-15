@@ -444,14 +444,14 @@ async def resolve_extracted_edge(
         }
 
         edge_model = edge_types.get(fact_type)
+        if edge_model is not None and len(edge_model.model_fields) != 0:
+            edge_attributes_response = await llm_client.generate_response(
+                prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+                response_model=edge_model,  # type: ignore
+                model_size=ModelSize.small,
+            )
 
-        edge_attributes_response = await llm_client.generate_response(
-            prompt_library.extract_edges.extract_attributes(edge_attributes_context),
-            response_model=edge_model,  # type: ignore
-            model_size=ModelSize.small,
-        )
-
-        resolved_edge.attributes = edge_attributes_response
+            resolved_edge.attributes = edge_attributes_response
 
     end = time()
     logger.debug(
