@@ -30,6 +30,7 @@ anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
+voyage = ["voyageai>=0.2.3"]
 voyageai = ["voyageai>=0.2.3"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
 dev = [
