@@ -472,13 +472,13 @@ class Neo4jConfig(BaseModel):
 class FalkorConfig(BaseModel):
     """Configuration for FalkorDB database connection."""
 
-    uri: str = 'bold://localhost:6379'
+    uri: str = 'bolt://localhost:6379'
     user: str = ''
     password: str = ''
 
     @classmethod
     def from_env(cls) -> 'FalkorConfig':
-        uri = os.environ.get('FALKORDB_URI', 'bold://localhost:6379')
+        uri = os.environ.get('FALKORDB_URI', 'bolt://localhost:6379')
         user = os.environ.get('FALKORDB_USER', '')
         password = os.environ.get('FALKORDB_PASSWORD', '')
         return cls(uri=uri, user=user, password=password)
@@ -638,7 +638,7 @@ async def initialize_graphiti():
             port = int(parsed.port or 6379)
             username = config.falkor.user or (parsed.username if parsed.username else None)
             password = config.falkor.password or (parsed.password if parsed.password else None)
-            print(f'FalkorDB driver initialized with host={host}, port={port}, user={username}')
+            logger.info(f'FalkorDB driver initialized with host={host}, port={port}, user={username}')
             falkor_driver = FalkorDriver(
                 host=host,
                 port=port,
@@ -665,8 +665,6 @@ async def initialize_graphiti():
 
         # Initialize the graph database with Graphiti's indices
         await graphiti_client.build_indices_and_constraints()
-        logger.info(f'Graphiti client initialized successfully with {config.database_type}')
-
         logger.info(f'Graphiti client initialized successfully with {config.database_type}')
 
         # Log configuration details for transparency

@@ -3,7 +3,7 @@ services:
     image: falkordb/falkordb:latest
     ports:
       - "6379:6379"
-    command: ["falkordb-server", "--loadmodule", "/FalkorDB/bin/src/falkordb.so"]
+    command: ["falkordb-server", "--loadmodule", "${FALKORDB_MODULE_PATH:-/FalkorDB/bin/src/falkordb.so}"]
     volumes:
       - falkordb_data:/data
     healthcheck:
@@ -28,8 +28,8 @@ services:
       - DATABASE_TYPE=falkordb
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
-      - FALKORDB_USERNAME=${FALKORDB_USERNAME:-}
-      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_USERNAME=${FALKORDB_USERNAME:-falkordb}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-demodemo}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - MODEL_NAME=${MODEL_NAME}
       - PATH=/root/.local/bin:${PATH}
