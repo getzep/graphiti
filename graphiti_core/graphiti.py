@@ -703,7 +703,7 @@ class Graphiti:
             # Resolve nodes and edges against the existing graph
             nodes_by_episode_unique: dict[str, list[EntityNode]] = {}
             nodes_uuid_set: set[str] = set()
-            for episode, previous_episodes in episode_context:
+            for episode, _ in episode_context:
                 nodes_by_episode_unique[episode.uuid] = []
                 nodes = [nodes_by_uuid[node.uuid] for node in nodes_by_episode[episode.uuid]]
                 for node in nodes:
