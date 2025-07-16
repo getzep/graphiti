@@ -351,6 +351,7 @@ async def dedupe_edges_bulk(
         ]
     )
 
+    # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
     for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]

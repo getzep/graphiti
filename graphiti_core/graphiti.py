@@ -730,7 +730,7 @@ class Graphiti:
             for result in node_results:
                 resolved_nodes.extend(result[0])
                 uuid_map.update(result[1])
-                node_duplicates.extend(result[1])
+                node_duplicates.extend(result[2])
 
             # Update nodes_by_uuid map with the resolved nodes
             for resolved_node in resolved_nodes:
