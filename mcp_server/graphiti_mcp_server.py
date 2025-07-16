@@ -818,8 +818,8 @@ async def add_memory(
         # The Graphiti client expects a str for group_id, not Optional[str]
         group_id_str =  str(effective_group_id) if effective_group_id is not None else ''
 
-        # We've already checked that  heregraphiti_client is not None above
-        # This assert statement helps type checkers understand that gr hereaphiti_client is defined
+        # We've already checked that  graphiti_client is not None above
+        # This assert statement helps type checkers understand that graphiti_client is defined
         assert graphiti_client is not None, 'graphiti_client should not be None here'
 
         # Use cast to help the type checker understand that graphiti_client is not None
