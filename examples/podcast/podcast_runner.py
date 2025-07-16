@@ -78,7 +78,7 @@ async def main(use_bulk: bool = False):
     group_id = str(uuid4())
 
     raw_episodes: list[RawEpisode] = []
-    for i, message in enumerate(messages[3:10]):
+    for i, message in enumerate(messages[3:14]):
         raw_episodes.append(
             RawEpisode(
                 name=f'Message {i}',
@@ -97,7 +97,7 @@ async def main(use_bulk: bool = False):
             edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
         )
     else:
-        for i, message in enumerate(messages[3:14]):
+        for i, message in enumerate(messages[3:7]):
             episodes = await client.retrieve_episodes(
                 message.actual_timestamp, 3, group_ids=[group_id]
             )
@@ -116,4 +116,4 @@ async def main(use_bulk: bool = False):
             )
 
 
-asyncio.run(main(False))
+asyncio.run(main(True))

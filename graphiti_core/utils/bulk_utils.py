@@ -320,7 +320,11 @@ async def dedupe_edges_bulk(
                 edge_words = set(edge.fact.lower().split())
                 existing_edge_words = set(existing_edge.fact.lower().split())
                 has_overlap = not edge_words.isdisjoint(existing_edge_words)
-                if has_overlap:
+                if (
+                    has_overlap
+                    and edge.source_node_uuid == existing_edge.source_node_uuid
+                    and edge.target_node_uuid == existing_edge.target_node_uuid
+                ):
                     candidates.append(existing_edge)
                     continue
 
