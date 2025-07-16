@@ -53,7 +53,7 @@ def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None
 
 def get_default_group_id(db_type: str) -> str:
     """
-    This function diffrentiates the default group id based on the database type.
+    This function differentiates the default group id based on the database type.
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
     if db_type == 'falkordb':
