@@ -46,6 +46,7 @@ class GraphDriverSession(ABC):
 
 class GraphDriver(ABC):
     provider: str
+    fulltext_syntax: str = '' # Neo4j (default) syntax does not require a prefix for fulltext queries
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:

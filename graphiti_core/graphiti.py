@@ -33,6 +33,7 @@ from graphiti_core.helpers import (
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
+    get_default_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
@@ -420,7 +421,10 @@ class Graphiti:
             start = time()
             now = utc_now()
 
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_entity_types(entity_types)
+
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
 
@@ -583,6 +587,8 @@ class Graphiti:
             start = time()
             now = utc_now()
 
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_group_id(group_id)
 
             # Create default edge type map

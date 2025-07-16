@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -89,7 +89,7 @@ class EpisodeType(Enum):
 class Node(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(description='name of the node')
-    group_id: Optional[str] = Field(default=None, description='partition of the graph')
+    group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
 
