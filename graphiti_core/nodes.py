@@ -46,8 +46,7 @@ ENTITY_NODE_RETURN: LiteralString = """
             n.created_at AS created_at, 
             n.summary AS summary,
             labels(n) AS labels,
-            properties(n) AS attributes
-            """
+            properties(n) AS attributes"""
 
 
 class EpisodeType(Enum):
@@ -335,8 +334,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         query = (
             """
-                                                                    MATCH (n:Entity {uuid: $uuid})
-                                                                    """
+                                                                            MATCH (n:Entity {uuid: $uuid})
+                                                                            """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -374,6 +373,7 @@ class EntityNode(Node):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        with_embeddings: bool = False,
     ):
         cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -384,6 +384,11 @@ class EntityNode(Node):
         """
             + cursor_query
             + ENTITY_NODE_RETURN
+            + """,
+                n.name_embedding AS name_embedding
+                """
+            if with_embeddings
+            else ''
             + """
         ORDER BY n.uuid DESC
         """
@@ -546,6 +551,7 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
+        name_embedding=record.get('name_embedding'),
         group_id=record['group_id'],
         labels=record['labels'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
