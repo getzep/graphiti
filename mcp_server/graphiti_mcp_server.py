@@ -21,6 +21,7 @@ from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
@@ -472,16 +473,18 @@ class Neo4jConfig(BaseModel):
 class FalkorConfig(BaseModel):
     """Configuration for FalkorDB database connection."""
 
-    uri: str = 'bolt://localhost:6379'
+    host: str = 'localhost'
+    port: int = 6379
     user: str = ''
     password: str = ''
 
     @classmethod
     def from_env(cls) -> 'FalkorConfig':
-        uri = os.environ.get('FALKORDB_URI', 'bolt://localhost:6379')
+        host = os.environ.get('FALKORDB_HOST', 'localhost')
+        port = int(os.environ.get('FALKORDB_PORT', 6379))
         user = os.environ.get('FALKORDB_USER', '')
         password = os.environ.get('FALKORDB_PASSWORD', '')
-        return cls(uri=uri, user=user, password=password)
+        return cls(host=host, port=port, user=user, password=password)
 
 
 class GraphitiConfig(BaseModel):
@@ -497,16 +500,20 @@ class GraphitiConfig(BaseModel):
     group_id: str | None = None
     use_custom_entities: bool = False
     destroy_graph: bool = False
-    database_type: str = 'neo4j'  # Default to Neo4j
+    database_type: str = 'neo4j'
 
     @classmethod
     def from_env(cls) -> 'GraphitiConfig':
         """Create a configuration instance from environment variables."""
+        db_type = os.environ.get('DATABASE_TYPE')
+        if not db_type:
+            raise ValueError('DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")')
         return cls(
             llm=GraphitiLLMConfig.from_env(),
             embedder=GraphitiEmbedderConfig.from_env(),
             neo4j=Neo4jConfig.from_env(),
             falkor=FalkorConfig.from_env(),
+            database_type=db_type,
         )
 
     @classmethod
@@ -514,9 +521,6 @@ class GraphitiConfig(BaseModel):
         """Create configuration from CLI arguments, falling back to environment variables."""
         # Start with environment configuration
         config = cls.from_env()
-
-        # Set database type from environment variable first
-        config.database_type = os.environ.get('DATABASE_TYPE', 'neo4j')
 
         # Apply CLI overrides
         if args.group_id:
@@ -529,10 +533,6 @@ class GraphitiConfig(BaseModel):
 
         # Update LLM config using CLI args
         config.llm = GraphitiLLMConfig.from_cli_and_env(args)
-
-        # Set database type from CLI if provided
-        if hasattr(args, 'database_type') and args.database_type:
-            config.database_type = args.database_type
 
         return config
 
@@ -614,49 +614,35 @@ async def initialize_graphiti():
         # Create embedder client
         embedder_client = config.embedder.create_client()
 
-        # Initialize Graphiti client based on database type
+        # Construct the driver based on the database_type
+        driver = None
         if config.database_type == 'neo4j':
-            # Neo4j configuration
-            if not config.neo4j.uri or not config.neo4j.user or not config.neo4j.password:
-                raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
-            
-            logger.info(f'Initializing Graphiti with Neo4j at {config.neo4j.uri}')
-            graphiti_client = Graphiti(
+            driver = Neo4jDriver(
                 uri=config.neo4j.uri,
                 user=config.neo4j.user,
                 password=config.neo4j.password,
-                llm_client=llm_client,
-                embedder=embedder_client,
-                max_coroutines=SEMAPHORE_LIMIT,
             )
         elif config.database_type == 'falkordb':
-            if not config.falkor.uri:
-                raise ValueError('FALKORDB_URI must be set')
-            logger.info(f'Initializing Graphiti with FalkorDB at {config.falkor.uri}')
-            parsed = urlparse(config.falkor.uri)
-            host = parsed.hostname or 'localhost'
-            port = int(parsed.port or 6379)
-            username = config.falkor.user or (parsed.username if parsed.username else None)
-            password = config.falkor.password or (parsed.password if parsed.password else None)
-            logger.info(f'FalkorDB driver initialized with host={host}, port={port}, user={username}')
-            falkor_driver = FalkorDriver(
+            host = config.falkor.host if hasattr(config.falkor, 'host') else 'localhost'
+            port = int(config.falkor.port) if hasattr(config.falkor, 'port') else 6379
+            username = config.falkor.user or None
+            password = config.falkor.password or None
+            driver = FalkorDriver(
                 host=host,
                 port=port,
                 username=username,
                 password=password,
             )
-            
-            graphiti_client = Graphiti(
-                uri=config.falkor.uri,
-                user=config.falkor.user,
-                password=config.falkor.password,
-                graph_driver=falkor_driver,
-                llm_client=llm_client,
-                embedder=embedder_client,
-                max_coroutines=SEMAPHORE_LIMIT,
-            )
         else:
             raise ValueError(f'Unsupported database type: {config.database_type}')
+
+        # Always create Graphiti client the same way
+        graphiti_client = Graphiti(
+            graph_driver=driver,
+            llm_client=llm_client,
+            embedder=embedder_client,
+            max_coroutines=SEMAPHORE_LIMIT,
+        )
 
         # Destroy graph if requested
         if config.destroy_graph:
@@ -828,12 +814,12 @@ async def add_memory(
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id if group_id is not None else config.group_id
 
-        # Cast group_id to str to satisfy type checker
+        # Cast group_id to str to satisfy type che herestrr
         # The Graphiti client expects a str for group_id, not Optional[str]
-        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
+        group_id_str =  str(effective_group_id) if effective_group_id is not None else ''
 
-        # We've already checked that graphiti_client is not None above
-        # This assert statement helps type checkers understand that graphiti_client is defined
+        # We've already checked that  heregraphiti_client is not None above
+        # This assert statement helps type checkers understand that gr hereaphiti_client is defined
         assert graphiti_client is not None, 'graphiti_client should not be None here'
 
         # Use cast to help the type checker understand that graphiti_client is not None
@@ -1198,35 +1184,20 @@ async def get_status() -> StatusResponse:
         return StatusResponse(status='error', message='Graphiti client not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
         # Test database connection based on database type
         if config.database_type == 'neo4j':
             await client.driver.client.verify_connectivity()  # type: ignore
-            return StatusResponse(
-                status='ok', message='Graphiti MCP server is running and connected to Neo4j'
-            )
         elif config.database_type == 'falkordb':
-            # For FalkorDB, we'll try to execute a simple query to test connectivity
-            try:
-                await client.driver.client.ping()  # type: ignore
-                return StatusResponse(
-                    status='ok', message='Graphiti MCP server is running and connected to FalkorDB'
-                )
-            except Exception:
-                # If ping is not available, try a simple query
-                await client.driver.client.execute_query('RETURN 1')  # type: ignore
-                return StatusResponse(
-                    status='ok', message='Graphiti MCP server is running and connected to FalkorDB'
-                )
+            await client.driver.health_check() # type: ignore
         else:
-            return StatusResponse(
-                status='error', message=f'Unknown database type: {config.database_type}'
-            )
+            return StatusResponse(status='error', message=f'Unknown database type: {config.database_type}')
+
+        return StatusResponse(
+            status='ok', message=f'Graphiti MCP server is running and connected to {config.database_type}'
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error checking {config.database_type} connection: {error_msg}')
@@ -1280,7 +1251,6 @@ async def initialize_server() -> MCPConfig:
     parser.add_argument(
         '--database-type',
         choices=['neo4j', 'falkordb'],
-        default='neo4j',
         help='Type of database to use (default: neo4j)',
     )
 
