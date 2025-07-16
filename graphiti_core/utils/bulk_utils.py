@@ -317,6 +317,12 @@ async def dedupe_edges_bulk(
             for existing_edge in existing_edges:
                 # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
                 # This approach will cast a wider net than BM25, which is ideal for this use case
+                if (
+                    edge.source_node_uuid != existing_edge.source_node_uuid
+                    or edge.target_node_uuid != existing_edge.target_node_uuid
+                ):
+                    continue
+
                 edge_words = set(edge.fact.lower().split())
                 existing_edge_words = set(existing_edge.fact.lower().split())
                 has_overlap = not edge_words.isdisjoint(existing_edge_words)
@@ -345,6 +351,7 @@ async def dedupe_edges_bulk(
         ]
     )
 
+    # For now we won't track edge invalidation
     duplicate_pairs: list[tuple[str, str]] = []
     for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
         episode, edge, candidates = dedupe_tuples[i]
