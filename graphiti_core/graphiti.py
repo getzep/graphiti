@@ -30,10 +30,10 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
+    get_default_group_id,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
-    get_default_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
