@@ -196,18 +196,13 @@ The Docker Compose setup includes a FalkorDB container with the following defaul
 - Host: `falkordb`
 - Port: `6379`
 - No authentication by default
-- Bolt connection protocol
 
-To run with FalkorDB instead of Neo4j, use the FalkorDB-specific compose file:
+#### Running Both Databases and MCP Servers
 
-```bash
-docker compose -f docker-compose.falkordb.yml up
-```
-
-Or run both databases simultaneously:
+To run both Neo4j and FalkorDB services and their MCP servers simultaneously:
 
 ```bash
-docker compose up  # This runs both Neo4j and FalkorDB services
+docker compose up
 ```
 
 The main compose file now includes both databases:
@@ -218,9 +213,9 @@ The main compose file now includes both databases:
 
 A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
 
-**For Neo4j (default):**
+**For Neo4j:**
 ```bash
-docker compose up graphiti-mcp
+docker compose up graphiti-mcp-neo4j
 ```
 
 **For FalkorDB:**
@@ -228,7 +223,7 @@ docker compose up graphiti-mcp
 docker compose up graphiti-mcp-falkordb
 ```
 
-**For both databases:**
+**For both databases and MCP servers:**
 ```bash
 docker compose up
 ```
