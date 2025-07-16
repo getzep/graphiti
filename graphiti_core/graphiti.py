@@ -34,7 +34,6 @@ from graphiti_core.helpers import (
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
-    get_default_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
