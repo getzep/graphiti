@@ -306,19 +306,22 @@ class EntityEdge(Edge):
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
-
-        query: LiteralString = (
-            """
-        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-        WHERE e.group_id IN $group_ids
-        """
-            + cursor_query
-            + ENTITY_EDGE_RETURN
-            + """,
+        with_embeddings_query: LiteralString = (
+            """,
                 e.fact_embedding AS fact_embedding
                 """
             if with_embeddings
             else ''
+        )
+
+        query: LiteralString = (
+            """
+            MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+            WHERE e.group_id IN $group_ids
+            """
+            + cursor_query
+            + ENTITY_EDGE_RETURN
+            + with_embeddings_query
             + """
         ORDER BY e.uuid DESC 
         """
@@ -343,8 +346,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                                                MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                                                """
+                                                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                                                    """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(query, node_uuid=node_uuid, routing_='r')

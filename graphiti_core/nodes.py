@@ -334,8 +334,8 @@ class EntityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         query = (
             """
-                                                                            MATCH (n:Entity {uuid: $uuid})
-                                                                            """
+                                                                                MATCH (n:Entity {uuid: $uuid})
+                                                                                """
             + ENTITY_NODE_RETURN
         )
         records, _, _ = await driver.execute_query(
@@ -377,6 +377,13 @@ class EntityNode(Node):
     ):
         cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+        with_embeddings_query: LiteralString = (
+            """,
+                n.name_embedding AS name_embedding
+                """
+            if with_embeddings
+            else ''
+        )
 
         records, _, _ = await driver.execute_query(
             """
@@ -384,11 +391,7 @@ class EntityNode(Node):
         """
             + cursor_query
             + ENTITY_NODE_RETURN
-            + """,
-                n.name_embedding AS name_embedding
-                """
-            if with_embeddings
-            else ''
+            + with_embeddings_query
             + """
         ORDER BY n.uuid DESC
         """
