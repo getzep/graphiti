@@ -128,7 +128,7 @@ uv run graphiti_mcp_server.py
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse --database-type falkordb
+uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse --database-type falkordb --port 8001
 ```
 
 Available arguments:

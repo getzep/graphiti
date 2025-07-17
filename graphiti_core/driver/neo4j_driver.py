@@ -62,3 +62,7 @@ class Neo4jDriver(GraphDriver):
             'CALL db.indexes() YIELD name DROP INDEX name',
             database_=database,
         )
+
+    async def health_check(self) -> None:
+        """Check Neo4j connectivity by running the driver's verify_connectivity method."""
+        await self.client.verify_connectivity()

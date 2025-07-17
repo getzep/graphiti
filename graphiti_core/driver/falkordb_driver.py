@@ -168,6 +168,7 @@ class FalkorDriver(GraphDriver):
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""
         await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
+        return None
 
 
 def convert_datetimes_to_strings(obj):
