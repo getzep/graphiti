@@ -113,20 +113,10 @@ class FalkorDriver(GraphDriver):
         try:
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
-            msg = str(e)
-
-            # Ignore the initial RediSearch JSON syntax error on group_id
-            if 'Syntax error at offset' in msg and 'group_id' in msg:
-                logger.warning(f'Ignoring initial RediSearch JSON error: {msg}')
-                # Return no records, so Graphiti proceeds as if there were no duplicates
-                return [], [], None
-
-            # Already‐indexed warnings
-            if 'already indexed' in msg:
+            if 'already indexed' in str(e):
+                # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
-
-            # Any other error should bubble up
             logger.error(f'Error executing FalkorDB query: {e}')
             raise
 
@@ -141,6 +131,7 @@ class FalkorDriver(GraphDriver):
                 if i < len(row):
                     record[field_name] = row[i]
                 else:
+                    # If there are more fields in header than values in row, set to None
                     record[field_name] = None
             records.append(record)
 
@@ -169,7 +160,6 @@ class FalkorDriver(GraphDriver):
         """Check FalkorDB connectivity by running a simple query."""
         await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
         return None
-
 
 def convert_datetimes_to_strings(obj):
     if isinstance(obj, dict):
