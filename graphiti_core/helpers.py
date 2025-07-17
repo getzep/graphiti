@@ -52,6 +52,18 @@ def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None
     )
 
 
+def get_default_group_id(db_type: str) -> str:
+    """
+    This function differentiates the default group id based on the database type.
+    For most databases, the default group id is an empty string, while there are
+    database types that require a specific default group id.
+    """
+    if db_type == 'falkordb':
+        return '_'
+    else:
+        return ''
+
+
 def lucene_sanitize(query: str) -> str:
     # Escape special characters from a query before passing into Lucene
     # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /

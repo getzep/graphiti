@@ -30,6 +30,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
+    get_default_group_id,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
@@ -353,7 +354,7 @@ class Graphiti:
         reference_time: datetime,
         metadata: dict[str, Any] | None = None,
         source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
+        group_id: str | None = None,
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
@@ -422,6 +423,9 @@ class Graphiti:
         try:
             start = time()
             now = utc_now()
+
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
 
             validate_entity_types(entity_types)
             validate_excluded_entity_types(excluded_entity_types, entity_types)
@@ -544,7 +548,7 @@ class Graphiti:
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
-        group_id: str = '',
+        group_id: str | None = None,
         entity_types: dict[str, BaseModel] | None = None,
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
@@ -589,6 +593,9 @@ class Graphiti:
         try:
             start = time()
             now = utc_now()
+
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
 
             validate_group_id(group_id)
 
