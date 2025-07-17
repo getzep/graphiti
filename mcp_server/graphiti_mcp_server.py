@@ -508,13 +508,22 @@ class GraphitiConfig(BaseModel):
         db_type = os.environ.get('DATABASE_TYPE')
         if not db_type:
             raise ValueError('DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")')
-        return cls(
-            llm=GraphitiLLMConfig.from_env(),
-            embedder=GraphitiEmbedderConfig.from_env(),
-            neo4j=Neo4jConfig.from_env(),
-            falkor=FalkorConfig.from_env(),
-            database_type=db_type,
-        )
+        if db_type == 'neo4j':
+            return cls(
+                llm=GraphitiLLMConfig.from_env(),
+                embedder=GraphitiEmbedderConfig.from_env(),
+                neo4j=Neo4jConfig.from_env(),
+                database_type=db_type,
+            )
+        elif db_type == 'falkordb':
+            return cls(
+                llm=GraphitiLLMConfig.from_env(),
+                embedder=GraphitiEmbedderConfig.from_env(),
+                falkor=FalkorConfig.from_env(),
+                database_type=db_type,
+            )
+        else:
+            raise ValueError(f'Unsupported DATABASE_TYPE: {db_type}')
 
     @classmethod
     def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiConfig':
@@ -814,7 +823,7 @@ async def add_memory(
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id if group_id is not None else config.group_id
 
-        # Cast group_id to str to satisfy type che herestrr
+        # Cast group_id to str to satisfy type cheker
         # The Graphiti client expects a str for group_id, not Optional[str]
         group_id_str =  str(effective_group_id) if effective_group_id is not None else ''
 
@@ -1187,13 +1196,8 @@ async def get_status() -> StatusResponse:
         assert graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Test database connection based on database type
-        if config.database_type == 'neo4j':
-            await client.driver.client.verify_connectivity()  # type: ignore
-        elif config.database_type == 'falkordb':
-            await client.driver.health_check() # type: ignore
-        else:
-            return StatusResponse(status='error', message=f'Unknown database type: {config.database_type}')
+        # Test database connection using driver's health_check method
+        await client.driver.health_check() # type: ignore
 
         return StatusResponse(
             status='ok', message=f'Graphiti MCP server is running and connected to {config.database_type}'
@@ -1249,6 +1253,12 @@ async def initialize_server() -> MCPConfig:
         help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
     )
     parser.add_argument(
+        '--port',
+        type=int,
+        default=int(os.environ.get('PORT', 8000)),
+        help='Port to run the MCP server on (default: 8000 or value of PORT env variable)',
+    )
+    parser.add_argument(
         '--database-type',
         choices=['neo4j', 'falkordb'],
         help='Type of database to use (default: neo4j)',
@@ -1278,6 +1288,9 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Setting MCP server host to: {args.host}')
         # Set MCP server host from CLI or env
         mcp.settings.host = args.host
+
+    # After parsing args and initializing everything, set the port
+    mcp.settings.port = args.port
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)
