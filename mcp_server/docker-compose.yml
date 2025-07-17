@@ -79,7 +79,7 @@ services:
       - PATH=/root/.local/bin:${PATH}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
     ports:
-      - "8001:8000" # Expose the MCP server via HTTP for SSE transport
+      - "8001:8001" # Expose the MCP server via HTTP for SSE transport
     command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--database-type", "falkordb"]
 
 volumes:
