@@ -161,8 +161,9 @@ class FalkorDriver(GraphDriver):
         try:
             await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
             return None
-        except Exception:
-            return False # type: ignore
+        except Exception as e:
+            print(f"FalkorDB health check failed: {e}")
+            raise
 
 def convert_datetimes_to_strings(obj):
     if isinstance(obj, dict):
