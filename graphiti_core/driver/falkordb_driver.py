@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +34,39 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+
+# Regex to match union labels like "(n:LabelA|LabelB {" allowing optional spaces
+UNION_LABEL_RE = re.compile(
+    r"\(\s*(?P<var>[a-zA-Z][a-zA-Z0-9_]*)\s*:\s*(?P<labels>[A-Za-z0-9_]+(?:\s*\|\s*[A-Za-z0-9_]+)+)(?=[\s\{\)])"
+)
+
+
+def _rewrite_union_labels(query: str) -> str:
+    """Rewrite union label syntax (:A|B) to FalkorDB compatible WHERE clause."""
+    conditions: list[str] = []
+
+    def _sub(match: re.Match[str]) -> str:
+        var = match.group("var")
+        labels = [l.strip() for l in match.group("labels").split("|")]
+        conditions.append("(" + " OR ".join(f"{var}:{l}" for l in labels) + ")")
+        return f"({var}"
+
+    rewritten = UNION_LABEL_RE.sub(_sub, query)
+    if not conditions:
+        return query
+
+    where_expr = " AND ".join(conditions)
+    upper = rewritten.upper()
+    if " WHERE " in upper:
+        idx = upper.find(" WHERE ") + len(" WHERE ")
+        return rewritten[:idx] + where_expr + " AND " + rewritten[idx:]
+
+    insert_pos = len(rewritten)
+    for kw in [" DETACH", " RETURN ", " DELETE ", " SET "]:
+        p = upper.find(kw)
+        if p != -1 and p < insert_pos:
+            insert_pos = p
+    return rewritten[:insert_pos] + " WHERE " + where_expr + rewritten[insert_pos:]
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +95,12 @@ class FalkorDriverSession(GraphDriverSession):
         if isinstance(query, list):
             for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
+                cypher = _rewrite_union_labels(str(cypher))
                 await self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
+            query = _rewrite_union_labels(str(query))
             await self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
@@ -113,6 +149,8 @@ class FalkorDriver(GraphDriver):
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
         params = convert_datetimes_to_strings(dict(kwargs))
+
+        cypher_query_ = _rewrite_union_labels(cypher_query_)
 
         try:
             result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]

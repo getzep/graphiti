@@ -161,6 +161,27 @@ class TestFalkorDriver:
         call_args = mock_graph.query.call_args[0]
         assert call_args[1]['created_at'] == test_datetime.isoformat()
 
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_execute_query_rewrites_union_labels(self):
+        """Queries using union labels should be rewritten to FalkorDB syntax."""
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+        mock_result.header = []
+        mock_result.result_set = []
+        mock_graph.query = AsyncMock(return_value=mock_result)
+        self.mock_client.select_graph.return_value = mock_graph
+
+        await self.driver.execute_query(
+            'MATCH (n:Entity | Community {uuid: $uuid}) RETURN n',
+            uuid='123',
+        )
+
+        mock_graph.query.assert_called_once_with(
+            'MATCH (n {uuid: $uuid}) WHERE (n:Entity OR n:Community) RETURN n',
+            {'uuid': '123'},
+        )
+
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_session_creation(self):
         """Test session creation with specific database."""
