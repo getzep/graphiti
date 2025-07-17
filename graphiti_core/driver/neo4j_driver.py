@@ -56,9 +56,7 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(self, database_: str | None = None) -> Coroutine[Any, Any, EagerResult]:
-        database = database_ or self._database
+    def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
-            database_=database,
         )

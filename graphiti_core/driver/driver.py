@@ -46,6 +46,7 @@ class GraphDriverSession(ABC):
 
 class GraphDriver(ABC):
     provider: str
+    _database: str
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -60,5 +61,5 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str | None = None) -> Coroutine:
+    def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
