@@ -95,7 +95,7 @@ class FalkorDriver(GraphDriver):
             self.client = falkor_db
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
-            self._database = database
+        self._database = database
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
