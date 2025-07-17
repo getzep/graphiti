@@ -146,19 +146,16 @@ class EpisodicNode(Node):
         description='list of entity edges referenced in this episode',
         default_factory=list,
     )
+    metadata: dict[str, Any] = Field(default_factory=dict, description='custom metadata for the episode')
 
     async def save(self, driver: GraphDriver):
+        episode_data = self.model_dump()
+        episode_data["source"] = self.source.value
+        episode_data.pop("labels", None)
+
         result = await driver.execute_query(
             EPISODIC_NODE_SAVE,
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            source_description=self.source_description,
-            content=self.content,
-            entity_edges=self.entity_edges,
-            created_at=self.created_at,
-            valid_at=self.valid_at,
-            source=self.source.value,
+            episode_data=episode_data,
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -178,7 +175,8 @@ class EpisodicNode(Node):
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source,
-            e.entity_edges AS entity_edges
+            e.entity_edges AS entity_edges,
+            e.metadata AS metadata
         """,
             uuid=uuid,
             routing_='r',
@@ -205,7 +203,8 @@ class EpisodicNode(Node):
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source,
-            e.entity_edges AS entity_edges
+            e.entity_edges AS entity_edges,
+            e.metadata AS metadata
         """,
             uuids=uuids,
             routing_='r',
@@ -241,7 +240,8 @@ class EpisodicNode(Node):
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source,
-            e.entity_edges AS entity_edges
+            e.entity_edges AS entity_edges,
+            e.metadata AS metadata
         ORDER BY e.uuid DESC
         """
             + limit_query,
@@ -269,7 +269,8 @@ class EpisodicNode(Node):
             e.group_id AS group_id,
             e.source_description AS source_description,
             e.source AS source,
-            e.entity_edges AS entity_edges
+            e.entity_edges AS entity_edges,
+            e.metadata AS metadata
         """,
             entity_node_uuid=entity_node_uuid,
             routing_='r',
@@ -547,6 +548,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         name=record['name'],
         source_description=record['source_description'],
         entity_edges=record['entity_edges'],
+        metadata=record.get('metadata', {}),
     )
 
 

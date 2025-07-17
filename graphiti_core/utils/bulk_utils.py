@@ -63,6 +63,7 @@ class RawEpisode(BaseModel):
     source_description: str
     source: EpisodeType
     reference_time: datetime
+    metadata: dict[str, Any] | None = None
 
 
 async def retrieve_previous_episodes_bulk(
@@ -118,6 +119,7 @@ async def add_nodes_and_edges_bulk_tx(
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
+        episode.pop('labels', None)
     nodes: list[dict[str, Any]] = []
     for node in entity_nodes:
         if node.name_embedding is None:

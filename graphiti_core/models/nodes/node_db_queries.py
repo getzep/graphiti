@@ -15,17 +15,14 @@ limitations under the License.
 """
 
 EPISODIC_NODE_SAVE = """
-        MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
-        entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
+        MERGE (n:Episodic {uuid: $episode_data.uuid})
+        SET n = $episode_data
         RETURN n.uuid AS uuid"""
 
 EPISODIC_NODE_SAVE_BULK = """
     UNWIND $episodes AS episode
     MERGE (n:Episodic {uuid: episode.uuid})
-    SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, 
-        source: episode.source, content: episode.content, 
-    entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
+    SET n = episode
     RETURN n.uuid AS uuid
 """
 
