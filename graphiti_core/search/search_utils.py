@@ -993,43 +993,168 @@ async def episode_mentions_reranker(
     return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
 
 
+def normalize_embeddings_batch(embeddings: NDArray) -> NDArray:
+    """
+    Normalize a batch of embeddings using L2 normalization.
+    
+    Args:
+        embeddings: Array of shape (n_embeddings, embedding_dim)
+    
+    Returns:
+        L2-normalized embeddings of same shape
+    """
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    # Avoid division by zero
+    norms = np.where(norms == 0, 1, norms)
+    return embeddings / norms
+
+
 def maximal_marginal_relevance(
     query_vector: list[float],
     candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
     min_score: float = -2.0,
+    max_results: int | None = None,
 ) -> list[str]:
+    """
+    Optimized implementation of Maximal Marginal Relevance (MMR) using vectorized numpy operations.
+    
+    This implementation:
+    1. Uses true iterative MMR algorithm (greedy selection)
+    2. Leverages vectorized numpy operations for performance
+    3. Normalizes query vector for consistent similarity computation
+    4. Minimizes memory usage by avoiding full similarity matrices
+    5. Leverages optimized BLAS operations through matrix multiplication
+    6. Optimizes for small datasets by using efficient numpy operations
+    
+    Args:
+        query_vector: Query embedding vector
+        candidates: Dictionary mapping UUIDs to embedding vectors
+        mmr_lambda: Balance parameter between relevance and diversity (0-1)
+        min_score: Minimum MMR score threshold
+        max_results: Maximum number of results to return
+    
+    Returns:
+        List of candidate UUIDs ranked by MMR score
+    """
     start = time()
-    query_array = np.array(query_vector)
-    candidate_arrays: dict[str, NDArray] = {}
-    for uuid, embedding in candidates.items():
-        candidate_arrays[uuid] = normalize_l2(embedding)
-
-    uuids: list[str] = list(candidate_arrays.keys())
-
-    similarity_matrix = np.zeros((len(uuids), len(uuids)))
-
-    for i, uuid_1 in enumerate(uuids):
-        for j, uuid_2 in enumerate(uuids[:i]):
-            u = candidate_arrays[uuid_1]
-            v = candidate_arrays[uuid_2]
-            similarity = np.dot(u, v)
-
-            similarity_matrix[i, j] = similarity
-            similarity_matrix[j, i] = similarity
-
-    mmr_scores: dict[str, float] = {}
-    for i, uuid in enumerate(uuids):
-        max_sim = np.max(similarity_matrix[i, :])
-        mmr = mmr_lambda * np.dot(query_array, candidate_arrays[uuid]) + (mmr_lambda - 1) * max_sim
-        mmr_scores[uuid] = mmr
-
-    uuids.sort(reverse=True, key=lambda c: mmr_scores[c])
-
+    
+    if not candidates:
+        return []
+    
+    # Convert to numpy arrays for vectorized operations
+    uuids = list(candidates.keys())
+    candidate_embeddings = np.array([candidates[uuid] for uuid in uuids])
+    
+    # Normalize all embeddings (query and candidates) for cosine similarity
+    candidate_embeddings = normalize_embeddings_batch(candidate_embeddings)
+    query_normalized = normalize_l2(query_vector)
+    
+    # Compute relevance scores (query-candidate similarities) using matrix multiplication
+    relevance_scores = candidate_embeddings @ query_normalized  # Shape: (n_candidates,)
+    
+    # For small datasets, use optimized batch computation
+    if len(uuids) <= 100:
+        return _mmr_small_dataset(uuids, candidate_embeddings, relevance_scores, mmr_lambda, min_score, max_results)
+    
+    # For large datasets, use iterative selection to save memory
+    selected_indices = []
+    remaining_indices = set(range(len(uuids)))
+    
+    max_results = max_results or len(uuids)
+    
+    for _ in range(min(max_results, len(uuids))):
+        if not remaining_indices:
+            break
+            
+        best_idx = None
+        best_score = -float('inf')
+        
+        # Vectorized computation of MMR scores for all remaining candidates
+        remaining_list = list(remaining_indices)
+        remaining_relevance = relevance_scores[remaining_list]
+        
+        if selected_indices:
+            # Compute similarities between remaining candidates and selected documents
+            remaining_embeddings = candidate_embeddings[remaining_list]  # Shape: (n_remaining, dim)
+            selected_embeddings = candidate_embeddings[selected_indices]  # Shape: (n_selected, dim)
+            
+            # Matrix multiplication: (n_remaining, dim) @ (dim, n_selected) = (n_remaining, n_selected)
+            sim_matrix = remaining_embeddings @ selected_embeddings.T
+            diversity_penalties = np.max(sim_matrix, axis=1)  # Max similarity to any selected doc
+        else:
+            diversity_penalties = np.zeros(len(remaining_list))
+        
+        # Compute MMR scores for all remaining candidates
+        mmr_scores = mmr_lambda * remaining_relevance - (1 - mmr_lambda) * diversity_penalties
+        
+        # Find best candidate
+        best_local_idx = np.argmax(mmr_scores)
+        best_score = mmr_scores[best_local_idx]
+        
+        if best_score >= min_score:
+            best_idx = remaining_list[best_local_idx]
+            selected_indices.append(best_idx)
+            remaining_indices.remove(best_idx)
+        else:
+            break
+    
     end = time()
-    logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
+    logger.debug(f'Completed optimized MMR reranking in {(end - start) * 1000} ms')
+    
+    return [uuids[idx] for idx in selected_indices]
 
-    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
+
+def _mmr_small_dataset(
+    uuids: list[str],
+    candidate_embeddings: NDArray,
+    relevance_scores: NDArray,
+    mmr_lambda: float,
+    min_score: float,
+    max_results: int | None,
+) -> list[str]:
+    """
+    Optimized MMR implementation for small datasets using precomputed similarity matrix.
+    """
+    n_candidates = len(uuids)
+    max_results = max_results or n_candidates
+    
+    # Precompute similarity matrix for small datasets
+    similarity_matrix = candidate_embeddings @ candidate_embeddings.T  # Shape: (n, n)
+    
+    selected_indices = []
+    remaining_indices = set(range(n_candidates))
+    
+    for _ in range(min(max_results, n_candidates)):
+        if not remaining_indices:
+            break
+            
+        best_idx = None
+        best_score = -float('inf')
+        
+        for idx in remaining_indices:
+            relevance = relevance_scores[idx]
+            
+            # Compute diversity penalty using precomputed matrix
+            if selected_indices:
+                diversity_penalty = np.max(similarity_matrix[idx, selected_indices])
+            else:
+                diversity_penalty = 0.0
+            
+            # MMR score
+            mmr_score = mmr_lambda * relevance - (1 - mmr_lambda) * diversity_penalty
+            
+            if mmr_score > best_score:
+                best_score = mmr_score
+                best_idx = idx
+        
+        if best_idx is not None and best_score >= min_score:
+            selected_indices.append(best_idx)
+            remaining_indices.remove(best_idx)
+        else:
+            break
+    
+    return [uuids[idx] for idx in selected_indices]
 
 
 async def get_embeddings_for_nodes(
