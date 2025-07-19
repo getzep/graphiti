@@ -34,7 +34,7 @@ async def get_community_clusters(
         group_id_values, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN 
+        RETURN
             collect(DISTINCT n.group_id) AS group_ids
         """,
         )
@@ -233,10 +233,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
@@ -250,10 +250,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,

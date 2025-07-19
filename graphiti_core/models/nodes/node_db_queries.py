@@ -20,7 +20,7 @@ from graphiti_core.driver.driver import GraphProvider
 
 EPISODIC_NODE_SAVE = """
     MERGE (n:Episodic {uuid: $uuid})
-    SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
+    SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
     entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
     RETURN n.uuid AS uuid
 """
@@ -28,8 +28,8 @@ EPISODIC_NODE_SAVE = """
 EPISODIC_NODE_SAVE_BULK = """
     UNWIND $episodes AS episode
     MERGE (n:Episodic {uuid: episode.uuid})
-    SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, 
-        source: episode.source, content: episode.content, 
+    SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description,
+        source: episode.source, content: episode.content,
     entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
     RETURN n.uuid AS uuid
 """
@@ -97,10 +97,10 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
 
 
 ENTITY_NODE_RETURN = """
-    n.uuid As uuid,
+    n.uuid AS uuid,
     n.name AS name,
     n.group_id AS group_id,
-    n.created_at AS created_at, 
+    n.created_at AS created_at,
     n.summary AS summary,
     labels(n) AS labels,
     properties(n) AS attributes
@@ -124,7 +124,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
 
 
 COMMUNITY_NODE_RETURN = """
-    n.uuid As uuid,
+    n.uuid AS uuid,
     n.name AS name,
     n.name_embedding AS name_embedding,
     n.group_id AS group_id,
