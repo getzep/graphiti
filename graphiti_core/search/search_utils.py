@@ -273,7 +273,7 @@ async def edge_bfs_search(
         WHERE e.uuid = rel.uuid
         """
         + filter_query
-        + """  
+        + """
         RETURN DISTINCT
         """
         + ENTITY_EDGE_RETURN
@@ -382,9 +382,7 @@ async def node_similarity_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        search_vector=f'vecf32({search_vector})'
-        if driver.provider == GraphProvider.FALKORDB
-        else search_vector,
+        search_vector=search_vector,
         limit=limit,
         min_score=min_score,
         routing_='r',
@@ -534,7 +532,7 @@ async def community_similarity_search(
         """
         + group_filter_query
         + """
-        WITH n, 
+        WITH n,
         """
         + get_vector_cosine_func_query('n.name_embedding', '$search_vector', driver.provider)
         + """ AS score
@@ -673,8 +671,8 @@ async def get_relevant_nodes(
         WHERE m.group_id = $group_id
         WITH node, top_vector_nodes, vector_node_uuids, collect(m) AS fulltext_nodes
 
-        WITH node, 
-             top_vector_nodes, 
+        WITH node,
+             top_vector_nodes,
              [m IN fulltext_nodes WHERE NOT m.uuid IN vector_node_uuids] AS filtered_fulltext_nodes
 
         WITH node, top_vector_nodes + filtered_fulltext_nodes AS combined_nodes
@@ -682,10 +680,10 @@ async def get_relevant_nodes(
         UNWIND combined_nodes AS combined_node
         WITH node, collect(DISTINCT combined_node) AS deduped_nodes
 
-        RETURN 
+        RETURN
           node.uuid AS search_node_uuid,
           [x IN deduped_nodes | {
-            uuid: x.uuid, 
+            uuid: x.uuid,
             name: x.name,
             name_embedding: x.name_embedding,
             group_id: x.group_id,
@@ -936,7 +934,7 @@ async def episode_mentions_reranker(
     # Find the shortest path to center node
     results, _, _ = await driver.execute_query(
         """
-        UNWIND $node_uuids AS node_uuid 
+        UNWIND $node_uuids AS node_uuid
         MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
         RETURN count(*) AS score, n.uuid AS uuid
         """,

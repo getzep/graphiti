@@ -68,13 +68,13 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
         ]
 
     return [
-        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
+        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS
         FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
+        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS
         FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
-        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
+        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS
         FOR (n:Community) ON EACH [n.name, n.group_id]""",
-        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
+        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS
         FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
 
@@ -90,7 +90,7 @@ def get_nodes_query(provider: GraphProvider, name: str = '', query: str | None =
 def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
     if provider == GraphProvider.FALKORDB:
         # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
-        return f'(2 - vec.cosineDistance({vec1}, {vec2}))/2'
+        return f'(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2'
 
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
