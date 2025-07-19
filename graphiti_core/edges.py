@@ -30,11 +30,11 @@ from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_RETURN,
-    COMMUNITY_EDGE_SAVE,
     ENTITY_EDGE_RETURN,
-    ENTITY_EDGE_SAVE,
     EPISODIC_EDGE_RETURN,
     EPISODIC_EDGE_SAVE,
+    get_community_edge_save_query,
+    get_entity_edge_save_query,
 )
 from graphiti_core.nodes import Node
 
@@ -232,7 +232,7 @@ class EntityEdge(Edge):
         edge_data.update(self.attributes or {})
 
         result = await driver.execute_query(
-            ENTITY_EDGE_SAVE,
+            get_entity_edge_save_query(driver.provider),
             edge_data=edge_data,
         )
 
@@ -344,7 +344,7 @@ class EntityEdge(Edge):
 class CommunityEdge(Edge):
     async def save(self, driver: GraphDriver):
         result = await driver.execute_query(
-            COMMUNITY_EDGE_SAVE,
+            get_community_edge_save_query(driver.provider),
             community_uuid=self.source_node_uuid,
             entity_uuid=self.target_node_uuid,
             uuid=self.uuid,
@@ -360,7 +360,7 @@ class CommunityEdge(Edge):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)-[e:HAS_MEMBER {uuid: $uuid}]->(m:Entity | Community)
+            MATCH (n:Community)-[e:HAS_MEMBER {uuid: $uuid}]->(m)
             RETURN
             """
             + COMMUNITY_EDGE_RETURN,
@@ -376,7 +376,7 @@ class CommunityEdge(Edge):
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
+            MATCH (n:Community)-[e:HAS_MEMBER]->(m)
             WHERE e.uuid IN $uuids
             RETURN
             """
@@ -402,7 +402,7 @@ class CommunityEdge(Edge):
 
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)-[e:HAS_MEMBER]->(m:Entity | Community)
+            MATCH (n:Community)-[e:HAS_MEMBER]->(m)
             WHERE e.group_id IN $group_ids
             """
             + cursor_query

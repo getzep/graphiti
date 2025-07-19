@@ -25,17 +25,17 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
-    COMMUNITY_NODE_SAVE,
     ENTITY_NODE_RETURN,
-    ENTITY_NODE_SAVE,
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_SAVE,
+    get_community_node_save_query,
+    get_entity_node_save_query,
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -89,17 +89,25 @@ class Node(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
-        result = await driver.execute_query(
-            """
-            MATCH (n:Entity|Episodic|Community {uuid: $uuid})
-            DETACH DELETE n
-            """,
-            uuid=self.uuid,
-        )
+        if driver.provider == GraphProvider.FALKORDB:
+            for label in ['Entity', 'Episodic', 'Community']:
+                await driver.execute_query(
+                    f"""
+                    MATCH (n:{label} {{uuid: $uuid}})
+                    DETACH DELETE n
+                    """,
+                    uuid=self.uuid,
+                )
+        else:
+            await driver.execute_query(
+                """
+                MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                DETACH DELETE n
+                """,
+                uuid=self.uuid,
+            )
 
         logger.debug(f'Deleted Node: {self.uuid}')
-
-        return result
 
     def __hash__(self):
         return hash(self.uuid)
@@ -111,15 +119,23 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str):
-        await driver.execute_query(
-            """
-            MATCH (n:Entity|Episodic|Community {group_id: $group_id})
-            DETACH DELETE n
-            """,
-            group_id=group_id,
-        )
-
-        return 'SUCCESS'
+        if driver.provider == GraphProvider.FALKORDB:
+            for label in ['Entity', 'Episodic', 'Community']:
+                await driver.execute_query(
+                    f"""
+                    MATCH (n:{label} {{group_id: $group_id}})
+                    DETACH DELETE n
+                    """,
+                    group_id=group_id,
+                )
+        else:
+            await driver.execute_query(
+                """
+                MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+                DETACH DELETE n
+                """,
+                group_id=group_id,
+            )
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -286,12 +302,12 @@ class EntityNode(Node):
             'summary': self.summary,
             'created_at': self.created_at,
         }
-
         entity_data.update(self.attributes or {})
 
+        labels = ':'.join(self.labels + ['Entity'])
+
         result = await driver.execute_query(
-            ENTITY_NODE_SAVE,
-            labels=self.labels + ['Entity'],
+            get_entity_node_save_query(driver.provider, labels),
             entity_data=entity_data,
         )
 
@@ -386,7 +402,7 @@ class CommunityNode(Node):
 
     async def save(self, driver: GraphDriver):
         result = await driver.execute_query(
-            COMMUNITY_NODE_SAVE,
+            get_community_node_save_query(driver.provider),
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,

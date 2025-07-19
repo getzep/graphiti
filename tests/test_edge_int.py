@@ -19,6 +19,7 @@ import sys
 from datetime import datetime
 from uuid import uuid4
 
+import numpy as np
 import pytest
 
 from graphiti_core.driver.driver import GraphDriver
@@ -241,7 +242,7 @@ async def test_entity_edge(driver):
     assert retrieved[0].group_id == group_id
 
     await entity_edge.load_fact_embedding(graph_driver)
-    assert entity_edge.fact_embedding == edge_embedding
+    assert np.allclose(entity_edge.fact_embedding, edge_embedding)
 
     await entity_edge.delete(graph_driver)
     edge_count = await get_edge_count(graph_driver, entity_edge.uuid)

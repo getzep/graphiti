@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from typing import Any
+
+from graphiti_core.driver.driver import GraphProvider
+
 EPISODIC_NODE_SAVE = """
     MERGE (n:Episodic {uuid: $uuid})
     SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
@@ -42,22 +46,55 @@ EPISODIC_NODE_RETURN = """
     e.entity_edges AS entity_edges
 """
 
-ENTITY_NODE_SAVE = """
-    MERGE (n:Entity {uuid: $entity_data.uuid})
-    SET n:$($labels)
-    SET n = $entity_data
-    WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
-    RETURN n.uuid AS uuid
-"""
 
-ENTITY_NODE_SAVE_BULK = """
-    UNWIND $nodes AS node
-    MERGE (n:Entity {uuid: node.uuid})
-    SET n:$(node.labels)
-    SET n = node
-    WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)
-    RETURN n.uuid AS uuid
-"""
+def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
+    if provider == GraphProvider.FALKORDB:
+        return f"""
+            MERGE (n:Entity {{uuid: $entity_data.uuid}})
+            SET n:{labels}
+            SET n = $entity_data
+            RETURN n.uuid AS uuid
+        """
+
+    return f"""
+        MERGE (n:Entity {{uuid: $entity_data.uuid}})
+        SET n:{labels}
+        SET n = $entity_data
+        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
+        RETURN n.uuid AS uuid
+    """
+
+
+def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) -> str | Any:
+    if provider == GraphProvider.FALKORDB:
+        queries = []
+        for node in nodes:
+            for label in node['labels']:
+                queries.append(
+                    (
+                        f"""
+                        UNWIND $nodes AS node
+                        MERGE (n:Entity {{uuid: node.uuid}})
+                        SET n:{label}
+                        SET n = node
+                        WITH n, node
+                        SET n.name_embedding = vecf32(node.name_embedding)
+                        RETURN n.uuid AS uuid
+                        """,
+                        {'nodes': [node]},
+                    )
+                )
+        return queries
+
+    return """
+        UNWIND $nodes AS node
+        MERGE (n:Entity {uuid: node.uuid})
+        SET n:$(node.labels)
+        SET n = node
+        WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)
+        RETURN n.uuid AS uuid
+    """
+
 
 ENTITY_NODE_RETURN = """
     n.uuid As uuid,
@@ -69,12 +106,22 @@ ENTITY_NODE_RETURN = """
     properties(n) AS attributes
 """
 
-COMMUNITY_NODE_SAVE = """
-    MERGE (n:Community {uuid: $uuid})
-    SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-    WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-    RETURN n.uuid AS uuid
-"""
+
+def get_community_node_save_query(provider: GraphProvider) -> str:
+    if provider == GraphProvider.FALKORDB:
+        return """
+            MERGE (n:Community {uuid: $uuid})
+            SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: $name_embedding}
+            RETURN n.uuid AS uuid
+        """
+
+    return """
+        MERGE (n:Community {uuid: $uuid})
+        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+        RETURN n.uuid AS uuid
+    """
+
 
 COMMUNITY_NODE_RETURN = """
     n.uuid As uuid,

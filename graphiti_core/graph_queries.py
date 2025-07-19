@@ -5,17 +5,9 @@ This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
 
-from typing import Any
-
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK,
-)
-from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK,
-)
 
 # Mapping from Neo4j fulltext index names to FalkorDB node labels
 NEO4J_TO_FALKORDB_MAPPING = {
@@ -98,7 +90,7 @@ def get_nodes_query(provider: GraphProvider, name: str = '', query: str | None =
 def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
     if provider == GraphProvider.FALKORDB:
         # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
-        return f'(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2'
+        return f'(2 - vec.cosineDistance({vec1}, {vec2}))/2'
 
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
@@ -109,43 +101,3 @@ def get_relationships_query(name: str, provider: GraphProvider) -> str:
         return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
-
-
-def get_entity_node_save_bulk_query(nodes, provider: GraphProvider) -> str | Any:
-    if provider == GraphProvider.FALKORDB:
-        queries = []
-        for node in nodes:
-            for label in node['labels']:
-                queries.append(
-                    (
-                        f"""
-                        UNWIND $nodes AS node
-                        MERGE (n:Entity {{uuid: node.uuid}})
-                        SET n:{label}
-                        SET n = node
-                        WITH n, node
-                        SET n.name_embedding = vecf32(node.name_embedding)
-                        RETURN n.uuid AS uuid
-                        """,
-                        {'nodes': [node]},
-                    )
-                )
-        return queries
-
-    return ENTITY_NODE_SAVE_BULK
-
-
-def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
-    if provider == GraphProvider.FALKORDB:
-        return """
-        UNWIND $entity_edges AS edge
-        MATCH (source:Entity {uuid: edge.source_node_uuid}) 
-        MATCH (target:Entity {uuid: edge.target_node_uuid}) 
-        MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
-        SET r = {uuid: edge.uuid, name: edge.name, group_id: edge.group_id, fact: edge.fact, episodes: edge.episodes, 
-        created_at: edge.created_at, expired_at: edge.expired_at, valid_at: edge.valid_at, invalid_at: edge.invalid_at, fact_embedding: vecf32(edge.fact_embedding)}
-        WITH r, edge
-        RETURN edge.uuid AS uuid
-        """
-
-    return ENTITY_EDGE_SAVE_BULK

@@ -175,11 +175,11 @@ async def edge_fulltext_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
         routing_='r',
+        **filter_params,
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -239,14 +239,11 @@ async def edge_similarity_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=query_params,
         search_vector=search_vector,
-        source_uuid=source_node_uuid,
-        target_uuid=target_node_uuid,
-        group_ids=group_ids,
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -270,7 +267,7 @@ async def edge_bfs_search(
     query = (
         """
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+        MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..3]->(n:Entity)
         UNWIND relationships(path) AS rel
         MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
         WHERE e.uuid = rel.uuid
@@ -287,11 +284,10 @@ async def edge_bfs_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         limit=limit,
         routing_='r',
+        **filter_params,
     )
 
     edges = [get_entity_edge_from_record(record) for record in records]
@@ -332,11 +328,11 @@ async def node_fulltext_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=filter_params,
         query=fuzzy_query,
         group_ids=group_ids,
         limit=limit,
         routing_='r',
+        **filter_params,
     )
 
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -386,12 +382,13 @@ async def node_similarity_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=query_params,
-        search_vector=search_vector,
-        group_ids=group_ids,
+        search_vector=f'vecf32({search_vector})'
+        if driver.provider == GraphProvider.FALKORDB
+        else search_vector,
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
 
     nodes = [get_entity_node_from_record(record) for record in records]
@@ -415,7 +412,7 @@ async def node_bfs_search(
     query = (
         """
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+        MATCH (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..3]->(n:Entity)
         WHERE n.group_id = origin.group_id
         """
         + filter_query
@@ -430,11 +427,10 @@ async def node_bfs_search(
 
     records, _, _ = await driver.execute_query(
         query,
-        params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         limit=limit,
         routing_='r',
+        **filter_params,
     )
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -555,10 +551,10 @@ async def community_similarity_search(
     records, _, _ = await driver.execute_query(
         query,
         search_vector=search_vector,
-        group_ids=group_ids,
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
     communities = [get_community_node_from_record(record) for record in records]
 
@@ -713,12 +709,12 @@ async def get_relevant_nodes(
 
     results, _, _ = await driver.execute_query(
         query,
-        params=query_params,
         nodes=query_nodes,
         group_id=group_id,
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
 
     relevant_nodes_dict: dict[str, list[EntityNode]] = {
@@ -783,11 +779,11 @@ async def get_relevant_edges(
 
     results, _, _ = await driver.execute_query(
         query,
-        params=query_params,
         edges=[edge.model_dump() for edge in edges],
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
 
     relevant_edges_dict: dict[str, list[EntityEdge]] = {
@@ -853,11 +849,11 @@ async def get_edge_invalidation_candidates(
 
     results, _, _ = await driver.execute_query(
         query,
-        params=query_params,
         edges=[edge.model_dump() for edge in edges],
         limit=limit,
         min_score=min_score,
         routing_='r',
+        **query_params,
     )
     invalidation_edges_dict: dict[str, list[EntityEdge]] = {
         result['search_edge_uuid']: [
