@@ -21,13 +21,13 @@ from typing import Any
 from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
 
 
 class Neo4jDriver(GraphDriver):
-    provider: str = 'neo4j'
+    provider = GraphProvider.NEO4J
 
     def __init__(self, uri: str, user: str | None, password: str | None, database: str = 'neo4j'):
         super().__init__()

@@ -17,9 +17,15 @@ limitations under the License.
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class GraphProvider(Enum):
+    NEO4J = 'neo4j'
+    FALKORDB = 'falkordb'
 
 
 class GraphDriverSession(ABC):
@@ -45,8 +51,9 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(ABC):
-    provider: str
-    fulltext_syntax: str = '' # Neo4j (default) syntax does not require a prefix for fulltext queries
+    provider: GraphProvider
+    # Neo4j (default) syntax does not require a prefix for fulltext queries
+    fulltext_syntax: str = ''
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:

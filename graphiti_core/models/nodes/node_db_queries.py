@@ -15,10 +15,11 @@ limitations under the License.
 """
 
 EPISODIC_NODE_SAVE = """
-        MERGE (n:Episodic {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
-        entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
-        RETURN n.uuid AS uuid"""
+    MERGE (n:Episodic {uuid: $uuid})
+    SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
+    entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
+    RETURN n.uuid AS uuid
+"""
 
 EPISODIC_NODE_SAVE_BULK = """
     UNWIND $episodes AS episode
@@ -29,12 +30,25 @@ EPISODIC_NODE_SAVE_BULK = """
     RETURN n.uuid AS uuid
 """
 
+EPISODIC_NODE_RETURN = """
+    e.content AS content,
+    e.created_at AS created_at,
+    e.valid_at AS valid_at,
+    e.uuid AS uuid,
+    e.name AS name,
+    e.group_id AS group_id,
+    e.source_description AS source_description,
+    e.source AS source,
+    e.entity_edges AS entity_edges
+"""
+
 ENTITY_NODE_SAVE = """
-        MERGE (n:Entity {uuid: $entity_data.uuid})
-        SET n:$($labels)
-        SET n = $entity_data
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
-        RETURN n.uuid AS uuid"""
+    MERGE (n:Entity {uuid: $entity_data.uuid})
+    SET n:$($labels)
+    SET n = $entity_data
+    WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
+    RETURN n.uuid AS uuid
+"""
 
 ENTITY_NODE_SAVE_BULK = """
     UNWIND $nodes AS node
@@ -45,8 +59,28 @@ ENTITY_NODE_SAVE_BULK = """
     RETURN n.uuid AS uuid
 """
 
+ENTITY_NODE_RETURN = """
+    n.uuid As uuid,
+    n.name AS name,
+    n.group_id AS group_id,
+    n.created_at AS created_at, 
+    n.summary AS summary,
+    labels(n) AS labels,
+    properties(n) AS attributes
+"""
+
 COMMUNITY_NODE_SAVE = """
-        MERGE (n:Community {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid"""
+    MERGE (n:Community {uuid: $uuid})
+    SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+    WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+    RETURN n.uuid AS uuid
+"""
+
+COMMUNITY_NODE_RETURN = """
+    n.uuid As uuid,
+    n.name AS name,
+    n.name_embedding AS name_embedding,
+    n.group_id AS group_id,
+    n.summary AS summary,
+    n.created_at AS created_at
+"""

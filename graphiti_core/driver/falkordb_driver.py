@@ -32,7 +32,7 @@ else:
             'Install it with: pip install graphiti-core[falkordb]'
         ) from None
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 
 class FalkorDriver(GraphDriver):
-    provider: str = 'falkordb'
+    provider = GraphProvider.FALKORDB
 
     def __init__(
         self,
@@ -98,7 +98,6 @@ class FalkorDriver(GraphDriver):
             self._database = database
 
         self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
-        
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
