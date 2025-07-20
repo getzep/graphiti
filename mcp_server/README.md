@@ -92,6 +92,11 @@ The server uses the following environment variables:
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
 - `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
+- `USE_OLLAMA_FOR_EMBEDDER`: Set to `true` to use Ollama for embeddings (auto-detects Ollama provider)
+- `OLLAMA_EMBEDDER_API_KEY`: Ollama API key (optional, defaults to 'ollama')
+- `OLLAMA_EMBEDDER_BASE_URL`: Ollama base URL for embedder API (when using Ollama)
+- `OLLAMA_EMBEDDER_MODEL_NAME`: Ollama embedding model name
+- `OLLAMA_EMBEDDER_DIMENSION`: Ollama embedding dimension
 - `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
