@@ -23,6 +23,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.embedder.ollama import OllamaEmbedder, OllamaEmbedderConfig
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.llm_client.config import LLMConfig
@@ -354,6 +355,7 @@ class GraphitiEmbedderConfig(BaseModel):
 
     model: str = DEFAULT_EMBEDDER_MODEL
     api_key: str | None = None
+    provider: str = "openai"  # "openai", "ollama", or "azure"
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
@@ -366,6 +368,16 @@ class GraphitiEmbedderConfig(BaseModel):
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('EMBEDDER_MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_EMBEDDER_MODEL
+
+        # Get embedder-specific API key and base URL, fallback to general OpenAI settings
+        api_key = os.environ.get('EMBEDDER_API_KEY') or os.environ.get('OPENAI_API_KEY')
+
+        # Detect provider based on configuration
+        provider = "openai"  # default
+        if api_key and api_key.lower() == "ollama":
+            provider = "ollama"
+
+        logger.info(f'GraphitiEmbedderConfig provider: {provider}')
 
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_EMBEDDING_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None)
@@ -408,6 +420,7 @@ class GraphitiEmbedderConfig(BaseModel):
             return cls(
                 model=model,
                 api_key=os.environ.get('OPENAI_API_KEY'),
+                provider=provider,
             )
 
     def create_client(self) -> EmbedderClient | None:
@@ -439,6 +452,29 @@ class GraphitiEmbedderConfig(BaseModel):
             else:
                 logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
                 return None
+        elif self.provider == "ollama":
+
+            base_url_env = os.environ.get('EMBEDDER_BASE_URL')
+            base_url = base_url_env if base_url_env else 'http://localhost:11434'
+
+            model_env = os.environ.get('EMBEDDER_MODEL_NAME')
+            model = model_env if model_env else 'nomic-embed-text'
+
+            # Get embedding dimension from environment
+            embedding_dim_env = os.environ.get('EMBEDDER_DIMENSION')
+            embedding_dim = int(embedding_dim_env) if embedding_dim_env else 768
+
+            logger.info(f'ollama model: {model}')
+            logger.info(f'ollama base_url: {base_url}')
+            logger.info(f'ollama embedding_dim: {embedding_dim}')
+
+            # Ollama API setup
+            ollama_config = OllamaEmbedderConfig(
+                embedding_model=model,
+                base_url=base_url,
+                embedding_dim=embedding_dim  # nomic-embed-text default
+            )
+            return OllamaEmbedder(config=ollama_config)
         else:
             # OpenAI API setup
             if not self.api_key:
