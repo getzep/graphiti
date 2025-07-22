@@ -18,6 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from typing import Any
+from enum import Enum
 
 from graphiti_core.helpers import DEFAULT_DATABASE
 

@@ -351,20 +351,24 @@ async def node_fulltext_search(
         return []
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
-    query = (
-        get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
-        + """
-        YIELD node AS n, score
-            WITH n, score
-            LIMIT $limit
-            WHERE n:Entity
-        """
-        + filter_query
-        + ENTITY_NODE_RETURN
-        + """
-        ORDER BY score DESC
-        """
-    )
+    if driver.provider == "neptune":
+        res = await driver.run_aoss_query("node_name_and_summary", query)
+        query = ""
+    else:
+        query = (
+            get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
+            + """
+            YIELD node AS n, score
+                WITH n, score
+                LIMIT $limit
+                WHERE n:Entity
+            """
+            + filter_query
+            + ENTITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            """
+        )
     records, header, _ = await driver.execute_query(
         query,
         params=filter_params,

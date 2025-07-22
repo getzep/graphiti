@@ -34,6 +34,9 @@ aoss_indices = [
      "body": {
             "mappings": {
                    "properties": {
+                    "id": {
+                        "type": "text"
+                    },
                     "name": {
                         "type": "text"
                     },
@@ -45,12 +48,23 @@ aoss_indices = [
                     }
                 }
             }
+        },
+        "query": {
+            "query": {
+                "multi_match": {
+                    "query": "",
+                    "fields": ["name", "summary", "group_id"]
+                }
+            }   
         }
-     },
+    },
     {"index_name": "community_name",
      "body": {
             "mappings": {
                    "properties": {
+                    "id": {
+                        "type": "text"
+                    },
                     "name": {
                         "type": "text"
                     },
@@ -59,16 +73,27 @@ aoss_indices = [
                     }
                 }
             }
+        },
+        "query": {
+            "query": {
+                "multi_match": {
+                    "query": "",
+                    "fields": ["name", "group_id"]
+                }
+            }   
         }
      },
     {"index_name": "episode_content",
      "body": {
             "mappings": {
                    "properties": {
-                    "content": {
+                    "id": {
                         "type": "text"
                     },
                     "content": {
+                        "type": "text"
+                    },
+                    "source": {
                         "type": "text"
                     },
                     "source_description": {
@@ -79,12 +104,23 @@ aoss_indices = [
                     }
                 }
             }
+        },
+        "query": {
+            "query": {
+                "multi_match": {
+                    "query": "",
+                    "fields": ["content", "source", "source_description", "group_id"]
+                }
+            }   
         }
      },
     {"index_name": "edge_name_and_fact",
      "body": {
             "mappings": {
                    "properties": {
+                    "id": {
+                        "type": "text"
+                    },
                     "name": {
                         "type": "text"
                     },
@@ -96,6 +132,14 @@ aoss_indices = [
                     }
                 }
             }
+        },
+        "query": {
+            "query": {
+                "multi_match": {
+                    "query": "",
+                    "fields": ["name", "fact", "group_id"]
+                }
+            }   
         }
      }
 ]
@@ -181,4 +225,28 @@ class NeptuneDriver(GraphDriver):
                     index=index_name,
                     body=index['body']
                 )
+    
+    async def delete_aoss_indices(self):
+        for index in aoss_indices:
+            index_name = index['index_name']
+            client = self.aoss_client
+            if not client.indices.exists(index=index_name):
+                client.indices.delete(
+                    index=index_name
+                )
+    
+    def run_aoss_query(self, name, query_text): 
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                query = {
+                    "size": 10,
+                    "query": index['query']
+                }
+                resp = self.aoss_client.search(
+                    body = query['query'],
+                    index = index['index_name']
+                )
+                return resp
+
+
 
