@@ -159,7 +159,7 @@ async def edge_fulltext_search(
         get_relationships_query('edge_name_and_fact', provider=driver.provider)
         + """
         YIELD relationship AS rel, score
-        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
         WHERE e.group_id IN $group_ids """
         + filter_query
         + """
@@ -207,14 +207,14 @@ async def edge_similarity_search(
     if group_ids is not None:
         group_filter_query += '\nAND e.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
-        query_params['source_node_uuid'] = source_node_uuid
-        query_params['target_node_uuid'] = target_node_uuid
 
         if source_node_uuid is not None:
-            group_filter_query += '\nAND (n.uuid IN [$source_uuid, $target_uuid])'
+            query_params['source_uuid'] = source_node_uuid
+            group_filter_query += '\nAND (n.uuid = $source_uuid)'
 
         if target_node_uuid is not None:
-            group_filter_query += '\nAND (m.uuid IN [$source_uuid, $target_uuid])'
+            query_params['target_uuid'] = target_node_uuid
+            group_filter_query += '\nAND (m.uuid = $target_uuid)'
 
     query = (
         RUNTIME_QUERY
@@ -267,7 +267,7 @@ async def edge_bfs_search(
     query = (
         """
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..3]->(n:Entity)
+        MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..3]->(:Entity)
         UNWIND relationships(path) AS rel
         MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
         WHERE e.uuid = rel.uuid
@@ -312,9 +312,9 @@ async def node_fulltext_search(
         get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
         + """
         YIELD node AS n, score
+        WHERE n:Entity
         WITH n, score
         LIMIT $limit
-        WHERE n:Entity
         """
         + filter_query
         + """
@@ -450,9 +450,7 @@ async def episode_fulltext_search(
     query = (
         get_nodes_query(driver.provider, 'episode_content', '$query')
         + """
-        YIELD node AS episode, score
-        MATCH (e:Episodic)
-        WHERE e.uuid = episode.uuid
+        YIELD node AS e, score
         RETURN
         """
         + EPISODIC_NODE_RETURN
