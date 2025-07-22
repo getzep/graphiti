@@ -133,9 +133,7 @@ class FalkorDriver(GraphDriver):
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
             self._database = database
 
-        # FalkorDB uses a redisearch-like syntax for fulltext queries
-        # see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
-        self.fulltext_syntax = '@'
+        self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
