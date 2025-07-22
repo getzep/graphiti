@@ -353,7 +353,7 @@ async def node_fulltext_search(
         YIELD node AS n, score
             WITH n, score
             LIMIT $limit
-            WHERE n:Entity
+            WHERE n:Entity AND n.group_id IN $group_ids
         """
         + filter_query
         + ENTITY_NODE_RETURN
