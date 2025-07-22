@@ -188,7 +188,12 @@ async def edge_search(
                     config.sim_min_score,
                 ),
                 edge_bfs_search(
-                    driver, bfs_origin_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
+                    driver,
+                    bfs_origin_node_uuids,
+                    config.bfs_max_depth,
+                    search_filter,
+                    group_ids,
+                    2 * limit,
                 ),
             ]
         )
@@ -198,7 +203,12 @@ async def edge_search(
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
         search_results.append(
             await edge_bfs_search(
-                driver, source_node_uuids, config.bfs_max_depth, search_filter, 2 * limit
+                driver,
+                source_node_uuids,
+                config.bfs_max_depth,
+                search_filter,
+                group_ids,
+                2 * limit,
             )
         )
 
@@ -281,7 +291,12 @@ async def node_search(
                     driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
                 ),
                 node_bfs_search(
-                    driver, bfs_origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+                    driver,
+                    bfs_origin_node_uuids,
+                    search_filter,
+                    config.bfs_max_depth,
+                    group_ids,
+                    2 * limit,
                 ),
             ]
         )
@@ -291,7 +306,12 @@ async def node_search(
         origin_node_uuids = [node.uuid for result in search_results for node in result]
         search_results.append(
             await node_bfs_search(
-                driver, origin_node_uuids, search_filter, config.bfs_max_depth, 2 * limit
+                driver,
+                origin_node_uuids,
+                search_filter,
+                config.bfs_max_depth,
+                group_ids,
+                2 * limit,
             )
         )
 
