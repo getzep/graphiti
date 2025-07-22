@@ -538,7 +538,14 @@ class Graphiti:
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
-            return AddEpisodeResults(episode=episode, episodic_edges=episodic_edges, nodes=hydrated_nodes, edges=entity_edges, communities=communities, community_edges=community_edges)
+            return AddEpisodeResults(
+                episode=episode,
+                episodic_edges=episodic_edges,
+                nodes=hydrated_nodes,
+                edges=entity_edges,
+                communities=communities,
+                community_edges=community_edges,
+            )
 
         except Exception as e:
             raise e
@@ -823,7 +830,9 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def build_communities(self, group_ids: list[str] | None = None) -> tuple[list[CommunityNode], list[CommunityEdge]]:
+    async def build_communities(
+        self, group_ids: list[str] | None = None
+    ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
         """
         Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
         the content of these communities.

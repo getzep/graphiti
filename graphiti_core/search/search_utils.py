@@ -312,7 +312,7 @@ async def node_fulltext_search(
         get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
         + """
         YIELD node AS n, score
-        WHERE n:Entity
+        WHERE n:Entity AND n.group_id IN $group_ids
         WITH n, score
         LIMIT $limit
         """
