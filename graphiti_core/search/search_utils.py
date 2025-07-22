@@ -168,8 +168,8 @@ async def edge_fulltext_search(
     query = (
         get_relationships_query('edge_name_and_fact', db_type=driver.provider)
         + """
-        YIELD relationship AS r, score
-        MATCH (n:Entity)-[r]->(m:Entity)
+        YIELD relationship AS rel, score
+        MATCH (n:Entity)-[r:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
         WHERE r.group_id IN $group_ids """
         + filter_query
         + """
