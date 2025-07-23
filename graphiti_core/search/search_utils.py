@@ -62,9 +62,7 @@ MAX_QUERY_LENGTH = 128
 
 def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
     group_ids_filter_list = (
-        [fulltext_syntax + f"group_id:'{lucene_sanitize(g)}'" for g in group_ids]
-        if group_ids is not None
-        else []
+        [fulltext_syntax + f'group_id:"{g}"' for g in group_ids] if group_ids is not None else []
     )
     group_ids_filter = ''
     for f in group_ids_filter_list:
@@ -169,7 +167,7 @@ async def edge_fulltext_search(
         get_relationships_query('edge_name_and_fact', db_type=driver.provider)
         + """
         YIELD relationship AS rel, score
-        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+        MATCH (n:Entity)-[r:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
         WHERE r.group_id IN $group_ids """
         + filter_query
         + """
@@ -285,7 +283,8 @@ async def edge_bfs_search(
     bfs_origin_node_uuids: list[str] | None,
     bfs_max_depth: int,
     search_filter: SearchFilters,
-    limit: int,
+    group_ids: list[str] | None = None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # vector similarity search over embedded facts
     if bfs_origin_node_uuids is None:
@@ -295,12 +294,13 @@ async def edge_bfs_search(
 
     query = (
         """
-                                        UNWIND $bfs_origin_node_uuids AS origin_uuid
-                                        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                                        UNWIND relationships(path) AS rel
-                                        MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                                        WHERE r.uuid = rel.uuid
-                                        """
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+            UNWIND relationships(path) AS rel
+            MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+            WHERE r.uuid = rel.uuid
+            AND r.group_id IN $group_ids
+        """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -325,6 +325,7 @@ async def edge_bfs_search(
         params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
+        group_ids=group_ids,
         limit=limit,
         routing_='r',
     )
@@ -433,7 +434,8 @@ async def node_bfs_search(
     bfs_origin_node_uuids: list[str] | None,
     search_filter: SearchFilters,
     bfs_max_depth: int,
-    limit: int,
+    group_ids: list[str] | None = None,
+    limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # vector similarity search over entity names
     if bfs_origin_node_uuids is None:
@@ -443,10 +445,11 @@ async def node_bfs_search(
 
     query = (
         """
-                                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                                MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                                WHERE n.group_id = origin.group_id
-                                """
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+            WHERE n.group_id = origin.group_id
+            AND origin.group_id IN $group_ids
+        """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -458,6 +461,7 @@ async def node_bfs_search(
         params=filter_params,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
         depth=bfs_max_depth,
+        group_ids=group_ids,
         limit=limit,
         routing_='r',
     )
@@ -484,6 +488,7 @@ async def episode_fulltext_search(
         YIELD node AS episode, score
         MATCH (e:Episodic)
         WHERE e.uuid = episode.uuid
+        AND e.group_id IN $group_ids
         RETURN 
             e.content AS content,
             e.created_at AS created_at,
@@ -526,6 +531,7 @@ async def community_fulltext_search(
         get_nodes_query(driver.provider, 'community_name', '$query')
         + """
         YIELD node AS comm, score
+        WHERE comm.group_id IN $group_ids
         RETURN
             comm.uuid AS uuid,
             comm.group_id AS group_id, 
