@@ -294,13 +294,13 @@ async def edge_bfs_search(
 
     query = (
         """
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                WHERE r.uuid = rel.uuid
-                AND r.group_id IN $group_ids
-            """
+                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                    UNWIND relationships(path) AS rel
+                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                    WHERE r.uuid = rel.uuid
+                    AND r.group_id IN $group_ids
+                """
         + filter_query
         + """  
                 RETURN DISTINCT
@@ -445,11 +445,11 @@ async def node_bfs_search(
 
     query = (
         """
-                UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                WHERE n.group_id = origin.group_id
-                AND origin.group_id IN $group_ids
-            """
+                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                    MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                    WHERE n.group_id = origin.group_id
+                    AND origin.group_id IN $group_ids
+                """
         + filter_query
         + ENTITY_NODE_RETURN
         + """
@@ -672,7 +672,7 @@ async def hybrid_node_search(
     }
     result_uuids = [[node.uuid for node in result] for result in results]
 
-    ranked_uuids = rrf(result_uuids)
+    ranked_uuids, _ = rrf(result_uuids)
 
     relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
 

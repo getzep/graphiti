@@ -119,11 +119,11 @@ class SearchConfig(BaseModel):
 
 
 class SearchResults(BaseModel):
-    edges: list[EntityEdge]
-    edge_reranker_scores: list[float]
-    nodes: list[EntityNode]
-    node_reranker_scores: list[float]
-    episodes: list[EpisodicNode]
-    episode_reranker_scores: list[float]
-    communities: list[CommunityNode]
-    community_reranker_scores: list[float]
+    edges: list[EntityEdge] = Field(default_factory=list)
+    edge_reranker_scores: list[float] = Field(default_factory=list)
+    nodes: list[EntityNode] = Field(default_factory=list)
+    node_reranker_scores: list[float] = Field(default_factory=list)
+    episodes: list[EpisodicNode] = Field(default_factory=list)
+    episode_reranker_scores: list[float] = Field(default_factory=list)
+    communities: list[CommunityNode] = Field(default_factory=list)
+    community_reranker_scores: list[float] = Field(default_factory=list)

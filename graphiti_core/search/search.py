@@ -80,12 +80,7 @@ async def search(
     cross_encoder = clients.cross_encoder
 
     if query.strip() == '':
-        return SearchResults(
-            edges=[],
-            nodes=[],
-            episodes=[],
-            communities=[],
-        )
+        return SearchResults()
     query_vector = (
         query_vector
         if query_vector is not None
