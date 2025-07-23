@@ -120,6 +120,10 @@ class SearchConfig(BaseModel):
 
 class SearchResults(BaseModel):
     edges: list[EntityEdge]
+    edge_reranker_scores: list[float]
     nodes: list[EntityNode]
+    node_reranker_scores: list[float]
     episodes: list[EpisodicNode]
+    episode_reranker_scores: list[float]
     communities: list[CommunityNode]
+    community_reranker_scores: list[float]

@@ -71,7 +71,7 @@ async def test_graphiti_init():
     )
 
     results = await graphiti.search_(
-        query='What is the hall of portrait?',
+        query='Who is Tania',
         search_filter=search_filter,
     )
 
