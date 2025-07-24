@@ -7,6 +7,7 @@ from graphiti_core.edges import EntityEdge  # type: ignore
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
+from graphiti_core.driver.neo4j_driver import Neo4jDriver  # type: ignore
 
 from graph_service.config import ZepEnvDep
 from graph_service.dto import FactResult
@@ -15,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class ZepGraphiti(Graphiti):
-    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
-        super().__init__(uri, user, password, llm_client)
+    def __init__(self, driver, llm_client: LLMClient | None = None):
+        super().__init__(graph_driver=driver, llm_client=llm_client)
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -72,18 +73,28 @@ class ZepGraphiti(Graphiti):
 
 
 async def get_graphiti(settings: ZepEnvDep):
-    client = ZepGraphiti(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    # Select driver based on backend
+    if settings.db_backend == 'falkordb':
+        from graphiti_core.driver.falkordb_driver import FalkorDriver  # type: ignore
+        driver = FalkorDriver(
+            host=settings.falkordb_host,
+            port=settings.falkordb_port,
+            username=settings.falkordb_user,
+            password=settings.falkordb_password,
+        )
+    else:
+        driver = Neo4jDriver(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
+    client = ZepGraphiti(driver)
     if settings.openai_base_url is not None:
         client.llm_client.config.base_url = settings.openai_base_url
     if settings.openai_api_key is not None:
         client.llm_client.config.api_key = settings.openai_api_key
     if settings.model_name is not None:
         client.llm_client.model = settings.model_name
-
     try:
         yield client
     finally:
@@ -91,11 +102,22 @@ async def get_graphiti(settings: ZepEnvDep):
 
 
 async def initialize_graphiti(settings: ZepEnvDep):
-    client = ZepGraphiti(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    # Select driver based on backend
+    if settings.db_backend == 'falkordb':
+        from graphiti_core.driver.falkordb_driver import FalkorDriver  # type: ignore
+        driver = FalkorDriver(
+            host=settings.falkordb_host,
+            port=settings.falkordb_port,
+            username=settings.falkordb_user,
+            password=settings.falkordb_password,
+        )
+    else:
+        driver = Neo4jDriver(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
+    client = ZepGraphiti(driver)
     await client.build_indices_and_constraints()
 
 
