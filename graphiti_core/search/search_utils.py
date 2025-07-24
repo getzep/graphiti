@@ -524,7 +524,6 @@ async def community_fulltext_search(
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
