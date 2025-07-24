@@ -113,25 +113,46 @@ async def retrieve_episodes(
     )
     source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
 
-    query: LiteralString = (
-        """
-                                MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                                """
-        + group_id_filter
-        + source_filter
-        + """
-        RETURN e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.group_id AS group_id,
-            e.name AS name,
-            e.source_description AS source_description,
-            e.source AS source
-        ORDER BY e.valid_at DESC
-        LIMIT $num_episodes
-        """
-    )
+    if driver.provider == "neptune":
+        query: LiteralString = (
+            """
+            MATCH (e:Episodic) WHERE e.valid_at <= datetime($reference_time)
+            """
+            + group_id_filter
+            + source_filter
+            + """
+            RETURN e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.group_id AS group_id,
+                e.name AS name,
+                e.source_description AS source_description,
+                e.source AS source
+            ORDER BY e.valid_at DESC
+            LIMIT $num_episodes
+            """
+        )
+    else:
+        query: LiteralString = (
+            """
+            MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+            """
+            + group_id_filter
+            + source_filter
+            + """
+            RETURN e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.group_id AS group_id,
+                e.name AS name,
+                e.source_description AS source_description,
+                e.source AS source
+            ORDER BY e.valid_at DESC
+            LIMIT $num_episodes
+            """
+        )
     result, _, _ = await driver.execute_query(
         query,
         reference_time=reference_time,

@@ -167,6 +167,8 @@ async def add_nodes_and_edges_bulk_tx(
         edges.append(edge_data)
 
     if driver.provider == 'neptune':
+        #First save the episodes to AOSS
+        driver.save_to_aoss('episode_content', episodes)
         await tx.run(EPISODIC_NODE_SAVE_BULK_NEPTUNE, episodes=episodes)
     else:
         await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)

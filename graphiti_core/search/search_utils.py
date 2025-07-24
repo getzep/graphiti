@@ -166,41 +166,90 @@ async def edge_fulltext_search(
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
-    query = (
-        get_relationships_query('edge_name_and_fact', db_type=driver.provider)
-        + """
-        YIELD relationship AS rel, score
-        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-        WHERE r.group_id IN $group_ids """
-        + filter_query
-        + """
-        WITH r, score, startNode(r) AS n, endNode(r) AS m
-        RETURN
-            r.uuid AS uuid,
-            r.group_id AS group_id,
-            n.uuid AS source_node_uuid,
-            m.uuid AS target_node_uuid,
-            r.created_at AS created_at,
-            r.name AS name,
-            r.fact AS fact,
-            r.episodes AS episodes,
-            r.expired_at AS expired_at,
-            r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at,
-            properties(r) AS attributes
-        ORDER BY score DESC LIMIT $limit
-        """
-    )
+    if driver.provider == "neptune":
+        res = driver.run_aoss_query("edge_name_and_fact", query)
+        if res['hits']['total']['value'] > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in res['hits']['total']['hits']:
+                print("******** fix search_utils.node_fulltext_search *********")
+                if score > min_score:
+                    input_ids.append({'id': r['uuid'], 'score': score})        
+                    
+            # Match the edge ides and return the values
+            query =  ( """
+                UNWIND $ids as id
+                MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+                WHERE r.group_id IN $group_ids 
+                AND id(r)=id 
+                """
+                + filter_query
+                + """
+                WITH r, id.score as score, startNode(r) AS n, endNode(r) AS m
+                RETURN
+                    r.uuid AS uuid,
+                    r.group_id AS group_id,
+                    n.uuid AS source_node_uuid,
+                    m.uuid AS target_node_uuid,
+                    r.created_at AS created_at,
+                    r.name AS name,
+                    r.fact AS fact,
+                    r.episodes AS episodes,
+                    r.expired_at AS expired_at,
+                    r.valid_at AS valid_at,
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
+                ORDER BY score DESC LIMIT $limit
+                            """)
 
-    records, _, _ = await driver.execute_query(
-        query,
-        params=filter_params,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+            records, _, _ = await driver.execute_query(
+                query,
+                params=filter_params,
+                query=fuzzy_query,
+                group_ids=group_ids,
+                ids=input_ids,
+                limit=limit,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:    
+        query = (
+            get_relationships_query('edge_name_and_fact', db_type=driver.provider)
+            + """
+            YIELD relationship AS rel, score
+            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+            WHERE r.group_id IN $group_ids """
+            + filter_query
+            + """
+            WITH r, score, startNode(r) AS n, endNode(r) AS m
+            RETURN
+                r.uuid AS uuid,
+                r.group_id AS group_id,
+                n.uuid AS source_node_uuid,
+                m.uuid AS target_node_uuid,
+                r.created_at AS created_at,
+                r.name AS name,
+                r.fact AS fact,
+                r.episodes AS episodes,
+                r.expired_at AS expired_at,
+                r.valid_at AS valid_at,
+                r.invalid_at AS invalid_at,
+                properties(r) AS attributes
+            ORDER BY score DESC LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            params=filter_params,
+            query=fuzzy_query,
+            group_ids=group_ids,
+            limit=limit,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -236,47 +285,113 @@ async def edge_similarity_search(
         if target_node_uuid is not None:
             group_filter_query += '\nAND (m.uuid IN [$source_uuid, $target_uuid])'
 
-    query = (
-        RUNTIME_QUERY
-        + """
-        MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
-        """
-        + group_filter_query
-        + filter_query
-        + """
-        WITH DISTINCT r, """
-        + get_vector_cosine_func_query('r.fact_embedding', '$search_vector', driver.provider)
-        + """ AS score
-        WHERE score > $min_score
-        RETURN
-            r.uuid AS uuid,
-            r.group_id AS group_id,
-            startNode(r).uuid AS source_node_uuid,
-            endNode(r).uuid AS target_node_uuid,
-            r.created_at AS created_at,
-            r.name AS name,
-            r.fact AS fact,
-            r.episodes AS episodes,
-            r.expired_at AS expired_at,
-            r.valid_at AS valid_at,
-            r.invalid_at AS invalid_at,
-            properties(r) AS attributes
-        ORDER BY score DESC
-        LIMIT $limit
-        """
-    )
-    records, header, _ = await driver.execute_query(
-        query,
-        params=query_params,
-        search_vector=search_vector,
-        source_uuid=source_node_uuid,
-        target_uuid=target_node_uuid,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+    if driver.provider == "neptune":
+        query = (RUNTIME_QUERY 
+            + """
+            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)            
+            """ 
+            + group_filter_query  
+            + filter_query
+            + """
+            RETURN DISTINCT id(r) as id, [x IN split(r.fact_embedding, ",") | toFloat(x)] as embedding
+            """)
+        resp, header, _  = await driver.execute_query(
+            query,
+            params=query_params,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
+        if len(resp) > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in resp:
+                if r['embedding']:
+                    score = driver.calculate_cosine_similarity(search_vector, r['embedding'])
+                    if score > min_score:
+                        input_ids.append({'id': r['id'], 'score': score})        
+            
+            # Match the edge ides and return the values
+            query_params['ids'] = input_ids
+            query =  ( """
+                UNWIND $ids as i
+                MATCH ()-[r]->()
+                WHERE id(r) = i.id
+                RETURN
+                    r.uuid AS uuid,
+                    r.group_id AS group_id,
+                    startNode(r).uuid AS source_node_uuid,
+                    endNode(r).uuid AS target_node_uuid,
+                    r.created_at AS created_at,
+                    r.name AS name,
+                    r.fact AS fact,
+                    split(r.episodes, ",") AS episodes,
+                    r.expired_at AS expired_at,
+                    r.valid_at AS valid_at,
+                    r.invalid_at AS invalid_at,
+                    properties(r) AS attributes
+                ORDER BY i.score DESC
+                LIMIT $limit
+                    """)
+            records, header, _ = await driver.execute_query(
+                query,
+                params=query_params,
+                ids=input_ids,
+                search_vector=search_vector,
+                group_ids=group_ids,
+                limit=limit,
+                min_score=min_score,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:
+        query = (
+            RUNTIME_QUERY
+            + """
+            MATCH (n:Entity)-[r:RELATES_TO]->(m:Entity)
+            """
+            + group_filter_query
+            + filter_query
+            + """
+            WITH DISTINCT r, """
+            + get_vector_cosine_func_query('r.fact_embedding', '$search_vector', driver.provider)
+            + """ AS score
+            WHERE score > $min_score
+            RETURN
+                r.uuid AS uuid,
+                r.group_id AS group_id,
+                startNode(r).uuid AS source_node_uuid,
+                endNode(r).uuid AS target_node_uuid,
+                r.created_at AS created_at,
+                r.name AS name,
+                r.fact AS fact,
+                split(r.episodes, ',') AS episodes,                
+                r.expired_at AS expired_at,
+                r.valid_at AS valid_at,
+                r.invalid_at AS invalid_at,
+                properties(r) AS attributes
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+        records, header, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            search_vector=search_vector,
+            source_uuid=source_node_uuid,
+            target_uuid=target_node_uuid,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
 
     edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -359,7 +474,7 @@ async def node_fulltext_search(
             for r in res['hits']['total']['hits']:
                 print("******** fix search_utils.node_fulltext_search *********")
                 if score > min_score:
-                    input_ids.append({'id': r['~id'], 'score': score})        
+                    input_ids.append({'id': r['uuid'], 'score': score})        
                     
             # Match the edge ides and return the values
             query_params['ids'] = input_ids

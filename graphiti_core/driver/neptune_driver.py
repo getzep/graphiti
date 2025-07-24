@@ -96,7 +96,7 @@ aoss_indices = [
      "body": {
             "mappings": {
                    "properties": {
-                    "id": {
+                    "uuid": {
                         "type": "text"
                     },
                     "name": {
@@ -124,7 +124,7 @@ aoss_indices = [
      "body": {
             "mappings": {
                    "properties": {
-                    "id": {
+                    "uuid": {
                         "type": "text"
                     },
                     "name": {
@@ -149,7 +149,7 @@ aoss_indices = [
      "body": {
             "mappings": {
                    "properties": {
-                    "id": {
+                    "uuid": {
                         "type": "text"
                     },
                     "content": {
@@ -180,7 +180,7 @@ aoss_indices = [
      "body": {
             "mappings": {
                    "properties": {
-                    "id": {
+                    "uuid": {
                         "type": "text"
                     },
                     "name": {
@@ -309,8 +309,8 @@ class NeptuneDriver(GraphDriver):
     
     def run_aoss_query(self, name:str, query_text:str): 
         for index in aoss_indices:
-            index['query']['query']['multi_match']['query'] = query_text
-            if name.lower() == index['index_name']:
+            if name.lower() == index['index_name']:                
+                index['query']['query']['multi_match']['query'] = query_text
                 query = {
                     "size": 10,
                     "query": index['query']
@@ -320,8 +320,22 @@ class NeptuneDriver(GraphDriver):
                     index = index['index_name']
                 )
                 return resp
+    
+    def save_to_aoss(self, name:str, data:list[dict]) -> bool: 
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                to_index = []
+                for d in data:
+                    item = {"_index": name}
+                    for p in index['body']['mappings']['properties'].keys():
+                        item[p] = d[p]
+                    to_index.append(item)                
+                helpers.bulk(self.aoss_client, to_index)
+        
+        return True
 
-    def calculate_cosine_similarity(vector1:List[float], vector2:List[float]):
+
+    def calculate_cosine_similarity(self, vector1:List[float], vector2:List[float]) -> float:
         """
         Calculates the cosine similarity between two vectors using NumPy.
         """
