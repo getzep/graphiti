@@ -479,7 +479,6 @@ async def episode_fulltext_search(
 ) -> list[EpisodicNode]:
     # BM25 search to get top episodes
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
