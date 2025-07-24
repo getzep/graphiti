@@ -268,9 +268,9 @@ async def edge_bfs_search(
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH path = (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
             UNWIND relationships(path) AS rel
-            MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-            WHERE r.uuid = rel.uuid
-            AND r.group_id IN $group_ids
+            MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
+            WHERE e.uuid = rel.uuid
+            AND e.group_id IN $group_ids
         """
         + filter_query
         + """
