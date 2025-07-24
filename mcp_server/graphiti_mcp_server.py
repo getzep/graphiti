@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
-from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
@@ -632,6 +631,7 @@ async def initialize_graphiti():
                 password=config.neo4j.password,
             )
         elif config.database_type == 'falkordb':
+            from graphiti_core.driver.falkordb_driver import FalkorDriver
             host = config.falkor.host if hasattr(config.falkor, 'host') else 'localhost'
             port = int(config.falkor.port) if hasattr(config.falkor, 'port') else 6379
             username = config.falkor.user or None

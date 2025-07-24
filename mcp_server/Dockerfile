@@ -30,8 +30,13 @@ RUN groupadd -r app && useradd -r -d /app -g app app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies first (better layer caching)
+ARG INSTALL_FALKORDB=false
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    if [ "$INSTALL_FALKORDB" = "true" ]; then \
+        uv sync --frozen --no-dev --extra falkordb; \
+    else \
+        uv sync --frozen --no-dev; \
+    fi
 
 # Copy application code
 COPY graphiti_mcp_server.py ./
@@ -43,7 +48,8 @@ RUN chown -Rv app:app /app
 USER app
 
 # Expose port
-EXPOSE 8000
+EXPOSE $PORT
 
-# Command to run the application
-CMD ["uv", "run", "graphiti_mcp_server.py"]
+# Command to run the application, using DATABASE_TYPE env var
+CMD ["sh", "-c", "/app/.venv/bin/python graphiti_mcp_server.py --transport sse"]
+
