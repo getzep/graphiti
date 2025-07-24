@@ -32,7 +32,7 @@ else:
             'Install it with: pip install graphiti-core[falkordb]'
         ) from None
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 
 class FalkorDriver(GraphDriver):
-    provider: str = 'falkordb'
+    provider = GraphProvider.FALKORDB
 
     def __init__(
         self,
@@ -119,7 +119,7 @@ class FalkorDriver(GraphDriver):
                 # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
-            logger.error(f'Error executing FalkorDB query: {e}')
+            logger.error(f'Error executing FalkorDB query: {e}\n{cypher_query_}\n{params}')
             raise
 
         # Convert the result header to a list of strings

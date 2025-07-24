@@ -14,25 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import os
 from datetime import datetime, timezone
 
 import pytest
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import validate_excluded_entity_types
+from tests.helpers_test import drivers, get_driver
 
 pytestmark = pytest.mark.integration
-
 pytest_plugins = ('pytest_asyncio',)
-
-load_dotenv()
-
-NEO4J_URI = os.getenv('NEO4J_URI')
-NEO4J_USER = os.getenv('NEO4J_USER')
-NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
 
 # Test entity type definitions
@@ -65,9 +57,14 @@ class Location(BaseModel):
 
 
 @pytest.mark.asyncio
-async def test_exclude_default_entity_type():
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+    ids=drivers,
+)
+async def test_exclude_default_entity_type(driver):
     """Test excluding the default 'Entity' type while keeping custom types."""
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    graphiti = Graphiti(graph_driver=get_driver(driver))
 
     try:
         await graphiti.build_indices_and_constraints()
@@ -118,9 +115,14 @@ async def test_exclude_default_entity_type():
 
 
 @pytest.mark.asyncio
-async def test_exclude_specific_custom_types():
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+    ids=drivers,
+)
+async def test_exclude_specific_custom_types(driver):
     """Test excluding specific custom entity types while keeping others."""
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    graphiti = Graphiti(graph_driver=get_driver(driver))
 
     try:
         await graphiti.build_indices_and_constraints()
@@ -177,9 +179,14 @@ async def test_exclude_specific_custom_types():
 
 
 @pytest.mark.asyncio
-async def test_exclude_all_types():
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+    ids=drivers,
+)
+async def test_exclude_all_types(driver):
     """Test excluding all entity types (edge case)."""
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    graphiti = Graphiti(graph_driver=get_driver(driver))
 
     try:
         await graphiti.build_indices_and_constraints()
@@ -221,9 +228,14 @@ async def test_exclude_all_types():
 
 
 @pytest.mark.asyncio
-async def test_exclude_no_types():
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+    ids=drivers,
+)
+async def test_exclude_no_types(driver):
     """Test normal behavior when no types are excluded (baseline test)."""
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    graphiti = Graphiti(graph_driver=get_driver(driver))
 
     try:
         await graphiti.build_indices_and_constraints()
@@ -299,9 +311,14 @@ def test_validation_invalid_excluded_types():
 
 
 @pytest.mark.asyncio
-async def test_excluded_types_parameter_validation_in_add_episode():
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+    ids=drivers,
+)
+async def test_excluded_types_parameter_validation_in_add_episode(driver):
     """Test that add_episode validates excluded_entity_types parameter."""
-    graphiti = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    graphiti = Graphiti(graph_driver=get_driver(driver))
 
     try:
         entity_types = {

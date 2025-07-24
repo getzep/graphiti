@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
+
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
 
@@ -48,7 +50,7 @@ class TestFalkorDriver:
             driver = FalkorDriver(
                 host='test-host', port='1234', username='test-user', password='test-pass'
             )
-            assert driver.provider == 'falkordb'
+            assert driver.provider == GraphProvider.FALKORDB
             mock_falkor_db.assert_called_once_with(
                 host='test-host', port='1234', username='test-user', password='test-pass'
             )
@@ -59,14 +61,14 @@ class TestFalkorDriver:
         with patch('graphiti_core.driver.falkordb_driver.FalkorDB') as mock_falkor_db_class:
             mock_falkor_db = MagicMock()
             driver = FalkorDriver(falkor_db=mock_falkor_db)
-            assert driver.provider == 'falkordb'
+            assert driver.provider == GraphProvider.FALKORDB
             assert driver.client is mock_falkor_db
             mock_falkor_db_class.assert_not_called()
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_provider(self):
         """Test driver provider identification."""
-        assert self.driver.provider == 'falkordb'
+        assert self.driver.provider == GraphProvider.FALKORDB
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_get_graph_with_name(self):

@@ -34,7 +34,7 @@ async def get_community_clusters(
         group_id_values, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN 
+        RETURN
             collect(DISTINCT n.group_id) AS group_ids
         """,
         )
@@ -233,10 +233,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
@@ -250,10 +250,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
@@ -286,11 +286,11 @@ async def determine_entity_community(
 
 async def update_community(
     driver: GraphDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
-):
+) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community, is_new = await determine_entity_community(driver, entity)
 
     if community is None:
-        return
+        return [], []
 
     new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
     new_name = await generate_summary_description(llm_client, new_summary)
@@ -298,10 +298,14 @@ async def update_community(
     community.summary = new_summary
     community.name = new_name
 
+    community_edges = []
     if is_new:
         community_edge = (build_community_edges([entity], community, utc_now()))[0]
         await community_edge.save(driver)
+        community_edges.append(community_edge)
 
     await community.generate_name_embedding(embedder)
 
     await community.save(driver)
+
+    return [community], community_edges

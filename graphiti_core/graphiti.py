@@ -26,7 +26,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
-from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
@@ -93,8 +93,11 @@ load_dotenv()
 
 class AddEpisodeResults(BaseModel):
     episode: EpisodicNode
+    episodic_edges: list[EpisodicEdge]
     nodes: list[EntityNode]
     edges: list[EntityEdge]
+    communities: list[CommunityNode]
+    community_edges: list[CommunityEdge]
 
 
 class Graphiti:
@@ -520,9 +523,12 @@ class Graphiti:
                 self.driver, [episode], episodic_edges, hydrated_nodes, entity_edges, self.embedder
             )
 
+            communities = []
+            community_edges = []
+
             # Update any communities
             if update_communities:
-                await semaphore_gather(
+                communities, community_edges = await semaphore_gather(
                     *[
                         update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
@@ -532,7 +538,14 @@ class Graphiti:
             end = time()
             logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
-            return AddEpisodeResults(episode=episode, nodes=nodes, edges=entity_edges)
+            return AddEpisodeResults(
+                episode=episode,
+                episodic_edges=episodic_edges,
+                nodes=hydrated_nodes,
+                edges=entity_edges,
+                communities=communities,
+                community_edges=community_edges,
+            )
 
         except Exception as e:
             raise e
@@ -817,7 +830,9 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    async def build_communities(self, group_ids: list[str] | None = None) -> list[CommunityNode]:
+    async def build_communities(
+        self, group_ids: list[str] | None = None
+    ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
         """
         Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
         the content of these communities.
@@ -846,7 +861,7 @@ class Graphiti:
             max_coroutines=self.max_coroutines,
         )
 
-        return community_nodes
+        return community_nodes, community_edges
 
     async def search(
         self,

@@ -20,6 +20,15 @@ jobs:
         ports:
           - 6379:6379
         options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      neo4j:
+        image: neo4j:5.26-community
+        ports:
+          - 7687:7687
+          - 7474:7474
+        env:
+          NEO4J_AUTH: neo4j/testpass
+          NEO4J_PLUGINS: '["apoc"]'
+        options: --health-cmd "cypher-shell -u neo4j -p testpass 'RETURN 1'" --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -37,15 +46,33 @@ jobs:
       - name: Run non-integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpass
         run: |
           uv run pytest -m "not integration"
       - name: Wait for FalkorDB
         run: |
           timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
+      - name: Wait for Neo4j
+        run: |
+          timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
       - name: Run FalkorDB integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
+          DISABLE_NEO4J: 1
         run: |
           uv run pytest tests/driver/test_falkordb_driver.py
+      - name: Run Neo4j integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpass
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: 6379
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          uv run pytest tests/test_*_int.py -k "neo4j"
