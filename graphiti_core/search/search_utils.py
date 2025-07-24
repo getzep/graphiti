@@ -352,8 +352,29 @@ async def node_fulltext_search(
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
     if driver.provider == "neptune":
-        res = await driver.run_aoss_query("node_name_and_summary", query)
-        query = ""
+        res = driver.run_aoss_query("node_name_and_summary", query)
+        if res['hits']['total']['value'] > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in res['hits']['total']['hits']:
+                print("******** fix search_utils.node_fulltext_search *********")
+                if score > min_score:
+                    input_ids.append({'id': r['~id'], 'score': score})        
+                    
+            # Match the edge ides and return the values
+            query_params['ids'] = input_ids
+            query =  ( """
+                UNWIND $ids as i
+                MATCH (n)
+                WHERE id(n)=i.id
+                """
+                + ENTITY_NODE_RETURN
+                + """
+                ORDER BY i.score DESC
+                LIMIT $limit
+                            """)
+        else:
+            return []
     else:
         query = (
             get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
@@ -403,35 +424,92 @@ async def node_similarity_search(
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
 
-    query = (
-        RUNTIME_QUERY
-        + """
-        MATCH (n:Entity)
-        """
-        + group_filter_query
-        + filter_query
-        + """
-        WITH n, """
-        + get_vector_cosine_func_query('n.name_embedding', '$search_vector', driver.provider)
-        + """ AS score
-        WHERE score > $min_score"""
-        + ENTITY_NODE_RETURN
-        + """
-        ORDER BY score DESC
-        LIMIT $limit
-            """
-    )
 
-    records, header, _ = await driver.execute_query(
-        query,
-        params=query_params,
-        search_vector=search_vector,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+    if driver.provider == "neptune":
+        query = (RUNTIME_QUERY 
+            + """
+            MATCH (n:Entity)
+            """ 
+            + group_filter_query  
+            + filter_query
+            + """
+            RETURN DISTINCT id(n) as id, [x IN split(n.embedding, ",") | toFloat(x)] as embedding
+            """)
+        resp, header, _  = await driver.execute_query(
+            query,
+            params=query_params,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
+        if len(resp) > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in resp:
+                if r['embedding']:
+                    score = driver.calculate_cosine_similarity(search_vector, r['embedding'])
+                    if score > min_score:
+                        input_ids.append({'id': r['id'], 'score': score})        
+            
+            # Match the edge ides and return the values
+            query_params['ids'] = input_ids
+            query =  ( """
+                UNWIND $ids as i
+                MATCH (n)
+                WHERE id(n)=i.id
+                """
+                + ENTITY_NODE_RETURN
+                + """
+                ORDER BY i.score DESC
+                LIMIT $limit
+                    """)
+            records, header, _ = await driver.execute_query(
+                query,
+                params=query_params,
+                ids=input_ids,
+                search_vector=search_vector,
+                group_ids=group_ids,
+                limit=limit,
+                min_score=min_score,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:
+        query = (
+            RUNTIME_QUERY
+            + """
+            MATCH (n:Entity)
+            """
+            + group_filter_query
+            + filter_query
+            + """
+            WITH n, """
+            + get_vector_cosine_func_query('n.name_embedding', '$search_vector', driver.provider)
+            + """ AS score
+            WHERE score > $min_score"""
+            + ENTITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+                """
+        )
+
+        records, header, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
 
     nodes = [get_entity_node_from_record(record) for record in records]
 
@@ -798,21 +876,44 @@ async def get_relevant_edges(
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
-
-    query = (
-        RUNTIME_QUERY
-        + """
-        UNWIND $edges AS edge
-        MATCH (n:Entity {uuid: edge.source_node_uuid})-[e:RELATES_TO {group_id: edge.group_id}]-(m:Entity {uuid: edge.target_node_uuid})
-        """
-        + filter_query
-        + """
-        WITH e, edge, """
-        + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
-        + """ AS score
-        WHERE score > $min_score
-        WITH edge, e, score
-        ORDER BY score DESC
+    
+    if driver.provider == "neptune":
+        query = (
+            RUNTIME_QUERY
+            + """
+            UNWIND $edges AS edge
+            MATCH (n:Entity {uuid: edge.source_node_uuid})-[e:RELATES_TO {group_id: edge.group_id}]-(m:Entity {uuid: edge.target_node_uuid})
+            """
+            + filter_query
+            + """
+            WITH e, edge
+            RETURN DISTINCT id(e) as id, e.fact_embedding as source_embedding, edge.uuid as search_edge_uuid, 
+            [x IN split(edge.fact_embedding, ",") | toFloat(x)] as target_embedding
+            """)
+        resp, header, _  = await driver.execute_query(
+            query,
+            params=query_params,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
+            # Calculate Cosine similarity then return the edge ids
+        input_ids = []
+        for r in resp:
+            score = driver.calculate_cosine_similarity(r['source_embedding'], r['target_embedding'])
+            if score > min_score:
+                input_ids.append({'id': r['id'], 'score': score, 'uuid': r['search_edge_uuid']})        
+        
+        # Match the edge ides and return the values
+        query = ("""                      
+        UNWIND $ids AS edge
+        MATCH ()-[e]->()
+        WHERE id(e) = edge.id
+        WITH edge, e
+        ORDER BY edge.score DESC
         RETURN edge.uuid AS search_edge_uuid,
             collect({
                 uuid: e.uuid,
@@ -829,18 +930,61 @@ async def get_relevant_edges(
                 invalid_at: e.invalid_at,
                 attributes: properties(e)
             })[..$limit] AS matches
-        """
-    )
+                """)
 
-    results, _, _ = await driver.execute_query(
-        query,
-        params=query_params,
-        edges=[edge.model_dump() for edge in edges],
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+        results, _, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            ids=input_ids,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+    else:
+        query = (
+            RUNTIME_QUERY
+            + """
+            UNWIND $edges AS edge
+            MATCH (n:Entity {uuid: edge.source_node_uuid})-[e:RELATES_TO {group_id: edge.group_id}]-(m:Entity {uuid: edge.target_node_uuid})
+            """
+            + filter_query
+            + """
+            WITH e, edge, """
+            + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
+            + """ AS score
+            WHERE score > $min_score
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
+                })[..$limit] AS matches
+            """
+        )
+        results, _, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+
 
     relevant_edges_dict: dict[str, list[EntityEdge]] = {
         result['search_edge_uuid']: [
@@ -869,21 +1013,45 @@ async def get_edge_invalidation_candidates(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
 
-    query = (
-        RUNTIME_QUERY
-        + """
-        UNWIND $edges AS edge
-        MATCH (n:Entity)-[e:RELATES_TO {group_id: edge.group_id}]->(m:Entity)
-        WHERE n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid]
-        """
-        + filter_query
-        + """
-        WITH edge, e, """
-        + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
-        + """ AS score
-        WHERE score > $min_score
-        WITH edge, e, score
-        ORDER BY score DESC
+    if driver.provider == "neptune":
+        query = (
+            RUNTIME_QUERY
+            + """
+            UNWIND $edges AS edge
+            MATCH (n:Entity)-[e:RELATES_TO {group_id: edge.group_id}]->(m:Entity)
+            WHERE n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid]
+            """
+            + filter_query
+            + """
+            WITH e, edge
+            RETURN DISTINCT id(e) as id, e.fact_embedding as source_embedding,
+            edge.fact_embedding as target_embedding
+            """)
+        resp, header, _  = await driver.execute_query(
+            query,
+            params=query_params,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
+        # Calculate Cosine similarity then return the edge ids
+        input_ids = []
+        for r in resp:
+            score = driver.calculate_cosine_similarity(r['source_embedding'], r['target_embedding'])
+            if score > min_score:
+                input_ids.append({'id': r['id'], 'score': score, 'uuid': r['search_edge_uuid']})      
+        
+        # Match the edge ides and return the values
+        query_params['ids'] = input_ids
+        query =  ("""                      
+        UNWIND $ids AS edge
+        MATCH ()-[e]->()
+        WHERE id(e) = edge.id
+        WITH edge, e
+        ORDER BY edge.score DESC
         RETURN edge.uuid AS search_edge_uuid,
             collect({
                 uuid: e.uuid,
@@ -900,18 +1068,61 @@ async def get_edge_invalidation_candidates(
                 invalid_at: e.invalid_at,
                 attributes: properties(e)
             })[..$limit] AS matches
-        """
-    )
-
-    results, _, _ = await driver.execute_query(
-        query,
-        params=query_params,
-        edges=[edge.model_dump() for edge in edges],
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+                """)
+        results, _, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            ids=input_ids,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+    else: 
+        query = (
+            RUNTIME_QUERY
+            + """
+            UNWIND $edges AS edge
+            MATCH (n:Entity)-[e:RELATES_TO {group_id: edge.group_id}]->(m:Entity)
+            WHERE n.uuid IN [edge.source_node_uuid, edge.target_node_uuid] OR m.uuid IN [edge.target_node_uuid, edge.source_node_uuid]
+            """
+            + filter_query
+            + """
+            WITH edge, e, """
+            + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
+            + """ AS score
+            WHERE score > $min_score
+            WITH edge, e, score
+            ORDER BY score DESC
+            RETURN edge.uuid AS search_edge_uuid,
+                collect({
+                    uuid: e.uuid,
+                    source_node_uuid: startNode(e).uuid,
+                    target_node_uuid: endNode(e).uuid,
+                    created_at: e.created_at,
+                    name: e.name,
+                    group_id: e.group_id,
+                    fact: e.fact,
+                    fact_embedding: e.fact_embedding,
+                    episodes: e.episodes,
+                    expired_at: e.expired_at,
+                    valid_at: e.valid_at,
+                    invalid_at: e.invalid_at,
+                    attributes: properties(e)
+                })[..$limit] AS matches
+            """
+        )
+        results, _, _ = await driver.execute_query(
+            query,
+            params=query_params,
+            edges=[edge.model_dump() for edge in edges],
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
     invalidation_edges_dict: dict[str, list[EntityEdge]] = {
         result['search_edge_uuid']: [
             get_entity_edge_from_record(record) for record in result['matches']

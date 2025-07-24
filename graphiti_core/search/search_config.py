@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 from enum import Enum
-
 from pydantic import BaseModel, Field
 
 from graphiti_core.edges import EntityEdge

@@ -37,6 +37,14 @@ ENTITY_EDGE_SAVE = """
         SET r = $edge_data
         WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $edge_data.fact_embedding)
         RETURN r.uuid AS uuid"""
+        
+ENTITY_EDGE_SAVE_NEPTUNE = """
+        MATCH (source:Entity {uuid: $source_uuid}) 
+        MATCH (target:Entity {uuid: $target_uuid}) 
+        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
+        SET r = $edge_data
+        SET r.fact_embedding = join([x IN $edge_data.fact_embedding | toString(x) ], ",")
+        RETURN r.uuid AS uuid"""
 
 ENTITY_EDGE_SAVE_BULK = """
     UNWIND $entity_edges AS edge
@@ -45,6 +53,17 @@ ENTITY_EDGE_SAVE_BULK = """
     MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
     SET r = edge
     WITH r, edge CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", edge.fact_embedding)
+    RETURN edge.uuid AS uuid
+"""
+
+ENTITY_EDGE_SAVE_BULK_NEPTUNE = """
+    UNWIND $entity_edges AS edge
+    MATCH (source:Entity {uuid: edge.source_node_uuid}) 
+    MATCH (target:Entity {uuid: edge.target_node_uuid}) 
+    MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
+    SET r = removeKeyFromMap(removeKeyFromMap(edge, "fact_embedding"), "episodes")
+    SET r.fact_embedding = join([x IN edge.fact_embedding | toString(x) ], ",")
+    SET r.episodes = join(edge.episodes, ",")
     RETURN edge.uuid AS uuid
 """
 

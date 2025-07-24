@@ -29,6 +29,22 @@ EPISODIC_NODE_SAVE_BULK = """
     RETURN n.uuid AS uuid
 """
 
+EPISODIC_NODE_SAVE_BULK_NEPTUNE = """
+    UNWIND $episodes AS episode
+    MERGE (n:Episodic {uuid: episode.uuid})
+    SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, 
+        source: episode.source, content: episode.content, 
+    entity_edges: join([x IN episode.entity_edges | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at}
+    RETURN n.uuid AS uuid
+"""
+
+ENTITY_NODE_SAVE_NEPTUNE = """
+        MERGE (n:Entity {uuid: $entity_data.uuid})
+        ||SET_LABELS||
+        SET n = removeKeyFromMap(removeKeyFromMap(node, "labels"), "name_embedding")
+        SET n.name_embedding = join([x IN $entity_data.name_embedding | toString(x) ], ",")
+        RETURN n.uuid AS uuid"""
+
 ENTITY_NODE_SAVE = """
         MERGE (n:Entity {uuid: $entity_data.uuid})
         SET n:$($labels)
@@ -45,8 +61,23 @@ ENTITY_NODE_SAVE_BULK = """
     RETURN n.uuid AS uuid
 """
 
+ENTITY_NODE_SAVE_BULK_NEPTUNE = """
+    UNWIND $nodes AS node
+    MERGE (n:Entity {uuid: node.uuid})
+    ||SET_LABELS||
+    SET n = removeKeyFromMap(removeKeyFromMap(node, "labels"), "name_embedding")
+    SET n.name_embedding = join([x IN node.name_embedding | toString(x) ], ",")
+    RETURN n.uuid AS uuid
+"""
+
 COMMUNITY_NODE_SAVE = """
         MERGE (n:Community {uuid: $uuid})
         SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
         WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+        RETURN n.uuid AS uuid"""
+
+COMMUNITY_NODE_SAVE_NEPTUNE = """
+        MERGE (n:Community {uuid: $uuid})
+        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}        
+        SET n.name_embedding = join([x IN $name_embedding | toString(x) ], ",")
         RETURN n.uuid AS uuid"""

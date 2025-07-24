@@ -38,7 +38,7 @@ from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    EPISODIC_NODE_SAVE_BULK,
+    EPISODIC_NODE_SAVE_BULK, EPISODIC_NODE_SAVE_BULK_NEPTUNE
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -166,7 +166,10 @@ async def add_nodes_and_edges_bulk_tx(
         edge_data.update(edge.attributes or {})
         edges.append(edge_data)
 
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+    if driver.provider == 'neptune':
+        await tx.run(EPISODIC_NODE_SAVE_BULK_NEPTUNE, episodes=episodes)
+    else:
+        await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
     await tx.run(entity_node_save_bulk, nodes=nodes)
     await tx.run(
