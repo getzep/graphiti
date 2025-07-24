@@ -70,7 +70,10 @@ async def test_graphiti_init():
         created_at=[[DateFilter(date=utc_now(), comparison_operator=ComparisonOperator.less_than)]]
     )
 
-    results = await graphiti.search_(query='Who is Tania?', search_filter=search_filter)
+    results = await graphiti.search_(
+        query='Who is Tania',
+        search_filter=search_filter,
+    )
 
     pretty_results = search_results_to_context_string(results)
 

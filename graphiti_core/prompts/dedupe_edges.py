@@ -141,9 +141,9 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         
 
         Task:
-        If the NEW FACT represents the same factual information as any fact in EXISTING FACTS, return the idx of the duplicate fact.
+        If the NEW FACT represents identical factual information of one or more in EXISTING FACTS, return the idx of the duplicate facts.
         Facts with similar information that contain key differences should not be marked as duplicates.
-        If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return -1.
+        If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return an empty list.
         
         Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
         Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
@@ -153,8 +153,8 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         If there are no contradicted facts, return an empty list.
 
         Guidelines:
-        1. The facts do not need to be completely identical to be duplicates, they just need to express the same information.
-        2. Some facts may be very similar but will have key differences, particularly around numeric values in the facts.
+        1. Some facts may be very similar but will have key differences, particularly around numeric values in the facts.
+            Do not mark these facts as duplicates.
         """,
         ),
     ]

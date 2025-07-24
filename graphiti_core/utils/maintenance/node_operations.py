@@ -277,10 +277,12 @@ async def resolve_extracted_nodes(
         uuid_map[extracted_node.uuid] = resolved_node.uuid
 
         duplicates: list[int] = resolution.get('duplicates', [])
+        if duplicate_idx not in duplicates and duplicate_idx > -1:
+            duplicates.append(duplicate_idx)
         for idx in duplicates:
             existing_node = existing_nodes[idx] if idx < len(existing_nodes) else resolved_node
 
-            node_duplicates.append((resolved_node, existing_node))
+            node_duplicates.append((extracted_node, existing_node))
 
     logger.debug(f'Resolved nodes: {[(n.name, n.uuid) for n in resolved_nodes]}')
 
