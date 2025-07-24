@@ -1,16 +1,8 @@
 {
-  "services": {
-    "graphiti-app": {
-      "port": 8000
-    },
-    "graphiti-db": {
-      "disk_name": "graphiti-data"
-    }
+  "app": "farhadkouhi-zep",
+  "port": 3000,
+  "build": {
+    "location": "germany"
   },
-  "disks": [
-    {
-      "name": "graphiti-data",
-      "size": 10
-    }
-  ]
+  "disks": []
 }
