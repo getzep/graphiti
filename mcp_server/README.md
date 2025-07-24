@@ -189,6 +189,14 @@ The Docker Compose setup includes a Neo4j container with the following default c
 - URI: `bolt://neo4j:7687` (from within the Docker network)
 - Memory settings optimized for development use
 
+To run only Neo4j with its MCP server:
+
+```bash
+docker compose up
+```
+
+- Neo4j MCP server on port 8000
+
 #### FalkorDB Configuration
 
 The Docker Compose setup includes a FalkorDB container with the following default configuration:
@@ -197,16 +205,12 @@ The Docker Compose setup includes a FalkorDB container with the following defaul
 - Port: `6379`
 - No authentication by default
 
-#### Running Both Databases and MCP Servers
-
-To run both Neo4j and FalkorDB services and their MCP servers simultaneously:
+To run only FalkorDB with its MCP server:
 
 ```bash
-docker compose up
+docker compose --profile falkordb up
 ```
 
-The main compose file now includes both databases:
-- Neo4j MCP server on port 8000
 - FalkorDB MCP server on port 8001
 
 #### Running with Docker Compose
@@ -215,17 +219,12 @@ A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The lates
 
 **For Neo4j:**
 ```bash
-docker compose up graphiti-mcp-neo4j
+docker compose up
 ```
 
 **For FalkorDB:**
 ```bash
-docker compose up graphiti-mcp-falkordb
-```
-
-**For both databases and MCP servers:**
-```bash
-docker compose up
+docker compose up --profile falkordb up
 ```
 
 This will start the database(s) and the Graphiti MCP server(s). The Docker setup:
