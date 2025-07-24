@@ -18,6 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from typing import Any
+import copy
 
 logger = logging.getLogger(__name__)
 

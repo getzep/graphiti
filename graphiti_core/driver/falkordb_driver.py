@@ -100,9 +100,6 @@ class FalkorDriver(GraphDriver):
 
         self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
 
-        self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
-        
-
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
         if graph_name is None:
@@ -159,8 +156,7 @@ class FalkorDriver(GraphDriver):
             'CALL db.indexes() YIELD name DROP INDEX name',
         )
 
-        
-    def clone(self, database: str) -> "GraphDriver":
+    def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).

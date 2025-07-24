@@ -160,7 +160,6 @@ async def edge_fulltext_search(
 ) -> list[EntityEdge]:
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
 
@@ -346,7 +345,6 @@ async def node_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
@@ -754,7 +752,6 @@ async def get_relevant_nodes(
             'uuid': node.uuid,
             'name': node.name,
             'name_embedding': node.name_embedding,
-            'fulltext_query': fulltext_query(node.name, [node.group_id], driver.fulltext_syntax),
             'fulltext_query': fulltext_query(node.name, [node.group_id], driver.fulltext_syntax),
         }
         for node in nodes
