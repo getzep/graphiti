@@ -20,6 +20,7 @@ The Graphiti MCP server exposes the following key high-level functions of Graphi
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
+- **Flexible Ollama Configuration**: Fully configurable LLM and embedding models via CLI arguments and environment variables
 
 ## Quick Start
 
@@ -57,7 +58,7 @@ cd graphiti && pwd
 
 `docker compose up`
 
-3. Point your MCP client to `http://localhost:8000/sse`
+3. Point your MCP client to `http://localhost:2400/sse`
 
 ## Installation
 
@@ -65,20 +66,145 @@ cd graphiti && pwd
 
 1. Ensure you have Python 3.10 or higher installed.
 2. A running Neo4j database (version 5.26 or later required)
-3. OpenAI API key for LLM operations
+3. **Ollama** installed and running (default) OR OpenAI API key for LLM operations
 
-### Setup
+### Ollama Setup (Default)
 
-1. Clone the repository and navigate to the mcp_server directory
-2. Use `uv` to create a virtual environment and install dependencies:
+The server now defaults to using Ollama for LLM operations and embeddings. To set up Ollama:
 
-```bash
-# Install uv if you don't have it already
-curl -LsSf https://astral.sh/uv/install.sh | sh
+1. **Install Ollama**: Visit [https://ollama.ai](https://ollama.ai) for installation instructions
+2. **Start Ollama**: Run `ollama serve` to start the Ollama server
+3. **Pull required models**:
+   ```bash
+   ollama pull deepseek-r1:7b     # LLM model
+   ollama pull nomic-embed-text   # Embedding model
+   ```
 
-# Create a virtual environment and install dependencies in one step
-uv sync
-```
+The server will automatically connect to Ollama at `http://localhost:11434/v1` and use these models by default.
+
+### OpenAI Setup (Alternative)
+
+If you prefer to use OpenAI instead of Ollama:
+
+1. Set the environment variable: `USE_OLLAMA=false`
+2. Configure your OpenAI API key: `OPENAI_API_KEY=your_api_key_here`
+3. Optionally customize the models using `MODEL_NAME` and `SMALL_MODEL_NAME` environment variables
+
+### Docker Setup
+
+The project includes Docker Compose configuration for easy deployment. There are several ways to configure Ollama with Docker:
+
+#### Option 1: Use Host Ollama (Recommended)
+
+If you have Ollama running on your host machine:
+
+1. **Start Ollama on your host**:
+   ```bash
+   ollama serve
+   ```
+
+2. **Pull required models**:
+   ```bash
+   ollama pull deepseek-r1:7b
+   ollama pull nomic-embed-text
+   ```
+
+3. **Start the services**:
+   ```bash
+   docker compose up
+   ```
+
+The server will connect to your host Ollama instance using `host.docker.internal:11434`.
+
+**Note**: The Graphiti core library requires an `OPENAI_API_KEY` environment variable even when using Ollama (for the reranker component). The Docker configuration includes a dummy API key (`abc`) for this purpose.
+
+#### Option 2: Use Containerized Ollama
+
+If you prefer to run Ollama in a container:
+
+1. **Uncomment the Ollama service** in `docker-compose.yml`:
+   ```yaml
+   ollama:
+     image: ollama/ollama:latest
+     ports:
+       - "11434:11434"
+     volumes:
+       - ollama_data:/root/.ollama
+   ```
+
+2. **Update the OLLAMA_BASE_URL** in the environment section:
+   ```yaml
+   environment:
+     - OLLAMA_BASE_URL=http://ollama:11434/v1
+   ```
+
+3. **Uncomment the volume**:
+   ```yaml
+   volumes:
+     ollama_data:
+   ```
+
+4. **Start the services**:
+   ```bash
+   docker compose up
+   ```
+
+5. **Pull models in the container**:
+   ```bash
+   docker compose exec ollama ollama pull deepseek-r1:7b
+   docker compose exec ollama ollama pull nomic-embed-text
+   ```
+
+#### Option 3: Use OpenAI with Docker
+
+To use OpenAI instead of Ollama in Docker:
+
+1. **Create a `.env` file** with your OpenAI configuration:
+   ```bash
+   USE_OLLAMA=false
+   OPENAI_API_KEY=your_openai_api_key_here
+   MODEL_NAME=gpt-4o-mini
+   ```
+
+2. **Update docker-compose.yml** to use the `.env` file:
+   ```yaml
+   env_file:
+     - .env
+   ```
+
+3. **Start the services**:
+   ```bash
+   docker compose up
+   ```
+
+### Local Development Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd mcp_server
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   uv sync
+   ```
+
+3. **Set up environment variables** (optional):
+   ```bash
+   cp sample_env.txt .env
+   # Edit .env with your configuration
+   ```
+
+4. **Start Neo4j** (if using Docker):
+   ```bash
+   docker compose up neo4j -d
+   ```
+
+5. **Run the server**:
+   ```bash
+   uv run graphiti_mcp_server.py --transport sse
+   ```
 
 ## Configuration
 
@@ -87,22 +213,42 @@ The server uses the following environment variables:
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
+
+### LLM Configuration
+
+The server now defaults to using **Ollama** for LLM operations and embeddings. You can configure it using these environment variables:
+
+#### Ollama Configuration (Default)
+- `USE_OLLAMA`: Use Ollama for LLM and embeddings (default: `true`)
+- `OLLAMA_BASE_URL`: Ollama base URL (default: `http://localhost:11434/v1`)
+- `OLLAMA_LLM_MODEL`: Ollama LLM model name (default: `deepseek-r1:7b`)
+- `OLLAMA_EMBEDDING_MODEL`: Ollama embedding model name (default: `nomic-embed-text`)
+- `OLLAMA_EMBEDDING_DIM`: Ollama embedding dimension (default: `768`)
+
+#### OpenAI Configuration (Alternative)
+To use OpenAI instead of Ollama, set `USE_OLLAMA=false` and configure:
 - `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
-- `MODEL_NAME`: OpenAI model name to use for LLM operations.
-- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
-- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
-- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
-- `AZURE_OPENAI_EMBEDDING_API_KEY`: Optional Azure OpenAI Embedding deployment key (if other than `OPENAI_API_KEY`)
-- `AZURE_OPENAI_EMBEDDING_ENDPOINT`: Optional Azure OpenAI Embedding endpoint URL
-- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
-- `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
-- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
-- `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `MODEL_NAME`: OpenAI model name to use for LLM operations (default: `gpt-4.1-mini`)
+- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations (default: `gpt-4.1-nano`)
+- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0)
 
-You can set these variables in a `.env` file in the project directory.
+#### Azure OpenAI Configuration (Alternative)
+To use Azure OpenAI, set `USE_OLLAMA=false` and configure:
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI LLM endpoint URL
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Azure OpenAI LLM deployment name
+- `AZURE_OPENAI_API_VERSION`: Azure OpenAI LLM API version
+- `AZURE_OPENAI_EMBEDDING_API_KEY`: Azure OpenAI Embedding deployment key (if different from `OPENAI_API_KEY`)
+- `AZURE_OPENAI_EMBEDDING_ENDPOINT`: Azure OpenAI Embedding endpoint URL
+- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Azure OpenAI embedding deployment name
+- `AZURE_OPENAI_EMBEDDING_API_VERSION`: Azure OpenAI API version
+- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Use Azure Managed Identities for authentication
+
+#### General Configuration
+- `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `MCP_SERVER_PORT`: Port for the MCP server when using SSE transport (default: 2400)
+
+You can set these variables in a `.env` file in the project directory. A sample configuration file (`sample_env.txt`) is provided with all available options and their default values.
 
 ## Running the Server
 
@@ -120,13 +266,110 @@ uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 
 Available arguments:
 
-- `--model`: Overrides the `MODEL_NAME` environment variable.
-- `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
+- `--model`: Overrides the `MODEL_NAME` environment variable (only when not using Ollama).
+- `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable (only when not using Ollama).
 - `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
+- `--port`: Port to bind the MCP server to (default: 2400)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
+
+#### Ollama Configuration Arguments
+- `--use-ollama`: Use Ollama for LLM and embeddings (default: true)
+- `--ollama-base-url`: Ollama base URL (default: http://localhost:11434/v1)
+- `--ollama-llm-model`: Ollama LLM model name (default: deepseek-r1:7b)
+- `--ollama-embedding-model`: Ollama embedding model name (default: nomic-embed-text)
+- `--ollama-embedding-dim`: Ollama embedding dimension (default: 768)
+
+### Ollama Configuration Examples
+
+The Graphiti MCP server provides flexible configuration options for Ollama models. Here are some common use cases:
+
+#### Basic Configuration Examples
+
+**Use default models:**
+```bash
+# With default .env configuration
+uv run graphiti_mcp_server.py
+
+# Or explicitly set in .env file:
+# USE_OLLAMA=true
+# OLLAMA_LLM_MODEL=deepseek-r1:7b
+# OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+**Use a different LLM model:**
+```bash
+uv run graphiti_mcp_server.py --ollama-llm-model llama3.2:3b
+```
+
+**Use a different embedding model with custom dimension:**
+```bash
+uv run graphiti_mcp_server.py --ollama-embedding-model all-minilm-l6-v2 --ollama-embedding-dim 384
+```
+
+**Connect to a remote Ollama server:**
+```bash
+uv run graphiti_mcp_server.py --ollama-base-url http://remote-server:11434/v1 --ollama-llm-model llama3.2:8b
+```
+
+#### Environment Variable Configuration
+
+You can also configure Ollama models using environment variables in a `.env` file:
+
+```bash
+# Create or edit .env file
+nano .env
+```
+
+Add the following variables to your `.env` file:
+
+```env
+# Ollama Configuration
+OLLAMA_LLM_MODEL=mistral:7b
+OLLAMA_EMBEDDING_MODEL=all-minilm-l6-v2
+OLLAMA_EMBEDDING_DIM=384
+LLM_TEMPERATURE=0.1
+```
+
+Then run the server:
+
+```bash
+uv run graphiti_mcp_server.py
+```
+
+#### Configuration Priority
+
+The configuration system follows this priority order (highest to lowest):
+
+1. **CLI arguments** - Override all other settings
+2. **Environment variables** - Provide defaults that can be overridden by CLI
+3. **Default values** - Built-in defaults for all settings
+
+#### Available Ollama Models
+
+**Common LLM Models:**
+- `deepseek-r1:7b` (default) - Good balance of performance and quality
+- `llama3.2:3b` - Fast, smaller model for development
+- `llama3.2:8b` - Higher quality, larger model
+- `mistral:7b` - Excellent performance for many tasks
+- `codellama:7b` - Specialized for code generation
+- `phi3:3.8b` - Microsoft's efficient model
+
+**Common Embedding Models:**
+- `nomic-embed-text` (default) - High-quality embeddings
+- `nomic-embed-text-v2` - Improved version of the default
+- `all-minilm-l6-v2` - Fast, efficient embeddings
+- `all-MiniLM-L6-v2` - Alternative spelling for the same model
+- `text-embedding-ada-002` - OpenAI-compatible embeddings
+
+#### Performance Considerations
+
+- **Smaller models** (3B parameters) are faster but may have lower quality
+- **Larger models** (7B+ parameters) provide better quality but require more resources
+- **Embedding dimensions** affect both performance and storage requirements
+- **Remote Ollama servers** can be used for distributed deployments
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
 
@@ -196,7 +439,7 @@ This will start both the Neo4j database and the Graphiti MCP server. The Docker 
 - Uses `uv` for package management and running the server
 - Installs dependencies from the `pyproject.toml` file
 - Connects to the Neo4j container using the environment variables
-- Exposes the server on port 8000 for HTTP-based SSE transport
+- Exposes the server on port 2400 for HTTP-based SSE transport
 - Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
@@ -209,6 +452,104 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
 > You will need the Python package manager, `uv` installed. Please refer to the [`uv` install instructions](https://docs.astral.sh/uv/getting-started/installation/).
 >
 > Ensure that you set the full path to the `uv` binary and your Graphiti project folder.
+
+#### Using Ollama (Default)
+
+**Basic Ollama configuration:**
+```json
+{
+  "mcpServers": {
+    "graphiti-memory": {
+      "transport": "stdio",
+      "command": "/Users/<user>/.local/bin/uv",
+      "args": [
+        "run",
+        "--isolated",
+        "--directory",
+        "/Users/<user>>/dev/zep/graphiti/mcp_server",
+        "--project",
+        ".",
+        "graphiti_mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password"
+      }
+    }
+  }
+}
+```
+
+**Custom Ollama models via CLI arguments:**
+```json
+{
+  "mcpServers": {
+    "graphiti-memory": {
+      "transport": "stdio",
+      "command": "/Users/<user>/.local/bin/uv",
+      "args": [
+        "run",
+        "--isolated",
+        "--directory",
+        "/Users/<user>>/dev/zep/graphiti/mcp_server",
+        "--project",
+        ".",
+        "graphiti_mcp_server.py",
+        "--transport",
+        "stdio",
+        "--ollama-llm-model",
+        "llama3.2:3b",
+        "--ollama-embedding-model",
+        "all-minilm-l6-v2",
+        "--ollama-embedding-dim",
+        "384"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password"
+      }
+    }
+  }
+}
+```
+
+**Custom Ollama models via environment variables:**
+```json
+{
+  "mcpServers": {
+    "graphiti-memory": {
+      "transport": "stdio",
+      "command": "/Users/<user>/.local/bin/uv",
+      "args": [
+        "run",
+        "--isolated",
+        "--directory",
+        "/Users/<user>>/dev/zep/graphiti/mcp_server",
+        "--project",
+        ".",
+        "graphiti_mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password",
+        "OLLAMA_LLM_MODEL": "mistral:7b",
+        "OLLAMA_EMBEDDING_MODEL": "nomic-embed-text-v2",
+        "OLLAMA_EMBEDDING_DIM": "768",
+        "LLM_TEMPERATURE": "0.1"
+      }
+    }
+  }
+}
+```
+
+#### Using OpenAI (Alternative)
 
 ```json
 {
@@ -231,6 +572,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "NEO4J_URI": "bolt://localhost:7687",
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
+        "USE_OLLAMA": "false",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
         "MODEL_NAME": "gpt-4.1-mini"
       }
@@ -246,7 +588,7 @@ For SSE transport (HTTP-based), you can use this configuration:
   "mcpServers": {
     "graphiti-memory": {
       "transport": "sse",
-      "url": "http://localhost:8000/sse"
+      "url": "http://localhost:2400/sse"
     }
   }
 }
@@ -306,7 +648,7 @@ docker compose up
 {
   "mcpServers": {
     "graphiti-memory": {
-      "url": "http://localhost:8000/sse"
+      "url": "http://localhost:2400/sse"
     }
   }
 }
@@ -347,7 +689,7 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
           "command": "npx", // Or the full path to mcp-remote if npx is not in your PATH
           "args": [
             "mcp-remote",
-            "http://localhost:8000/sse" // Ensure this matches your Graphiti server's SSE endpoint
+            "http://localhost:2400/sse" // Ensure this matches your Graphiti server's SSE endpoint
           ]
         }
       }
@@ -358,11 +700,47 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
 
 4.  **Restart Claude Desktop** for the changes to take effect.
 
+## Troubleshooting
+
+### Ollama Configuration Issues
+
+**Server won't start with Ollama:**
+- Ensure Ollama is installed and running: `ollama serve`
+- Check that required models are pulled: `ollama list`
+- Verify Ollama server is accessible: `curl http://localhost:11434/v1/models`
+- Check your `.env` file has `USE_OLLAMA=true` (default)
+
+**Model not found errors:**
+- Pull the required model: `ollama pull <model-name>`
+- Check model name spelling (case-sensitive)
+- Verify model is available in Ollama library
+
+**Embedding dimension mismatch:**
+- Ensure `OLLAMA_EMBEDDING_DIM` matches your embedding model's output dimension
+- Common dimensions: 384 (all-minilm-l6-v2), 768 (nomic-embed-text), 1536 (nomic-embed-text-v2)
+
+**Performance issues:**
+- Try smaller models for faster response times
+- Adjust `SEMAPHORE_LIMIT` for concurrency control
+- Consider using remote Ollama servers for distributed workloads
+
+### General Issues
+
+**Neo4j connection errors:**
+- Verify Neo4j is running and accessible
+- Check connection credentials and URI
+- Ensure Neo4j version is 5.26 or later
+
+**MCP client connection issues:**
+- Verify transport method (stdio vs sse) matches client requirements
+- Check port configuration for SSE transport
+- Ensure firewall allows connections on configured ports
+
 ## Requirements
 
 - Python 3.10 or higher
 - Neo4j database (version 5.26 or later required)
-- OpenAI API key (for LLM operations and embeddings)
+- **Ollama** installed and running (default) OR OpenAI API key (for LLM operations)
 - MCP-compatible client
 
 ## Telemetry

@@ -38,9 +38,9 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 load_dotenv()
 
 
-DEFAULT_LLM_MODEL = 'gpt-4.1-mini'
-SMALL_LLM_MODEL = 'gpt-4.1-nano'
-DEFAULT_EMBEDDER_MODEL = 'text-embedding-3-small'
+DEFAULT_LLM_MODEL = 'deepseek-r1:7b'
+SMALL_LLM_MODEL = 'deepseek-r1:7b'
+DEFAULT_EMBEDDER_MODEL = 'nomic-embed-text'
 
 # Semaphore limit for concurrent Graphiti operations.
 # Decrease this if you're experiencing 429 rate limit errors from your LLM provider.
@@ -200,10 +200,33 @@ class GraphitiLLMConfig(BaseModel):
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
     azure_openai_use_managed_identity: bool = False
+    # Ollama configuration
+    use_ollama: bool = True  # Default to Ollama
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_llm_model: str = DEFAULT_LLM_MODEL
 
     @classmethod
     def from_env(cls) -> 'GraphitiLLMConfig':
         """Create LLM configuration from environment variables."""
+        # Check if Ollama should be used (default to True)
+        use_ollama = os.environ.get('USE_OLLAMA', 'true').lower() == 'true'
+
+        if use_ollama:
+            # Ollama configuration
+            ollama_base_url = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+            ollama_llm_model = os.environ.get('OLLAMA_LLM_MODEL', DEFAULT_LLM_MODEL)
+
+            return cls(
+                api_key="abc",  # Ollama doesn't require a real API key
+                model=ollama_llm_model,
+                small_model=ollama_llm_model,
+                temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                use_ollama=True,
+                ollama_base_url=ollama_base_url,
+                ollama_llm_model=ollama_llm_model,
+            )
+
+        # OpenAI/Azure OpenAI configuration (existing logic)
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_LLM_MODEL
@@ -236,6 +259,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                use_ollama=False,
             )
         else:
             # Setup for Azure OpenAI API
@@ -260,6 +284,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                use_ollama=False,
             )
 
     @classmethod
@@ -269,18 +294,30 @@ class GraphitiLLMConfig(BaseModel):
         config = cls.from_env()
 
         # CLI arguments override environment variables when provided
+        if hasattr(args, 'use_ollama') and args.use_ollama is not None:
+            config.use_ollama = args.use_ollama
+
+        if hasattr(args, 'ollama_base_url') and args.ollama_base_url:
+            config.ollama_base_url = args.ollama_base_url
+
+        if hasattr(args, 'ollama_llm_model') and args.ollama_llm_model:
+            config.ollama_llm_model = args.ollama_llm_model
+            if config.use_ollama:
+                config.model = args.ollama_llm_model
+                config.small_model = args.ollama_llm_model
+
         if hasattr(args, 'model') and args.model:
-            # Only use CLI model if it's not empty
-            if args.model.strip():
+            # Only use CLI model if it's not empty and not using Ollama
+            if args.model.strip() and not config.use_ollama:
                 config.model = args.model
-            else:
+            elif args.model.strip() == '':
                 # Log that empty model was provided and default is used
                 logger.warning(f'Empty model name provided, using default: {DEFAULT_LLM_MODEL}')
 
         if hasattr(args, 'small_model') and args.small_model:
-            if args.small_model.strip():
+            if args.small_model.strip() and not config.use_ollama:
                 config.small_model = args.small_model
-            else:
+            elif args.small_model.strip() == '':
                 logger.warning(f'Empty small_model name provided, using default: {SMALL_LLM_MODEL}')
 
         if hasattr(args, 'temperature') and args.temperature is not None:
@@ -294,6 +331,17 @@ class GraphitiLLMConfig(BaseModel):
         Returns:
             LLMClient instance
         """
+
+        if self.use_ollama:
+            # Ollama setup
+            llm_client_config = LLMConfig(
+                api_key="abc",  # Ollama doesn't require a real API key
+                model=self.ollama_llm_model,
+                small_model=self.ollama_llm_model,
+                temperature=self.temperature,
+                base_url=self.ollama_base_url,
+            )
+            return OpenAIClient(config=llm_client_config)
 
         if self.azure_openai_endpoint is not None:
             # Azure OpenAI API setup
@@ -358,11 +406,34 @@ class GraphitiEmbedderConfig(BaseModel):
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
     azure_openai_use_managed_identity: bool = False
+    # Ollama configuration
+    use_ollama: bool = True  # Default to Ollama
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_embedding_model: str = DEFAULT_EMBEDDER_MODEL
+    ollama_embedding_dim: int = 768
 
     @classmethod
     def from_env(cls) -> 'GraphitiEmbedderConfig':
         """Create embedder configuration from environment variables."""
+        # Check if Ollama should be used (default to True)
+        use_ollama = os.environ.get('USE_OLLAMA', 'true').lower() == 'true'
 
+        if use_ollama:
+            # Ollama configuration
+            ollama_base_url = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
+            ollama_embedding_model = os.environ.get('OLLAMA_EMBEDDING_MODEL', DEFAULT_EMBEDDER_MODEL)
+            ollama_embedding_dim = int(os.environ.get('OLLAMA_EMBEDDING_DIM', '768'))
+
+            return cls(
+                model=ollama_embedding_model,
+                api_key="abc",  # Ollama doesn't require a real API key
+                use_ollama=True,
+                ollama_base_url=ollama_base_url,
+                ollama_embedding_model=ollama_embedding_model,
+                ollama_embedding_dim=ollama_embedding_dim,
+            )
+
+        # OpenAI/Azure OpenAI configuration (existing logic)
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('EMBEDDER_MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_EMBEDDER_MODEL
@@ -403,14 +474,49 @@ class GraphitiEmbedderConfig(BaseModel):
                 api_key=api_key,
                 azure_openai_api_version=azure_openai_api_version,
                 azure_openai_deployment_name=azure_openai_deployment_name,
+                use_ollama=False,
             )
         else:
             return cls(
                 model=model,
                 api_key=os.environ.get('OPENAI_API_KEY'),
+                use_ollama=False,
             )
 
+    @classmethod
+    def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiEmbedderConfig':
+        """Create embedder configuration from CLI arguments, falling back to environment variables."""
+        # Start with environment-based config
+        config = cls.from_env()
+
+        # CLI arguments override environment variables when provided
+        if hasattr(args, 'use_ollama') and args.use_ollama is not None:
+            config.use_ollama = args.use_ollama
+
+        if hasattr(args, 'ollama_base_url') and args.ollama_base_url:
+            config.ollama_base_url = args.ollama_base_url
+
+        if hasattr(args, 'ollama_embedding_model') and args.ollama_embedding_model:
+            config.ollama_embedding_model = args.ollama_embedding_model
+            if config.use_ollama:
+                config.model = args.ollama_embedding_model
+
+        if hasattr(args, 'ollama_embedding_dim') and args.ollama_embedding_dim:
+            config.ollama_embedding_dim = args.ollama_embedding_dim
+
+        return config
+
     def create_client(self) -> EmbedderClient | None:
+        if self.use_ollama:
+            # Ollama setup
+            embedder_config = OpenAIEmbedderConfig(
+                api_key="abc",  # Ollama doesn't require a real API key
+                embedding_model=self.ollama_embedding_model,
+                embedding_dim=self.ollama_embedding_dim,
+                base_url=self.ollama_base_url,
+            )
+            return OpenAIEmbedder(config=embedder_config)
+
         if self.azure_openai_endpoint is not None:
             # Azure OpenAI API setup
             if self.azure_openai_use_managed_identity:
@@ -506,6 +612,9 @@ class GraphitiConfig(BaseModel):
         # Update LLM config using CLI args
         config.llm = GraphitiLLMConfig.from_cli_and_env(args)
 
+        # Update embedder config using CLI args
+        config.embedder = GraphitiEmbedderConfig.from_cli_and_env(args)
+
         return config
 
 
@@ -513,11 +622,12 @@ class MCPConfig(BaseModel):
     """Configuration for MCP server."""
 
     transport: str = 'sse'  # Default to SSE transport
+    port: int = 2400  # Default port for SSE transport
 
     @classmethod
     def from_cli(cls, args: argparse.Namespace) -> 'MCPConfig':
         """Create MCP configuration from CLI arguments."""
-        return cls(transport=args.transport)
+        return cls(transport=args.transport, port=args.port)
 
 
 # Configure logging
@@ -536,13 +646,13 @@ GRAPHITI_MCP_INSTRUCTIONS = """
 Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
 with dynamic data such as user interactions, changing enterprise data, and external information.
 
-Graphiti transforms information into a richly connected knowledge network, allowing you to 
-capture relationships between concepts, entities, and information. The system organizes data as episodes 
-(content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic, 
-queryable memory store that evolves with new information. Graphiti supports multiple data formats, including 
+Graphiti transforms information into a richly connected knowledge network, allowing you to
+capture relationships between concepts, entities, and information. The system organizes data as episodes
+(content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic,
+queryable memory store that evolves with new information. Graphiti supports multiple data formats, including
 structured JSON data, enabling seamless integration with existing data pipelines and systems.
 
-Facts contain temporal metadata, allowing you to track the time of creation and whether a fact is invalid 
+Facts contain temporal metadata, allowing you to track the time of creation and whether a fact is invalid
 (superseded by new information).
 
 Key capabilities:
@@ -552,13 +662,13 @@ Key capabilities:
 4. Retrieve specific entity edges or episodes by UUID
 5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
 
-The server connects to a database for persistent storage and uses language models for certain operations. 
+The server connects to a database for persistent storage and uses language models for certain operations.
 Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
 
-When adding information, provide descriptive names and detailed content to improve search quality. 
+When adding information, provide descriptive names and detailed content to improve search quality.
 When searching, use specific queries and consider filtering by group_id for more relevant results.
 
-For optimal performance, ensure the database is properly configured and accessible, and valid 
+For optimal performance, ensure the database is properly configured and accessible, and valid
 API keys are provided for any language model operations.
 """
 
@@ -568,15 +678,29 @@ mcp = FastMCP(
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
+# Set default port from environment variable if available
+default_port = int(os.environ.get('MCP_SERVER_PORT', '2400'))
+mcp.settings.port = default_port
+
 # Initialize Graphiti client
 graphiti_client: Graphiti | None = None
-
 
 async def initialize_graphiti():
     """Initialize the Graphiti client with the configured settings."""
     global graphiti_client, config
 
     try:
+        # Validate Ollama configuration if using Ollama
+        if config.llm.use_ollama:
+            if not config.llm.ollama_llm_model or not config.llm.ollama_llm_model.strip():
+                raise ValueError('OLLAMA_LLM_MODEL must be set when using Ollama for LLM')
+            logger.info(f'Validated Ollama LLM model: {config.llm.ollama_llm_model}')
+
+        if config.embedder.use_ollama:
+            if not config.embedder.ollama_embedding_model or not config.embedder.ollama_embedding_model.strip():
+                raise ValueError('OLLAMA_EMBEDDING_MODEL must be set when using Ollama for embeddings')
+            logger.info(f'Validated Ollama embedding model: {config.embedder.ollama_embedding_model}')
+
         # Create LLM client if possible
         llm_client = config.llm.create_client()
         if not llm_client and config.use_custom_entities:
@@ -610,10 +734,21 @@ async def initialize_graphiti():
 
         # Log configuration details for transparency
         if llm_client:
-            logger.info(f'Using OpenAI model: {config.llm.model}')
+            if config.llm.use_ollama:
+                logger.info(f'Using Ollama LLM model: {config.llm.ollama_llm_model}')
+            else:
+                logger.info(f'Using OpenAI/Azure OpenAI model: {config.llm.model}')
             logger.info(f'Using temperature: {config.llm.temperature}')
         else:
             logger.info('No LLM client configured - entity extraction will be limited')
+
+        if embedder_client:
+            if config.embedder.use_ollama:
+                logger.info(f'Using Ollama embedding model: {config.embedder.ollama_embedding_model}')
+            else:
+                logger.info(f'Using OpenAI/Azure OpenAI embedding model: {config.embedder.model}')
+        else:
+            logger.info('No embedder client configured - embeddings will not be available')
 
         logger.info(f'Using group_id: {config.group_id}')
         logger.info(
@@ -1200,6 +1335,35 @@ async def initialize_server() -> MCPConfig:
         default=os.environ.get('MCP_SERVER_HOST'),
         help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
     )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=int(os.environ.get('MCP_SERVER_PORT', '2400')),
+        help='Port to bind the MCP server to (default: MCP_SERVER_PORT environment variable or 2400)',
+    )
+    # Ollama configuration arguments
+    parser.add_argument(
+        '--use-ollama',
+        type=lambda x: x.lower() == 'true',
+        help='Use Ollama for LLM and embeddings (default: true)',
+    )
+    parser.add_argument(
+        '--ollama-base-url',
+        help='Ollama base URL (default: http://localhost:11434/v1)',
+    )
+    parser.add_argument(
+        '--ollama-llm-model',
+        help=f'Ollama LLM model name (default: {DEFAULT_LLM_MODEL})',
+    )
+    parser.add_argument(
+        '--ollama-embedding-model',
+        help=f'Ollama embedding model name (default: {DEFAULT_EMBEDDER_MODEL})',
+    )
+    parser.add_argument(
+        '--ollama-embedding-dim',
+        type=int,
+        help='Ollama embedding dimension (default: 768)',
+    )
 
     args = parser.parse_args()
 
@@ -1218,6 +1382,22 @@ async def initialize_server() -> MCPConfig:
     else:
         logger.info('Entity extraction disabled (no custom entities will be used)')
 
+    # Log LLM configuration
+    if config.llm.use_ollama:
+        logger.info(f'Using Ollama LLM: {config.llm.ollama_llm_model}')
+        logger.info(f'Ollama base URL: {config.llm.ollama_base_url}')
+        logger.info(f'LLM temperature: {config.llm.temperature}')
+    else:
+        logger.info(f'Using OpenAI/Azure OpenAI LLM: {config.llm.model}')
+        logger.info(f'LLM temperature: {config.llm.temperature}')
+
+    # Log embedder configuration
+    if config.embedder.use_ollama:
+        logger.info(f'Using Ollama embedder: {config.embedder.ollama_embedding_model}')
+        logger.info(f'Embedding dimension: {config.embedder.ollama_embedding_dim}')
+    else:
+        logger.info(f'Using OpenAI/Azure OpenAI embedder: {config.embedder.model}')
+
     # Initialize Graphiti
     await initialize_graphiti()
 
@@ -1225,6 +1405,11 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Setting MCP server host to: {args.host}')
         # Set MCP server host from CLI or env
         mcp.settings.host = args.host
+
+    if args.port:
+        logger.info(f'Setting MCP server port to: {args.port}')
+        # Set MCP server port from CLI or env
+        mcp.settings.port = args.port
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)

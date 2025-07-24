@@ -1,4 +1,19 @@
 services:
+  # Optional: Ollama service for LLM operations
+  # Uncomment and use this if you want to run Ollama in a container
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/v1/models"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 60s
+
   neo4j:
     image: neo4j:5.26.0
     ports:
@@ -20,13 +35,12 @@ services:
       start_period: 30s
 
   graphiti-mcp:
-    image: zepai/knowledge-graph-mcp:latest
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - path: .env
-        required: false # Makes the file optional. Default value is 'true'
+        required: true # Makes the file optional. Default value is 'true'
     depends_on:
       neo4j:
         condition: service_healthy
@@ -34,14 +48,20 @@ services:
       - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-demodemo}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MODEL_NAME=${MODEL_NAME}
+      - USE_OLLAMA=true
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+      - OLLAMA_LLM_MODEL=deepseek-r1:7b
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+      - OLLAMA_EMBEDDING_DIM=768
+      - OPENAI_API_KEY=abc
       - PATH=/root/.local/bin:${PATH}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-2400}
     ports:
-      - "8000:8000" # Expose the MCP server via HTTP for SSE transport
+      - "${MCP_SERVER_PORT:-2400}:${MCP_SERVER_PORT:-2400}" # Expose the MCP server via HTTP for SSE transport
     command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse"]
 
 volumes:
   neo4j_data:
   neo4j_logs:
+  # ollama_data:  # Uncomment if using Ollama service

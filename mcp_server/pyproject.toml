@@ -5,9 +5,8 @@ description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "mcp>=1.5.0",
-    "openai>=1.68.2",
-    "graphiti-core>=0.14.0",
-    "azure-identity>=1.21.0",
-    "graphiti-core",
+    "mcp>=1.12.1",
+    "openai>=1.97.1",
+    "graphiti-core>=0.18.0",
+    "azure-identity>=1.23.1",
 ]
