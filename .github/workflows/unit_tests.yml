@@ -56,7 +56,7 @@ jobs:
           timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
       - name: Wait for Neo4j
         run: |
-          timeout 60 bash -c 'until curl -f http://localhost:7474/db/data/ >/dev/null 2>&1; do sleep 1; done'
+          timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
       - name: Run FalkorDB integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
