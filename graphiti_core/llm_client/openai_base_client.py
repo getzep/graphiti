@@ -59,7 +59,11 @@ class BaseOpenAIClient(LLMClient):
             config = LLMConfig()
 
         super().__init__(config, cache)
-        self.max_tokens = max_tokens
+
+        if config.max_tokens != DEFAULT_MAX_TOKENS:
+            self.max_tokens = config.max_tokens  # Use config when explicitly set
+        else:
+            self.max_tokens = max_tokens  # Use constructor parameter as fallback
 
     @abstractmethod
     async def _create_completion(
