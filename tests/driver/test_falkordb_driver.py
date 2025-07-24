@@ -101,9 +101,7 @@ class TestFalkorDriver:
         mock_graph.query = AsyncMock(return_value=mock_result)
         self.mock_client.select_graph.return_value = mock_graph
 
-        result = await self.driver.execute_query(
-            'MATCH (n) RETURN n', param1='value1'
-        )
+        result = await self.driver.execute_query('MATCH (n) RETURN n', param1='value1')
 
         mock_graph.query.assert_called_once_with('MATCH (n) RETURN n', {'param1': 'value1'})
 
@@ -211,9 +209,7 @@ class TestFalkorDriver:
         with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
             await self.driver.delete_all_indexes()
 
-            mock_execute.assert_called_once_with(
-                'CALL db.indexes() YIELD name DROP INDEX name'
-            )
+            mock_execute.assert_called_once_with('CALL db.indexes() YIELD name DROP INDEX name')
 
 
 class TestFalkorDriverSession:
