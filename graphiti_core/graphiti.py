@@ -116,7 +116,7 @@ class Graphiti:
         """
         Initialize a Graphiti instance.
 
-        This constructor sets up a connection to the Neo4j database and initializes
+        This constructor sets up a connection to a graph database and initializes
         the LLM client for natural language processing tasks.
 
         Parameters
@@ -151,11 +151,11 @@ class Graphiti:
 
         Notes
         -----
-        This method establishes a connection to the Neo4j database using the provided
+        This method establishes a connection to a graph database (Neo4j by default) using the provided
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
-        The default database name is set to 'neo4j'. If a different database name
+        The default database name is defined during the driver’s construction. If a different database name
         is required, it should be specified in the URI or set separately after
         initialization.
 
@@ -974,7 +974,7 @@ class Graphiti:
 
         nodes = await get_mentioned_nodes(self.driver, episodes)
 
-        return SearchResults(edges=edges, nodes=nodes, episodes=[], communities=[])
+        return SearchResults(edges=edges, nodes=nodes)
 
     async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:

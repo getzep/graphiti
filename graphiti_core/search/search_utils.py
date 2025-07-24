@@ -265,11 +265,12 @@ async def edge_bfs_search(
 
     query = (
         """
-        UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(:Entity)
-        UNWIND relationships(path) AS rel
-        MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
-        WHERE e.uuid = rel.uuid AND e.group_id IN $group_ids
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(:Entity)
+            UNWIND relationships(path) AS rel
+            MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+            WHERE r.uuid = rel.uuid
+            AND r.group_id IN $group_ids
         """
         + filter_query
         + """
@@ -411,9 +412,10 @@ async def node_bfs_search(
 
     query = (
         """
-        UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(n:Entity)
-        WHERE n.group_id = origin.group_id AND origin.group_id IN $group_ids
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(n:Entity)
+            WHERE n.group_id = origin.group_id
+            AND origin.group_id IN $group_ids
         """
         + filter_query
         + """
@@ -630,7 +632,7 @@ async def hybrid_node_search(
     }
     result_uuids = [[node.uuid for node in result] for result in results]
 
-    ranked_uuids = rrf(result_uuids)
+    ranked_uuids, _ = rrf(result_uuids)
 
     relevant_nodes: list[EntityNode] = [node_uuid_map[uuid] for uuid in ranked_uuids]
 
@@ -872,7 +874,9 @@ async def get_edge_invalidation_candidates(
 
 
 # takes in a list of rankings of uuids
-def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[str]:
+def rrf(
+    results: list[list[str]], rank_const=1, min_score: float = 0
+) -> tuple[list[str], list[float]]:
     scores: dict[str, float] = defaultdict(float)
     for result in results:
         for i, uuid in enumerate(result):
@@ -883,7 +887,9 @@ def rrf(results: list[list[str]], rank_const=1, min_score: float = 0) -> list[st
 
     sorted_uuids = [term[0] for term in scored_uuids]
 
-    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
+    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score], [
+        scores[uuid] for uuid in sorted_uuids if scores[uuid] >= min_score
+    ]
 
 
 async def node_distance_reranker(
@@ -891,7 +897,7 @@ async def node_distance_reranker(
     node_uuids: list[str],
     center_node_uuid: str,
     min_score: float = 0,
-) -> list[str]:
+) -> tuple[list[str], list[float]]:
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {center_node_uuid: 0.0}
@@ -927,14 +933,16 @@ async def node_distance_reranker(
         scores[center_node_uuid] = 0.1
         filtered_uuids = [center_node_uuid] + filtered_uuids
 
-    return [uuid for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score]
+    return [uuid for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score], [
+        1 / scores[uuid] for uuid in filtered_uuids if (1 / scores[uuid]) >= min_score
+    ]
 
 
 async def episode_mentions_reranker(
     driver: GraphDriver, node_uuids: list[list[str]], min_score: float = 0
-) -> list[str]:
+) -> tuple[list[str], list[float]]:
     # use rrf as a preliminary ranker
-    sorted_uuids = rrf(node_uuids)
+    sorted_uuids, _ = rrf(node_uuids)
     scores: dict[str, float] = {}
 
     # Find the shortest path to center node
@@ -954,7 +962,9 @@ async def episode_mentions_reranker(
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
 
-    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score]
+    return [uuid for uuid in sorted_uuids if scores[uuid] >= min_score], [
+        scores[uuid] for uuid in sorted_uuids if scores[uuid] >= min_score
+    ]
 
 
 def maximal_marginal_relevance(
@@ -962,7 +972,7 @@ def maximal_marginal_relevance(
     candidates: dict[str, list[float]],
     mmr_lambda: float = DEFAULT_MMR_LAMBDA,
     min_score: float = -2.0,
-) -> list[str]:
+) -> tuple[list[str], list[float]]:
     start = time()
     query_array = np.array(query_vector)
     candidate_arrays: dict[str, NDArray] = {}
@@ -993,7 +1003,9 @@ def maximal_marginal_relevance(
     end = time()
     logger.debug(f'Completed MMR reranking in {(end - start) * 1000} ms')
 
-    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score]
+    return [uuid for uuid in uuids if mmr_scores[uuid] >= min_score], [
+        mmr_scores[uuid] for uuid in uuids if mmr_scores[uuid] >= min_score
+    ]
 
 
 async def get_embeddings_for_nodes(
