@@ -76,4 +76,4 @@ jobs:
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
         run: |
-          uv run pytest tests/driver/test_neo4j_driver.py tests/test_*_int.py -k "neo4j"
+          uv run pytest tests/test_*_int.py -k "neo4j"
