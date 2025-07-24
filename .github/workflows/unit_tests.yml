@@ -75,5 +75,6 @@ jobs:
           NEO4J_PASSWORD: testpass
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           uv run pytest tests/test_*_int.py -k "neo4j"
