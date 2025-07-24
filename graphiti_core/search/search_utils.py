@@ -264,9 +264,9 @@ async def edge_bfs_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     query = (
-        """
+        f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(:Entity)
+            MATCH path = (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
             UNWIND relationships(path) AS rel
             MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
             WHERE r.uuid = rel.uuid
@@ -285,7 +285,6 @@ async def edge_bfs_search(
     records, _, _ = await driver.execute_query(
         query,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         group_ids=group_ids,
         limit=limit,
         routing_='r',
@@ -411,9 +410,9 @@ async def node_bfs_search(
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
     query = (
-        """
+        f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..$depth]->(n:Entity)
+            MATCH (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
             WHERE n.group_id = origin.group_id
             AND origin.group_id IN $group_ids
         """
@@ -430,7 +429,6 @@ async def node_bfs_search(
     records, _, _ = await driver.execute_query(
         query,
         bfs_origin_node_uuids=bfs_origin_node_uuids,
-        depth=bfs_max_depth,
         group_ids=group_ids,
         limit=limit,
         routing_='r',
