@@ -10,7 +10,9 @@ import os
 import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, TypedDict, cast
+from typing import Any, cast
+from typing_extensions import TypedDict
+from urllib.parse import urlparse
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
@@ -19,6 +21,7 @@ from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
@@ -466,6 +469,23 @@ class Neo4jConfig(BaseModel):
         )
 
 
+class FalkorConfig(BaseModel):
+    """Configuration for FalkorDB database connection."""
+
+    host: str = 'localhost'
+    port: int = 6379
+    user: str = ''
+    password: str = ''
+
+    @classmethod
+    def from_env(cls) -> 'FalkorConfig':
+        host = os.environ.get('FALKORDB_HOST', 'localhost')
+        port = int(os.environ.get('FALKORDB_PORT', 6379))
+        user = os.environ.get('FALKORDB_USER', '')
+        password = os.environ.get('FALKORDB_PASSWORD', '')
+        return cls(host=host, port=port, user=user, password=password)
+
+
 class GraphitiConfig(BaseModel):
     """Configuration for Graphiti client.
 
@@ -475,18 +495,34 @@ class GraphitiConfig(BaseModel):
     llm: GraphitiLLMConfig = Field(default_factory=GraphitiLLMConfig)
     embedder: GraphitiEmbedderConfig = Field(default_factory=GraphitiEmbedderConfig)
     neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig)
+    falkor: FalkorConfig = Field(default_factory=FalkorConfig)
     group_id: str | None = None
     use_custom_entities: bool = False
     destroy_graph: bool = False
+    database_type: str = 'neo4j'
 
     @classmethod
     def from_env(cls) -> 'GraphitiConfig':
         """Create a configuration instance from environment variables."""
-        return cls(
-            llm=GraphitiLLMConfig.from_env(),
-            embedder=GraphitiEmbedderConfig.from_env(),
-            neo4j=Neo4jConfig.from_env(),
-        )
+        db_type = os.environ.get('DATABASE_TYPE')
+        if not db_type:
+            raise ValueError('DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")')
+        if db_type == 'neo4j':
+            return cls(
+                llm=GraphitiLLMConfig.from_env(),
+                embedder=GraphitiEmbedderConfig.from_env(),
+                neo4j=Neo4jConfig.from_env(),
+                database_type=db_type,
+            )
+        elif db_type == 'falkordb':
+            return cls(
+                llm=GraphitiLLMConfig.from_env(),
+                embedder=GraphitiEmbedderConfig.from_env(),
+                falkor=FalkorConfig.from_env(),
+                database_type=db_type,
+            )
+        else:
+            raise ValueError(f'Unsupported DATABASE_TYPE: {db_type}')
 
     @classmethod
     def from_cli_and_env(cls, args: argparse.Namespace) -> 'GraphitiConfig':
@@ -583,17 +619,35 @@ async def initialize_graphiti():
             # If custom entities are enabled, we must have an LLM client
             raise ValueError('OPENAI_API_KEY must be set when custom entities are enabled')
 
-        # Validate Neo4j configuration
-        if not config.neo4j.uri or not config.neo4j.user or not config.neo4j.password:
-            raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
-
+        # Create embedder client
         embedder_client = config.embedder.create_client()
 
-        # Initialize Graphiti client
+        # Construct the driver based on the database_type
+        driver = None
+        if config.database_type == 'neo4j':
+            driver = Neo4jDriver(
+                uri=config.neo4j.uri,
+                user=config.neo4j.user,
+                password=config.neo4j.password,
+            )
+        elif config.database_type == 'falkordb':
+            from graphiti_core.driver.falkordb_driver import FalkorDriver
+            host = config.falkor.host if hasattr(config.falkor, 'host') else 'localhost'
+            port = int(config.falkor.port) if hasattr(config.falkor, 'port') else 6379
+            username = config.falkor.user or None
+            password = config.falkor.password or None
+            driver = FalkorDriver(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+            )
+        else:
+            raise ValueError(f'Unsupported database type: {config.database_type}')
+
+        # Always create Graphiti client the same way
         graphiti_client = Graphiti(
-            uri=config.neo4j.uri,
-            user=config.neo4j.user,
-            password=config.neo4j.password,
+            graph_driver=driver,
             llm_client=llm_client,
             embedder=embedder_client,
             max_coroutines=SEMAPHORE_LIMIT,
@@ -606,7 +660,7 @@ async def initialize_graphiti():
 
         # Initialize the graph database with Graphiti's indices
         await graphiti_client.build_indices_and_constraints()
-        logger.info('Graphiti client initialized successfully')
+        logger.info(f'Graphiti client initialized successfully with {config.database_type}')
 
         # Log configuration details for transparency
         if llm_client:
@@ -616,6 +670,7 @@ async def initialize_graphiti():
             logger.info('No LLM client configured - entity extraction will be limited')
 
         logger.info(f'Using group_id: {config.group_id}')
+        logger.info(f'Using database type: {config.database_type}')
         logger.info(
             f'Custom entity extraction: {"enabled" if config.use_custom_entities else "disabled"}'
         )
@@ -768,11 +823,11 @@ async def add_memory(
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id if group_id is not None else config.group_id
 
-        # Cast group_id to str to satisfy type checker
+        # Cast group_id to str to satisfy type cheker
         # The Graphiti client expects a str for group_id, not Optional[str]
-        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
+        group_id_str =  str(effective_group_id) if effective_group_id is not None else ''
 
-        # We've already checked that graphiti_client is not None above
+        # We've already checked that  graphiti_client is not None above
         # This assert statement helps type checkers understand that graphiti_client is defined
         assert graphiti_client is not None, 'graphiti_client should not be None here'
 
@@ -1131,31 +1186,28 @@ async def clear_graph() -> SuccessResponse | ErrorResponse:
 
 @mcp.resource('http://graphiti/status')
 async def get_status() -> StatusResponse:
-    """Get the status of the Graphiti MCP server and Neo4j connection."""
+    """Get the status of the Graphiti MCP server and database connection."""
     global graphiti_client
 
     if graphiti_client is None:
         return StatusResponse(status='error', message='Graphiti client not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
         client = cast(Graphiti, graphiti_client)
 
-        # Test database connection
-        await client.driver.client.verify_connectivity()  # type: ignore
+        # Test database connection using driver's health_check method
+        await client.driver.health_check() # type: ignore
 
         return StatusResponse(
-            status='ok', message='Graphiti MCP server is running and connected to Neo4j'
+            status='ok', message=f'Graphiti MCP server is running and connected to {config.database_type}'
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error checking Neo4j connection: {error_msg}')
+        logger.error(f'Error checking {config.database_type} connection: {error_msg}')
         return StatusResponse(
             status='error',
-            message=f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
+            message=f'Graphiti MCP server is running but {config.database_type} connection failed: {error_msg}',
         )
 
 
@@ -1200,6 +1252,17 @@ async def initialize_server() -> MCPConfig:
         default=os.environ.get('MCP_SERVER_HOST'),
         help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
     )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=int(os.environ.get('PORT', 8000)),
+        help='Port to run the MCP server on (default: 8000 or value of PORT env variable)',
+    )
+    parser.add_argument(
+        '--database-type',
+        choices=['neo4j', 'falkordb'],
+        help='Type of database to use (default: neo4j)',
+    )
 
     args = parser.parse_args()
 
@@ -1225,6 +1288,9 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Setting MCP server host to: {args.host}')
         # Set MCP server host from CLI or env
         mcp.settings.host = args.host
+
+    # After parsing args and initializing everything, set the port
+    mcp.settings.port = args.port
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)

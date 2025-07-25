@@ -1,5 +1,6 @@
 services:
   graph:
+    profiles: [""]
     build:
       context: .
     ports:
@@ -26,6 +27,7 @@ services:
       - PORT=8000
   neo4j:
     image: neo4j:5.26.2
+    profiles: [""]
     healthcheck:
       test:
         [
@@ -43,6 +45,45 @@ services:
       - neo4j_data:/data
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
+  falkordb:
+    image: falkordb/falkordb:latest
+    profiles: ["falkordb"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkordb_data:/data
+    environment:
+      - FALKORDB_ARGS=--port 6379 --cluster-enabled no
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 3s
+  graph-falkordb:
+    build:
+      args:
+        INSTALL_FALKORDB: "true"
+      context: .
+    profiles: ["falkordb"]
+    ports:
+      - "8001:8001"
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthcheck')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_DATABASE=default_db
+      - GRAPHITI_BACKEND=falkordb
+      - PORT=8001
 
 volumes:
   neo4j_data:
+  falkordb_data:

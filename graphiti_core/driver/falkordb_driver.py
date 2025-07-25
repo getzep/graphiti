@@ -156,6 +156,15 @@ class FalkorDriver(GraphDriver):
             'CALL db.indexes() YIELD name DROP INDEX name',
         )
 
+    async def health_check(self) -> None:
+        """Check FalkorDB connectivity by running a simple query."""
+        try:
+            await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
+            return None
+        except Exception as e:
+            print(f"FalkorDB health check failed: {e}")
+            raise
+
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
@@ -164,7 +173,6 @@ class FalkorDriver(GraphDriver):
         cloned = FalkorDriver(falkor_db=self.client, database=database)
 
         return cloned
-
 
 def convert_datetimes_to_strings(obj):
     if isinstance(obj, dict):
