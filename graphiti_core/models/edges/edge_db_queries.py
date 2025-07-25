@@ -37,6 +37,14 @@ ENTITY_EDGE_SAVE = """
         SET r = $edge_data
         WITH r CALL db.create.setRelationshipVectorProperty(r, "fact_embedding", $edge_data.fact_embedding)
         RETURN r.uuid AS uuid"""
+
+ENTITY_EDGE_SAVE_NEPTUNE = """
+        MATCH (source:Entity {uuid: $source_uuid}) 
+        MATCH (target:Entity {uuid: $target_uuid}) 
+        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
+        SET r = removeKeyFromMap($edge_data, "fact_embedding")
+        SET r.fact_embedding = join([x IN $edge_data.fact_embedding | toString(x) ], ",")
+        RETURN r.uuid AS uuid"""
         
 ENTITY_EDGE_SAVE_NEPTUNE = """
         MATCH (source:Entity {uuid: $source_uuid}) 
@@ -71,5 +79,60 @@ COMMUNITY_EDGE_SAVE = """
         MATCH (community:Community {uuid: $community_uuid}) 
         MATCH (node:Entity | Community {uuid: $entity_uuid}) 
         MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
+        SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
+        RETURN r.uuid AS uuid"""
+        
+COMMUNITY_EDGE_SAVE_NEPTUNE = """
+        MATCH (community:Community {uuid: $community_uuid}) 
+        MATCH (node {uuid: $entity_uuid})
+        WHERE node:Entity OR node:Community
+        MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
+        SET r.uuid= $uuid
+        SET r.group_id= $group_id
+        SET r.created_at= datetime($created_at)
+        RETURN r.uuid AS uuid"""
+
+COMMUNITY_EDGE_SAVE_BULK = """
+    UNWIND $community_edges AS edge
+    MATCH (community:Community {uuid: edge.source_node_uuid})
+    MATCH (node:Entity | Community {uuid: edge.target_node_uuid})
+    MERGE (community)-[r:HAS_MEMBER {uuid: edge.uuid}]->(node)
+    SET r = edge
+    RETURN edge.uuid AS uuid
+"""
+
+COMMUNITY_EDGE_SAVE_BULK_NEPTUNE = """
+    UNWIND $community_edges AS edge
+    MATCH (community:Community {uuid: edge.source_node_uuid})
+    MATCH (node:Entity | Community {uuid: edge.target_node_uuid})
+    MERGE (community)-[r:HAS_MEMBER {uuid: edge.uuid}]->(node)
+    SET r = removeKeyFromMap(edge, "episodes")
+    SET r.created_at: datetime(edge.created_at)
+    RETURN edge.uuid AS uuid
+"""
+
+EPISODIC_EDGE_SAVE_BULK_NEPTUNE = """
+    UNWIND $episodic_edges AS edge
+    MATCH (episode:Episodic {uuid: edge.source_node_uuid})
+    MATCH (node:Entity {uuid: edge.target_node_uuid})
+    MERGE (episode)-[r:MENTIONS {uuid: edge.uuid}]->(node)
+    SET r = removeKeyFromMap(edge, "episodes")
+    SET r.episodes = join(edge.episodes, ", ")
+    RETURN edge.uuid AS uuid
+"""
+
+EPISODIC_EDGE_SAVE_BULK = """
+    UNWIND $episodic_edges AS edge
+    MATCH (episode:Episodic {uuid: edge.source_node_uuid})
+    MATCH (node:Entity {uuid: edge.target_node_uuid})
+    MERGE (episode)-[r:MENTIONS {uuid: edge.uuid}]->(node)
+    SET r = edge
+    RETURN edge.uuid AS uuid
+"""
+
+EPISODIC_EDGE_SAVE_NEPTUNE = """
+        MATCH (episode:Episodic {uuid: $episode_uuid})
+        MATCH (node:Entity {uuid: $entity_uuid})
+        MERGE (episode)-[r:MENTIONS {uuid: $uuid}]->(node)
         SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
         RETURN r.uuid AS uuid"""

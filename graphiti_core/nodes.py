@@ -30,9 +30,9 @@ from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
-    COMMUNITY_NODE_SAVE,
-    ENTITY_NODE_SAVE,
-    EPISODIC_NODE_SAVE,
+    COMMUNITY_NODE_SAVE, COMMUNITY_NODE_SAVE_NEPTUNE,
+    ENTITY_NODE_SAVE, ENTITY_NODE_SAVE_NEPTUNE, 
+    EPISODIC_NODE_SAVE
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -151,6 +151,13 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
+        
+        if driver.provider == 'neptune':
+            driver.save_to_aoss('episode_content', [{'uuid': self.uuid, 'group_id': self.group_id,
+                                                    'source': self.source.value, 
+                                                    'content': self.content, 
+                                                    'source_description': self.source_description}])
+        
         result = await driver.execute_query(
             EPISODIC_NODE_SAVE,
             uuid=self.uuid,
@@ -329,13 +336,26 @@ class EntityNode(Node):
         }
 
         entity_data.update(self.attributes or {})
-
-        result = await driver.execute_query(
-            ENTITY_NODE_SAVE,
-            labels=self.labels + ['Entity'],
-            entity_data=entity_data,
-            database_=DEFAULT_DATABASE,
-        )
+        
+        if driver.provider == 'neptune':
+            driver.save_to_aoss('node_name_and_summary', [entity_data])
+            result = await driver.execute_query(
+                ENTITY_NODE_SAVE_NEPTUNE,
+                uuid=self.uuid,
+                name=self.name,
+                group_id=self.group_id,
+                summary=self.summary,
+                name_embedding=self.name_embedding,
+                created_at=self.created_at,
+                database_=DEFAULT_DATABASE,
+            )
+        else:
+            result = await driver.execute_query(
+                ENTITY_NODE_SAVE,
+                labels=self.labels + ['Entity'],
+                entity_data=entity_data,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
@@ -417,16 +437,30 @@ class CommunityNode(Node):
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
-        result = await driver.execute_query(
-            COMMUNITY_NODE_SAVE,
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            summary=self.summary,
-            name_embedding=self.name_embedding,
-            created_at=self.created_at,
-            database_=DEFAULT_DATABASE,
-        )
+        if driver.provider == 'neptune':            
+            driver.save_to_aoss('community_name', [{'name': self.name, 'uuid': self.uuid, 
+                                                   'group_id': self.group_id}])
+            result = await driver.execute_query(
+                COMMUNITY_NODE_SAVE_NEPTUNE,
+                uuid=self.uuid,
+                name=self.name,
+                group_id=self.group_id,
+                summary=self.summary,
+                name_embedding=self.name_embedding,
+                created_at=self.created_at,
+                database_=DEFAULT_DATABASE,
+            )
+        else: 
+            result = await driver.execute_query(
+                COMMUNITY_NODE_SAVE,
+                uuid=self.uuid,
+                name=self.name,
+                group_id=self.group_id,
+                summary=self.summary,
+                name_embedding=self.name_embedding,
+                created_at=self.created_at,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 

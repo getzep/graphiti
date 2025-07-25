@@ -29,8 +29,8 @@ from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
-    COMMUNITY_EDGE_SAVE,
-    ENTITY_EDGE_SAVE,
+    COMMUNITY_EDGE_SAVE, COMMUNITY_EDGE_SAVE_NEPTUNE,
+    ENTITY_EDGE_SAVE, ENTITY_EDGE_SAVE_NEPTUNE,
     EPISODIC_EDGE_SAVE,
 )
 from graphiti_core.nodes import Node
@@ -257,12 +257,20 @@ class EntityEdge(Edge):
         }
 
         edge_data.update(self.attributes or {})
-
-        result = await driver.execute_query(
-            ENTITY_EDGE_SAVE,
-            edge_data=edge_data,
-            database_=DEFAULT_DATABASE,
-        )
+        
+        if driver.provider == 'neptune':
+            driver.save_to_aoss('edge_name_and_fact', [edge_data])
+            result = await driver.execute_query(
+                ENTITY_EDGE_SAVE_NEPTUNE,
+                edge_data=edge_data,
+                database_=DEFAULT_DATABASE,
+            )
+        else:
+            result = await driver.execute_query(
+                ENTITY_EDGE_SAVE,
+                edge_data=edge_data,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
 
@@ -360,15 +368,26 @@ class EntityEdge(Edge):
 
 class CommunityEdge(Edge):
     async def save(self, driver: GraphDriver):
-        result = await driver.execute_query(
-            COMMUNITY_EDGE_SAVE,
-            community_uuid=self.source_node_uuid,
-            entity_uuid=self.target_node_uuid,
-            uuid=self.uuid,
-            group_id=self.group_id,
-            created_at=self.created_at,
-            database_=DEFAULT_DATABASE,
-        )
+        if driver.provider == 'neptune':
+            result = await driver.execute_query(
+                COMMUNITY_EDGE_SAVE_NEPTUNE,
+                community_uuid=self.source_node_uuid,
+                entity_uuid=self.target_node_uuid,
+                uuid=self.uuid,
+                group_id=self.group_id,
+                created_at=self.created_at,
+                database_=DEFAULT_DATABASE,
+            )
+        else:
+            result = await driver.execute_query(
+                COMMUNITY_EDGE_SAVE,
+                community_uuid=self.source_node_uuid,
+                entity_uuid=self.target_node_uuid,
+                uuid=self.uuid,
+                group_id=self.group_id,
+                created_at=self.created_at,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
 

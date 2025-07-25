@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 import boto3
 import numpy as np
+import time
 import datetime
 from langchain_aws.graphs import NeptuneGraph, NeptuneAnalyticsGraph
 from opensearchpy import helpers, OpenSearch, Urllib3HttpConnection, Urllib3AWSV4SignerAuth
@@ -28,68 +29,6 @@ from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.helpers import DEFAULT_DATABASE
 
 logger = logging.getLogger(__name__)
-
-class NeptuneDriverSession(GraphDriverSession):
-    def __init__(self, graph: NeptuneGraph):  # type: ignore[reportUnknownArgumentType]
-        self.graph = graph
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        # No cleanup needed for Neptune, but method must exist
-        pass
-
-    async def close(self):
-        # No explicit close needed for Neptune, but method must exist
-        pass
-
-    async def execute_write(self, func, *args, **kwargs):
-        # Directly await the provided async function with `self` as the transaction/session
-        return await func(self, *args, **kwargs)
-
-    async def run(self, query: str | list, **kwargs: Any) -> Any:
-        # Neptune does not support argument for Label Set, so it's converted into an array of queries
-        if isinstance(query, list):
-            for cypher, params in query:
-                query = _sanitize_parameters(query, params)
-                print(cypher)
-                print(params)
-                self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
-        else:
-            params = dict(kwargs)
-            query = _sanitize_parameters(query, params)
-
-            self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
-        return None
-
-
-def _sanitize_parameters(query, params):
-    if isinstance(query, list):
-        queries = []
-        for q in query:
-            queries.append(_sanitize_parameters(q, params))
-        return queries
-    else:
-        for k, v in params.items():
-            if isinstance(v, datetime.datetime):
-                params[k] = v.isoformat()
-            elif isinstance(v, list):   
-                # Handle lists that might contain datetime objects
-                for i, item in enumerate(v):
-                    if isinstance(item, datetime.datetime):
-                        v[i] = item.isoformat()
-                        query = query.replace(f'${k}', f'datetime(${k})')
-                    if isinstance(item, dict):
-                        query = _sanitize_parameters(query, v[i])
-
-                # If the list contains datetime objects, we need to wrap each element with datetime()
-                if any(isinstance(item, str) and 'T' in item for item in v):
-                    # Create a new list expression with datetime() wrapped around each element
-                    datetime_list = '[' + ', '.join(f'datetime("{item}")' if isinstance(item, str) and 'T' in item else repr(item) for item in v) + ']'
-                    query = query.replace(f'${k}', datetime_list)
-        return query
-
 
 aoss_indices = [
     {"index_name": "node_name_and_summary",
@@ -239,7 +178,7 @@ class NeptuneDriver(GraphDriver):
             self.aoss_client = OpenSearch(
                 hosts=[{
                     'host': aoss_host,
-                    'port': 443
+                    'port': aoss_port
                 }],
                 http_auth=Urllib3AWSV4SignerAuth(session.get_credentials(), session.region_name, 'aoss'),
                 use_ssl=True,
@@ -249,33 +188,64 @@ class NeptuneDriver(GraphDriver):
             )        
         else:
             raise ValueError('You must provide an AOSS endpoint to create a NeptuneDriver')
+        
+    def _sanitize_parameters(self, query, params):
+        if isinstance(query, list):
+            queries = []
+            for q in query:
+                queries.append(self._sanitize_parameters(q, params))
+            return queries
+        else:
+            for k, v in params.items():
+                if isinstance(v, datetime.datetime):
+                    params[k] = v.isoformat()
+                elif isinstance(v, list):   
+                    # Handle lists that might contain datetime objects
+                    for i, item in enumerate(v):
+                        if isinstance(item, datetime.datetime):
+                            v[i] = item.isoformat()
+                            query = query.replace(f'${k}', f'datetime(${k})')
+                        if isinstance(item, dict):
+                            query = self._sanitize_parameters(query, v[i])
+
+                    # If the list contains datetime objects, we need to wrap each element with datetime()
+                    if any(isinstance(item, str) and 'T' in item for item in v):
+                        # Create a new list expression with datetime() wrapped around each element
+                        datetime_list = '[' + ', '.join(f'datetime("{item}")' if isinstance(item, str) and 'T' in item else repr(item) for item in v) + ']'
+                        query = query.replace(f'${k}', datetime_list)
+            return query
+
 
     async def execute_query(self, cypher_query_: str, **kwargs: Any) -> dict:
         params = dict(kwargs)
         if isinstance(cypher_query_, list):
             for q in cypher_query_:
-                await self.execute_query(q, **params)
-        else:
-            cypher_query_ = _sanitize_parameters(cypher_query_, params)
-            try:
-
-                result = self.client.query(cypher_query_, params=params)
-            except Exception as e:
-                print(e)
-                print(cypher_query_)
-                print(params)
-                logger.error('Error executing query: %s', e)
-                raise e
-
+                result, _, _ = self._run_query(q[0], q[1])
             return result, None, None
+        else:
+            return self._run_query(cypher_query_, params)
 
+    def _run_query(self, cypher_query_, params):
+        cypher_query_ = self._sanitize_parameters(cypher_query_, params)
+        try:
+            result = self.client.query(cypher_query_, params=params)
+        except Exception as e:
+            logger.error('Query: %s', cypher_query_)
+            logger.error('Parameters: %s', params)
+            logger.error('Error executing query: %s', e)
+            raise e
+
+        return result, None, None
 
 
     def session(self, database: str) -> GraphDriverSession:
-        return NeptuneDriverSession(graph = self.client)
+        return NeptuneDriverSession(driver = self)
 
     async def close(self) -> None:
         return self.client.client.close()
+    
+    async def _delete_all_data(self) -> Any:
+        return await self.execute_query("MATCH (n) DETACH DELETE n")
 
     def delete_all_indexes(
         self, database_: str = DEFAULT_DATABASE
@@ -286,7 +256,7 @@ class NeptuneDriver(GraphDriver):
         self
     ) -> Coroutine[Any, Any, Any]:
         # No matter what happens above, always return True
-        return True
+        return self.delete_aoss_indices()
     
     async def create_aoss_indices(self):
         for index in aoss_indices:
@@ -297,12 +267,14 @@ class NeptuneDriver(GraphDriver):
                     index=index_name,
                     body=index['body']
                 )
+        # Sleep for 1 minute to let the index creation complete
+        time.sleep(60)
     
     async def delete_aoss_indices(self):
         for index in aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
-            if not client.indices.exists(index=index_name):
+            if client.indices.exists(index=index_name):
                 client.indices.delete(
                     index=index_name
                 )
@@ -334,7 +306,6 @@ class NeptuneDriver(GraphDriver):
         
         return True
 
-
     def calculate_cosine_similarity(self, vector1:List[float], vector2:List[float]) -> float:
         """
         Calculates the cosine similarity between two vectors using NumPy.
@@ -348,3 +319,24 @@ class NeptuneDriver(GraphDriver):
 
         return dot_product / (norm_vector1 * norm_vector2)
 
+class NeptuneDriverSession(GraphDriverSession):
+    def __init__(self, driver: NeptuneDriver):  # type: ignore[reportUnknownArgumentType]
+        self.driver = driver
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        # No cleanup needed for Neptune, but method must exist
+        pass
+
+    async def close(self):
+        # No explicit close needed for Neptune, but method must exist
+        pass
+
+    async def execute_write(self, func, *args, **kwargs):
+        # Directly await the provided async function with `self` as the transaction/session
+        return await func(self, *args, **kwargs)
+
+    async def run(self, query: str | list, **kwargs: Any) -> Any:
+        return await self.driver.execute_query(query, **kwargs)
