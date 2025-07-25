@@ -70,10 +70,15 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            await tx.run(
-                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
-                group_ids=group_ids,
-            )
+            for label in ['Entity', 'Episodic', 'Community']:
+                await tx.run(
+                    f"""
+                    MATCH (n:{label})
+                    WHERE n.group_id IN $group_ids
+                    DETACH DELETE n
+                    """,
+                    group_ids=group_ids,
+                )
 
         if group_ids is None:
             await session.execute_write(delete_all)

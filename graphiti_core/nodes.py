@@ -89,19 +89,10 @@ class Node(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.FALKORDB:
-            for label in ['Entity', 'Episodic', 'Community']:
-                await driver.execute_query(
-                    f"""
-                    MATCH (n:{label} {{uuid: $uuid}})
-                    DETACH DELETE n
-                    """,
-                    uuid=self.uuid,
-                )
-        else:
+        for label in ['Entity', 'Episodic', 'Community']:
             await driver.execute_query(
-                """
-                MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                f"""
+                MATCH (n:{label} {{uuid: $uuid}})
                 DETACH DELETE n
                 """,
                 uuid=self.uuid,
