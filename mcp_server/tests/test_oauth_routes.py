@@ -2,8 +2,9 @@
 """Test script to verify OAuth routes are accessible."""
 
 import asyncio
+
 import aiohttp
-import sys
+
 
 async def test_oauth_routes():
     """Test all OAuth routes."""

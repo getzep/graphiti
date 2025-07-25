@@ -34,6 +34,14 @@ lint:
 test:
 	$(PYTEST)
 
+# Run only unit tests (skip integration tests)
+test-unit:
+	$(PYTEST) tests/test_basic.py tests/test_oauth_simple.py
+
+# Run test coverage for OAuth wrapper only
+test-oauth:
+	$(PYTEST) tests/test_oauth_simple.py --cov=src/oauth_wrapper --cov-report=term-missing
+
 # Run format, lint, and test
 check: format lint test
 

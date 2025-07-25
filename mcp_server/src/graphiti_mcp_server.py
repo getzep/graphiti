@@ -9,15 +9,11 @@ import logging
 import os
 import sys
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
-from openai import AsyncAzureOpenAI
-from pydantic import BaseModel, Field
-
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
@@ -34,6 +30,9 @@ from graphiti_core.search.search_config_recipes import (
 )
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
+from mcp.server.fastmcp import FastMCP
+from openai import AsyncAzureOpenAI
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -928,7 +927,7 @@ async def add_memory(
                     source_description=source_description,
                     group_id=group_id_str,  # Using the string version of group_id
                     uuid=uuid,
-                    reference_time=datetime.now(timezone.utc),
+                    reference_time=datetime.now(UTC),
                     entity_types=entity_types,
                 )
                 logger.info(f"Episode '{name}' added successfully")
@@ -1216,7 +1215,7 @@ async def get_episodes(
         client = cast(Graphiti, graphiti_client)
 
         episodes = await client.retrieve_episodes(
-            group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
+            group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(UTC)
         )
 
         if not episodes:

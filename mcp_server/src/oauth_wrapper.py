@@ -4,17 +4,15 @@ OAuth wrapper for Graphiti MCP Server
 Provides OAuth endpoints required by Claude Code
 """
 
-import os
-import json
-import asyncio
 import logging
+import os
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
 import httpx
 import uvicorn
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +30,7 @@ OAUTH_CONFIG = {
 }
 
 # Store registered clients (in production, use a database)
-registered_clients: Dict[str, Dict[str, Any]] = {}
+registered_clients: dict[str, dict[str, Any]] = {}
 
 
 @app.get("/.well-known/oauth-authorization-server")
@@ -73,12 +71,12 @@ async def register_client(request: Request):
     """Register a new OAuth client"""
     try:
         body = await request.json()
-        
+
         # Generate client credentials
         import secrets
         client_id = f"client_{secrets.token_urlsafe(16)}"
         client_secret = secrets.token_urlsafe(32)
-        
+
         client_info = {
             "client_id": client_id,
             "client_secret": client_secret,
@@ -88,10 +86,10 @@ async def register_client(request: Request):
             "token_endpoint_auth_method": "none",
             **body
         }
-        
+
         # Store client info
         registered_clients[client_id] = client_info
-        
+
         logger.info(f"Registered new client: {client_id}")
         return JSONResponse(client_info, status_code=201)
     except Exception as e:
@@ -106,34 +104,37 @@ async def proxy_sse(request: Request):
     """Proxy SSE requests to the MCP server running on a different port"""
     mcp_port = int(os.environ.get('MCP_INTERNAL_PORT', '2401'))
     mcp_url = f"http://localhost:{mcp_port}/sse"
-    
-    # Create httpx client
-    async with httpx.AsyncClient() as client:
-        # Forward the request
-        headers = dict(request.headers)
-        headers.pop('host', None)  # Remove host header
-        
-        if request.method == "GET":
-            # Handle SSE streaming
-            response = await client.get(
-                mcp_url,
-                headers=headers,
-                params=request.query_params,
-                follow_redirects=True
-            )
-            
-            # Stream the response
-            async def generate():
-                async for chunk in response.aiter_bytes():
-                    yield chunk
-            
-            return StreamingResponse(
-                generate(),
-                media_type="text/event-stream",
-                headers=dict(response.headers)
-            )
-        else:
-            # Handle POST requests
+
+    # Forward the request headers
+    headers = dict(request.headers)
+    headers.pop('host', None)  # Remove host header
+
+    if request.method == "GET":
+        # Handle SSE streaming
+        # Stream the response without buffering
+        async def generate():
+            # Create httpx client inside the generator to ensure it stays alive
+            async with httpx.AsyncClient() as client:
+                async with client.stream("GET", mcp_url, headers=headers, params=request.query_params) as response:
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+
+        # Ensure proper SSE headers
+        sse_headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers=sse_headers
+        )
+    else:
+        # Handle POST requests
+        async with httpx.AsyncClient() as client:
             body = await request.body()
             response = await client.post(
                 mcp_url,
@@ -141,12 +142,41 @@ async def proxy_sse(request: Request):
                 content=body,
                 follow_redirects=True
             )
-            
+
             return Response(
                 content=response.content,
                 status_code=response.status_code,
                 headers=dict(response.headers)
             )
+
+
+# Proxy messages endpoint to the actual MCP server
+@app.post("/messages/")
+async def proxy_messages(request: Request):
+    """Proxy messages requests to the MCP server running on a different port"""
+    mcp_port = int(os.environ.get('MCP_INTERNAL_PORT', '2401'))
+    mcp_url = f"http://localhost:{mcp_port}/messages/"
+
+    # Forward the request headers
+    headers = dict(request.headers)
+    headers.pop('host', None)  # Remove host header
+
+    # Handle POST requests
+    async with httpx.AsyncClient() as client:
+        body = await request.body()
+        response = await client.post(
+            mcp_url,
+            headers=headers,
+            content=body,
+            params=request.query_params,
+            follow_redirects=True
+        )
+
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
 
 
 @app.get("/")

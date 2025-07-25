@@ -3,16 +3,18 @@
 Test script for OAuth endpoints
 """
 
-import httpx
 import json
+
+import httpx
+
 
 async def test_oauth_endpoints():
     """Test all OAuth endpoints"""
     base_url = "http://localhost:8020"
-    
+
     async with httpx.AsyncClient() as client:
         print("🔍 Testing OAuth endpoints...")
-        
+
         # Test OAuth authorization server metadata
         print("\n1. Testing OAuth authorization server metadata:")
         response = await client.get(f"{base_url}/.well-known/oauth-authorization-server")
@@ -21,8 +23,8 @@ async def test_oauth_endpoints():
             print(f"   ✅ OAuth server metadata: {json.dumps(response.json(), indent=2)}")
         else:
             print(f"   ❌ Failed: {response.text}")
-        
-        # Test OAuth protected resource metadata  
+
+        # Test OAuth protected resource metadata
         print("\n2. Testing OAuth protected resource metadata:")
         response = await client.get(f"{base_url}/.well-known/oauth-protected-resource")
         print(f"   Status: {response.status_code}")
@@ -30,7 +32,7 @@ async def test_oauth_endpoints():
             print(f"   ✅ Protected resource metadata: {json.dumps(response.json(), indent=2)}")
         else:
             print(f"   ❌ Failed: {response.text}")
-        
+
         # Test client registration
         print("\n3. Testing client registration:")
         client_data = {"client_name": "Test OAuth Client", "redirect_uris": ["http://localhost:3000/callback"]}
@@ -42,7 +44,7 @@ async def test_oauth_endpoints():
             print(f"   Client secret: {client_info['client_secret'][:10]}...")
         else:
             print(f"   ❌ Failed: {response.text}")
-        
+
         # Test SSE endpoint accessibility (should get timeout, which is expected)
         print("\n4. Testing SSE endpoint accessibility:")
         try:

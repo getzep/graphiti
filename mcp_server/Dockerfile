@@ -29,7 +29,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 RUN groupadd -r app && useradd -r -d /app -g app app
 
 # Copy project files for dependency installation (better caching)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install dependencies first (better layer caching)
 RUN --mount=type=cache,target=/root/.cache/uv \
