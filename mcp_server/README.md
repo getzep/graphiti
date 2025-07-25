@@ -58,7 +58,7 @@ cd graphiti && pwd
 
 `docker compose up`
 
-3. Point your MCP client to `http://localhost:2400/sse`
+3. Point your MCP client to `http://localhost:8020/sse`
 
 ## Installation
 
@@ -203,7 +203,7 @@ To use OpenAI instead of Ollama in Docker:
 
 5. **Run the server**:
    ```bash
-   uv run graphiti_mcp_server.py --transport sse
+   uv run src/graphiti_mcp_server.py.py --transport sse
    ```
 
 ## Configuration
@@ -246,7 +246,7 @@ To use Azure OpenAI, set `USE_OLLAMA=false` and configure:
 
 #### General Configuration
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
-- `MCP_SERVER_PORT`: Port for the MCP server when using SSE transport (default: 2400)
+- `MCP_SERVER_PORT`: Port for the MCP server when using SSE transport (default: 8020)
 
 You can set these variables in a `.env` file in the project directory. A sample configuration file (`sample_env.txt`) is provided with all available options and their default values.
 
@@ -255,13 +255,13 @@ You can set these variables in a `.env` file in the project directory. A sample 
 To run the Graphiti MCP server directly using `uv`:
 
 ```bash
-uv run graphiti_mcp_server.py
+uv run src/graphiti_mcp_server.py.py
 ```
 
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
+uv run src/graphiti_mcp_server.py.py --model gpt-4.1-mini --transport sse
 ```
 
 Available arguments:
@@ -270,7 +270,7 @@ Available arguments:
 - `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable (only when not using Ollama).
 - `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
-- `--port`: Port to bind the MCP server to (default: 2400)
+- `--port`: Port to bind the MCP server to (default: 8020)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
@@ -291,7 +291,7 @@ The Graphiti MCP server provides flexible configuration options for Ollama model
 **Use default models:**
 ```bash
 # With default .env configuration
-uv run graphiti_mcp_server.py
+uv run src/graphiti_mcp_server.py.py
 
 # Or explicitly set in .env file:
 # USE_OLLAMA=true
@@ -301,17 +301,17 @@ uv run graphiti_mcp_server.py
 
 **Use a different LLM model:**
 ```bash
-uv run graphiti_mcp_server.py --ollama-llm-model llama3.2:3b
+uv run src/graphiti_mcp_server.py.py --ollama-llm-model llama3.2:3b
 ```
 
 **Use a different embedding model with custom dimension:**
 ```bash
-uv run graphiti_mcp_server.py --ollama-embedding-model all-minilm-l6-v2 --ollama-embedding-dim 384
+uv run src/graphiti_mcp_server.py.py --ollama-embedding-model all-minilm-l6-v2 --ollama-embedding-dim 384
 ```
 
 **Connect to a remote Ollama server:**
 ```bash
-uv run graphiti_mcp_server.py --ollama-base-url http://remote-server:11434/v1 --ollama-llm-model llama3.2:8b
+uv run src/graphiti_mcp_server.py.py --ollama-base-url http://remote-server:11434/v1 --ollama-llm-model llama3.2:8b
 ```
 
 #### Environment Variable Configuration
@@ -336,7 +336,7 @@ LLM_TEMPERATURE=0.1
 Then run the server:
 
 ```bash
-uv run graphiti_mcp_server.py
+uv run src/graphiti_mcp_server.py.py
 ```
 
 #### Configuration Priority
@@ -439,7 +439,7 @@ This will start both the Neo4j database and the Graphiti MCP server. The Docker 
 - Uses `uv` for package management and running the server
 - Installs dependencies from the `pyproject.toml` file
 - Connects to the Neo4j container using the environment variables
-- Exposes the server on port 2400 for HTTP-based SSE transport
+- Exposes the server on port 8020 for HTTP-based SSE transport
 - Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
@@ -469,7 +469,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "/Users/<user>>/dev/zep/graphiti/mcp_server",
         "--project",
         ".",
-        "graphiti_mcp_server.py",
+        "src/graphiti_mcp_server.py",
         "--transport",
         "stdio"
       ],
@@ -497,7 +497,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "/Users/<user>>/dev/zep/graphiti/mcp_server",
         "--project",
         ".",
-        "graphiti_mcp_server.py",
+        "src/graphiti_mcp_server.py",
         "--transport",
         "stdio",
         "--ollama-llm-model",
@@ -531,7 +531,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "/Users/<user>>/dev/zep/graphiti/mcp_server",
         "--project",
         ".",
-        "graphiti_mcp_server.py",
+        "src/graphiti_mcp_server.py",
         "--transport",
         "stdio"
       ],
@@ -564,7 +564,7 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "/Users/<user>>/dev/zep/graphiti/mcp_server",
         "--project",
         ".",
-        "graphiti_mcp_server.py",
+        "src/graphiti_mcp_server.py",
         "--transport",
         "stdio"
       ],
@@ -588,7 +588,7 @@ For SSE transport (HTTP-based), you can use this configuration:
   "mcpServers": {
     "graphiti-memory": {
       "transport": "sse",
-      "url": "http://localhost:2400/sse"
+      "url": "http://localhost:8020/sse"
     }
   }
 }
@@ -631,7 +631,7 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 1. Run the Graphiti MCP server using the SSE transport:
 
 ```bash
-python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
+python src/graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
 ```
 
 Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "default" as the group_id.
@@ -648,7 +648,7 @@ docker compose up
 {
   "mcpServers": {
     "graphiti-memory": {
-      "url": "http://localhost:2400/sse"
+      "url": "http://localhost:8020/sse"
     }
   }
 }
@@ -689,7 +689,7 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
           "command": "npx", // Or the full path to mcp-remote if npx is not in your PATH
           "args": [
             "mcp-remote",
-            "http://localhost:2400/sse" // Ensure this matches your Graphiti server's SSE endpoint
+            "http://localhost:8020/sse" // Ensure this matches your Graphiti server's SSE endpoint
           ]
         }
       }

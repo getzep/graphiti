@@ -1,0 +1,26 @@
+services:
+  graphiti-mcp:
+    build:
+      dockerfile: Dockerfile.dev
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # Mount source code for live development
+      - ./src:/app/src:ro
+      # Mount pyproject.toml and uv.lock for dependency changes
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./uv.lock:/app/uv.lock:ro
+    develop:
+      watch:
+        - path: ./src
+          action: sync
+          target: /app/src
+        - path: ./pyproject.toml
+          action: sync
+          target: /app/pyproject.toml
+        - path: ./uv.lock
+          action: sync
+          target: /app/uv.lock
+        - path: ./Dockerfile.dev
+          action: rebuild

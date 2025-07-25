@@ -37,10 +37,23 @@ services:
   graphiti-mcp:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${DOCKERFILE:-Dockerfile}
+    develop:
+      watch:
+        - path: ./src
+          action: sync
+          target: /app/src
+        - path: ./pyproject.toml
+          action: sync
+          target: /app/pyproject.toml
+        - path: ./uv.lock
+          action: sync
+          target: /app/uv.lock
+        - path: ./Dockerfile
+          action: rebuild
     env_file:
       - path: .env
-        required: true # Makes the file optional. Default value is 'true'
+        required: true
     depends_on:
       neo4j:
         condition: service_healthy
@@ -56,10 +69,15 @@ services:
       - OPENAI_API_KEY=abc
       - PATH=/root/.local/bin:${PATH}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
-      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-2400}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8020}
+      - MCP_INTERNAL_PORT=${MCP_INTERNAL_PORT:-$((MCP_SERVER_PORT + 1))}
+      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-graphiti-mcp}
+      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-graphiti-secret-key-change-this-in-production}
+      - OAUTH_ISSUER=${OAUTH_ISSUER:-http://localhost:8020}
+      - OAUTH_AUDIENCE=${OAUTH_AUDIENCE:-graphiti-mcp}
     ports:
-      - "${MCP_SERVER_PORT:-2400}:${MCP_SERVER_PORT:-2400}" # Expose the MCP server via HTTP for SSE transport
-    command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse"]
+      - "${MCP_SERVER_PORT:-8020}:8020" # Expose the OAuth wrapper
+    command: ["sh", "-c", "uv run python src/graphiti_mcp_server.py --transport sse --port $MCP_INTERNAL_PORT & uv run python src/oauth_wrapper.py"]
 
 volumes:
   neo4j_data:

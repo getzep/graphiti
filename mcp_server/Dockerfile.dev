@@ -7,6 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv using the installer script to a system location
@@ -31,9 +32,9 @@ RUN groupadd -r app && useradd -r -d /app -g app app
 # Copy project files for dependency installation (better caching)
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies first (better layer caching)
+# Install dependencies including development dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen
 
 # Copy application code
 COPY src/ ./src/
@@ -45,11 +46,7 @@ RUN chown -Rv app:app /app
 USER app
 
 # Expose ports
-# Note: These are the default ports. Actual ports can be configured via:
-# - MCP_SERVER_PORT environment variable (default: 8020)
-# - MCP_INTERNAL_PORT environment variable (default: 8021)
-# The actual port mapping is handled by docker-compose.yml
-EXPOSE 8020 8021
+EXPOSE 2401 8020
 
 # Command to run the application
 CMD ["uv", "run", "python", "src/graphiti_mcp_server.py"]

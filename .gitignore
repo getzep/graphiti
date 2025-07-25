@@ -170,3 +170,5 @@ cache.db*
 # AI Tools
 .cursor/
 tasks/
+.claude/
+CLAUDE.md

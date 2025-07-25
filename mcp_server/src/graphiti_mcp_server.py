@@ -622,7 +622,7 @@ class MCPConfig(BaseModel):
     """Configuration for MCP server."""
 
     transport: str = 'sse'  # Default to SSE transport
-    port: int = 2400  # Default port for SSE transport
+    port: int = 8020  # Default port for SSE transport
 
     @classmethod
     def from_cli(cls, args: argparse.Namespace) -> 'MCPConfig':
@@ -679,7 +679,7 @@ mcp = FastMCP(
 )
 
 # Set default port from environment variable if available
-default_port = int(os.environ.get('MCP_SERVER_PORT', '2400'))
+default_port = int(os.environ.get('MCP_SERVER_PORT', '8020'))
 mcp.settings.port = default_port
 
 # Initialize Graphiti client
@@ -1338,8 +1338,8 @@ async def initialize_server() -> MCPConfig:
     parser.add_argument(
         '--port',
         type=int,
-        default=int(os.environ.get('MCP_SERVER_PORT', '2400')),
-        help='Port to bind the MCP server to (default: MCP_SERVER_PORT environment variable or 2400)',
+        default=int(os.environ.get('MCP_SERVER_PORT', '8020')),
+        help='Port to bind the MCP server to (default: MCP_SERVER_PORT environment variable or 8020)',
     )
     # Ollama configuration arguments
     parser.add_argument(
