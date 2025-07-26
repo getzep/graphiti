@@ -4,6 +4,7 @@ Jina AI Embedder
 Get your Jina AI API key for free: https://jina.ai/?sui=apikey
 """
 
+import os
 from collections.abc import Iterable
 
 import httpx
@@ -18,7 +19,7 @@ DEFAULT_TASK = "text-matching"
 
 class JinaAIEmbedderConfig(EmbedderConfig):
     embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL)
-    api_key: str | None = None
+    api_key: str | None = Field(default=os.getenv("JINAAI_API_KEY"))
     base_url: str = Field(default=DEFAULT_BASE_URL)
     task: str = Field(default=DEFAULT_TASK)
 
@@ -53,6 +54,8 @@ class JinaAIEmbedder(EmbedderClient):
             "dimensions": self.config.embedding_dim,
             "input": items,
         }
+        if not self.config.api_key:
+            raise ValueError("JINAAI_API_KEY is not set")
         headers = {"Authorization": f"Bearer {self.config.api_key}"}
         response = await self.client.post("/v1/embeddings", json=payload, headers=headers)
         response.raise_for_status()
