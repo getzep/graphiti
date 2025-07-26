@@ -259,6 +259,48 @@ class AnthropicClient(LLMClient):
         except Exception as e:
             raise e
 
+    def _clean_json_response(self, response: dict[str, typing.Any]) -> dict[str, typing.Any]:
+        """Clean potential markdown code blocks from LLM JSON responses.
+        
+        This method provides a safety net for LLMs that might wrap JSON in ```json``` blocks
+        despite being instructed not to do so.
+        
+        Args:
+            response: The response dictionary from the LLM
+            
+        Returns:
+            Cleaned response dictionary
+        """
+        # If response has a 'content' key with string value, check for code block wrapping
+        if isinstance(response, dict) and 'content' in response:
+            content = response.get('content', '')
+            if isinstance(content, str) and content.strip().startswith('```'):
+                # Extract JSON from code block
+                lines = content.strip().split('\n')
+                # Remove first line if it's ```json or just ```
+                if lines[0].strip().lower() in ('```json', '```'):
+                    lines = lines[1:]
+                # Remove last line if it's ```
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]
+                # Rejoin and update content
+                cleaned_content = '\n'.join(lines).strip()
+                if cleaned_content:
+                    try:
+                        # Validate it's still valid JSON
+                        import json
+                        parsed = json.loads(cleaned_content)
+                        # If it's a dict, return it directly; if string content, keep in content wrapper
+                        if isinstance(parsed, dict):
+                            return parsed
+                        else:
+                            response['content'] = cleaned_content
+                    except json.JSONDecodeError:
+                        # If cleaning broke JSON, return original
+                        pass
+        
+        return response
+
     async def generate_response(
         self,
         messages: list[Message],
@@ -294,6 +336,9 @@ class AnthropicClient(LLMClient):
                 response = await self._generate_response(
                     messages, response_model, max_tokens, model_size
                 )
+
+                # Clean potential code block wrapping from response
+                response = self._clean_json_response(response)
 
                 # If we have a response_model, attempt to validate the response
                 if response_model is not None:
