@@ -16,5 +16,10 @@ limitations under the License.
 
 from .client import CrossEncoderClient
 from .openai_reranker_client import OpenAIRerankerClient
+from .jina_reranker_client import JinaAIRerankerClient
 
-__all__ = ['CrossEncoderClient', 'OpenAIRerankerClient']
+__all__ = [
+    'CrossEncoderClient',
+    'OpenAIRerankerClient',
+    'JinaAIRerankerClient',
+]
