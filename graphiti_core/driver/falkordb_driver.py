@@ -37,7 +37,7 @@ from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 
 # Regex to match union labels like "(n:LabelA|LabelB {" allowing optional spaces
 UNION_LABEL_RE = re.compile(
-    r"\(\s*(?P<var>[a-zA-Z][a-zA-Z0-9_]*)\s*:\s*(?P<labels>[A-Za-z0-9_]+(?:\s*\|\s*[A-Za-z0-9_]+)+)(?=[\s\{\)])"
+    r'\(\s*(?P<var>[a-zA-Z][a-zA-Z0-9_]*)\s*:\s*(?P<labels>[A-Za-z0-9_]+(?:\s*\|\s*[A-Za-z0-9_]+)+)(?=[\s\{\)])'
 )
 
 
@@ -46,27 +46,28 @@ def _rewrite_union_labels(query: str) -> str:
     conditions: list[str] = []
 
     def _sub(match: re.Match[str]) -> str:
-        var = match.group("var")
-        labels = [l.strip() for l in match.group("labels").split("|")]
-        conditions.append("(" + " OR ".join(f"{var}:{l}" for l in labels) + ")")
-        return f"({var}"
+        var = match.group('var')
+        labels = [label.strip() for label in match.group('labels').split('|')]
+        conditions.append('(' + ' OR '.join(f'{var}:{label}' for label in labels) + ')')
+        return f'({var}'
 
     rewritten = UNION_LABEL_RE.sub(_sub, query)
     if not conditions:
         return query
 
-    where_expr = " AND ".join(conditions)
+    where_expr = ' AND '.join(conditions)
     upper = rewritten.upper()
-    if " WHERE " in upper:
-        idx = upper.find(" WHERE ") + len(" WHERE ")
-        return rewritten[:idx] + where_expr + " AND " + rewritten[idx:]
+    if ' WHERE ' in upper:
+        idx = upper.find(' WHERE ') + len(' WHERE ')
+        return rewritten[:idx] + where_expr + ' AND ' + rewritten[idx:]
 
     insert_pos = len(rewritten)
-    for kw in [" DETACH", " RETURN ", " DELETE ", " SET "]:
+    for kw in [' DETACH', ' RETURN ', ' DELETE ', ' SET ']:
         p = upper.find(kw)
         if p != -1 and p < insert_pos:
             insert_pos = p
-    return rewritten[:insert_pos] + " WHERE " + where_expr + rewritten[insert_pos:]
+    return rewritten[:insert_pos] + ' WHERE ' + where_expr + rewritten[insert_pos:]
+
 
 logger = logging.getLogger(__name__)
 
