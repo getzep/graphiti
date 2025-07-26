@@ -114,7 +114,9 @@ async def proxy_sse(request: Request):
         # Stream the response without buffering
         async def generate():
             # Create httpx client inside the generator to ensure it stays alive
-            async with httpx.AsyncClient() as client:
+            # Configure timeout for SSE connections (no read timeout for streaming)
+            timeout = httpx.Timeout(connect=10.0, read=None, write=10.0, pool=10.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream("GET", mcp_url, headers=headers, params=request.query_params) as response:
                     async for chunk in response.aiter_bytes():
                         yield chunk
@@ -134,7 +136,8 @@ async def proxy_sse(request: Request):
         )
     else:
         # Handle POST requests
-        async with httpx.AsyncClient() as client:
+        timeout = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             body = await request.body()
             response = await client.post(
                 mcp_url,
@@ -162,7 +165,8 @@ async def proxy_messages(request: Request):
     headers.pop('host', None)  # Remove host header
 
     # Handle POST requests
-    async with httpx.AsyncClient() as client:
+    timeout = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         body = await request.body()
         response = await client.post(
             mcp_url,

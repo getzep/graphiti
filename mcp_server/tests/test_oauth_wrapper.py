@@ -119,15 +119,20 @@ class TestOAuthWrapper:
         with TestClient(app) as client:
             # The SSE endpoint returns a StreamingResponse
             # We'll just verify it accepts GET requests properly
-            with patch("src.oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+            with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
                 mock_instance = AsyncMock()
                 mock_client_class.return_value.__aenter__.return_value = mock_instance
 
-                # Mock the stream response
+                # Create a proper async context manager for stream
+                mock_stream_ctx = AsyncMock()
                 mock_stream_response = AsyncMock()
                 mock_stream_response.aiter_bytes = AsyncMock()
                 mock_stream_response.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
-                mock_instance.stream.return_value.__aenter__.return_value = mock_stream_response
+                mock_stream_ctx.__aenter__.return_value = mock_stream_response
+                mock_stream_ctx.__aexit__.return_value = None
+                
+                # Make stream return the async context manager
+                mock_instance.stream = MagicMock(return_value=mock_stream_ctx)
 
                 response = client.get("/sse")
 
@@ -136,11 +141,51 @@ class TestOAuthWrapper:
                 assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
                 assert response.headers["cache-control"] == "no-cache"
 
+    @pytest.mark.asyncio
+    async def test_sse_proxy_get_timeout_configuration(self, mock_env):
+        """Test that SSE GET requests have proper timeout configuration (no read timeout)"""
+        from fastapi.testclient import TestClient
+        
+        captured_timeout = None
+        
+        def mock_client_init(*args, **kwargs):
+            nonlocal captured_timeout
+            captured_timeout = kwargs.get('timeout')
+            return AsyncMock()
+
+        with TestClient(app) as client:
+            with patch("oauth_wrapper.httpx.AsyncClient", side_effect=mock_client_init) as mock_client_class:
+                mock_instance = AsyncMock()
+                mock_client_class.return_value = mock_instance
+                mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+                mock_instance.__aexit__ = AsyncMock(return_value=None)
+                
+                # Create a proper async context manager for stream
+                mock_stream_ctx = AsyncMock()
+                mock_stream_response = AsyncMock()
+                mock_stream_response.aiter_bytes = AsyncMock()
+                mock_stream_response.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
+                mock_stream_ctx.__aenter__.return_value = mock_stream_response
+                mock_stream_ctx.__aexit__.return_value = None
+                
+                # Make stream return the async context manager
+                mock_instance.stream = MagicMock(return_value=mock_stream_ctx)
+                
+                # Make the request
+                response = client.get("/sse")
+                
+                # Verify timeout configuration
+                assert captured_timeout is not None
+                assert captured_timeout.connect == 10.0
+                assert captured_timeout.read is None  # No read timeout for SSE
+                assert captured_timeout.write == 10.0
+                assert captured_timeout.pool == 10.0
+
     def test_sse_proxy_post(self, mock_env, client):
         """Test SSE proxy POST request"""
         test_body = {"test": "data"}
 
-        with patch("src.oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_instance
 
@@ -156,11 +201,42 @@ class TestOAuthWrapper:
             assert response.status_code == 200
             assert response.json() == {"result": "success"}
 
+    def test_sse_proxy_post_timeout_configuration(self, mock_env, client):
+        """Test that SSE POST requests have proper timeout configuration (30s read timeout)"""
+        test_body = {"test": "data"}
+        captured_timeout = None
+
+        def mock_client_init(*args, **kwargs):
+            nonlocal captured_timeout
+            captured_timeout = kwargs.get('timeout')
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            
+            # Create a proper mock response
+            mock_response = MagicMock()
+            mock_response.content = b'{"result": "success"}'
+            mock_response.status_code = 200
+            mock_response.headers = {"content-type": "application/json"}
+            mock_instance.post.return_value = mock_response
+            
+            return mock_instance
+
+        with patch("src.oauth_wrapper.httpx.AsyncClient", side_effect=mock_client_init):
+            response = client.post("/sse", json=test_body)
+            
+            # Verify timeout configuration
+            assert captured_timeout is not None
+            assert captured_timeout.connect == 10.0
+            assert captured_timeout.read == 30.0  # 30 second read timeout for POST
+            assert captured_timeout.write == 10.0
+            assert captured_timeout.pool == 10.0
+
     def test_messages_proxy_post(self, mock_env, client):
         """Test messages proxy POST request"""
         test_body = {"message": "test"}
 
-        with patch("src.oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_instance
 
@@ -176,6 +252,37 @@ class TestOAuthWrapper:
             assert response.status_code == 200
             assert response.json() == {"response": "ok"}
 
+    def test_messages_proxy_post_timeout_configuration(self, mock_env, client):
+        """Test that messages POST requests have proper timeout configuration (30s read timeout)"""
+        test_body = {"message": "test"}
+        captured_timeout = None
+
+        def mock_client_init(*args, **kwargs):
+            nonlocal captured_timeout
+            captured_timeout = kwargs.get('timeout')
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            
+            # Create a proper mock response
+            mock_response = MagicMock()
+            mock_response.content = b'{"response": "ok"}'
+            mock_response.status_code = 200
+            mock_response.headers = {"content-type": "application/json"}
+            mock_instance.post.return_value = mock_response
+            
+            return mock_instance
+
+        with patch("src.oauth_wrapper.httpx.AsyncClient", side_effect=mock_client_init):
+            response = client.post("/messages/?session_id=123", json=test_body)
+            
+            # Verify timeout configuration
+            assert captured_timeout is not None
+            assert captured_timeout.connect == 10.0
+            assert captured_timeout.read == 30.0  # 30 second read timeout for POST
+            assert captured_timeout.write == 10.0
+            assert captured_timeout.pool == 10.0
+
     def test_sse_proxy_headers_forwarding(self, mock_env, client):
         """Test that headers are properly forwarded in SSE proxy"""
         test_headers = {
@@ -190,12 +297,15 @@ class TestOAuthWrapper:
             nonlocal captured_headers
             captured_headers = kwargs.get("headers", {})
             # Return a mock stream context manager
-            mock_stream = AsyncMock()
-            mock_stream.aiter_bytes = AsyncMock()
-            mock_stream.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
-            return AsyncMock(__aenter__=AsyncMock(return_value=mock_stream))
+            mock_stream_ctx = AsyncMock()
+            mock_stream_response = AsyncMock()
+            mock_stream_response.aiter_bytes = AsyncMock()
+            mock_stream_response.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_stream_response)
+            mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+            return mock_stream_ctx
 
-        with patch("src.oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_instance.stream = capture_stream_call
             mock_client_class.return_value.__aenter__.return_value = mock_instance
@@ -208,13 +318,120 @@ class TestOAuthWrapper:
     def test_sse_proxy_httpx_error_handling(self, mock_env, client):
         """Test SSE proxy handles httpx errors gracefully"""
         # When httpx fails inside the generator, FastAPI handles it
-        with patch("src.oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
             # Make the AsyncClient constructor raise an error
             mock_client_class.return_value.__aenter__.side_effect = httpx.ConnectError("Connection failed")
 
             # The error will be caught by FastAPI and return 500
             response = client.get("/sse")
             assert response.status_code == 500
+
+    def test_sse_proxy_timeout_error_handling(self, mock_env, client):
+        """Test SSE proxy handles timeout errors gracefully"""
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+            # Make the AsyncClient constructor raise an error
+            mock_client_class.side_effect = httpx.ReadTimeout("Read timeout")
+            
+            # The error will be caught by FastAPI and return 500
+            response = client.get("/sse")
+            assert response.status_code == 500
+
+    def test_messages_proxy_timeout_error_handling(self, mock_env, client):
+        """Test messages proxy handles timeout errors gracefully"""
+        test_body = {"message": "test"}
+        
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+            # Make the AsyncClient constructor raise an error
+            mock_client_class.side_effect = httpx.ReadTimeout("Read timeout")
+            
+            # The error will be caught by FastAPI and return 500
+            response = client.post("/messages/", json=test_body)
+            assert response.status_code == 500
+
+    def test_sse_streaming_headers(self, mock_env, client):
+        """Test that SSE streaming response has correct headers"""
+        with patch("oauth_wrapper.httpx.AsyncClient") as mock_client_class:
+            mock_instance = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_instance
+            
+            # Create a proper async context manager for stream
+            mock_stream_ctx = AsyncMock()
+            mock_stream_response = AsyncMock()
+            mock_stream_response.aiter_bytes = AsyncMock()
+            mock_stream_response.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
+            mock_stream_ctx.__aenter__.return_value = mock_stream_response
+            mock_stream_ctx.__aexit__.return_value = None
+            
+            # Make stream return the async context manager
+            mock_instance.stream = MagicMock(return_value=mock_stream_ctx)
+            
+            response = client.get("/sse")
+            
+            # Verify SSE-specific headers
+            assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            assert response.headers["cache-control"] == "no-cache"
+            assert response.headers["x-accel-buffering"] == "no"
+            assert response.headers["connection"] == "keep-alive"
+
+    def test_timeout_regression_sse_streaming(self, mock_env, client):
+        """Regression test: Ensure SSE streaming doesn't timeout with infinite read timeout"""
+        captured_timeout = None
+
+        def mock_client_init(*args, **kwargs):
+            nonlocal captured_timeout
+            captured_timeout = kwargs.get('timeout')
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            
+            # Create a proper async context manager for stream
+            mock_stream_ctx = AsyncMock()
+            mock_stream_response = AsyncMock()
+            mock_stream_response.aiter_bytes = AsyncMock()
+            mock_stream_response.aiter_bytes.return_value = self._async_generator([b"data: test\n\n"])
+            mock_stream_ctx.__aenter__.return_value = mock_stream_response
+            mock_stream_ctx.__aexit__.return_value = None
+            
+            # Make stream return the async context manager
+            mock_instance.stream = MagicMock(return_value=mock_stream_ctx)
+            return mock_instance
+
+        with patch("oauth_wrapper.httpx.AsyncClient", side_effect=mock_client_init):
+            response = client.get("/sse")
+            
+            # This is the critical assertion - read timeout MUST be None for SSE
+            # to prevent the original ReadTimeout error
+            assert captured_timeout is not None
+            assert captured_timeout.read is None, "SSE connections must have no read timeout to prevent ReadTimeout errors"
+            assert response.status_code == 200
+
+    def test_timeout_regression_post_requests(self, mock_env, client):
+        """Regression test: Ensure POST requests have adequate timeout (not default 5s)"""
+        captured_timeout = None
+
+        def mock_client_init(*args, **kwargs):
+            nonlocal captured_timeout
+            captured_timeout = kwargs.get('timeout')
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            
+            # Create a proper mock response
+            mock_response = MagicMock()
+            mock_response.content = b'{"result": "success"}'
+            mock_response.status_code = 200
+            mock_response.headers = {"content-type": "application/json"}
+            mock_instance.post.return_value = mock_response
+            
+            return mock_instance
+
+        with patch("oauth_wrapper.httpx.AsyncClient", side_effect=mock_client_init):
+            response = client.post("/sse", json={"test": "data"})
+            
+            # POST requests should have a reasonable read timeout (not default 5s)
+            assert captured_timeout is not None
+            assert captured_timeout.read == 30.0, "POST requests need sufficient read timeout to handle slow responses"
+            assert response.status_code == 200
 
     async def _async_generator(self, items):
         """Helper to create async generator for testing"""
