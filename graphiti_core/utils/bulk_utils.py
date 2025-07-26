@@ -121,6 +121,10 @@ async def add_nodes_and_edges_bulk_tx(
         episode_data = node.model_dump(mode='json')
         episode_data['source'] = node.source.value
         episode_data.pop('labels', None)
+        # FalkorDB properties cannot be nested maps; convert metadata dict to JSON string
+        if isinstance(episode_data.get('metadata'), dict):
+            import json
+            episode_data['metadata'] = json.dumps(episode_data['metadata'], ensure_ascii=False)
         episodes.append(episode_data)
     nodes: list[dict[str, Any]] = []
     for node in entity_nodes:
