@@ -116,15 +116,15 @@ async def add_nodes_and_edges_bulk_tx(
     embedder: EmbedderClient,
     driver: GraphDriver,
 ):
-    episodes = []
+    episodes: list[dict[str, Any]] = []
     for node in episodic_nodes:
-        episode_data = node.model_dump()
+        episode_data = node.model_dump(mode='json')
         episode_data['source'] = node.source.value
-        if isinstance(node.created_at, datetime):
-            episode_data['created_at'] = node.created_at.isoformat()
-        if isinstance(node.valid_at, datetime):
-            episode_data['valid_at'] = node.valid_at.isoformat()
         episode_data.pop('labels', None)
+        # FalkorDB properties cannot be nested maps; convert metadata dict to JSON string
+        if isinstance(episode_data.get('metadata'), dict):
+            import json
+            episode_data['metadata'] = json.dumps(episode_data['metadata'], ensure_ascii=False)
         episodes.append(episode_data)
     nodes: list[dict[str, Any]] = []
     for node in entity_nodes:
