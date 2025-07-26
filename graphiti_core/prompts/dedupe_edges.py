@@ -59,7 +59,10 @@ def edge(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates edges from edge lists.',
+            content='You are a helpful assistant that de-duplicates edges from edge lists. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -90,7 +93,10 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates edges from edge lists.',
+            content='You are a helpful assistant that de-duplicates edges from edge lists. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -119,7 +125,10 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are a helpful assistant that de-duplicates facts from fact lists and determines which existing '
-            'facts are contradicted by the new fact.',
+            'facts are contradicted by the new fact. '
+            'You must respond with valid JSON only. '
+            'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+            'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',

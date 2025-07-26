@@ -62,7 +62,7 @@ class Versions(TypedDict):
 
 
 def query_expansion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an expert at rephrasing questions into queries used in a database retrieval system"""
+    sys_prompt = """You are an expert at rephrasing questions into queries used in a database retrieval system. You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or text outside the JSON structure. Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
     Bob is asking Alice a question, are you able to rephrase the question into a simpler one about Alice in the third person
@@ -78,7 +78,7 @@ def query_expansion(context: dict[str, Any]) -> list[Message]:
 
 
 def qa_prompt(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are Alice and should respond to all questions from the first person perspective of Alice"""
+    sys_prompt = """You are Alice and should respond to all questions from the first person perspective of Alice. You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or text outside the JSON structure. Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
     Your task is to briefly answer the question in the way that you think Alice would answer the question.
@@ -101,7 +101,7 @@ def qa_prompt(context: dict[str, Any]) -> list[Message]:
 
 def eval_prompt(context: dict[str, Any]) -> list[Message]:
     sys_prompt = (
-        """You are a judge that determines if answers to questions match a gold standard answer"""
+        """You are a judge that determines if answers to questions match a gold standard answer. You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or text outside the JSON structure. Do not wrap your response in ```json``` or any other formatting."""
     )
 
     user_prompt = f"""
@@ -125,8 +125,7 @@ def eval_prompt(context: dict[str, Any]) -> list[Message]:
 
 
 def eval_add_episode_results(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are a judge that determines whether a baseline graph building result from a list of messages is better
-        than a candidate graph building result based on the same messages."""
+    sys_prompt = """You are a judge that determines whether a baseline graph building result from a list of messages is better than a candidate graph building result based on the same messages. You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or text outside the JSON structure. Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
     Given the following PREVIOUS MESSAGES and MESSAGE, determine if the BASELINE graph data extracted from the 

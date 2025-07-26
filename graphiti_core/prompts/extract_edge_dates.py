@@ -44,7 +44,10 @@ def v1(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an AI assistant that extracts datetime information for graph edges, focusing only on dates directly related to the establishment or change of the relationship described in the edge fact.',
+            content='You are an AI assistant that extracts datetime information for graph edges, focusing only on dates directly related to the establishment or change of the relationship described in the edge fact. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
