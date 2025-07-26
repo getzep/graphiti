@@ -116,10 +116,16 @@ async def add_nodes_and_edges_bulk_tx(
     embedder: EmbedderClient,
     driver: GraphDriver,
 ):
-    episodes = [dict(episode) for episode in episodic_nodes]
-    for episode in episodes:
-        episode['source'] = str(episode['source'].value)
-        episode.pop('labels', None)
+    episodes = []
+    for node in episodic_nodes:
+        episode_data = node.model_dump()
+        episode_data['source'] = node.source.value
+        if isinstance(node.created_at, datetime):
+            episode_data['created_at'] = node.created_at.isoformat()
+        if isinstance(node.valid_at, datetime):
+            episode_data['valid_at'] = node.valid_at.isoformat()
+        episode_data.pop('labels', None)
+        episodes.append(episode_data)
     nodes: list[dict[str, Any]] = []
     for node in entity_nodes:
         if node.name_embedding is None:
