@@ -19,6 +19,7 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
     "posthog>=3.0.0",
+    "helix-py>=0.2.24",
 ]
 
 [project.urls]

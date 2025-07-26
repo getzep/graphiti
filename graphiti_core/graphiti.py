@@ -239,6 +239,8 @@ class Graphiti:
             return 'neo4j'
         elif 'falkor' in class_name:
             return 'falkordb'
+        elif 'helix' in class_name:
+            return 'helixdb'
         # Embedder providers
         elif 'voyage' in class_name:
             return 'voyage'
