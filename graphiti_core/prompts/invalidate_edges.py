@@ -42,7 +42,10 @@ def v1(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
+            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -74,7 +77,10 @@ def v2(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are an AI assistant that determines which facts contradict each other.',
+            content='You are an AI assistant that determines which facts contradict each other. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',

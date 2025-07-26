@@ -58,7 +58,10 @@ def node(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that determines whether or not a NEW ENTITY is a duplicate of any EXISTING ENTITIES.',
+            content='You are a helpful assistant that determines whether or not a NEW ENTITY is a duplicate of any EXISTING ENTITIES. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -107,8 +110,11 @@ def nodes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates'
-            'of existing entities.',
+            content='You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates '
+            'of existing entities. '
+            'You must respond with valid JSON only. '
+            'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+            'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -172,7 +178,10 @@ def node_list(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
+            content='You are a helpful assistant that de-duplicates nodes from node lists. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',

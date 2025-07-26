@@ -49,7 +49,10 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that combines summaries.',
+            content='You are a helpful assistant that combines summaries. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -69,7 +72,10 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts entity properties from the provided text.',
+            content='You are a helpful assistant that extracts entity properties from the provided text. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -111,7 +117,10 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that describes provided contents in a single sentence.',
+            content='You are a helpful assistant that describes provided contents in a single sentence. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',

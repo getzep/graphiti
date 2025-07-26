@@ -62,8 +62,11 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are an expert fact extractor that extracts fact triples from text. '
-            '1. Extracted fact triples should also be extracted with relevant date information.'
-            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
+            '1. Extracted fact triples should also be extracted with relevant date information. '
+            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time. '
+            'You must respond with valid JSON only. '
+            'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+            'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
@@ -116,7 +119,7 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 # DATETIME RULES
 
-- Use ISO 8601 with “Z” suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
+- Use ISO 8601 with "Z" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
 - If the fact is ongoing (present tense), set `valid_at` to REFERENCE_TIME.
 - If a change/termination is expressed, set `invalid_at` to the relevant timestamp.
 - Leave both fields `null` if no explicit or resolvable time is stated.
@@ -128,7 +131,7 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 
 def reflexion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that determines which facts have not been extracted from the given context"""
+    sys_prompt = """You are an AI assistant that determines which facts have not been extracted from the given context. You must respond with valid JSON only. Do not include any markdown formatting, code blocks, or text outside the JSON structure. Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
@@ -159,7 +162,10 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts fact properties from the provided text.',
+            content='You are a helpful assistant that extracts fact properties from the provided text. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',

@@ -72,7 +72,10 @@ class Versions(TypedDict):
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that extracts entity nodes from conversational messages. 
-    Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation."""
+    Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation. 
+    You must respond with valid JSON only. 
+    Do not include any markdown formatting, code blocks, or text outside the JSON structure. 
+    Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
@@ -121,7 +124,10 @@ reference entities.
 
 def extract_json(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that extracts entity nodes from JSON. 
-    Your primary task is to extract and classify relevant entities from JSON files"""
+    Your primary task is to extract and classify relevant entities from JSON files. 
+    You must respond with valid JSON only. 
+    Do not include any markdown formatting, code blocks, or text outside the JSON structure. 
+    Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
 <SOURCE DESCRIPTION>:
@@ -152,7 +158,10 @@ Guidelines:
 
 def extract_text(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that extracts entity nodes from text. 
-    Your primary task is to extract and classify the speaker and other significant entities mentioned in the provided text."""
+    Your primary task is to extract and classify the speaker and other significant entities mentioned in the provided text. 
+    You must respond with valid JSON only. 
+    Do not include any markdown formatting, code blocks, or text outside the JSON structure. 
+    Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
 <TEXT>
@@ -181,7 +190,10 @@ Guidelines:
 
 
 def reflexion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context"""
+    sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context. 
+    You must respond with valid JSON only. 
+    Do not include any markdown formatting, code blocks, or text outside the JSON structure. 
+    Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
@@ -205,7 +217,10 @@ extracted.
 
 
 def classify_nodes(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that classifies entity nodes given the context from which they were extracted"""
+    sys_prompt = """You are an AI assistant that classifies entity nodes given the context from which they were extracted. 
+    You must respond with valid JSON only. 
+    Do not include any markdown formatting, code blocks, or text outside the JSON structure. 
+    Do not wrap your response in ```json``` or any other formatting."""
 
     user_prompt = f"""
     <PREVIOUS MESSAGES>
@@ -240,7 +255,10 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts entity properties from the provided text.',
+            content='You are a helpful assistant that extracts entity properties from the provided text. '
+                   'You must respond with valid JSON only. '
+                   'Do not include any markdown formatting, code blocks, or text outside the JSON structure. '
+                   'Do not wrap your response in ```json``` or any other formatting.',
         ),
         Message(
             role='user',
