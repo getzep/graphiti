@@ -15,6 +15,7 @@ from .client import EmbedderClient, EmbedderConfig
 DEFAULT_EMBEDDING_MODEL = "jina-embeddings-v4"
 DEFAULT_BASE_URL = "https://api.jina.ai"
 DEFAULT_TASK = "text-matching"
+DEFAULT_TIMEOUT = 60.0
 
 
 class JinaAIEmbedderConfig(EmbedderConfig):
@@ -22,6 +23,7 @@ class JinaAIEmbedderConfig(EmbedderConfig):
     api_key: str | None = Field(default=os.getenv("JINAAI_API_KEY"))
     base_url: str = Field(default=DEFAULT_BASE_URL)
     task: str = Field(default=DEFAULT_TASK)
+    timeout: float = Field(default=DEFAULT_TIMEOUT)
 
 
 class JinaAIEmbedder(EmbedderClient):
@@ -34,7 +36,11 @@ class JinaAIEmbedder(EmbedderClient):
             config = JinaAIEmbedderConfig()
         self.config = config
         if client is None:
-            self.client = httpx.AsyncClient(base_url=self.config.base_url, headers={"Accept": "application/json"})
+            self.client = httpx.AsyncClient(
+                base_url=self.config.base_url,
+                headers={"Accept": "application/json"},
+                timeout=self.config.timeout,
+            )
         else:
             self.client = client
 

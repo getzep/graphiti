@@ -116,6 +116,7 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 5. The `fact_text` should quote or closely paraphrase the original source sentence(s).
 6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
 7. Do **not** hallucinate or infer temporal bounds from unrelated events.
+8. The `source_entity_id` and `target_entity_id` MUST be valid indices within the ENTITIES list (0 ≤ id < len(ENTITIES)). If you cannot map an entity to a valid index, **omit that fact entirely**.
 
 # DATETIME RULES
 
