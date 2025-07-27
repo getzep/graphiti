@@ -30,6 +30,7 @@ from graphiti_core.edges import EntityEdge, EpisodicEdge
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
+    get_default_group_id,
     semaphore_gather,
     validate_excluded_entity_types,
     validate_group_id,
@@ -112,7 +113,7 @@ class Graphiti:
         """
         Initialize a Graphiti instance.
 
-        This constructor sets up a connection to the Neo4j database and initializes
+        This constructor sets up a connection to a graph database and initializes
         the LLM client for natural language processing tasks.
 
         Parameters
@@ -147,11 +148,11 @@ class Graphiti:
 
         Notes
         -----
-        This method establishes a connection to the Neo4j database using the provided
+        This method establishes a connection to a graph database (Neo4j by default) using the provided
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
-        The default database name is set to 'neo4j'. If a different database name
+        The default database name is defined during the driver’s construction. If a different database name
         is required, it should be specified in the URI or set separately after
         initialization.
 
@@ -352,7 +353,7 @@ class Graphiti:
         source_description: str,
         reference_time: datetime,
         source: EpisodeType = EpisodeType.message,
-        group_id: str = '',
+        group_id: str | None = None,
         uuid: str | None = None,
         update_communities: bool = False,
         entity_types: dict[str, BaseModel] | None = None,
@@ -420,7 +421,10 @@ class Graphiti:
             start = time()
             now = utc_now()
 
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_entity_types(entity_types)
+
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
 
@@ -537,7 +541,7 @@ class Graphiti:
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
-        group_id: str = '',
+        group_id: str | None = None,
         entity_types: dict[str, BaseModel] | None = None,
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, BaseModel] | None = None,
@@ -583,6 +587,8 @@ class Graphiti:
             start = time()
             now = utc_now()
 
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_group_id(group_id)
 
             # Create default edge type map
@@ -640,6 +646,7 @@ class Graphiti:
                 self.clients, extracted_nodes_bulk, episode_context, entity_types
             )
 
+            # Create Episodic Edges
             episodic_edges: list[EpisodicEdge] = []
             for episode_uuid, nodes in nodes_by_episode.items():
                 episodic_edges.extend(build_episodic_edges(nodes, episode_uuid, now))
@@ -695,18 +702,112 @@ class Graphiti:
 
             hydrated_nodes = [node for nodes in new_hydrated_nodes for node in nodes]
 
-            # TODO: Resolve nodes and edges against the existing graph
-            edges_by_uuid: dict[str, EntityEdge] = {
-                edge.uuid: edge for edges in edges_by_episode.values() for edge in edges
-            }
+            # Update nodes_by_uuid map with the hydrated nodes
+            for hydrated_node in hydrated_nodes:
+                nodes_by_uuid[hydrated_node.uuid] = hydrated_node
+
+            # Resolve nodes and edges against the existing graph
+            nodes_by_episode_unique: dict[str, list[EntityNode]] = {}
+            nodes_uuid_set: set[str] = set()
+            for episode, _ in episode_context:
+                nodes_by_episode_unique[episode.uuid] = []
+                nodes = [nodes_by_uuid[node.uuid] for node in nodes_by_episode[episode.uuid]]
+                for node in nodes:
+                    if node.uuid not in nodes_uuid_set:
+                        nodes_by_episode_unique[episode.uuid].append(node)
+                        nodes_uuid_set.add(node.uuid)
+
+            node_results = await semaphore_gather(
+                *[
+                    resolve_extracted_nodes(
+                        self.clients,
+                        nodes_by_episode_unique[episode.uuid],
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
+                    for episode, previous_episodes in episode_context
+                ]
+            )
+
+            resolved_nodes: list[EntityNode] = []
+            uuid_map: dict[str, str] = {}
+            node_duplicates: list[tuple[EntityNode, EntityNode]] = []
+            for result in node_results:
+                resolved_nodes.extend(result[0])
+                uuid_map.update(result[1])
+                node_duplicates.extend(result[2])
+
+            # Update nodes_by_uuid map with the resolved nodes
+            for resolved_node in resolved_nodes:
+                nodes_by_uuid[resolved_node.uuid] = resolved_node
+
+            # update nodes_by_episode_unique mapping
+            for episode_uuid, nodes in nodes_by_episode_unique.items():
+                updated_nodes: list[EntityNode] = []
+                for node in nodes:
+                    updated_node_uuid = uuid_map.get(node.uuid, node.uuid)
+                    updated_node = nodes_by_uuid[updated_node_uuid]
+                    updated_nodes.append(updated_node)
+
+                nodes_by_episode_unique[episode_uuid] = updated_nodes
+
+            hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
+                *[
+                    extract_attributes_from_nodes(
+                        self.clients,
+                        nodes_by_episode_unique[episode.uuid],
+                        episode,
+                        previous_episodes,
+                        entity_types,
+                    )
+                    for episode, previous_episodes in episode_context
+                ]
+            )
+
+            final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
+
+            edges_by_episode_unique: dict[str, list[EntityEdge]] = {}
+            edges_uuid_set: set[str] = set()
+            for episode_uuid, edges in edges_by_episode.items():
+                edges_with_updated_pointers = resolve_edge_pointers(edges, uuid_map)
+                edges_by_episode_unique[episode_uuid] = []
+
+                for edge in edges_with_updated_pointers:
+                    if edge.uuid not in edges_uuid_set:
+                        edges_by_episode_unique[episode_uuid].append(edge)
+                        edges_uuid_set.add(edge.uuid)
+
+            edge_results = await semaphore_gather(
+                *[
+                    resolve_extracted_edges(
+                        self.clients,
+                        edges_by_episode_unique[episode.uuid],
+                        episode,
+                        hydrated_nodes,
+                        edge_types or {},
+                        edge_type_map or edge_type_map_default,
+                    )
+                    for episode in episodes
+                ]
+            )
+
+            resolved_edges: list[EntityEdge] = []
+            invalidated_edges: list[EntityEdge] = []
+            for result in edge_results:
+                resolved_edges.extend(result[0])
+                invalidated_edges.extend(result[1])
+
+            # Resolved pointers for episodic edges
+            resolved_episodic_edges = resolve_edge_pointers(episodic_edges, uuid_map)
 
             # save data to KG
             await add_nodes_and_edges_bulk(
                 self.driver,
                 episodes,
-                episodic_edges,
-                hydrated_nodes,
-                list(edges_by_uuid.values()),
+                resolved_episodic_edges,
+                final_hydrated_nodes,
+                resolved_edges + invalidated_edges,
                 self.embedder,
             )
 
@@ -858,7 +959,7 @@ class Graphiti:
 
         nodes = await get_mentioned_nodes(self.driver, episodes)
 
-        return SearchResults(edges=edges, nodes=nodes, episodes=[], communities=[])
+        return SearchResults(edges=edges, nodes=nodes)
 
     async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
         if source_node.name_embedding is None:

@@ -50,8 +50,7 @@ ENTITY_EDGE_RETURN: LiteralString = """
             e.expired_at AS expired_at,
             e.valid_at AS valid_at,
             e.invalid_at AS invalid_at,
-            properties(e) AS attributes
-            """
+            properties(e) AS attributes"""
 
 
 class Edge(BaseModel, ABC):
@@ -303,21 +302,34 @@ class EntityEdge(Edge):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        with_embeddings: bool = False,
     ):
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+        with_embeddings_query: LiteralString = (
+            """,
+                e.fact_embedding AS fact_embedding
+                """
+            if with_embeddings
+            else ''
+        )
 
-        records, _, _ = await driver.execute_query(
+        query: LiteralString = (
             """
-        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-        WHERE e.group_id IN $group_ids
-        """
+            MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+            WHERE e.group_id IN $group_ids
+            """
             + cursor_query
             + ENTITY_EDGE_RETURN
+            + with_embeddings_query
             + """
         ORDER BY e.uuid DESC 
         """
-            + limit_query,
+            + limit_query
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
             group_ids=group_ids,
             uuid=uuid_cursor,
             limit=limit,
@@ -334,8 +346,8 @@ class EntityEdge(Edge):
     async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
         query: LiteralString = (
             """
-                                                        MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
-                                                        """
+                                                                    MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
+                                                                    """
             + ENTITY_EDGE_RETURN
         )
         records, _, _ = await driver.execute_query(query, node_uuid=node_uuid, routing_='r')
@@ -456,6 +468,7 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         source_node_uuid=record['source_node_uuid'],
         target_node_uuid=record['target_node_uuid'],
         fact=record['fact'],
+        fact_embedding=record.get('fact_embedding'),
         name=record['name'],
         group_id=record['group_id'],
         episodes=record['episodes'],

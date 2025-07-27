@@ -274,8 +274,14 @@ async def resolve_extracted_edges(
     # Determine which edge types are relevant for each edge
     edge_types_lst: list[dict[str, BaseModel]] = []
     for extracted_edge in extracted_edges:
-        source_node_labels = uuid_entity_map[extracted_edge.source_node_uuid].labels + ['Entity']
-        target_node_labels = uuid_entity_map[extracted_edge.target_node_uuid].labels + ['Entity']
+        source_node = uuid_entity_map.get(extracted_edge.source_node_uuid)
+        target_node = uuid_entity_map.get(extracted_edge.target_node_uuid)
+        source_node_labels = (
+            source_node.labels + ['Entity'] if source_node is not None else ['Entity']
+        )
+        target_node_labels = (
+            target_node.labels + ['Entity'] if target_node is not None else ['Entity']
+        )
         label_tuples = [
             (source_label, target_label)
             for source_label in source_node_labels
@@ -444,14 +450,14 @@ async def resolve_extracted_edge(
         }
 
         edge_model = edge_types.get(fact_type)
+        if edge_model is not None and len(edge_model.model_fields) != 0:
+            edge_attributes_response = await llm_client.generate_response(
+                prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+                response_model=edge_model,  # type: ignore
+                model_size=ModelSize.small,
+            )
 
-        edge_attributes_response = await llm_client.generate_response(
-            prompt_library.extract_edges.extract_attributes(edge_attributes_context),
-            response_model=edge_model,  # type: ignore
-            model_size=ModelSize.small,
-        )
-
-        resolved_edge.attributes = edge_attributes_response
+            resolved_edge.attributes = edge_attributes_response
 
     end = time()
     logger.debug(

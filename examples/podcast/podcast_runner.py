@@ -78,7 +78,7 @@ async def main(use_bulk: bool = False):
     group_id = str(uuid4())
 
     raw_episodes: list[RawEpisode] = []
-    for i, message in enumerate(messages[3:7]):
+    for i, message in enumerate(messages[3:14]):
         raw_episodes.append(
             RawEpisode(
                 name=f'Message {i}',
@@ -94,7 +94,7 @@ async def main(use_bulk: bool = False):
             group_id=group_id,
             entity_types={'Person': Person},
             edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
-            edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
+            edge_type_map={('Person', 'Entity'): ['IS_PRESIDENT_OF']},
         )
     else:
         for i, message in enumerate(messages[3:14]):
