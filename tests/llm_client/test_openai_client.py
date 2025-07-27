@@ -6,61 +6,6 @@ from unittest.mock import patch
 
 from graphiti_core.llm_client.config import DEFAULT_MAX_TOKENS, LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
-from graphiti_core.llm_client.utils import resolve_max_tokens
-
-
-class TestResolveMaxTokensUtility:
-    """Tests for the resolve_max_tokens utility function."""
-
-    def test_requested_max_tokens_takes_precedence(self):
-        """Test that explicit max_tokens parameter has highest precedence."""
-        result = resolve_max_tokens(
-            requested_max_tokens=5000,
-            config_max_tokens=3000,
-            instance_max_tokens=4000,
-            default_max_tokens=8192,
-        )
-        assert result == 5000
-
-    def test_config_max_tokens_second_precedence(self):
-        """Test that config max_tokens takes precedence over instance and default."""
-        result = resolve_max_tokens(
-            requested_max_tokens=None,
-            config_max_tokens=3000,
-            instance_max_tokens=4000,
-            default_max_tokens=8192,
-        )
-        assert result == 3000
-
-    def test_instance_max_tokens_third_precedence(self):
-        """Test that instance max_tokens is used when config is default."""
-        result = resolve_max_tokens(
-            requested_max_tokens=None,
-            config_max_tokens=8192,  # Same as default, so ignored
-            instance_max_tokens=4000,
-            default_max_tokens=8192,
-        )
-        assert result == 4000
-
-    def test_config_max_tokens_ignored_when_default(self):
-        """Test that config max_tokens is ignored when it equals default."""
-        result = resolve_max_tokens(
-            requested_max_tokens=None,
-            config_max_tokens=8192,  # Same as default
-            instance_max_tokens=None,
-            default_max_tokens=8192,
-        )
-        assert result == 8192
-
-    def test_default_fallback(self):
-        """Test that default is used when all other values are None."""
-        result = resolve_max_tokens(
-            requested_max_tokens=None,
-            instance_max_tokens=None,
-            config_max_tokens=None,
-            default_max_tokens=8192,
-        )
-        assert result == 8192
 
 
 class TestOpenAIClientInitialization:
