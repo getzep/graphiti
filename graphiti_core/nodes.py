@@ -19,8 +19,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from time import time
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
+import json
 
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
@@ -92,6 +93,9 @@ class Node(BaseModel, ABC):
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
 
+    helix_to_uuid: ClassVar[dict[str, str]] = {}
+    uuid_to_helix: ClassVar[dict[str, str]] = {}
+
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
 
@@ -118,6 +122,14 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str):
+        if driver.provider == 'helixdb':
+            result = await driver.execute_query(
+                "",
+                query="deleteGroup",
+                group_id=group_id,
+            )
+            return 'SUCCESS'
+        
         await driver.execute_query(
             """
         MATCH (n:Entity|Episodic|Community {group_id: $group_id})
@@ -148,6 +160,52 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            stored_episode = None
+            if self.uuid in Node.uuid_to_helix:
+                stored_episode = await driver.execute_query(
+                    "",
+                    query="getEpisode",
+                    episode_id=Node.uuid_to_helix.get(self.uuid),
+                )
+                stored_episode = stored_episode.get('episode', None)
+
+            if stored_episode is not None:
+                query = "updateEpisode"
+                helix_id = Node.uuid_to_helix.get(self.uuid)
+            else:
+                query = "createEpisode"
+                helix_id = self.uuid
+            
+            result = await driver.execute_query(
+                "",
+                query=query,
+                episode_id=helix_id,
+                name=self.name,
+                group_id=self.group_id,
+                source_description=self.source_description,
+                content=self.content,
+                entity_edges=self.entity_edges,
+                created_at=self.created_at,
+                valid_at=self.valid_at,
+                source=self.source.value,
+                labels=self.labels,
+            )
+
+            if query == "createEpisode":
+                helix_id = result.get('episode', {}).get('id', None)
+                if helix_id is None:
+                    raise ValueError('Failed to create episode node')
+                Node.uuid_to_helix[self.uuid] = helix_id
+                Node.helix_to_uuid[helix_id] = self.uuid
+
+            if query == "updateEpisode":
+                logger.debug(f'Updated Episode Node: {self.uuid}')
+            else:
+                logger.debug(f'Created Episode Node to Graph: {self.uuid}')
+
+            return {'uuid': self.uuid}
+        
         result = await driver.execute_query(
             EPISODIC_NODE_SAVE,
             uuid=self.uuid,
@@ -165,8 +223,56 @@ class EpisodicNode(Node):
 
         return result
 
+    async def delete(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            if self.uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(self.uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="deleteEpisode",
+                episode_id=Node.uuid_to_helix.get(self.uuid),
+            )
+
+            helix_id = Node.uuid_to_helix.get(self.uuid)
+
+            Node.uuid_to_helix.pop(self.uuid, None)
+            if helix_id is not None:
+                Node.helix_to_uuid.pop(helix_id, None)
+
+            logger.debug(f'Deleted Episode Node: {self.uuid}')
+
+            return result
+            
+        return await super().delete(driver)
+
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        if driver.provider == 'helixdb':
+            if uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="getEpisode",
+                episode_id=Node.uuid_to_helix.get(uuid),
+            )
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            result = result.get('episode', None)
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            result['uuid'] = uuid
+            helix_id = result.get('id')
+
+            Node.helix_to_uuid[helix_id] = uuid
+
+            return get_episodic_node_from_record(result)
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic {uuid: $uuid})
@@ -193,6 +299,35 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        if driver.provider == 'helixdb':
+            results = []
+            for uuid in uuids:
+                if uuid not in Node.uuid_to_helix:
+                    continue
+
+                result = await driver.execute_query(
+                    "",
+                    query="getEpisode",
+                    episode_id=Node.uuid_to_helix.get(uuid),
+                )
+
+                if result is None:
+                    continue
+                
+                result = result.get('episode', None)
+
+                if result is None:
+                    continue
+
+                result['uuid'] = uuid
+                results.append(result)
+
+                helix_id = result.get('id')
+                Node.helix_to_uuid[helix_id] = uuid
+
+            episodes = [get_episodic_node_from_record(result) for result in results]
+            return episodes
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic) WHERE e.uuid IN $uuids
@@ -223,6 +358,41 @@ class EpisodicNode(Node):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ):
+        if driver.provider == 'helixdb':
+            query = "getEpisodesbyGroup"
+            if limit is not None:
+                query = "getEpisodesbyGroupLimit"
+
+            results = []
+            for group_id in group_ids:
+                result = await driver.execute_query(
+                    "",
+                    query=query,
+                    limit=limit,
+                    group_id=group_id,
+                )
+                result = result.get('episodes', [])
+
+                for episode in result:
+                    helix_id = episode.get('id', None)
+                    if helix_id is None or helix_id not in Node.helix_to_uuid:
+                        continue
+
+                    episode['uuid'] = Node.helix_to_uuid.get(helix_id)
+
+                    Node.uuid_to_helix[episode['uuid']] = helix_id
+
+                    results.append(episode)
+
+            if uuid_cursor is not None:
+                results = [episode for episode in results if episode.get('uuid', '') < uuid_cursor]
+
+            results.sort(key=lambda x: x.get('uuid', ''), reverse=True)
+
+            episodes = [get_episodic_node_from_record(record) for record in results]
+
+            return episodes
+
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
@@ -257,6 +427,34 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_entity_node_uuid(cls, driver: GraphDriver, entity_node_uuid: str):
+        if driver.provider == 'helixdb':
+            if entity_node_uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(entity_node_uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="getEpisodebyEntity",
+                entity_id=Node.uuid_to_helix.get(entity_node_uuid),
+            )
+
+            result = result.get('episodes', [])
+
+            episodes = []
+            for episode in result:
+                helix_id = episode.get('id', None)
+                if helix_id is None or helix_id not in Node.helix_to_uuid:
+                    continue
+
+                episode['uuid'] = Node.helix_to_uuid.get(helix_id)
+
+                if episode['uuid'] not in Node.uuid_to_helix:
+                    Node.uuid_to_helix[episode['uuid']] = helix_id
+
+                episodes.append(episode)
+
+            episodes = [get_episodic_node_from_record(record) for record in episodes]
+            return episodes
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
@@ -297,6 +495,18 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            if self.uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(self.uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="loadEntityEmbedding",
+                entity_id=Node.uuid_to_helix.get(self.uuid),
+            )
+            self.name_embedding = result.get('embedding', None)[0].get('name_embedding', None)
+            return
+
         query: LiteralString = """
             MATCH (n:Entity {uuid: $uuid})
             RETURN n.name_embedding AS name_embedding
@@ -320,6 +530,50 @@ class EntityNode(Node):
 
         entity_data.update(self.attributes or {})
 
+        if driver.provider == 'helixdb':
+            stored_entity = None
+            if self.uuid in Node.uuid_to_helix:
+                stored_entity = await driver.execute_query(
+                    "",
+                    query="getEntity",
+                    entity_id=Node.uuid_to_helix.get(self.uuid),
+                )
+                stored_entity = stored_entity.get('entity', None)
+
+            if stored_entity is not None:
+                query = "updateEntity"
+                helix_id = Node.uuid_to_helix.get(self.uuid)
+            else:
+                query = "createEntity"
+                helix_id = self.uuid
+
+            result = await driver.execute_query(
+                "",
+                query=query,
+                entity_id=helix_id,
+                name=entity_data['name'],
+                name_embedding=entity_data['name_embedding'],
+                group_id=entity_data['group_id'],
+                summary=entity_data['summary'],
+                created_at=entity_data['created_at'],
+                labels=self.labels,
+                attributes=json.dumps(self.attributes),
+            )
+
+            if query == 'createEntity':
+                helix_id = result.get('entity', {}).get('id', None)
+                if helix_id is None:
+                    raise ValueError('Failed to create entity node')
+                Node.uuid_to_helix[self.uuid] = helix_id
+                Node.helix_to_uuid[helix_id] = self.uuid
+
+            if query == 'updateEntity':
+                logger.debug(f'Updated Entity Node: {self.uuid}')
+            else:
+                logger.debug(f'Created Entity Node to Graph: {self.uuid}')
+
+            return {'uuid': result.get('entity', {}).get('id', None)}
+
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
             labels=self.labels + ['Entity'],
@@ -330,8 +584,65 @@ class EntityNode(Node):
 
         return result
 
+    async def delete(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            if self.uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(self.uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="deleteEntity",
+                entity_id=Node.uuid_to_helix.get(self.uuid),
+            )
+
+            helix_id = Node.uuid_to_helix.get(self.uuid)
+
+            Node.uuid_to_helix.pop(self.uuid, None)
+            if helix_id is not None:
+                Node.helix_to_uuid.pop(helix_id, None)
+
+            logger.debug(f'Deleted Entity Node: {self.uuid}')
+
+            return result
+        else:
+            return await super().delete(driver)
+
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        if driver.provider == 'helixdb':
+            if uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="getEntity",
+                entity_id=Node.uuid_to_helix.get(uuid),
+            )
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            embedding = await driver.execute_query(
+                "",
+                query="loadEntityEmbedding",
+                entity_id=Node.uuid_to_helix.get(uuid),
+            )
+            embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+            result = result.get('entity', None)
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            result['uuid'] = uuid
+            result['name_embedding'] = embedding
+            result['attributes'] = json.loads(result.get('attributes', '{}'))
+            helix_id = result.get('id')
+
+            Node.helix_to_uuid[helix_id] = uuid
+
+            return get_entity_node_from_record(result)
+
         query = (
             """
                                                                                 MATCH (n:Entity {uuid: $uuid})
@@ -353,6 +664,45 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        if driver.provider == 'helixdb':
+            results = []
+            for uuid in uuids:
+                if uuid not in Node.uuid_to_helix:
+                    continue
+
+                result = await driver.execute_query(
+                    "",
+                    query="getEntity",
+                    entity_id=Node.uuid_to_helix.get(uuid),
+                )
+
+                if result is None:
+                    continue
+
+                embedding = await driver.execute_query(
+                    "",
+                    query="loadEntityEmbedding",
+                    entity_id=Node.uuid_to_helix.get(uuid),
+                )
+                embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+                result = result.get('entity', None)
+
+                if result is None:
+                    continue
+
+                result['uuid'] = uuid
+                result['name_embedding'] = embedding
+                result['attributes'] = json.loads(result.get('attributes', '{}'))
+                results.append(result)
+
+                helix_id = result.get('id')
+                Node.helix_to_uuid[helix_id] = uuid
+
+            nodes = [get_entity_node_from_record(result) for result in results]
+
+            return nodes
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Entity) WHERE n.uuid IN $uuids
@@ -375,6 +725,50 @@ class EntityNode(Node):
         uuid_cursor: str | None = None,
         with_embeddings: bool = False,
     ):
+        if driver.provider == 'helixdb':
+            query = "getEntitiesbyGroup"
+            if limit is not None:
+                query = "getEntitiesbyGroupLimit"
+            
+            results = []
+            for group_id in group_ids:
+                result = await driver.execute_query(
+                    "",
+                    query=query,
+                    limit=limit,
+                    group_id=group_id,
+                )
+                result = result.get('entities', [])
+                for entity in result:
+                    helix_id = entity.get('id', None)
+                    if helix_id is None or helix_id not in Node.helix_to_uuid:
+                        continue
+
+                    embedding = await driver.execute_query(
+                        "",
+                        query="loadEntityEmbedding",
+                        entity_id=helix_id,
+                    )
+                    embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+                    entity['uuid'] = Node.helix_to_uuid.get(helix_id)
+                    entity['attributes'] = json.loads(entity.get('attributes', '{}'))
+                    entity['name_embedding'] = embedding
+
+                    if entity['uuid'] not in Node.uuid_to_helix:
+                        Node.uuid_to_helix[entity['uuid']] = helix_id
+
+                    results.append(entity)
+
+            if uuid_cursor is not None:
+                results = [entity for entity in results if entity.get('uuid', '') < uuid_cursor]
+
+            results.sort(key=lambda x: x.get('uuid', ''), reverse=True)
+
+            nodes = [get_entity_node_from_record(record) for record in results]
+
+            return nodes
+
         cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
         with_embeddings_query: LiteralString = (
@@ -412,6 +806,49 @@ class CommunityNode(Node):
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            stored_community = None
+            if self.uuid in Node.uuid_to_helix:
+                stored_community = await driver.execute_query(
+                    "",
+                    query="getCommunity",
+                    community_id=Node.uuid_to_helix.get(self.uuid),
+                )
+                stored_community = stored_community.get('community', None)
+
+            if stored_community is not None:
+                query = "updateCommunity"
+                helix_id = Node.uuid_to_helix.get(self.uuid)
+            else:
+                query = "createCommunity"
+                helix_id = self.uuid
+            
+            result = await driver.execute_query(
+                "",
+                query=query,
+                community_id=helix_id,
+                name=self.name,
+                group_id=self.group_id,
+                summary=self.summary,
+                name_embedding=self.name_embedding,
+                created_at=self.created_at,
+                labels=self.labels,
+            )
+
+            if query == 'createCommunity':
+                helix_id = result.get('community', {}).get('id', None)
+                if helix_id is None:
+                    raise ValueError('Failed to create community node')
+                Node.uuid_to_helix[self.uuid] = helix_id
+                Node.helix_to_uuid[helix_id] = self.uuid
+            
+            if query == 'updateCommunity':
+                logger.debug(f'Updated Community Node: {self.uuid}')
+            else:
+                logger.debug(f'Created Community Node to Graph: {self.uuid}')
+
+            return {'uuid': result.get('community', {}).get('id', None)}
+
         result = await driver.execute_query(
             COMMUNITY_NODE_SAVE,
             uuid=self.uuid,
@@ -426,6 +863,29 @@ class CommunityNode(Node):
 
         return result
 
+    async def delete(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            if self.uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(self.uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="deleteCommunity",
+                community_id=Node.uuid_to_helix.get(self.uuid),
+            )
+
+            helix_id = Node.uuid_to_helix.get(self.uuid)
+
+            Node.uuid_to_helix.pop(self.uuid, None)
+            if helix_id is not None:
+                Node.helix_to_uuid.pop(helix_id, None)
+
+            logger.debug(f'Deleted Community Node: {self.uuid}')
+
+            return result
+        else:
+            return await super().delete(driver)
+
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
@@ -436,6 +896,19 @@ class CommunityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
+        if driver.provider == 'helixdb':
+            if self.uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(self.uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="loadCommunityEmbedding",
+                community_id=Node.uuid_to_helix.get(self.uuid),
+            )
+
+            self.name_embedding = result.get('embedding', None)[0].get('name_embedding', None)
+            return
+
         query: LiteralString = """
             MATCH (c:Community {uuid: $uuid})
             RETURN c.name_embedding AS name_embedding
@@ -449,6 +922,39 @@ class CommunityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        if driver.provider == 'helixdb':
+            if uuid not in Node.uuid_to_helix:
+                raise NodeNotFoundError(uuid)
+
+            result = await driver.execute_query(
+                "",
+                query="getCommunity",
+                community_id=Node.uuid_to_helix.get(uuid),
+            )
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            embedding = await driver.execute_query(
+                "",
+                query="loadCommunityEmbedding",
+                community_id=Node.uuid_to_helix.get(uuid),
+            )
+            embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+            result = result.get('community', None)
+
+            if result is None:
+                raise NodeNotFoundError(uuid)
+
+            result['uuid'] = uuid
+            result['name_embedding'] = embedding
+            helix_id = result.get('id')
+
+            Node.helix_to_uuid[helix_id] = uuid
+
+            return get_community_node_from_record(result)
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community {uuid: $uuid})
@@ -472,6 +978,44 @@ class CommunityNode(Node):
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        if driver.provider == 'helixdb':
+            results = []
+            for uuid in uuids:
+                if uuid not in Node.uuid_to_helix:
+                    continue
+
+                result = await driver.execute_query(
+                    "",
+                    query="getCommunity",
+                    community_id=Node.uuid_to_helix.get(uuid),
+                )
+
+                if result is None:
+                    continue
+
+                embedding = await driver.execute_query(
+                    "",
+                    query="loadCommunityEmbedding",
+                    community_id=Node.uuid_to_helix.get(uuid),
+                )
+                embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+                result = result.get('community', None)
+
+                if result is None:
+                    continue
+
+                result['uuid'] = uuid
+                result['name_embedding'] = embedding
+                results.append(result)
+
+                helix_id = result.get('id')
+                Node.helix_to_uuid[helix_id] = uuid
+
+            nodes = [get_community_node_from_record(result) for result in results]
+
+            return nodes
+
         records, _, _ = await driver.execute_query(
             """
         MATCH (n:Community) WHERE n.uuid IN $uuids
@@ -498,6 +1042,49 @@ class CommunityNode(Node):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ):
+        if driver.provider == 'helixdb':
+            query = "getCommunitiesbyGroup"
+            if limit is not None:
+                query = "getCommunitiesbyGroupLimit"
+            
+            results = []
+            for group_id in group_ids:
+                result = await driver.execute_query(
+                    "",
+                    query=query,
+                    limit=limit,
+                    group_id=group_id,
+                )
+                result = result.get('communities', [])
+                for community in result:
+                    helix_id = community.get('id', None)
+                    if helix_id is None or helix_id not in Node.helix_to_uuid:
+                        continue
+
+                    embedding = await driver.execute_query(
+                        "",
+                        query="loadCommunityEmbedding",
+                        community_id=helix_id,
+                    )
+                    embedding = embedding.get('embedding', None)[0].get('name_embedding', None)
+
+                    community['uuid'] = Node.helix_to_uuid.get(helix_id)
+                    community['name_embedding'] = embedding
+
+                    if community['uuid'] not in Node.uuid_to_helix:
+                        Node.uuid_to_helix[community['uuid']] = helix_id
+
+                    results.append(community)
+
+            if uuid_cursor is not None:
+                results = [community for community in results if community.get('uuid', '') < uuid_cursor]
+
+            results.sort(key=lambda x: x.get('uuid', ''), reverse=True)
+
+            communities = [get_community_node_from_record(record) for record in results]
+
+            return communities
+
         cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 

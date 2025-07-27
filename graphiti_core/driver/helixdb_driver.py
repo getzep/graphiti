@@ -28,6 +28,16 @@ class HelixDriverSession(GraphDriverSession):
         # Directly await the provided async function with `self` as the transaction/session
         return await func(self, *args, **kwargs)
 
+    async def _helix_query(self, query: str, params: dict[str, Any]) -> dict[str, Any]:
+        result = self.client.query(query, params)  # type: ignore[reportUnknownArgumentType]
+        if isinstance(result, list):
+            if len(result) == 1:
+                result = result[0]
+            else:
+                response: dict[str, Any] = {str(i):v for i, v in enumerate(result)}
+                return response
+        return result
+
     async def run(self, query: str | list, **kwargs: Any) -> Any:
         # HelixDB does not support argument for Label Set, so it's converted into an array of queries
         queries: dict[str, list[dict[str, Any]]] = {}
@@ -54,7 +64,7 @@ class HelixDriverSession(GraphDriverSession):
                     queries[endpoint].append(filtered_params)
 
             for endpoint, params in queries.items():
-                await self.client.query(endpoint, params)  # type: ignore[reportUnknownArgumentType]
+                await self._helix_query(endpoint, params)  # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
@@ -63,7 +73,7 @@ class HelixDriverSession(GraphDriverSession):
             if 'query' not in params:
                 raise ValueError("Missing 'query' parameter")
                 
-            await self.client.query(params['query'], {k: v for k, v in params.items() if k != 'query'})  # type: ignore[reportUnknownArgumentType]
+            await self._helix_query(params['query'], {k: v for k, v in params.items() if k != 'query'})  # type: ignore[reportUnknownArgumentType]
         # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
         return None
 
@@ -101,17 +111,21 @@ class HelixDriver(GraphDriver):
             raise ValueError("Missing 'query' parameter")
 
         try:
-            result = await self.helix_query(converted_params['query'], {k: v for k, v in converted_params.items() if k != 'query'})  # type: ignore[reportUnknownArgumentType]
+            result = await self._helix_query(converted_params['query'], {k: v for k, v in converted_params.items() if k != 'query'})  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
             logger.error(f'Error executing HelixDB query: {e}')
             raise
 
         return result
 
-    async def helix_query(self, query: str, params: dict[str, Any]) -> dict[str, Any]:
-        result = self.client.query(query, params)
+    async def _helix_query(self, query: str, params: dict[str, Any]) -> dict[str, Any]:
+        result = self.client.query(query, params)  # type: ignore[reportUnknownArgumentType]
         if isinstance(result, list):
-            result = result[0]
+            if len(result) == 1:
+                result = result[0]
+            else:
+                response: dict[str, Any] = {str(i):v for i, v in enumerate(result)}
+                return response
         return result
 
     def session(self, database: str | None = None) -> GraphDriverSession:
@@ -122,13 +136,13 @@ class HelixDriver(GraphDriver):
         return None
 
     async def delete_all_indexes(self) -> None:
-        self.client.query('deleteAll', {})
+        await self._helix_query('deleteAll', {})
         return None
 
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
-        Reuses the same connection (e.g. HelixDB, Neo4j).
+        Reuses the same connection (e.g. HelixDB, Neo4j, FalkorDB).
         """
         cloned = HelixDriver(local=self.client.local, port=self.client.h_server_port, api_endpoint=self.client.h_server_api_endpoint, verbose=self.client.verbose)
 
