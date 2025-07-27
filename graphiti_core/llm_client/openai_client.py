@@ -49,6 +49,8 @@ class OpenAIClient(BaseOpenAIClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+            max_tokens (int): The maximum number of tokens to generate. Defaults to DEFAULT_MAX_TOKENS.
+                            Left for backwards compatibility, but config should be preferred for consistency between clients.
         """
         super().__init__(config, cache, max_tokens)
 
