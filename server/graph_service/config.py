@@ -1,31 +1,40 @@
 from functools import lru_cache
 from typing import Annotated
-import os
 
-from fastapi import Depends
-from pydantic import Field, model_validator
+from fastapi import Depends  # type: ignore
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
 
 
 class Settings(BaseSettings):
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
-    openai_base_url: str | None = Field(None, env="OPENAI_BASE_URL")
-    model_name: str | None = Field(None, env="MODEL_NAME")
-    embedding_model_name: str | None = Field(None, env="EMBEDDING_MODEL_NAME")
+    # LLM settings
+    openai_api_key: str
+    openai_base_url: str | None = None
+    model_name: str | None = None
+    embedding_model_name: str | None = None
+    
     # Backend selection: 'neo4j' or 'falkordb'
-    db_backend: str | None = Field(None, alias="GRAPHITI_BACKEND", env="GRAPHITI_BACKEND", description="Database backend: 'neo4j' or 'falkordb'")
+    db_backend: str | None = None
+    
     # Neo4j settings (optional, validated below)
-    neo4j_uri: str | None = Field(None, env="NEO4J_URI")
-    neo4j_user: str | None = Field(None, env="NEO4J_USER")
-    neo4j_password: str | None = Field(None, env="NEO4J_PASSWORD")
+    neo4j_uri: str = ""
+    neo4j_user: str = ""
+    neo4j_password: str = ""
+    
     # FalkorDB settings (optional, validated below)
-    falkordb_host: str | None = Field(None, env="FALKORDB_HOST")
-    falkordb_port: int | None = Field(None, env="FALKORDB_PORT")
-    falkordb_database: str = Field("default_db", env="FALKORDB_DATABASE")
-    falkordb_user: str | None = Field(None, env="FALKORDB_USER")
-    falkordb_password: str | None = Field(None, env="FALKORDB_PASSWORD")
+    falkordb_host: str = ""
+    falkordb_port: int = 6379
+    falkordb_user: str | None = None
+    falkordb_password: str | None = None
 
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', env_prefix='', extra='ignore', env_priority='env', populate_by_name=True)
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        env_prefix='',
+        extra='ignore',
+        env_priority='env',
+        populate_by_name=True
+    )
 
     @model_validator(mode="after")
     def check_backend_fields(self):

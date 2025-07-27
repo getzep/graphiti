@@ -11,14 +11,13 @@ import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
-from typing_extensions import TypedDict
-from urllib.parse import urlparse
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from graphiti_core import Graphiti
 from graphiti_core.driver.neo4j_driver import Neo4jDriver

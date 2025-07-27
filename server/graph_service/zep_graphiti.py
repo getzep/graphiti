@@ -3,11 +3,11 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException
 from graphiti_core import Graphiti  # type: ignore
+from graphiti_core.driver.neo4j_driver import Neo4jDriver  # type: ignore
 from graphiti_core.edges import EntityEdge  # type: ignore
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
-from graphiti_core.driver.neo4j_driver import Neo4jDriver  # type: ignore
 
 from graph_service.config import ZepEnvDep
 from graph_service.dto import FactResult
@@ -77,16 +77,16 @@ async def get_graphiti(settings: ZepEnvDep):
     if settings.db_backend == 'falkordb':
         from graphiti_core.driver.falkordb_driver import FalkorDriver  # type: ignore
         driver = FalkorDriver(
-            host=settings.falkordb_host,
-            port=settings.falkordb_port,
+            host=settings.falkordb_host,   # type: ignore
+            port=settings.falkordb_port,  # type: ignore
             username=settings.falkordb_user,
             password=settings.falkordb_password,
         )
     else:
         driver = Neo4jDriver(
-            uri=settings.neo4j_uri,
-            user=settings.neo4j_user,
-            password=settings.neo4j_password,
+            uri=settings.neo4j_uri,  # type: ignore
+            user=settings.neo4j_user,  # type: ignore
+            password=settings.neo4j_password,  # type: ignore
         )
     client = ZepGraphiti(driver)
     if settings.openai_base_url is not None:
