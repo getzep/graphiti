@@ -20,6 +20,8 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "posthog>=3.0.0",
     "helix-py>=0.2.24",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
 ]
 
 [project.urls]

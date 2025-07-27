@@ -904,6 +904,8 @@ dependencies = [
     { name = "openai" },
     { name = "posthog" },
     { name = "pydantic" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
@@ -974,7 +976,9 @@ requires-dist = [
     { name = "posthog", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.380" },
+    { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3" },
+    { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
