@@ -56,7 +56,8 @@ aoss_indices = [
                     "query": "",
                     "fields": ["name", "summary", "group_id"]
                 }
-            }   
+            },
+            "size": 10
         }
     },
     {"index_name": "community_name",
@@ -81,7 +82,8 @@ aoss_indices = [
                     "query": "",
                     "fields": ["name", "group_id"]
                 }
-            }   
+            },
+            "size": 10
         }
      },
     {"index_name": "episode_content",
@@ -112,7 +114,8 @@ aoss_indices = [
                     "query": "",
                     "fields": ["content", "source", "source_description", "group_id"]
                 }
-            }   
+            },
+            "size": 10
         }
      },
     {"index_name": "edge_name_and_fact",
@@ -140,7 +143,8 @@ aoss_indices = [
                     "query": "",
                     "fields": ["name", "fact", "group_id"]
                 }
-            }   
+            },
+            "size": 10
         }
      }
 ]
@@ -279,12 +283,12 @@ class NeptuneDriver(GraphDriver):
                     index=index_name
                 )
     
-    def run_aoss_query(self, name:str, query_text:str): 
+    def run_aoss_query(self, name:str, query_text:str, limit:int = 10) -> dict[str, Any]:
         for index in aoss_indices:
             if name.lower() == index['index_name']:                
                 index['query']['query']['multi_match']['query'] = query_text
                 query = {
-                    "size": 10,
+                    "size": limit,
                     "query": index['query']
                 }
                 resp = self.aoss_client.search(
@@ -292,8 +296,9 @@ class NeptuneDriver(GraphDriver):
                     index = index['index_name']
                 )
                 return resp
+        return None
     
-    def save_to_aoss(self, name:str, data:list[dict]) -> bool: 
+    def save_to_aoss(self, name : str, data : list[dict]) -> int:
         for index in aoss_indices:
             if name.lower() == index['index_name']:
                 to_index = []
@@ -302,22 +307,13 @@ class NeptuneDriver(GraphDriver):
                     for p in index['body']['mappings']['properties'].keys():
                         item[p] = d[p]
                     to_index.append(item)                
-                helpers.bulk(self.aoss_client, to_index)
+                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                if failed  > 0:
+                    return success
+                else:
+                    return 0
         
-        return True
-
-    def calculate_cosine_similarity(self, vector1:List[float], vector2:List[float]) -> float:
-        """
-        Calculates the cosine similarity between two vectors using NumPy.
-        """
-        dot_product = np.dot(vector1, vector2)
-        norm_vector1 = np.linalg.norm(vector1)
-        norm_vector2 = np.linalg.norm(vector2)
-
-        if norm_vector1 == 0 or norm_vector2 == 0:
-            return 0  # Handle cases where one or both vectors are zero vectors
-
-        return dot_product / (norm_vector1 * norm_vector2)
+        return 0
 
 class NeptuneDriverSession(GraphDriverSession):
     def __init__(self, driver: NeptuneDriver):  # type: ignore[reportUnknownArgumentType]

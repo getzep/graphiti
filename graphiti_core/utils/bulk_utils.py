@@ -166,18 +166,31 @@ async def add_nodes_and_edges_bulk_tx(
         edge_data.update(edge.attributes or {})
         edges.append(edge_data)
 
+    # Save Episodes
     if driver.provider == 'neptune':
         #First save the episodes to AOSS
         driver.save_to_aoss('episode_content', episodes)
         await tx.run(EPISODIC_NODE_SAVE_BULK_NEPTUNE, episodes=episodes)
     else:
         await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+        
+    # Save Entities
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
+    if driver.provider == 'neptune':
+        #First save the entities to AOSS        
+        driver.save_to_aoss('node_name_and_summary', nodes)
     await tx.run(entity_node_save_bulk, nodes=nodes)
+    
+    # Save Episode edges
     await tx.run(
         EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
     )
     entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
+
+    # Save Entity Edges
+    if driver.provider == 'neptune':
+        #First save the edges to AOSS        
+        driver.save_to_aoss('edge_name_and_fact', edges)
     await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
 
