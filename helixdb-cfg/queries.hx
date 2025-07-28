@@ -101,6 +101,22 @@ QUERY deleteFact (uuid: String) =>
     RETURN "SUCCESS"
 
 // #########################################################
+//                      Fact Operations
+// #########################################################
+
+QUERY checkDuplicateFact (source_uuid: String, target_uuid: String) =>
+    fact <- N<Fact>::WHERE(
+        AND(
+            EXISTS(_::In<Entity_Fact>::WHERE(_::{uuid}::EQ(source_uuid))),
+            EXISTS(_::Out<Fact_Entity>::WHERE(_::{uuid}::EQ(target_uuid))),
+            _::{name}::EQ("IS_DUPLICATE_OF")
+        )
+    )
+    source <- N<Entity>({uuid: source_uuid})
+    target <- N<Entity>({uuid: target_uuid})
+    RETURN fact, source, target
+
+// #########################################################
 //                          Episode
 // #########################################################
 

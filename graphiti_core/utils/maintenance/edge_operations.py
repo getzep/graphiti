@@ -542,11 +542,32 @@ async def filter_existing_duplicate_of_edges(
         (source.uuid, target.uuid): (source, target) for source, target in duplicates_node_tuples
     }
 
-    records, _, _ = await driver.execute_query(
-        query,
-        duplicate_node_uuids=list(duplicate_nodes_map.keys()),
-        routing_='r',
-    )
+    if driver.provider == 'helixdb':
+        records = []
+        for source_uuid, target_uuid in duplicate_nodes_map.keys():
+            result = await driver.execute_query(
+                "",
+                query="checkDuplicateFact",
+                source_uuid=source_uuid,
+                target_uuid=target_uuid,
+            )
+
+            is_duplicate = len(result.get('fact', [])) > 0
+            source = result.get('source', False)
+            target = result.get('target', False)
+
+            if is_duplicate and source and target:
+                record = {
+                    'source_uuid': source.get('uuid'),
+                    'target_uuid': target.get('uuid'),
+                }
+                records.append(record)
+    else:
+        records, _, _ = await driver.execute_query(
+            query,
+            duplicate_node_uuids=list(duplicate_nodes_map.keys()),
+            routing_='r',
+        )
 
     # Remove duplicates that already have the IS_DUPLICATE_OF edge
     for record in records:
