@@ -857,7 +857,7 @@ class CommunityEdge(Edge):
                 stored_edge = await driver.execute_query(
                     "",
                     query="getCommunityEdge",
-                    community_id=CommunityEdge.uuid_to_helix.get(self.uuid),
+                    communityEdge_id=CommunityEdge.uuid_to_helix.get(self.uuid),
                 )
                 stored_edge = stored_edge.get('community_edge', None)
 
@@ -880,7 +880,7 @@ class CommunityEdge(Edge):
 
             if query == "createCommunityEdge":
                 helix_id = result.get('community_edge', None).get('id', None)
-                if helix_id is not None:
+                if helix_id is None:
                     raise ValueError(f"Failed to create community edge")
             
                 CommunityEdge.uuid_to_helix[self.uuid] = helix_id
@@ -938,7 +938,7 @@ class CommunityEdge(Edge):
             result = await driver.execute_query(
                 "",
                 query="getCommunityEdge",
-                community_id=CommunityEdge.uuid_to_helix.get(uuid),
+                communityEdge_id=CommunityEdge.uuid_to_helix.get(uuid),
             )
 
             if result is None:
@@ -988,7 +988,7 @@ class CommunityEdge(Edge):
                 result = await driver.execute_query(
                     "",
                     query="getCommunityEdge",
-                    community_id=CommunityEdge.uuid_to_helix.get(uuid),
+                    communityEdge_id=CommunityEdge.uuid_to_helix.get(uuid),
                 )
 
                 if result is None:

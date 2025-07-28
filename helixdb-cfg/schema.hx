@@ -99,8 +99,11 @@ E::Episode_Entity {
 // #########################################################
 
 N::Community {
+    name: String,
     group_id: String,
+    labels: [String],
     created_at: Date DEFAULT NOW,
+    summary: String
 }
 
 E::Community_to_Embedding {

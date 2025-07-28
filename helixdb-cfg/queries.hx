@@ -213,8 +213,8 @@ QUERY updateCommunityEdge (communityEdge_id: ID, community_id: ID, entity_id: ID
     community_edge <- AddE<Community_Entity>({group_id: group_id, created_at: created_at})::From(community)::To(entity)
     RETURN community_edge
 
-QUERY getCommunityEdge (community_id: ID) =>
-    community_edge <- N<Community>(community_id)::Out<Community_to_Embedding>
+QUERY getCommunityEdge (communityEdge_id: ID) =>
+    community_edge <- E<Community_Entity>(communityEdge_id)
     RETURN community_edge
 
 QUERY getCommunityEdgesbyGroup (group_id: String) =>
