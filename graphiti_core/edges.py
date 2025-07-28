@@ -91,29 +91,18 @@ class Edge(BaseModel, ABC):
 
 
 class EpisodicEdge(Edge):
-
-    helix_to_uuid: ClassVar[dict[str, str]] = {}
-    uuid_to_helix: ClassVar[dict[str, str]] = {}
-
     async def save(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.source_node_uuid not in EpisodicNode.uuid_to_helix:
-                raise NodeNotFoundError(self.source_node_uuid)
-            if self.target_node_uuid not in EntityNode.uuid_to_helix:
-                raise NodeNotFoundError(self.target_node_uuid)
+            stored_edge = await driver.execute_query(
+                "",
+                query="getEpisodeEdge",
+                uuid=self.uuid,
+            )
+            stored_edge = stored_edge.get('episode_edge', None)
 
-            stored_edge = None
-            if self.uuid in EpisodicEdge.uuid_to_helix:
-                stored_edge = await driver.execute_query(
-                    "",
-                    query="getEpisodeEdge",
-                    episodeEdge_id=EpisodicEdge.uuid_to_helix.get(self.uuid),
-                )
-                stored_edge = stored_edge.get('episode_edge', None)
-
-            if stored_edge is not None:
+            if stored_edge is not None and len(stored_edge) > 0:
                 query = "updateEpisodeEdge"
-                helix_id = EpisodicEdge.uuid_to_helix.get(self.uuid)
+                helix_id = stored_edge[0].get('id')
             else:
                 query = "createEpisodeEdge"
                 helix_id = self.uuid
@@ -122,19 +111,17 @@ class EpisodicEdge(Edge):
                 "",
                 query=query,
                 episodeEdge_id=helix_id,
-                episode_id=EpisodicNode.uuid_to_helix.get(self.source_node_uuid),
-                entity_id=EntityNode.uuid_to_helix.get(self.target_node_uuid),
+                uuid=self.uuid,
+                episode_uuid=self.source_node_uuid,
+                entity_uuid=self.target_node_uuid,
                 group_id=self.group_id,
                 created_at=self.created_at,
             )
 
             if query == 'createEpisodeEdge':
-                helix_id = result.get('episode_edge', {}).get('id', None)
+                helix_id = result.get('episode_edge', None).get('id', None)
                 if helix_id is None:
                     raise ValueError('Failed to create episode edge')
-
-                EpisodicEdge.uuid_to_helix[self.uuid] = helix_id
-                EpisodicEdge.helix_to_uuid[helix_id] = self.uuid
 
             if query == 'updateEpisodeEdge':
                 logger.debug(f'Updated Episode Edge: {self.uuid}')
@@ -158,20 +145,11 @@ class EpisodicEdge(Edge):
 
     async def delete(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.uuid not in EpisodicEdge.uuid_to_helix:
-                raise EdgeNotFoundError(self.uuid)
-
             result = await driver.execute_query(
                 "",
                 query="deleteEpisodeEdge",
-                episodeEdge_id=EpisodicEdge.uuid_to_helix.get(self.uuid),
+                uuid=self.uuid,
             )
-
-            helix_id = EpisodicEdge.uuid_to_helix.get(self.uuid)
-
-            EpisodicEdge.uuid_to_helix.pop(self.uuid, None)
-            if helix_id is not None:
-                EpisodicEdge.helix_to_uuid.pop(helix_id, None)
 
             logger.debug(f'Deleted Episode Edge: {self.uuid}')
 
@@ -182,30 +160,28 @@ class EpisodicEdge(Edge):
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         if driver.provider == 'helixdb':
-            if uuid not in EpisodicEdge.uuid_to_helix:
-                raise EdgeNotFoundError(uuid)
-            
             result = await driver.execute_query(
                 "",
                 query="getEpisodeEdge",
-                episodeEdge_id=EpisodicEdge.uuid_to_helix.get(uuid),
+                uuid=uuid,
             )
 
-            if result is None:
+            if not isinstance(result, dict):
                 raise EdgeNotFoundError(uuid)
 
-            result = result.get('episode_edge', None)
+            source = result.get('episode', [])
+            target = result.get('entity', [])
+            result = result.get('episode_edge', [])
 
-            if result is None:
+            if len(source) == 0 or len(target) == 0 or len(result) == 0:
                 raise EdgeNotFoundError(uuid)
 
-            result['uuid'] = uuid
-            result['source_node_uuid'] = EpisodicNode.helix_to_uuid.get(result.get('from_node'))
-            result['target_node_uuid'] = EntityNode.helix_to_uuid.get(result.get('to_node'))
-            helix_id = result.get('id')
+            source = source[0]
+            target = target[0]
+            result = result[0]
 
-            EpisodicEdge.helix_to_uuid[helix_id] = uuid
-            EpisodicEdge.uuid_to_helix[uuid] = helix_id
+            result['source_node_uuid'] = source.get('uuid')
+            result['target_node_uuid'] = target.get('uuid')
 
             return get_episodic_edge_from_record(result)
 
@@ -234,31 +210,29 @@ class EpisodicEdge(Edge):
         if driver.provider == 'helixdb':
             results = []
             for uuid in uuids:
-                if uuid not in EpisodicEdge.uuid_to_helix:
-                    continue
-                    
                 result = await driver.execute_query(
                     "",
                     query="getEpisodeEdge",
-                    episodeEdge_id=EpisodicEdge.uuid_to_helix.get(uuid),
+                    uuid=uuid,
                 )
                 
-                if result is None:
+                if not isinstance(result, dict):
                     continue
                 
-                result = result.get('episode_edge', None)
+                source = result.get('episode', [])
+                target = result.get('entity', [])
+                result = result.get('episode_edge', [])
                 
-                if result is None:
+                if len(source) == 0 or len(target) == 0 or len(result) == 0:
                     continue
 
-                result['uuid'] = uuid
-                result['source_node_uuid'] = EpisodicNode.helix_to_uuid.get(result.get('from_node'))
-                result['target_node_uuid'] = EntityNode.helix_to_uuid.get(result.get('to_node'))
+                source = source[0]
+                target = target[0]
+                result = result[0]
+
+                result['source_node_uuid'] = source.get('uuid')
+                result['target_node_uuid'] = target.get('uuid')
                 results.append(result)
-
-                helix_id = result.get('id')
-                EpisodicEdge.helix_to_uuid[helix_id] = uuid
-                EpisodicEdge.uuid_to_helix[uuid] = helix_id
 
             edges = [get_episodic_edge_from_record(result) for result in results]
 
@@ -306,19 +280,21 @@ class EpisodicEdge(Edge):
                     limit=limit,
                     group_id=group_id,
                 )
+
+                sources = result.get('episodes', [])
+                targets = result.get('entities', [])
                 result = result.get('episode_edges', [])
 
-                for episode_edge in result:
+                for i in range(len(result)):
+                    episode_edge = result[i]
+                    source = sources[i]
+                    target = targets[i]
                     helix_id = episode_edge.get('id')
-                    if helix_id is None or helix_id not in EpisodicEdge.helix_to_uuid:
+                    if helix_id is None:
                         continue
 
-                    episode_edge['uuid'] = EpisodicEdge.helix_to_uuid.get(helix_id)
-                    episode_edge['source_node_uuid'] = EpisodicNode.helix_to_uuid.get(episode_edge.get('from_node'))
-                    episode_edge['target_node_uuid'] = EntityNode.helix_to_uuid.get(episode_edge.get('to_node'))
-
-                    EpisodicEdge.uuid_to_helix[episode_edge['uuid']] = helix_id
-                    EpisodicEdge.helix_to_uuid[helix_id] = episode_edge['uuid']
+                    episode_edge['source_node_uuid'] = source.get('uuid')
+                    episode_edge['target_node_uuid'] = target.get('uuid')
 
                     results.append(episode_edge)
                     
@@ -364,10 +340,6 @@ class EpisodicEdge(Edge):
 
 
 class EntityEdge(Edge):
-
-    helix_to_uuid: ClassVar[dict[str, str]] = {}
-    uuid_to_helix: ClassVar[dict[str, str]] = {}
-
     name: str = Field(description='name of the edge, relation name')
     fact: str = Field(description='fact representing the edge and nodes that it connects')
     fact_embedding: list[float] | None = Field(default=None, description='embedding of the fact')
@@ -401,15 +373,18 @@ class EntityEdge(Edge):
 
     async def load_fact_embedding(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.uuid not in EntityEdge.uuid_to_helix:
-                raise EdgeNotFoundError(self.uuid)
-            
             result = await driver.execute_query(
                 "",
-                query="loadFactEmbedding",
-                fact_id=EntityEdge.uuid_to_helix.get(self.uuid),
+                query="loadFactEmbedding", 
+                uuid=self.uuid,
             )
-            self.fact_embedding = result.get('embedding', None)[0].get('fact_embedding', None)
+
+            result = result.get('embedding', None)
+
+            if result is None or len(result) == 0:
+                raise EdgeNotFoundError(self.uuid)
+
+            self.fact_embedding = result[0].get('fact_embedding', None)
             return
 
         query: LiteralString = """
@@ -442,26 +417,19 @@ class EntityEdge(Edge):
         edge_data.update(self.attributes or {})
 
         if driver.provider == 'helixdb':
-            stored_fact = None
-            if self.uuid in EntityEdge.uuid_to_helix:
-                stored_fact = await driver.execute_query(
-                    "",
-                    query="getFact",
-                    fact_id=EntityEdge.uuid_to_helix.get(self.uuid),
-                )
-                stored_fact = stored_fact.get('fact', None)
+            stored_fact = await driver.execute_query(
+                "",
+                query="getFact",
+                uuid=self.uuid,
+            )
+            stored_fact = stored_fact.get('fact', None)
 
             if stored_fact is not None:
                 query = "updateFact"
-                helix_id = EntityEdge.uuid_to_helix.get(self.uuid)
+                helix_id = stored_fact.get('id')
             else:
                 query = "createFact"
                 helix_id = self.uuid
-
-            if self.source_node_uuid not in EntityNode.uuid_to_helix:
-                raise NodeNotFoundError(self.source_node_uuid)
-            if self.target_node_uuid not in EntityNode.uuid_to_helix:
-                raise NodeNotFoundError(self.target_node_uuid)
 
             valid_date = edge_data['valid_at']
             if valid_date is None:
@@ -477,12 +445,13 @@ class EntityEdge(Edge):
                 "",
                 query=query,
                 fact_id=helix_id,
+                uuid=self.uuid,
                 name=edge_data['name'],
                 fact=edge_data['fact'],
                 fact_embedding=edge_data['fact_embedding'],
                 group_id=edge_data['group_id'],
-                source_uuid=EntityNode.uuid_to_helix.get(self.source_node_uuid),
-                target_uuid=EntityNode.uuid_to_helix.get(self.target_node_uuid),
+                source_uuid=self.source_node_uuid,
+                target_uuid=self.target_node_uuid,
                 episodes=edge_data['episodes'],
                 created_at=edge_data['created_at'],
                 valid_at=valid_date,
@@ -495,9 +464,6 @@ class EntityEdge(Edge):
                 helix_id = result.get('fact_node', {}).get('id', None)
                 if helix_id is None:
                     raise ValueError('Failed to create entity edge')
-
-                EntityEdge.uuid_to_helix[self.uuid] = helix_id
-                EntityEdge.helix_to_uuid[helix_id] = self.uuid
 
             if query == 'updateFact':
                 logger.debug(f'Updated Entity Edge: {self.uuid}')
@@ -517,20 +483,11 @@ class EntityEdge(Edge):
 
     async def delete(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.uuid not in EntityEdge.uuid_to_helix:
-                raise EdgeNotFoundError(self.uuid)
-
             result = await driver.execute_query(
                 "",
                 query="deleteFact",
-                fact_id=EntityEdge.uuid_to_helix.get(self.uuid),
+                uuid=self.uuid,
             )
-
-            helix_id = EntityEdge.uuid_to_helix.get(self.uuid)
-
-            EntityEdge.uuid_to_helix.pop(self.uuid, None)
-            if helix_id is not None:
-                EntityEdge.helix_to_uuid.pop(helix_id, None)
 
             logger.debug(f'Deleted Entity Edge: {self.uuid}')
 
@@ -540,14 +497,11 @@ class EntityEdge(Edge):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        if driver.provider == 'helixdb':
-            if uuid not in EntityEdge.uuid_to_helix:
-                raise EdgeNotFoundError(uuid)
-            
+        if driver.provider == 'helixdb': 
             result = await driver.execute_query(
                 "",
                 query="getFact",
-                fact_id=EntityEdge.uuid_to_helix.get(uuid),
+                uuid=uuid,
             )
             
             if result is None:
@@ -556,29 +510,32 @@ class EntityEdge(Edge):
             embedding = await driver.execute_query(
                 "",
                 query="loadFactEmbedding",
-                fact_id=EntityEdge.uuid_to_helix.get(uuid),
+                uuid=uuid,
             )
-            embedding = embedding.get('embedding', None)[0].get('fact_embedding', None)
+            embedding = embedding.get('embedding', [{}])
 
-            source = result.get('source', None)
-            target = result.get('target', None)
+            if len(embedding) == 0:
+                embedding = None
+            else:
+                embedding = embedding[0].get('fact_embedding', None)
+
+            source = result.get('source', [])
+            target = result.get('target', [])
             result = result.get('fact', None)
             
-            if result is None:
+            if result is None or len(source) == 0 or len(target) == 0:
                 raise EdgeNotFoundError(uuid)
+
+            source = source[0]
+            target = target[0]
             
-            result['uuid'] = uuid
             result['fact_embedding'] = embedding
             result['valid_at'] = check_null_dates(result.get('valid_at', None))
             result['invalid_at'] = check_null_dates(result.get('invalid_at', None))
             result['expired_at'] = check_null_dates(result.get('expired_at', None))
             result['attributes'] = json.loads(result.get('attributes', '{}'))
-            result['source_node_uuid'] = EntityNode.helix_to_uuid.get(source[0].get('from_node'))
-            result['target_node_uuid'] = EntityNode.helix_to_uuid.get(target[0].get('to_node'))
-            helix_id = result.get('id')
-
-            EntityEdge.helix_to_uuid[helix_id] = uuid
-            EntityEdge.uuid_to_helix[uuid] = helix_id
+            result['source_node_uuid'] = source.get('uuid')
+            result['target_node_uuid'] = target.get('uuid')
 
             return get_entity_edge_from_record(result)
 
@@ -602,13 +559,10 @@ class EntityEdge(Edge):
         if driver.provider == 'helixdb':
             results = []
             for uuid in uuids:
-                if uuid not in EntityEdge.uuid_to_helix:
-                    continue
-            
                 result = await driver.execute_query(
                     "",
                     query="getFact",
-                    fact_id=EntityEdge.uuid_to_helix.get(uuid),
+                    uuid=uuid,
                 )
                 
                 if result is None:
@@ -617,30 +571,33 @@ class EntityEdge(Edge):
                 embedding = await driver.execute_query(
                     "",
                     query="loadFactEmbedding",
-                    fact_id=EntityEdge.uuid_to_helix.get(uuid),
+                    uuid=uuid,
                 )
-                embedding = embedding.get('embedding', None)[0].get('fact_embedding', None)
+                embedding = embedding.get('embedding', [{}])
 
-                source = result.get('source', None)
-                target = result.get('target', None)
+                if len(embedding) == 0:
+                    embedding = None
+                else:
+                    embedding = embedding[0].get('fact_embedding', None)
+
+                source = result.get('source', [])
+                target = result.get('target', [])
                 result = result.get('fact', None)
                 
-                if result is None:
+                if result is None or len(source) == 0 or len(target) == 0:
                     continue
+
+                source = source[0]
+                target = target[0]
                 
-                result['uuid'] = uuid
                 result['fact_embedding'] = embedding
                 result['valid_at'] = check_null_dates(result.get('valid_at', None))
                 result['invalid_at'] = check_null_dates(result.get('invalid_at', None))
                 result['expired_at'] = check_null_dates(result.get('expired_at', None))
                 result['attributes'] = json.loads(result.get('attributes', '{}'))
-                result['source_node_uuid'] = EntityNode.helix_to_uuid.get(source[0].get('from_node'))
-                result['target_node_uuid'] = EntityNode.helix_to_uuid.get(target[0].get('to_node'))
+                result['source_node_uuid'] = source.get('uuid')
+                result['target_node_uuid'] = target.get('uuid')
                 results.append(result)
-
-                helix_id = result.get('id')
-                EntityEdge.helix_to_uuid[helix_id] = uuid
-                EntityEdge.uuid_to_helix[uuid] = helix_id
 
             edges = [get_entity_edge_from_record(result) for result in results]
 
@@ -685,42 +642,38 @@ class EntityEdge(Edge):
                     limit=limit,
                     group_id=group_id,
                 )
-                sources = result.get('source', [])
-                targets = result.get('target', [])
+                sources = result.get('sources', [])
+                targets = result.get('targets', [])
                 result = result.get('facts', [])
 
                 for i in range(len(result)):
                     fact = result[i]
-                    source = sources[i].get('from_node')
-                    target = targets[i].get('to_node')
-
-                    if source not in EntityNode.helix_to_uuid:
-                        continue
-                    if target not in EntityNode.helix_to_uuid:
-                        continue
+                    source = sources[i]
+                    target = targets[i]
 
                     helix_id = fact.get('id', None)
-                    if helix_id is None or helix_id not in EntityEdge.helix_to_uuid:
+                    if helix_id is None:
                         continue
                     
                     embedding = await driver.execute_query(
                         "",
                         query="loadFactEmbedding",
-                        fact_id=helix_id,
+                        uuid=fact.get('uuid'),
                     )
-                    embedding = embedding.get('embedding', None)[0].get('fact_embedding', None)
+                    embedding = embedding.get('embedding', [{}])
+
+                    if len(embedding) == 0:
+                        embedding = None
+                    else:
+                        embedding = embedding[0].get('fact_embedding', None)
                     
-                    fact['uuid'] = EntityEdge.helix_to_uuid.get(helix_id)
                     fact['fact_embedding'] = embedding
                     fact['valid_at'] = check_null_dates(fact.get('valid_at', None))
                     fact['invalid_at'] = check_null_dates(fact.get('invalid_at', None))
                     fact['expired_at'] = check_null_dates(fact.get('expired_at', None))
                     fact['attributes'] = json.loads(fact.get('attributes', '{}'))
-                    fact['source_node_uuid'] = EntityNode.helix_to_uuid.get(source)
-                    fact['target_node_uuid'] = EntityNode.helix_to_uuid.get(target)
-
-                    EntityEdge.uuid_to_helix[fact['uuid']] = helix_id
-                    EntityEdge.helix_to_uuid[helix_id] = fact['uuid']
+                    fact['source_node_uuid'] = source.get('uuid')
+                    fact['target_node_uuid'] = target.get('uuid')
 
                     results.append(fact)
 
@@ -774,32 +727,24 @@ class EntityEdge(Edge):
     @classmethod
     async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
         if driver.provider == 'helixdb':
-            if node_uuid not in EntityNode.uuid_to_helix:
-                raise NodeNotFoundError(node_uuid)
-            
             result = await driver.execute_query(
                 "",
                 query="getFactsbyEntity",
-                entity_id=EntityNode.uuid_to_helix.get(node_uuid),
+                uuid=node_uuid,
             )
             
-            sources = result.get('source', [])
-            targets = result.get('target', [])
+            sources = result.get('sources', [])
+            targets = result.get('targets', [])
             result = result.get('facts', [])
             
             results = []
             for i in range(len(result)):
                 fact = result[i]
-                source = sources[i].get('from_node')
-                target = targets[i].get('to_node')
+                source = sources[i]
+                target = targets[i]
 
-                if source not in EntityNode.helix_to_uuid:
-                    continue
-                if target not in EntityNode.helix_to_uuid:
-                    continue
-                
                 helix_id = fact.get('id', None)
-                if helix_id is None or helix_id not in EntityEdge.helix_to_uuid:
+                if helix_id is None:
                     continue
                 
                 embedding = await driver.execute_query(
@@ -807,19 +752,20 @@ class EntityEdge(Edge):
                     query="loadFactEmbedding",
                     fact_id=helix_id,
                 )
-                embedding = embedding.get('embedding', None)[0].get('fact_embedding', None)
+                embedding = embedding.get('embedding', [{}])
+
+                if len(embedding) == 0:
+                    embedding = None
+                else:
+                    embedding = embedding[0].get('fact_embedding', None)
                 
-                fact['uuid'] = EntityEdge.helix_to_uuid.get(helix_id)
                 fact['fact_embedding'] = embedding
                 fact['valid_at'] = check_null_dates(fact.get('valid_at', None))
                 fact['invalid_at'] = check_null_dates(fact.get('invalid_at', None))
                 fact['expired_at'] = check_null_dates(fact.get('expired_at', None))
                 fact['attributes'] = json.loads(fact.get('attributes', '{}'))
-                fact['source_node_uuid'] = EntityNode.helix_to_uuid.get(source)
-                fact['target_node_uuid'] = EntityNode.helix_to_uuid.get(target)
-
-                EntityEdge.uuid_to_helix[fact['uuid']] = helix_id
-                EntityEdge.helix_to_uuid[helix_id] = fact['uuid']
+                fact['source_node_uuid'] = source.get('uuid')
+                fact['target_node_uuid'] = target.get('uuid')
 
                 results.append(fact)
 
@@ -841,29 +787,18 @@ class EntityEdge(Edge):
 
 
 class CommunityEdge(Edge):
-
-    helix_to_uuid: ClassVar[dict[str, str]] = {}
-    uuid_to_helix: ClassVar[dict[str, str]] = {}
-
     async def save(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.source_node_uuid not in CommunityNode.uuid_to_helix:
-                raise NodeNotFoundError(self.source_node_uuid)
-            if self.target_node_uuid not in EntityNode.uuid_to_helix:
-                raise NodeNotFoundError(self.target_node_uuid)
+            stored_edge = await driver.execute_query(
+                "",
+                query="getCommunityEdge",
+                uuid=self.uuid,
+            )
+            stored_edge = stored_edge.get('community_edge', None)
 
-            stored_edge = None
-            if self.uuid in CommunityEdge.uuid_to_helix:
-                stored_edge = await driver.execute_query(
-                    "",
-                    query="getCommunityEdge",
-                    communityEdge_id=CommunityEdge.uuid_to_helix.get(self.uuid),
-                )
-                stored_edge = stored_edge.get('community_edge', None)
-
-            if stored_edge is not None:
+            if stored_edge is not None and len(stored_edge) > 0:
                 query = "updateCommunityEdge"
-                helix_id = CommunityEdge.uuid_to_helix.get(self.uuid)
+                helix_id = stored_edge[0].get('id', None)
             else:
                 query = "createCommunityEdge"
                 helix_id = self.uuid
@@ -872,19 +807,17 @@ class CommunityEdge(Edge):
                 "",
                 query=query,
                 communityEdge_id=helix_id,
-                community_id=CommunityNode.uuid_to_helix.get(self.source_node_uuid),
-                entity_id=EntityNode.uuid_to_helix.get(self.target_node_uuid),  
+                community_uuid=self.source_node_uuid,
+                entity_uuid=self.target_node_uuid,  
                 group_id=self.group_id,
                 created_at=self.created_at,
+                uuid=self.uuid,
             )
 
             if query == "createCommunityEdge":
                 helix_id = result.get('community_edge', None).get('id', None)
                 if helix_id is None:
                     raise ValueError(f"Failed to create community edge")
-            
-                CommunityEdge.uuid_to_helix[self.uuid] = helix_id
-                CommunityEdge.helix_to_uuid[helix_id] = self.uuid
 
             if query == "updateCommunityEdge":
                 logger.debug(f'Updated community edge: {self.uuid}')
@@ -908,20 +841,11 @@ class CommunityEdge(Edge):
 
     async def delete(self, driver: GraphDriver):
         if driver.provider == 'helixdb':
-            if self.uuid not in CommunityEdge.uuid_to_helix:
-                raise EdgeNotFoundError(self.uuid)
-
             result = await driver.execute_query(
                 "",
                 query="deleteCommunityEdge",
-                communityEdge_id=CommunityEdge.uuid_to_helix.get(self.uuid),
+                uuid=self.uuid,
             )
-
-            helix_id = CommunityEdge.uuid_to_helix.get(self.uuid)
-
-            CommunityEdge.uuid_to_helix.pop(self.uuid)
-            if helix_id is not None:
-                CommunityEdge.helix_to_uuid.pop(helix_id)
 
             logger.debug(f'Deleted community edge: {self.uuid}')
 
@@ -932,30 +856,28 @@ class CommunityEdge(Edge):
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         if driver.provider == 'helixdb':
-            if uuid not in CommunityEdge.uuid_to_helix:
-                raise EdgeNotFoundError(uuid)
-
             result = await driver.execute_query(
                 "",
                 query="getCommunityEdge",
-                communityEdge_id=CommunityEdge.uuid_to_helix.get(uuid),
+                uuid=uuid,
             )
 
-            if result is None:
+            if not isinstance(result, dict):
                 raise EdgeNotFoundError(uuid)
 
-            result = result.get('community_edge', None)
+            source = result.get('community', [])
+            target = result.get('entity', [])
+            result = result.get('community_edge', [])
 
-            if result is None:
+            if len(source) == 0 or len(target) == 0 or len(result) == 0:
                 raise EdgeNotFoundError(uuid)
 
-            result['uuid'] = uuid
-            result['source_node_uuid'] = CommunityNode.helix_to_uuid.get(result.get('from_node'))
-            result['target_node_uuid'] = EntityNode.helix_to_uuid.get(result.get('to_node'))
-            helix_id = result.get('id')
+            source = source[0]
+            target = target[0]
+            result = result[0]
 
-            CommunityEdge.helix_to_uuid[helix_id] = uuid
-            CommunityEdge.uuid_to_helix[uuid] = helix_id
+            result['source_node_uuid'] = source.get('uuid')
+            result['target_node_uuid'] = target.get('uuid')
 
             return get_community_edge_from_record(result)
 
@@ -982,31 +904,29 @@ class CommunityEdge(Edge):
         if driver.provider == 'helixdb':
             results = []
             for uuid in uuids:
-                if uuid not in CommunityEdge.uuid_to_helix:
-                    continue
-
                 result = await driver.execute_query(
                     "",
                     query="getCommunityEdge",
-                    communityEdge_id=CommunityEdge.uuid_to_helix.get(uuid),
+                    uuid=uuid,
                 )
 
-                if result is None:
+                if not isinstance(result, dict):
                     continue
 
-                result = result.get('community_edge', None)
+                source = result.get('community', [])
+                target = result.get('entity', [])
+                result = result.get('community_edge', [])
 
-                if result is None:
+                if len(source) == 0 or len(target) == 0 or len(result) == 0:
                     continue
 
-                result['uuid'] = uuid
-                result['source_node_uuid'] = CommunityNode.helix_to_uuid.get(result.get('from_node'))
-                result['target_node_uuid'] = EntityNode.helix_to_uuid.get(result.get('to_node'))
+                source = source[0]
+                target = target[0]
+                result = result[0]
+
+                result['source_node_uuid'] = source.get('uuid')
+                result['target_node_uuid'] = target.get('uuid')
                 results.append(result)
-
-                helix_id = result.get('id')
-                CommunityEdge.helix_to_uuid[helix_id] = uuid
-                CommunityEdge.uuid_to_helix[uuid] = helix_id
 
             edges = [get_community_edge_from_record(result) for result in results]
 
@@ -1052,19 +972,21 @@ class CommunityEdge(Edge):
                     limit=limit,
                     group_id=group_id,
                 )
+
+                sources = result.get('communities', [])
+                targets = result.get('entities', [])
                 result = result.get('community_edges', [])
 
-                for community_edge in result:
+                for i in range(len(result)):
+                    community_edge = result[i]
+                    source = sources[i]
+                    target = targets[i]
                     helix_id = community_edge.get('id')
-                    if helix_id is None or helix_id not in CommunityEdge.helix_to_uuid:
+                    if helix_id is None:
                         continue
 
-                    community_edge['uuid'] = CommunityEdge.helix_to_uuid.get(helix_id)
-                    community_edge['source_node_uuid'] = CommunityNode.helix_to_uuid.get(community_edge.get('from_node'))
-                    community_edge['target_node_uuid'] = EntityNode.helix_to_uuid.get(community_edge.get('to_node'))
-
-                    CommunityEdge.uuid_to_helix[community_edge['uuid']] = helix_id
-                    CommunityEdge.helix_to_uuid[helix_id] = community_edge['uuid']
+                    community_edge['source_node_uuid'] = source.get('uuid')
+                    community_edge['target_node_uuid'] = target.get('uuid')
 
                     results.append(community_edge)
 

@@ -6,7 +6,7 @@
             "ef_search": 768
         },
         "graph_config": {
-            "secondary_indices": []
+            "secondary_indices": ["uuid"]
         },
         "db_max_size_gb": 10,
         "mcp": true,

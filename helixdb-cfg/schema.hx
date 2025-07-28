@@ -8,7 +8,8 @@ N::Entity {
     labels: [String],
     created_at: Date DEFAULT NOW,
     summary: String,
-    attributes: String
+    attributes: String,
+    INDEX uuid: String
 }
 
 E::Entity_to_Embedding {
@@ -45,7 +46,8 @@ N::Fact {
     valid_at: Date,
     invalid_at: Date,
     expired_at: Date,
-    attributes: String
+    attributes: String,
+    INDEX uuid: String
 }
 
 E::Fact_to_Embedding {
@@ -82,7 +84,8 @@ N::Episode {
     source_description: String,
     content: String,
     valid_at: Date DEFAULT NOW,
-    entity_edges: [String]
+    entity_edges: [String],
+    INDEX uuid: String
 }
 
 E::Episode_Entity {
@@ -90,7 +93,8 @@ E::Episode_Entity {
     To: Entity,
     Properties: {
         group_id: String,
-        created_at: Date DEFAULT NOW
+        created_at: Date DEFAULT NOW,
+        uuid: String
     }
 }
 
@@ -103,7 +107,8 @@ N::Community {
     group_id: String,
     labels: [String],
     created_at: Date DEFAULT NOW,
-    summary: String
+    summary: String,
+    INDEX uuid: String
 }
 
 E::Community_to_Embedding {
@@ -123,6 +128,7 @@ E::Community_Entity {
     To: Entity,
     Properties: {
         group_id: String,
-        created_at: Date DEFAULT NOW
+        created_at: Date DEFAULT NOW,
+        uuid: String
     }
 }
