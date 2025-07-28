@@ -20,19 +20,49 @@ from graphiti_core.driver.driver import GraphProvider
 
 EPISODIC_NODE_SAVE = """
     MERGE (n:Episodic {uuid: $uuid})
-    SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-    entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
+    SET
+        n.name = $name,
+        n.group_id = $group_id,
+        n.source_description = $source_description,
+        n.source = $source,
+        n.content = $content,
+        n.entity_edges = $entity_edges,
+        n.created_at = $created_at,
+        n.valid_at = $valid_at
     RETURN n.uuid AS uuid
 """
 
-EPISODIC_NODE_SAVE_BULK = """
-    UNWIND $episodes AS episode
-    MERGE (n:Episodic {uuid: episode.uuid})
-    SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description,
-        source: episode.source, content: episode.content,
-    entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
-    RETURN n.uuid AS uuid
-"""
+def get_episodic_node_save_bulk_query(provider: GraphProvider) -> str:
+    if provider == GraphProvider.KUZU:
+        return """
+            UNWIND CAST($episodes AS STRUCT(uuid STRING, name STRING, group_id STRING, source_description STRING, source STRING, content STRING, entity_edges STRING[], created_at TIMESTAMP, valid_at TIMESTAMP, labels STRING[])[]) AS episode
+            MERGE (n:Episodic {uuid: episode.uuid})
+            SET
+                n.name = episode.name,
+                n.group_id = episode.group_id,
+                n.source_description = episode.source_description,
+                n.source = episode.source,
+                n.content = episode.content,
+                n.entity_edges = episode.entity_edges,
+                n.created_at = episode.created_at,
+                n.valid_at = episode.valid_at
+            RETURN n.uuid AS uuid
+        """
+
+    return """
+        UNWIND $episodes AS episode
+        MERGE (n:Episodic {uuid: episode.uuid})
+        SET
+            n.name = episode.name,
+            n.group_id = episode.group_id,
+            n.source_description = episode.source_description,
+            n.source = episode.source,
+            n.content = episode.content,
+            n.entity_edges = episode.entity_edges,
+            n.created_at = episode.created_at,
+            n.valid_at = episode.valid_at
+        RETURN n.uuid AS uuid
+    """
 
 EPISODIC_NODE_RETURN = """
     e.content AS content,
@@ -56,6 +86,21 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
             RETURN n.uuid AS uuid
         """
 
+    if provider == GraphProvider.KUZU:
+        return """
+            MERGE (n:Entity {uuid: $uuid})
+            SET
+                n.labels = $labels,
+                n.name = $name,
+                n.name_embedding = $name_embedding,
+                n.group_id = $group_id,
+                n.summary = $summary,
+                n.created_at = $created_at,
+                n.attributes = $attributes
+            WITH n
+            RETURN n.uuid AS uuid
+        """
+
     return f"""
         MERGE (n:Entity {{uuid: $entity_data.uuid}})
         SET n:{labels}
@@ -65,7 +110,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
     """
 
 
-def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) -> str | Any:
+def get_entity_node_save_bulk_query(provider: GraphProvider, nodes) -> str | Any:
     if provider == GraphProvider.FALKORDB:
         queries = []
         for node in nodes:
@@ -86,6 +131,21 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                 )
         return queries
 
+    if provider == GraphProvider.KUZU:
+        return """
+            UNWIND CAST($nodes AS STRUCT(uuid STRING, labels STRING[], name STRING, name_embedding FLOAT[], group_id STRING, summary STRING, created_at TIMESTAMP, attributes STRING)[]) AS node
+            MERGE (n:Entity {uuid: node.uuid})
+            SET
+                n.labels =node.labels,
+                n.name = node.name,
+                n.name_embedding = node.name_embedding,
+                n.group_id = node.group_id,
+                n.summary = node.summary,
+                n.created_at = node.created_at,
+                n.attributes = node.attributes
+            RETURN n.uuid AS uuid
+        """
+
     return """
         UNWIND $nodes AS node
         MERGE (n:Entity {uuid: node.uuid})
@@ -96,22 +156,39 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
     """
 
 
-ENTITY_NODE_RETURN = """
-    n.uuid AS uuid,
-    n.name AS name,
-    n.group_id AS group_id,
-    n.created_at AS created_at,
-    n.summary AS summary,
-    labels(n) AS labels,
-    properties(n) AS attributes
-"""
+def get_entity_node_return_query(provider: GraphProvider) -> str:
+    if provider == GraphProvider.KUZU:
+        return """
+            n.uuid AS uuid,
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at,
+            n.summary AS summary,
+            n.labels AS labels,
+            n.attributes AS attributes
+        """
+
+    return """
+        n.uuid AS uuid,
+        n.name AS name,
+        n.group_id AS group_id,
+        n.created_at AS created_at,
+        n.summary AS summary,
+        labels(n) AS labels,
+        properties(n) AS attributes
+    """
 
 
 def get_community_node_save_query(provider: GraphProvider) -> str:
-    if provider == GraphProvider.FALKORDB:
+    if provider == GraphProvider.FALKORDB or provider == GraphProvider.KUZU:
         return """
             MERGE (n:Community {uuid: $uuid})
-            SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: $name_embedding}
+            SET
+                n.name = $name,
+                n.group_id = $group_id,
+                n.summary = $summary,
+                n.created_at = $created_at,
+                n.name_embedding = $name_embedding
             RETURN n.uuid AS uuid
         """
 

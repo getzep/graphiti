@@ -21,7 +21,7 @@ from time import time
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import (
     CommunityEdge,
     EntityEdge,
@@ -504,21 +504,33 @@ async def resolve_extracted_edge(
 async def filter_existing_duplicate_of_edges(
     driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
 ) -> list[tuple[EntityNode, EntityNode]]:
+    if len(duplicates_node_tuples) == 0:
+        return []
+
     query: LiteralString = """
         UNWIND $duplicate_node_uuids AS duplicate_tuple
-        MATCH (n:Entity {uuid: duplicate_tuple[0]})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple[1]})
+        MATCH (n:Entity {uuid: duplicate_tuple.src})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple.dst})
         RETURN DISTINCT
             n.uuid AS source_uuid,
             m.uuid AS target_uuid
     """
+    if driver.provider == GraphProvider.KUZU:
+        query: LiteralString = """
+            UNWIND $duplicate_node_uuids AS duplicate
+            MATCH (n:Entity {uuid: duplicate.src})-[:RELATES_TO]->(e:RelatesToNode_ {name: 'IS_DUPLICATE_OF'})-[:RELATES_TO]->(m:Entity {uuid: duplicate.dst})
+            RETURN DISTINCT
+                n.uuid AS source_uuid,
+                m.uuid AS target_uuid
+        """
 
     duplicate_nodes_map = {
         (source.uuid, target.uuid): (source, target) for source, target in duplicates_node_tuples
     }
 
+    duplicate_node_uuids = [{'src': src, 'dst': dst} for src, dst in duplicate_nodes_map]
     records, _, _ = await driver.execute_query(
         query,
-        duplicate_node_uuids=list(duplicate_nodes_map.keys()),
+        duplicate_node_uuids=duplicate_node_uuids,
         routing_='r',
     )
 

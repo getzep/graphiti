@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
@@ -45,14 +45,20 @@ async def get_community_clusters(
         projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
         for node in nodes:
-            records, _, _ = await driver.execute_query(
+            match_query = """
+                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
+            """
+            if driver.provider == GraphProvider.KUZU:
+                match_query = """
+                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
                 """
-            MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[r:RELATES_TO]-(m: Entity {group_id: $group_id})
-            WITH count(r) AS count, m.uuid AS uuid
-            RETURN
-                uuid,
-                count
-            """,
+            records, _, _ = await driver.execute_query(
+                match_query + """
+                WITH count(e) AS count, m.uuid AS uuid
+                RETURN
+                    uuid,
+                    count
+                """,
                 uuid=node.uuid,
                 group_id=group_id,
             )

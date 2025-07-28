@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -31,10 +32,10 @@ from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
-    ENTITY_NODE_RETURN,
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_SAVE,
     get_community_node_save_query,
+    get_entity_node_return_query,
     get_entity_node_save_query,
 )
 from graphiti_core.utils.datetime_utils import utc_now
@@ -110,7 +111,7 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str, batch_size: int = 100):
-        if driver.provider == GraphProvider.FALKORDB:
+        if driver.provider == GraphProvider.FALKORDB or driver.provider == GraphProvider.KUZU:
             for label in ['Entity', 'Episodic', 'Community']:
                 await driver.execute_query(
                     f"""
@@ -325,14 +326,22 @@ class EntityNode(Node):
             'summary': self.summary,
             'created_at': self.created_at,
         }
-        entity_data.update(self.attributes or {})
 
-        labels = ':'.join(self.labels + ['Entity'])
+        if driver.provider == GraphProvider.KUZU:
+            entity_data['attributes'] = json.dumps(self.attributes)
+            entity_data['labels'] = list(set(self.labels + ['Entity']))
+            result = await driver.execute_query(
+                get_entity_node_save_query(driver.provider, labels=""),
+                **entity_data,
+            )
+        else:
+            entity_data.update(self.attributes or {})
+            labels = ':'.join(self.labels + ['Entity'])
 
-        result = await driver.execute_query(
-            get_entity_node_save_query(driver.provider, labels),
-            entity_data=entity_data,
-        )
+            result = await driver.execute_query(
+                get_entity_node_save_query(driver.provider, labels),
+                entity_data=entity_data,
+            )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
@@ -345,12 +354,12 @@ class EntityNode(Node):
             MATCH (n:Entity {uuid: $uuid})
             RETURN
             """
-            + ENTITY_NODE_RETURN,
+            + get_entity_node_return_query(driver.provider),
             uuid=uuid,
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
@@ -365,12 +374,12 @@ class EntityNode(Node):
             WHERE n.uuid IN $uuids
             RETURN
             """
-            + ENTITY_NODE_RETURN,
+            + get_entity_node_return_query(driver.provider),
             uuids=uuids,
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         return nodes
 
@@ -402,7 +411,7 @@ class EntityNode(Node):
             + """
             RETURN
             """
-            + ENTITY_NODE_RETURN
+            + get_entity_node_return_query(driver.provider)
             + with_embeddings_query
             + """
             ORDER BY n.uuid DESC
@@ -414,7 +423,7 @@ class EntityNode(Node):
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         return nodes
 
@@ -557,7 +566,21 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     )
 
 
-def get_entity_node_from_record(record: Any) -> EntityNode:
+def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
+
+    if provider == GraphProvider.KUZU:
+        attributes = json.loads(record['attributes']) if record['attributes'] else {}
+        # Strip quotes
+        record['labels'] = [label.strip('"\'') for label in record['labels']]
+    else:
+        attributes = record['attributes']
+        attributes.pop('uuid', None)
+        attributes.pop('name', None)
+        attributes.pop('group_id', None)
+        attributes.pop('name_embedding', None)
+        attributes.pop('summary', None)
+        attributes.pop('created_at', None)
+
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
@@ -566,15 +589,8 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         labels=record['labels'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
-        attributes=record['attributes'],
+        attributes=attributes,
     )
-
-    entity_node.attributes.pop('uuid', None)
-    entity_node.attributes.pop('name', None)
-    entity_node.attributes.pop('group_id', None)
-    entity_node.attributes.pop('name_embedding', None)
-    entity_node.attributes.pop('summary', None)
-    entity_node.attributes.pop('created_at', None)
 
     return entity_node
 

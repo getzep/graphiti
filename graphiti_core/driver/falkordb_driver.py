@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -33,11 +32,14 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
 
 class FalkorDriverSession(GraphDriverSession):
+    provider = GraphProvider.FALKORDB
+
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -164,16 +166,3 @@ class FalkorDriver(GraphDriver):
         cloned = FalkorDriver(falkor_db=self.client, database=database)
 
         return cloned
-
-
-def convert_datetimes_to_strings(obj):
-    if isinstance(obj, dict):
-        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetimes_to_strings(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_datetimes_to_strings(item) for item in obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    else:
-        return obj

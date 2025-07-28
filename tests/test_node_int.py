@@ -72,7 +72,6 @@ def sample_community_node():
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_entity_node(sample_entity_node, driver):
     driver = get_driver(driver)
@@ -124,7 +123,6 @@ async def test_entity_node(sample_entity_node, driver):
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_community_node(sample_community_node, driver):
     driver = get_driver(driver)
@@ -175,7 +173,6 @@ async def test_community_node(sample_community_node, driver):
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_episodic_node(sample_episodic_node, driver):
     driver = get_driver(driver)
