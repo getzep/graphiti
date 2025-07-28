@@ -750,7 +750,7 @@ class EntityEdge(Edge):
                 embedding = await driver.execute_query(
                     "",
                     query="loadFactEmbedding",
-                    fact_id=helix_id,
+                    uuid=fact.get('uuid'),
                 )
                 embedding = embedding.get('embedding', [{}])
 
