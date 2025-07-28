@@ -43,14 +43,14 @@ RUNTIME_QUERY: LiteralString = (
 )
 
 
-def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None:
-    return (
-        neo_date.to_native()
-        if isinstance(neo_date, neo4j_time.DateTime)
-        else datetime.fromisoformat(neo_date)
-        if neo_date
-        else None
-    )
+def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
+    if isinstance(input_date, neo4j_time.DateTime):
+        return input_date.to_native()
+
+    if isinstance(input_date, str):
+        return datetime.fromisoformat(input_date)
+
+    return input_date
 
 
 def get_default_group_id(provider: GraphProvider) -> str:
