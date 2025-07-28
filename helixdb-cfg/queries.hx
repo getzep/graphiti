@@ -33,7 +33,6 @@ QUERY loadEntityEmbedding (entity_id: ID) =>
 
 QUERY deleteEntity (entity_id: ID) =>
     DROP N<Entity>(entity_id)::Out<Entity_to_Embedding>
-    DROP N<Entity>(entity_id)::OutE<Entity_Fact>
     DROP N<Entity>(entity_id)
     RETURN "SUCCESS"
 
@@ -41,13 +40,63 @@ QUERY deleteEntity (entity_id: ID) =>
 //                           Fact
 // #########################################################
 
+QUERY createFact (name: String, fact: String, fact_embedding: [F64], group_id: String, created_at: Date, source_uuid: ID, target_uuid: ID, episodes: [String], valid_at: Date, invalid_at: Date, expired_at: Date, attributes: String) =>
+    fact_node <- AddN<Fact>({name: name, fact: fact, group_id: group_id, created_at: created_at, episodes: episodes, valid_at: valid_at, invalid_at: invalid_at, expired_at: expired_at, attributes: attributes})
+
+    embedding <- AddV<Fact_Embedding>(fact_embedding, {fact_embedding: fact_embedding})
+    edge <- AddE<Fact_to_Embedding>({group_id: group_id})::From(fact_node)::To(embedding)
+
+    source <- N<Entity>(source_uuid)
+    target <- N<Entity>(target_uuid)
+    source_fact_edge <- AddE<Entity_Fact>({group_id: group_id})::From(source)::To(fact_node)
+    fact_target_edge <- AddE<Fact_Entity>({group_id: group_id})::From(fact_node)::To(target)
+    RETURN fact_node
+
+QUERY updateFact (fact_id: ID, name: String, fact: String, fact_embedding: [F64], group_id: String, created_at: Date, source_uuid: ID, target_uuid: ID, episodes: [String], valid_at: Date, invalid_at: Date, expired_at: Date, attributes: String) =>
+    fact_node <- N<Fact>(fact_id)::UPDATE({name: name, fact: fact, group_id: group_id, created_at: created_at, episodes: episodes, valid_at: valid_at, invalid_at: invalid_at, expired_at: expired_at, attributes: attributes})
+
+    DROP N<Fact>(fact_id)::Out<Fact_to_Embedding>
+    embedding <- AddV<Fact_Embedding>(fact_embedding, {fact_embedding: fact_embedding})
+    edge <- AddE<Fact_to_Embedding>({group_id: group_id})::From(fact_node)::To(embedding)
+
+    DROP N<Fact>(fact_id)::InE<Entity_Fact>
+    DROP N<Fact>(fact_id)::OutE<Fact_Entity>
+    source <- N<Entity>(source_uuid)
+    target <- N<Entity>(target_uuid)
+    source_fact_edge <- AddE<Entity_Fact>({group_id: group_id})::From(source)::To(fact_node)
+    fact_target_edge <- AddE<Fact_Entity>({group_id: group_id})::From(fact_node)::To(target)
+    RETURN fact_node
+
+QUERY getFact (fact_id: ID) =>
+    fact <- N<Fact>(fact_id)
+    source <- fact::InE<Entity_Fact>
+    target <- fact::OutE<Fact_Entity>
+    RETURN fact, source, target
+
+QUERY getFactsbyGroup (group_id: String) =>
+    facts <- N<Fact>::WHERE(_::{group_id}::EQ(group_id))
+    source <- facts::InE<Entity_Fact>
+    target <- facts::OutE<Fact_Entity>
+    RETURN facts, source, target
+
+QUERY getFactsbyGroupLimit (group_id: String, limit: I64) =>
+    facts <- N<Fact>::WHERE(_::{group_id}::EQ(group_id))::RANGE(0, limit)
+    source <- facts::InE<Entity_Fact>
+    target <- facts::OutE<Fact_Entity>
+    RETURN facts, source, target
+
+QUERY getFactsbyEntity (entity_id: ID) =>
+    facts <- N<Entity>(entity_id)::Out<Entity_Fact>
+    source <- facts::InE<Entity_Fact>
+    target <- facts::OutE<Fact_Entity>
+    RETURN facts, source, target
+
 QUERY loadFactEmbedding (fact_id: ID) =>
     embedding <- N<Fact>(fact_id)::Out<Fact_to_Embedding>
     RETURN embedding
 
 QUERY deleteFact (fact_id: ID) =>
     DROP N<Fact>(fact_id)::Out<Fact_to_Embedding>
-    DROP N<Fact>(fact_id)::OutE<Fact_Entity>
     DROP N<Fact>(fact_id)
     RETURN "SUCCESS"
 
@@ -148,17 +197,43 @@ QUERY loadCommunityEmbedding (community_id: ID) =>
 
 QUERY deleteCommunity (community_id: ID) =>
     DROP N<Community>(community_id)::Out<Community_to_Embedding>
-    DROP N<Community>(community_id)::OutE<Community_Fact>
-    DROP N<Community>(community_id)::OutE<Community_Entity>
-    DROP N<Community>(community_id)::OutE<Community_Community>
     DROP N<Community>(community_id)
+    RETURN "SUCCESS"
+
+QUERY createCommunityEdge (community_id: ID, entity_id: ID, group_id: String, created_at: Date) =>
+    community <- N<Community>(community_id)
+    entity <- N<Entity>(entity_id)
+    community_edge <- AddE<Community_Entity>({group_id: group_id, created_at: created_at})::From(community)::To(entity)
+    RETURN community_edge
+
+QUERY updateCommunityEdge (communityEdge_id: ID, community_id: ID, entity_id: ID, group_id: String, created_at: Date) =>
+    DROP E<Community_Entity>(communityEdge_id)
+    community <- N<Community>(community_id)
+    entity <- N<Entity>(entity_id)
+    community_edge <- AddE<Community_Entity>({group_id: group_id, created_at: created_at})::From(community)::To(entity)
+    RETURN community_edge
+
+QUERY getCommunityEdge (community_id: ID) =>
+    community_edge <- N<Community>(community_id)::Out<Community_to_Embedding>
+    RETURN community_edge
+
+QUERY getCommunityEdgesbyGroup (group_id: String) =>
+    community_edges <- E<Community_Entity>::WHERE(_::{group_id}::EQ(group_id))
+    RETURN community_edges
+
+QUERY getCommunityEdgesbyGroupLimit (group_id: String, limit: I64) =>
+    community_edges <- E<Community_Entity>::WHERE(_::{group_id}::EQ(group_id))::RANGE(0, limit)
+    RETURN community_edges
+
+QUERY deleteCommunityEdge (communityEdge_id: ID) =>
+    DROP E<Community_Entity>(communityEdge_id)
     RETURN "SUCCESS"
 
 // #########################################################
 //                          Global
 // #########################################################
 
-QUERY deleteGroup(group_id: String) =>
+QUERY deleteGroup (group_id: String) =>
     DROP N<Entity>::WHERE(_::{group_id}::EQ(group_id))
     DROP N<Episode>::WHERE(_::{group_id}::EQ(group_id))
     DROP N<Community>::WHERE(_::{group_id}::EQ(group_id))

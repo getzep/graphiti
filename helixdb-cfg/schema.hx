@@ -40,14 +40,11 @@ N::Fact {
     name: String,
     fact: String,
     group_id: String,
-    labels: [String],
     created_at: Date DEFAULT NOW,
-    source_id: String,
-    target_id: String,
     episodes: [String],
-    valid_at: Date DEFAULT NOW,
-    invalid_at: Date DEFAULT NOW,
-    expired_at: Date DEFAULT NOW,
+    valid_at: Date,
+    invalid_at: Date,
+    expired_at: Date,
     attributes: String
 }
 
@@ -60,7 +57,7 @@ E::Fact_to_Embedding {
 }
 
 V::Fact_Embedding {
-    fact: [F64],
+    fact_embedding: [F64],
 }
 
 E::Fact_Entity {
@@ -102,11 +99,8 @@ E::Episode_Entity {
 // #########################################################
 
 N::Community {
-    name: String,
     group_id: String,
-    labels: [String],
     created_at: Date DEFAULT NOW,
-    summary: String
 }
 
 E::Community_to_Embedding {
@@ -124,24 +118,6 @@ V::Community_Embedding {
 E::Community_Entity {
     From: Community,
     To: Entity,
-    Properties: {
-        group_id: String,
-        created_at: Date DEFAULT NOW
-    }
-}
-
-E::Community_Community {
-    From: Community,
-    To: Community,
-    Properties: {
-        group_id: String,
-        created_at: Date DEFAULT NOW
-    }
-}
-
-E::Community_Fact {
-    From: Community,
-    To: Fact,
     Properties: {
         group_id: String,
         created_at: Date DEFAULT NOW

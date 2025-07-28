@@ -270,6 +270,7 @@ class EpisodicNode(Node):
             helix_id = result.get('id')
 
             Node.helix_to_uuid[helix_id] = uuid
+            Node.uuid_to_helix[uuid] = helix_id
 
             return get_episodic_node_from_record(result)
 
@@ -324,6 +325,7 @@ class EpisodicNode(Node):
 
                 helix_id = result.get('id')
                 Node.helix_to_uuid[helix_id] = uuid
+                Node.uuid_to_helix[uuid] = helix_id
 
             episodes = [get_episodic_node_from_record(result) for result in results]
             return episodes
@@ -572,7 +574,7 @@ class EntityNode(Node):
             else:
                 logger.debug(f'Created Entity Node to Graph: {self.uuid}')
 
-            return {'uuid': result.get('entity', {}).get('id', None)}
+            return {'uuid': self.uuid}
 
         result = await driver.execute_query(
             ENTITY_NODE_SAVE,
@@ -604,8 +606,8 @@ class EntityNode(Node):
             logger.debug(f'Deleted Entity Node: {self.uuid}')
 
             return result
-        else:
-            return await super().delete(driver)
+
+        return await super().delete(driver)
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
@@ -640,6 +642,7 @@ class EntityNode(Node):
             helix_id = result.get('id')
 
             Node.helix_to_uuid[helix_id] = uuid
+            Node.uuid_to_helix[uuid] = helix_id
 
             return get_entity_node_from_record(result)
 
@@ -698,6 +701,7 @@ class EntityNode(Node):
 
                 helix_id = result.get('id')
                 Node.helix_to_uuid[helix_id] = uuid
+                Node.uuid_to_helix[uuid] = helix_id
 
             nodes = [get_entity_node_from_record(result) for result in results]
 
@@ -755,8 +759,8 @@ class EntityNode(Node):
                     entity['attributes'] = json.loads(entity.get('attributes', '{}'))
                     entity['name_embedding'] = embedding
 
-                    if entity['uuid'] not in Node.uuid_to_helix:
-                        Node.uuid_to_helix[entity['uuid']] = helix_id
+                    Node.uuid_to_helix[entity['uuid']] = helix_id
+                    Node.helix_to_uuid[helix_id] = entity['uuid']
 
                     results.append(entity)
 
@@ -952,6 +956,7 @@ class CommunityNode(Node):
             helix_id = result.get('id')
 
             Node.helix_to_uuid[helix_id] = uuid
+            Node.uuid_to_helix[uuid] = helix_id
 
             return get_community_node_from_record(result)
 
@@ -1011,6 +1016,7 @@ class CommunityNode(Node):
 
                 helix_id = result.get('id')
                 Node.helix_to_uuid[helix_id] = uuid
+                Node.uuid_to_helix[uuid] = helix_id
 
             nodes = [get_community_node_from_record(result) for result in results]
 
