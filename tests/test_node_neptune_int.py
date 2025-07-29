@@ -80,9 +80,7 @@ def sample_community_node():
 @pytest.mark.integration
 @unittest.skipIf(not HAS_NEPTUNE, 'Neptune is not installed')
 async def test_entity_node_save_get_and_delete(sample_entity_node):
-    neptune_driver = NeptuneDriver(
-        host=NEPTUNE_HOST, aoss_host=AOSS_HOST
-    )
+    neptune_driver = NeptuneDriver(host=NEPTUNE_HOST, aoss_host=AOSS_HOST)
 
     await sample_entity_node.save(neptune_driver)
 
@@ -99,9 +97,7 @@ async def test_entity_node_save_get_and_delete(sample_entity_node):
 @pytest.mark.integration
 @unittest.skipIf(not HAS_NEPTUNE, 'Neptune is not installed')
 async def test_community_node_save_get_and_delete(sample_community_node):
-    neptune_driver = NeptuneDriver(
-        host=NEPTUNE_HOST, aoss_host=AOSS_HOST
-    )
+    neptune_driver = NeptuneDriver(host=NEPTUNE_HOST, aoss_host=AOSS_HOST)
 
     await sample_community_node.save(neptune_driver)
 
@@ -119,9 +115,7 @@ async def test_community_node_save_get_and_delete(sample_community_node):
 @pytest.mark.integration
 @unittest.skipIf(not HAS_NEPTUNE, 'Neptune is not installed')
 async def test_episodic_node_save_get_and_delete(sample_episodic_node):
-    neptune_driver = NeptuneDriver(
-        host=NEPTUNE_HOST, aoss_host=AOSS_HOST
-    )
+    neptune_driver = NeptuneDriver(host=NEPTUNE_HOST, aoss_host=AOSS_HOST)
 
     await sample_episodic_node.save(neptune_driver)
 

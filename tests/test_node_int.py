@@ -19,16 +19,14 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from neo4j import AsyncGraphDatabase
 
+from graphiti_core.graphiti import Graphiti
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
     EpisodeType,
     EpisodicNode,
 )
-from graphiti_core.graphiti import Graphiti
-
 
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')

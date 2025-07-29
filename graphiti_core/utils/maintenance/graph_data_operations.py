@@ -113,7 +113,7 @@ async def retrieve_episodes(
     )
     source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
 
-    if driver.provider == "neptune":
+    if driver.provider == 'neptune':
         query: LiteralString = (
             """
             MATCH (e:Episodic) WHERE e.valid_at <= datetime($reference_time)

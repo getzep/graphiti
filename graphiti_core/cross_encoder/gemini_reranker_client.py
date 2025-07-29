@@ -44,6 +44,7 @@ class GeminiRerankerClient(CrossEncoderClient):
     """
     Google Gemini Reranker Client
     """
+
     def __init__(
         self,
         config: LLMConfig | None = None,

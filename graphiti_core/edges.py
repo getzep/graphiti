@@ -29,8 +29,10 @@ from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
-    COMMUNITY_EDGE_SAVE, COMMUNITY_EDGE_SAVE_NEPTUNE,
-    ENTITY_EDGE_SAVE, ENTITY_EDGE_SAVE_NEPTUNE,
+    COMMUNITY_EDGE_SAVE,
+    COMMUNITY_EDGE_SAVE_NEPTUNE,
+    ENTITY_EDGE_SAVE,
+    ENTITY_EDGE_SAVE_NEPTUNE,
     EPISODIC_EDGE_SAVE,
 )
 from graphiti_core.nodes import Node
@@ -257,9 +259,9 @@ class EntityEdge(Edge):
         }
 
         edge_data.update(self.attributes or {})
-        
+
         if driver.provider == 'neptune':
-            driver.save_to_aoss('edge_name_and_fact', [edge_data])
+            driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
             result = await driver.execute_query(
                 ENTITY_EDGE_SAVE_NEPTUNE,
                 source_uuid=self.source_node_uuid,
@@ -286,10 +288,12 @@ class EntityEdge(Edge):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         if driver.provider == 'neptune':
             records, _, _ = await driver.execute_query(
-            """
+                """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             """
-                + ENTITY_EDGE_RETURN.replace("e.episodes AS episodes,", "split(e.episodes, ',') AS episodes,"),
+                + ENTITY_EDGE_RETURN.replace(
+                    'e.episodes AS episodes,', "split(e.episodes, ',') AS episodes,"
+                ),
                 uuid=uuid,
                 database_=DEFAULT_DATABASE,
                 routing_='r',
@@ -322,7 +326,9 @@ class EntityEdge(Edge):
             MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
             WHERE e.uuid IN $uuids
             """
-                + ENTITY_EDGE_RETURN.replace("e.episodes AS episodes,", "split(e.episodes, ',') AS episodes,"),
+                + ENTITY_EDGE_RETURN.replace(
+                    'e.episodes AS episodes,', "split(e.episodes, ',') AS episodes,"
+                ),
                 uuids=uuids,
                 database_=DEFAULT_DATABASE,
                 routing_='r',

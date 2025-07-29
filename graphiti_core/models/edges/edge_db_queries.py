@@ -74,7 +74,7 @@ COMMUNITY_EDGE_SAVE = """
         MERGE (community)-[r:HAS_MEMBER {uuid: $uuid}]->(node)
         SET r = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
         RETURN r.uuid AS uuid"""
-        
+
 COMMUNITY_EDGE_SAVE_NEPTUNE = """
         MATCH (community:Community {uuid: $community_uuid}) 
         MATCH (node {uuid: $entity_uuid})

@@ -24,8 +24,8 @@ from logging import INFO
 from dotenv import load_dotenv
 
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType
 from graphiti_core.driver.neptune_driver import NeptuneDriver
+from graphiti_core.nodes import EpisodeType
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
 #################################################
@@ -75,7 +75,7 @@ async def main():
 
     try:
         # Initialize the graph database with graphiti's indices. This only needs to be done once.
-        awßßait driver.delete_aoss_indices()
+        await driver.delete_aoss_indices()
         await driver._delete_all_data()
         await graphiti.build_indices_and_constraints()
 
@@ -137,7 +137,6 @@ async def main():
                 reference_time=datetime.now(timezone.utc),
             )
             print(f'Added episode: Freakonomics Radio {i} ({episode["type"].value})')
-
 
         await graphiti.build_communities()
 

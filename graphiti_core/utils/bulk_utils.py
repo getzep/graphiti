@@ -38,7 +38,8 @@ from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    EPISODIC_NODE_SAVE_BULK, EPISODIC_NODE_SAVE_BULK_NEPTUNE
+    EPISODIC_NODE_SAVE_BULK,
+    EPISODIC_NODE_SAVE_BULK_NEPTUNE,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -168,19 +169,19 @@ async def add_nodes_and_edges_bulk_tx(
 
     # Save Episodes
     if driver.provider == 'neptune':
-        #First save the episodes to AOSS
-        driver.save_to_aoss('episode_content', episodes)
+        # First save the episodes to AOSS
+        driver.save_to_aoss('episode_content', episodes)  # pyright: ignore reportAttributeAccessIssue
         await tx.run(EPISODIC_NODE_SAVE_BULK_NEPTUNE, episodes=episodes)
     else:
         await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-        
+
     # Save Entities
     entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
     if driver.provider == 'neptune':
-        #First save the entities to AOSS        
-        driver.save_to_aoss('node_name_and_summary', nodes)
+        # First save the entities to AOSS
+        driver.save_to_aoss('node_name_and_summary', nodes)  # pyright: ignore reportAttributeAccessIssue
     await tx.run(entity_node_save_bulk, nodes=nodes)
-    
+
     # Save Episode edges
     await tx.run(
         EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
@@ -189,8 +190,8 @@ async def add_nodes_and_edges_bulk_tx(
 
     # Save Entity Edges
     if driver.provider == 'neptune':
-        #First save the edges to AOSS        
-        driver.save_to_aoss('edge_name_and_fact', edges)
+        # First save the edges to AOSS
+        driver.save_to_aoss('edge_name_and_fact', edges)  # pyright: ignore reportAttributeAccessIssue
     await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
 

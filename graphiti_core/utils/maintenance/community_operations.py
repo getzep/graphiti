@@ -31,7 +31,7 @@ async def get_community_clusters(
     community_clusters: list[list[EntityNode]] = []
 
     if group_ids is None:
-        if driver.provider == "neptune":
+        if driver.provider == 'neptune':
             group_id_values, _, _ = await driver.execute_query(
                 """
             MATCH (n:Entity) WHERE n.group_id IS NOT NULL
@@ -39,7 +39,7 @@ async def get_community_clusters(
                 collect(DISTINCT n.group_id) AS group_ids
             """,
                 database_=DEFAULT_DATABASE,
-            )            
+            )
         else:
             group_id_values, _, _ = await driver.execute_query(
                 """

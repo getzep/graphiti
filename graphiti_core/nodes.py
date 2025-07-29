@@ -30,9 +30,12 @@ from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
-    COMMUNITY_NODE_SAVE, COMMUNITY_NODE_SAVE_NEPTUNE,
-    ENTITY_NODE_SAVE, ENTITY_NODE_SAVE_NEPTUNE, 
-    EPISODIC_NODE_SAVE, EPISODIC_NODE_SAVE_NEPTUNE
+    COMMUNITY_NODE_SAVE,
+    COMMUNITY_NODE_SAVE_NEPTUNE,
+    ENTITY_NODE_SAVE,
+    ENTITY_NODE_SAVE_NEPTUNE,
+    EPISODIC_NODE_SAVE,
+    EPISODIC_NODE_SAVE_NEPTUNE,
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -175,13 +178,20 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        
         if driver.provider == 'neptune':
-            driver.save_to_aoss('episode_content', [{'uuid': self.uuid, 'group_id': self.group_id,
-                                                    'source': self.source.value, 
-                                                    'content': self.content, 
-                                                    'source_description': self.source_description}])
-        
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'episode_content',
+                [
+                    {
+                        'uuid': self.uuid,
+                        'group_id': self.group_id,
+                        'source': self.source.value,
+                        'content': self.content,
+                        'source_description': self.source_description,
+                    }
+                ],
+            )
+
             result = await driver.execute_query(
                 EPISODIC_NODE_SAVE_NEPTUNE,
                 uuid=self.uuid,
@@ -419,15 +429,15 @@ class EntityNode(Node):
         }
 
         entity_data.update(self.attributes or {})
-        
+
         if driver.provider == 'neptune':
-            driver.save_to_aoss('node_name_and_summary', [entity_data])
-            labels = ""
+            driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+            labels = ''
             for label in self.labels:
-                labels += f" SET n:{label}\n"
+                labels += f' SET n:{label}\n'
 
             result = await driver.execute_query(
-                ENTITY_NODE_SAVE_NEPTUNE.replace("||SET LABELS||", labels),
+                ENTITY_NODE_SAVE_NEPTUNE.replace('||SET LABELS||', labels),
                 entity_data=entity_data,
                 database_=DEFAULT_DATABASE,
             )
@@ -520,8 +530,10 @@ class CommunityNode(Node):
 
     async def save(self, driver: GraphDriver):
         if driver.provider == 'neptune':
-            driver.save_to_aoss('community_name', [{'name': self.name, 'uuid': self.uuid, 
-                                                   'group_id': self.group_id}])
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'community_name',
+                [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
+            )
             result = await driver.execute_query(
                 COMMUNITY_NODE_SAVE_NEPTUNE,
                 uuid=self.uuid,
@@ -532,7 +544,7 @@ class CommunityNode(Node):
                 created_at=self.created_at,
                 database_=DEFAULT_DATABASE,
             )
-        else: 
+        else:
             result = await driver.execute_query(
                 COMMUNITY_NODE_SAVE,
                 uuid=self.uuid,

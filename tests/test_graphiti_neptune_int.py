@@ -73,9 +73,7 @@ def setup_logging():
 async def test_graphiti_neptune_init():
     logger = setup_logging()
 
-    neptune_driver = NeptuneDriver(
-        host=NEPTUNE_HOST, aoss_host=AOSS_HOST
-    )
+    neptune_driver = NeptuneDriver(host=NEPTUNE_HOST, aoss_host=AOSS_HOST)
 
     graphiti = Graphiti(graph_driver=neptune_driver)
     results = await graphiti.search_(query='Who is the user?')
@@ -90,9 +88,7 @@ async def test_graphiti_neptune_init():
 @pytest.mark.asyncio
 @unittest.skipIf(not HAS_NEPTUNE, 'Neptune is not installed')
 async def test_graph_neptune_integration():
-    neptune_driver = NeptuneDriver(
-        host=NEPTUNE_HOST, aoss_host=AOSS_HOST
-    )
+    neptune_driver = NeptuneDriver(host=NEPTUNE_HOST, aoss_host=AOSS_HOST)
 
     client = Graphiti(graph_driver=neptune_driver)
     embedder = client.embedder
@@ -119,17 +115,14 @@ async def test_graph_neptune_integration():
         summary='Alice summary',
     )
 
-    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary',
-        group_id='')
+    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary', group_id='')
 
     episodic_edge_1 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now,
-        group_id=''
+        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now, group_id=''
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now,
-        group_id=''
+        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now, group_id=''
     )
 
     entity_edge = EntityEdge(
@@ -142,7 +135,7 @@ async def test_graph_neptune_integration():
         expired_at=now,
         valid_at=now,
         invalid_at=now,
-        group_id=''
+        group_id='',
     )
 
     await entity_edge.generate_embedding(embedder)

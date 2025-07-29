@@ -10,10 +10,12 @@ from typing import Any
 from typing_extensions import LiteralString
 
 from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK, ENTITY_EDGE_SAVE_BULK_NEPTUNE
+    ENTITY_EDGE_SAVE_BULK,
+    ENTITY_EDGE_SAVE_BULK_NEPTUNE,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK, ENTITY_NODE_SAVE_BULK_NEPTUNE
+    ENTITY_NODE_SAVE_BULK,
+    ENTITY_NODE_SAVE_BULK_NEPTUNE,
 )
 
 # Mapping from Neo4j fulltext index names to FalkorDB node labels
@@ -42,9 +44,9 @@ def get_range_indices(db_type: str = 'neo4j') -> list[LiteralString]:
                 # HAS_MEMBER edge
                 'CREATE INDEX FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
             ]
-        case "neptune":
+        case 'neptune':
             return []
-        case _: #Neo4j by default
+        case _:  # Neo4j by default
             return [
                 'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
                 'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
@@ -79,7 +81,7 @@ def get_fulltext_indices(db_type: str = 'neo4j') -> list[LiteralString]:
             ]
         case 'neptune':
             return []
-        case _: #Neo4j
+        case _:  # Neo4j
             return [
                 """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
                 FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
@@ -97,9 +99,9 @@ def get_nodes_query(db_type: str = 'neo4j', name: str = '', query: str | None = 
         case 'falkordb':
             label = NEO4J_TO_FALKORDB_MAPPING[name]
             return f"CALL db.idx.fulltext.queryNodes('{label}', {query})"
-        case "neptune":
+        case 'neptune':
             raise NotImplementedError
-        case _: #Neo4j
+        case _:  # Neo4j
             return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
 
@@ -108,9 +110,9 @@ def get_vector_cosine_func_query(vec1, vec2, db_type: str = 'neo4j') -> str:
         case 'falkordb':
             # FalkorDB uses a different syntax for regular cosine similarity and Neo4j uses normalized cosine similarity
             return f'(2 - vec.cosineDistance({vec1}, vecf32({vec2})))/2'
-        case "neptune":
+        case 'neptune':
             raise NotImplementedError
-        case _: #Neo4j
+        case _:  # Neo4j
             return f'vector.similarity.cosine({vec1}, {vec2})'
 
 
@@ -119,9 +121,9 @@ def get_relationships_query(name: str, db_type: str = 'neo4j') -> str:
         case 'falkordb':
             label = NEO4J_TO_FALKORDB_MAPPING[name]
             return f"CALL db.idx.fulltext.queryRelationships('{label}', $query)"
-        case "neptune":
+        case 'neptune':
             raise NotImplementedError
-        case _: #Neo4j
+        case _:  # Neo4j
             return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
 
 
@@ -146,20 +148,20 @@ def get_entity_node_save_bulk_query(nodes, db_type: str = 'neo4j') -> str | Any:
                         )
                     )
             return queries
-        case "neptune":
+        case 'neptune':
             queries = []
             for node in nodes:
-                labels = ""
+                labels = ''
                 for label in node['labels']:
-                    labels += f"SET n:{label} "
+                    labels += f'SET n:{label} '
                 queries.append(
                     (
-                        ENTITY_NODE_SAVE_BULK_NEPTUNE.replace("||SET_LABELS||", labels),
+                        ENTITY_NODE_SAVE_BULK_NEPTUNE.replace('||SET_LABELS||', labels),
                         {'nodes': [node]},
                     )
                 )
             return queries
-        case _: #Neo4j
+        case _:  # Neo4j
             return ENTITY_NODE_SAVE_BULK
 
 
@@ -175,7 +177,7 @@ def get_entity_edge_save_bulk_query(db_type: str = 'neo4j') -> str:
             created_at: edge.created_at, expired_at: edge.expired_at, valid_at: edge.valid_at, invalid_at: edge.invalid_at, fact_embedding: vecf32(edge.fact_embedding)}
             WITH r, edge
             RETURN edge.uuid AS uuid"""
-        case "neptune":
+        case 'neptune':
             return ENTITY_EDGE_SAVE_BULK_NEPTUNE
-        case _: #Neo4j
+        case _:  # Neo4j
             return ENTITY_EDGE_SAVE_BULK
