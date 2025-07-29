@@ -422,32 +422,61 @@ async def edge_bfs_search(
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
-    query = (
-        """
-                                    UNWIND $bfs_origin_node_uuids AS origin_uuid
-                                    MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
-                                    UNWIND relationships(path) AS rel
-                                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
-                                    WHERE r.uuid = rel.uuid
-                                    """
-        + filter_query
-        + """  
-                RETURN DISTINCT
-                    r.uuid AS uuid,
-                    r.group_id AS group_id,
-                    startNode(r).uuid AS source_node_uuid,
-                    endNode(r).uuid AS target_node_uuid,
-                    r.created_at AS created_at,
-                    r.name AS name,
-                    r.fact AS fact,
-                    r.episodes AS episodes,
-                    r.expired_at AS expired_at,
-                    r.valid_at AS valid_at,
-                    r.invalid_at AS invalid_at,
-                    properties(r) AS attributes
-                LIMIT $limit
-        """
-    )
+    if driver.provider == 'neptune':
+        query = (
+                """
+                    UNWIND $bfs_origin_node_uuids AS origin_uuid
+                    MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS *1..3]->(n:Entity)
+                    WHERE origin: Entity OR origin.Episode
+                    UNWIND relationships(path) AS rel
+                    MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                    WHERE r.uuid = rel.uuid
+                """
+                + filter_query
+                + """  
+                        RETURN DISTINCT
+                            r.uuid AS uuid,
+                            r.group_id AS group_id,
+                            startNode(r).uuid AS source_node_uuid,
+                            endNode(r).uuid AS target_node_uuid,
+                            r.created_at AS created_at,
+                            r.name AS name,
+                            r.fact AS fact,
+                            r.episodes AS episodes,
+                            r.expired_at AS expired_at,
+                            r.valid_at AS valid_at,
+                            r.invalid_at AS invalid_at,
+                            properties(r) AS attributes
+                        LIMIT $limit
+                """
+        )
+    else:
+        query = (
+            """
+                                        UNWIND $bfs_origin_node_uuids AS origin_uuid
+                                        MATCH path = (origin:Entity|Episodic {uuid: origin_uuid})-[:RELATES_TO|MENTIONS]->{1,3}(n:Entity)
+                                        UNWIND relationships(path) AS rel
+                                        MATCH (n:Entity)-[r:RELATES_TO]-(m:Entity)
+                                        WHERE r.uuid = rel.uuid
+                                        """
+            + filter_query
+            + """  
+                    RETURN DISTINCT
+                        r.uuid AS uuid,
+                        r.group_id AS group_id,
+                        startNode(r).uuid AS source_node_uuid,
+                        endNode(r).uuid AS target_node_uuid,
+                        r.created_at AS created_at,
+                        r.name AS name,
+                        r.fact AS fact,
+                        r.episodes AS episodes,
+                        r.expired_at AS expired_at,
+                        r.valid_at AS valid_at,
+                        r.invalid_at AS invalid_at,
+                        properties(r) AS attributes
+                    LIMIT $limit
+            """
+        )
 
     records, _, _ = await driver.execute_query(
         query,
@@ -714,36 +743,74 @@ async def episode_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
+    
+    if driver.provider == "neptune":
+        res = driver.run_aoss_query("episode_content", query, limit=limit)
+        if res['hits']['total']['value'] > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in res['hits']['hits']:
+                input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})        
+                    
+            # Match the edge ides and return the values
+            query =  ( """
+                UNWIND $ids as i
+                MATCH (e:Episodic)
+                WHERE e.uuid=i.id
+            RETURN 
+                    e.content AS content,
+                    e.created_at AS created_at,
+                    e.valid_at AS valid_at,
+                    e.uuid AS uuid,
+                    e.name AS name,
+                    e.group_id AS group_id,
+                    e.source_description AS source_description,
+                    e.source AS source,
+                    e.entity_edges AS entity_edges
+                ORDER BY i.score DESC
+                LIMIT $limit
+            """)
+            records, header, _ = await driver.execute_query(
+                query,
+                ids=input_ids,
+                query=fuzzy_query,
+                group_ids=group_ids,
+                limit=limit,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:
+        query = (
+            get_nodes_query(driver.provider, 'episode_content', '$query')
+            + """
+            YIELD node AS episode, score
+            MATCH (e:Episodic)
+            WHERE e.uuid = episode.uuid
+            RETURN 
+                e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.name AS name,
+                e.group_id AS group_id,
+                e.source_description AS source_description,
+                e.source AS source,
+                e.entity_edges AS entity_edges
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
 
-    query = (
-        get_nodes_query(driver.provider, 'episode_content', '$query')
-        + """
-        YIELD node AS episode, score
-        MATCH (e:Episodic)
-        WHERE e.uuid = episode.uuid
-        RETURN 
-            e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.name AS name,
-            e.group_id AS group_id,
-            e.source_description AS source_description,
-            e.source AS source,
-            e.entity_edges AS entity_edges
-        ORDER BY score DESC
-        LIMIT $limit
-        """
-    )
-
-    records, _, _ = await driver.execute_query(
-        query,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+        records, _, _ = await driver.execute_query(
+            query,
+            query=fuzzy_query,
+            group_ids=group_ids,
+            limit=limit,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
     episodes = [get_episodic_node_from_record(record) for record in records]
 
     return episodes
@@ -759,31 +826,66 @@ async def community_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids)
     if fuzzy_query == '':
         return []
+    
+    if driver.provider == "neptune":
+        res = driver.run_aoss_query("community_name", query, limit=limit)
+        if res['hits']['total']['value'] > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in res['hits']['hits']:
+                input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})        
+                    
+            # Match the edge ides and return the values
+            query =  ( """
+                UNWIND $ids as i
+                MATCH (comm:Community)
+                WHERE comm.uuid=i.id
+                RETURN
+                    comm.uuid AS uuid,
+                    comm.group_id AS group_id, 
+                    comm.name AS name, 
+                    comm.created_at AS created_at, 
+                    comm.summary AS summary,
+                    [x IN split(comm.name_embedding, ",") | toFloat(x)]AS name_embedding
+                ORDER BY i.score DESC
+                LIMIT $limit
+            """)
+            records, header, _ = await driver.execute_query(
+                query,
+                ids=input_ids,
+                query=fuzzy_query,
+                group_ids=group_ids,
+                limit=limit,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:
+        query = (
+            get_nodes_query(driver.provider, 'community_name', '$query')
+            + """
+            YIELD node AS comm, score
+            RETURN
+                comm.uuid AS uuid,
+                comm.group_id AS group_id, 
+                comm.name AS name, 
+                comm.created_at AS created_at, 
+                comm.summary AS summary,
+                comm.name_embedding AS name_embedding
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
 
-    query = (
-        get_nodes_query(driver.provider, 'community_name', '$query')
-        + """
-        YIELD node AS comm, score
-        RETURN
-            comm.uuid AS uuid,
-            comm.group_id AS group_id, 
-            comm.name AS name, 
-            comm.created_at AS created_at, 
-            comm.summary AS summary,
-            comm.name_embedding AS name_embedding
-        ORDER BY score DESC
-        LIMIT $limit
-        """
-    )
-
-    records, _, _ = await driver.execute_query(
-        query,
-        query=fuzzy_query,
-        group_ids=group_ids,
-        limit=limit,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+        records, _, _ = await driver.execute_query(
+            query,
+            query=fuzzy_query,
+            group_ids=group_ids,
+            limit=limit,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities
@@ -804,38 +906,96 @@ async def community_similarity_search(
         group_filter_query += 'WHERE comm.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
-    query = (
-        RUNTIME_QUERY
-        + """
-           MATCH (comm:Community)
-           """
-        + group_filter_query
-        + """
-           WITH comm, """
-        + get_vector_cosine_func_query('comm.name_embedding', '$search_vector', driver.provider)
-        + """ AS score
-           WHERE score > $min_score
-           RETURN
-               comm.uuid As uuid,
-               comm.group_id AS group_id,
-               comm.name AS name, 
-               comm.created_at AS created_at, 
-               comm.summary AS summary,
-               comm.name_embedding AS name_embedding
-           ORDER BY score DESC
-           LIMIT $limit
-        """
-    )
+    if driver.provider == "neptune":
+        query = (RUNTIME_QUERY 
+            + """
+            MATCH (n:Community)
+            """ 
+            + group_filter_query  
+            + """
+            RETURN DISTINCT id(n) as id, n.name_embedding as embedding
+            """)
+        resp, header, _  = await driver.execute_query(
+            query,
+            params=query_params,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
+        
+        if len(resp) > 0:
+            # Calculate Cosine similarity then return the edge ids
+            input_ids = []
+            for r in resp:
+                if r['embedding']:
+                    score = calculate_cosine_similarity(search_vector, list(map(float, r['embedding'].split(','))))
+                    if score > min_score:
+                        input_ids.append({'id': r['id'], 'score': score})        
+            
+            # Match the edge ides and return the values
+            query =  ( """
+                    UNWIND $ids as i
+                    MATCH (comm:Community)
+                    WHERE id(comm)=i.id
+                    RETURN
+                        comm.uuid As uuid,
+                        comm.group_id AS group_id,
+                        comm.name AS name, 
+                        comm.created_at AS created_at, 
+                        comm.summary AS summary,
+                        comm.name_embedding AS name_embedding
+                    ORDER BY i.score DESC
+                    LIMIT $limit
+                """)
+            records, header, _ = await driver.execute_query(
+                query,
+                params=query_params,
+                ids=input_ids,
+                search_vector=search_vector,
+                group_ids=group_ids,
+                limit=limit,
+                min_score=min_score,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            return []
+    else:
+        query = (
+            RUNTIME_QUERY
+            + """
+            MATCH (comm:Community)
+            """
+            + group_filter_query
+            + """
+            WITH comm, """
+            + get_vector_cosine_func_query('comm.name_embedding', '$search_vector', driver.provider)
+            + """ AS score
+            WHERE score > $min_score
+            RETURN
+                comm.uuid As uuid,
+                comm.group_id AS group_id,
+                comm.name AS name, 
+                comm.created_at AS created_at, 
+                comm.summary AS summary,
+                comm.name_embedding AS name_embedding
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
 
-    records, _, _ = await driver.execute_query(
-        query,
-        search_vector=search_vector,
-        group_ids=group_ids,
-        limit=limit,
-        min_score=min_score,
-        database_=DEFAULT_DATABASE,
-        routing_='r',
-    )
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            group_ids=group_ids,
+            limit=limit,
+            min_score=min_score,
+            database_=DEFAULT_DATABASE,
+            routing_='r',
+        )
     communities = [get_community_node_from_record(record) for record in records]
 
     return communities

@@ -217,6 +217,8 @@ class NeptuneDriver(GraphDriver):
                         # Create a new list expression with datetime() wrapped around each element
                         datetime_list = '[' + ', '.join(f'datetime("{item}")' if isinstance(item, str) and 'T' in item else repr(item) for item in v) + ']'
                         query = query.replace(f'${k}', datetime_list)
+                elif isinstance(v, dict):
+                    query = self._sanitize_parameters(query, v)
             return query
 
 

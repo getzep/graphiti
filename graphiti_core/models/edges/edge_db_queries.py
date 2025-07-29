@@ -42,16 +42,9 @@ ENTITY_EDGE_SAVE_NEPTUNE = """
         MATCH (source:Entity {uuid: $source_uuid}) 
         MATCH (target:Entity {uuid: $target_uuid}) 
         MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
-        SET r = removeKeyFromMap($edge_data, "fact_embedding")
-        SET r.fact_embedding = join([x IN $edge_data.fact_embedding | toString(x) ], ",")
-        RETURN r.uuid AS uuid"""
-        
-ENTITY_EDGE_SAVE_NEPTUNE = """
-        MATCH (source:Entity {uuid: $source_uuid}) 
-        MATCH (target:Entity {uuid: $target_uuid}) 
-        MERGE (source)-[r:RELATES_TO {uuid: $uuid}]->(target)
-        SET r = $edge_data
-        SET r.fact_embedding = join([x IN $edge_data.fact_embedding | toString(x) ], ",")
+        SET r = removeKeyFromMap(removeKeyFromMap($edge_data, "fact_embedding"), "episodes")
+        SET r.fact_embedding = join([x IN coalesce($edge_data.fact_embedding, []) | toString(x) ], ",")
+        SET r.episodes = join($edge_data.episodes, ",")
         RETURN r.uuid AS uuid"""
 
 ENTITY_EDGE_SAVE_BULK = """
@@ -70,7 +63,7 @@ ENTITY_EDGE_SAVE_BULK_NEPTUNE = """
     MATCH (target:Entity {uuid: edge.target_node_uuid}) 
     MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
     SET r = removeKeyFromMap(removeKeyFromMap(edge, "fact_embedding"), "episodes")
-    SET r.fact_embedding = join([x IN edge.fact_embedding | toString(x) ], ",")
+    SET r.fact_embedding = join([x IN coalesce(edge.fact_embedding, []) | toString(x) ], ",")
     SET r.episodes = join(edge.episodes, ",")
     RETURN edge.uuid AS uuid
 """
@@ -117,7 +110,7 @@ EPISODIC_EDGE_SAVE_BULK_NEPTUNE = """
     MATCH (node:Entity {uuid: edge.target_node_uuid})
     MERGE (episode)-[r:MENTIONS {uuid: edge.uuid}]->(node)
     SET r = removeKeyFromMap(edge, "episodes")
-    SET r.episodes = join(edge.episodes, ", ")
+    SET r.episodes = join(coalesce(edge.episodes, []), ", ")
     RETURN edge.uuid AS uuid
 """
 

@@ -32,7 +32,7 @@ from graphiti_core.helpers import DEFAULT_DATABASE, parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_SAVE, COMMUNITY_NODE_SAVE_NEPTUNE,
     ENTITY_NODE_SAVE, ENTITY_NODE_SAVE_NEPTUNE, 
-    EPISODIC_NODE_SAVE
+    EPISODIC_NODE_SAVE, EPISODIC_NODE_SAVE_NEPTUNE
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -97,14 +97,25 @@ class Node(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
-        result = await driver.execute_query(
-            """
-        MATCH (n:Entity|Episodic|Community {uuid: $uuid})
-        DETACH DELETE n
-        """,
-            uuid=self.uuid,
-            database_=DEFAULT_DATABASE,
-        )
+        if driver.provider == 'neptune':
+            result = await driver.execute_query(
+                """
+            MATCH (n {uuid: $uuid})
+            WHERE n:Entity OR n:Episodic OR n:Community
+            DETACH DELETE n
+            """,
+                uuid=self.uuid,
+                database_=DEFAULT_DATABASE,
+            )
+        else:
+            result = await driver.execute_query(
+                """
+            MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+            DETACH DELETE n
+            """,
+                uuid=self.uuid,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Deleted Node: {self.uuid}')
 
@@ -120,16 +131,29 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str):
-        await driver.execute_query(
-            """
-        MATCH (n:Entity|Episodic|Community {group_id: $group_id})
-        DETACH DELETE n
-        """,
-            group_id=group_id,
-            database_=DEFAULT_DATABASE,
-        )
+        if driver.provider == 'neptune':
+            await driver.execute_query(
+                """
+            MATCH (n {group_id: $group_id})
+            WHERE n:Entity OR n:Episodic OR n:Community
+            DETACH DELETE n
+            """,
+                group_id=group_id,
+                database_=DEFAULT_DATABASE,
+            )
 
-        return 'SUCCESS'
+            return 'SUCCESS'
+        else:
+            await driver.execute_query(
+                """
+            MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+            DETACH DELETE n
+            """,
+                group_id=group_id,
+                database_=DEFAULT_DATABASE,
+            )
+
+            return 'SUCCESS'
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -158,19 +182,33 @@ class EpisodicNode(Node):
                                                     'content': self.content, 
                                                     'source_description': self.source_description}])
         
-        result = await driver.execute_query(
-            EPISODIC_NODE_SAVE,
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            source_description=self.source_description,
-            content=self.content,
-            entity_edges=self.entity_edges,
-            created_at=self.created_at,
-            valid_at=self.valid_at,
-            source=self.source.value,
-            database_=DEFAULT_DATABASE,
-        )
+            result = await driver.execute_query(
+                EPISODIC_NODE_SAVE_NEPTUNE,
+                uuid=self.uuid,
+                name=self.name,
+                group_id=self.group_id,
+                source_description=self.source_description,
+                content=self.content,
+                entity_edges=self.entity_edges,
+                created_at=self.created_at,
+                valid_at=self.valid_at,
+                source=self.source.value,
+                database_=DEFAULT_DATABASE,
+            )
+        else:
+            result = await driver.execute_query(
+                EPISODIC_NODE_SAVE,
+                uuid=self.uuid,
+                name=self.name,
+                group_id=self.group_id,
+                source_description=self.source_description,
+                content=self.content,
+                entity_edges=self.entity_edges,
+                created_at=self.created_at,
+                valid_at=self.valid_at,
+                source=self.source.value,
+                database_=DEFAULT_DATABASE,
+            )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
@@ -178,23 +216,42 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
-            """
-        MATCH (e:Episodic {uuid: $uuid})
-            RETURN e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.name AS name,
-            e.group_id AS group_id,
-            e.source_description AS source_description,
-            e.source AS source,
-            e.entity_edges AS entity_edges
-        """,
-            uuid=uuid,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
+        if driver.provider == 'neptune':
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (e:Episodic {uuid: $uuid})
+                RETURN e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.name AS name,
+                e.group_id AS group_id,
+                e.source_description AS source_description,
+                e.source AS source,
+                split(e.entity_edges, ",") AS entity_edges
+            """,
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (e:Episodic {uuid: $uuid})
+                RETURN e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.name AS name,
+                e.group_id AS group_id,
+                e.source_description AS source_description,
+                e.source AS source,
+                e.entity_edges AS entity_edges
+            """,
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
@@ -205,24 +262,44 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
-        records, _, _ = await driver.execute_query(
-            """
-        MATCH (e:Episodic) WHERE e.uuid IN $uuids
-            RETURN DISTINCT
-            e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.name AS name,
-            e.group_id AS group_id,
-            e.source_description AS source_description,
-            e.source AS source,
-            e.entity_edges AS entity_edges
-        """,
-            uuids=uuids,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
+        if driver.provider == 'neptune':
+            records, _, _ = await driver.execute_query(
+                """
+                MATCH (e:Episodic) WHERE e.uuid IN $uuids
+                RETURN DISTINCT
+                    e.content AS content,
+                    e.created_at AS created_at,
+                    e.valid_at AS valid_at,
+                    e.uuid AS uuid,
+                    e.name AS name,
+                    e.group_id AS group_id,
+                    e.source_description AS source_description,
+                    e.source AS source,
+                    split(e.entity_edges, ",") AS entity_edges
+            """,
+                uuids=uuids,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (e:Episodic) WHERE e.uuid IN $uuids
+                RETURN DISTINCT
+                e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.name AS name,
+                e.group_id AS group_id,
+                e.source_description AS source_description,
+                e.source AS source,
+                e.entity_edges AS entity_edges
+            """,
+                uuids=uuids,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
 
         episodes = [get_episodic_node_from_record(record) for record in records]
 
@@ -312,10 +389,16 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
-        query: LiteralString = """
-            MATCH (n:Entity {uuid: $uuid})
-            RETURN n.name_embedding AS name_embedding
-        """
+        if driver.provider == 'neptune':
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN [x IN split(n.name_embedding, ",") | toFloat(x)]
+            """
+        else:
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN n.name_embedding AS name_embedding
+            """
         records, _, _ = await driver.execute_query(
             query, uuid=self.uuid, database_=DEFAULT_DATABASE, routing_='r'
         )
@@ -339,14 +422,13 @@ class EntityNode(Node):
         
         if driver.provider == 'neptune':
             driver.save_to_aoss('node_name_and_summary', [entity_data])
+            labels = ""
+            for label in self.labels:
+                labels += f" SET n:{label}\n"
+
             result = await driver.execute_query(
-                ENTITY_NODE_SAVE_NEPTUNE,
-                uuid=self.uuid,
-                name=self.name,
-                group_id=self.group_id,
-                summary=self.summary,
-                name_embedding=self.name_embedding,
-                created_at=self.created_at,
+                ENTITY_NODE_SAVE_NEPTUNE.replace("||SET LABELS||", labels),
+                entity_data=entity_data,
                 database_=DEFAULT_DATABASE,
             )
         else:
@@ -491,20 +573,37 @@ class CommunityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
-            """
-        MATCH (n:Community {uuid: $uuid})
-        RETURN
-            n.uuid As uuid, 
-            n.name AS name,
-            n.group_id AS group_id,
-            n.created_at AS created_at, 
-            n.summary AS summary
-        """,
-            uuid=uuid,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
+        if driver.provider == 'neptune':
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Community {uuid: $uuid})
+            RETURN
+                n.uuid As uuid, 
+                n.name AS name,
+                n.group_id AS group_id,
+                n.created_at AS created_at, 
+                n.summary AS summary,
+                [x IN split(n.name_embedding, ",") | toFloat(x)] AS name_embedding
+            """,
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Community {uuid: $uuid})
+            RETURN
+                n.uuid As uuid, 
+                n.name AS name,
+                n.group_id AS group_id,
+                n.created_at AS created_at, 
+                n.summary AS summary
+            """,
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
 
         nodes = [get_community_node_from_record(record) for record in records]
 

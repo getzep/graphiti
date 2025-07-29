@@ -102,6 +102,7 @@ async def test_graph_neptune_integration():
     episode = EpisodicNode(
         name='test_episode',
         labels=[],
+        group_id='',
         created_at=now,
         valid_at=now,
         source='message',
@@ -113,18 +114,22 @@ async def test_graph_neptune_integration():
     alice_node = EntityNode(
         name='Alice',
         labels=[],
+        group_id='',
         created_at=now,
         summary='Alice summary',
     )
 
-    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary')
+    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary',
+        group_id='')
 
     episodic_edge_1 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now,
+        group_id=''
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now,
+        group_id=''
     )
 
     entity_edge = EntityEdge(
@@ -137,6 +142,7 @@ async def test_graph_neptune_integration():
         expired_at=now,
         valid_at=now,
         invalid_at=now,
+        group_id=''
     )
 
     await entity_edge.generate_embedding(embedder)

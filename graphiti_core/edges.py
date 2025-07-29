@@ -262,6 +262,9 @@ class EntityEdge(Edge):
             driver.save_to_aoss('edge_name_and_fact', [edge_data])
             result = await driver.execute_query(
                 ENTITY_EDGE_SAVE_NEPTUNE,
+                source_uuid=self.source_node_uuid,
+                target_uuid=self.target_node_uuid,
+                uuid=self.uuid,
                 edge_data=edge_data,
                 database_=DEFAULT_DATABASE,
             )
@@ -278,15 +281,26 @@ class EntityEdge(Edge):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        records, _, _ = await driver.execute_query(
+        if driver.provider == 'neptune':
+            records, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
-        """
-            + ENTITY_EDGE_RETURN,
-            uuid=uuid,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
+            MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+            """
+                + ENTITY_EDGE_RETURN.replace("e.episodes AS episodes,", "split(e.episodes, ',') AS episodes,"),
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+            """
+                + ENTITY_EDGE_RETURN,
+                uuid=uuid,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
@@ -299,16 +313,28 @@ class EntityEdge(Edge):
         if len(uuids) == 0:
             return []
 
-        records, _, _ = await driver.execute_query(
+        if driver.provider == 'neptune':
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+            WHERE e.uuid IN $uuids
             """
-        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-        WHERE e.uuid IN $uuids
-        """
-            + ENTITY_EDGE_RETURN,
-            uuids=uuids,
-            database_=DEFAULT_DATABASE,
-            routing_='r',
-        )
+                + ENTITY_EDGE_RETURN.replace("e.episodes AS episodes,", "split(e.episodes, ',') AS episodes,"),
+                uuids=uuids,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
+        else:
+            records, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+            WHERE e.uuid IN $uuids
+            """
+                + ENTITY_EDGE_RETURN,
+                uuids=uuids,
+                database_=DEFAULT_DATABASE,
+                routing_='r',
+            )
 
         edges = [get_entity_edge_from_record(record) for record in records]
 
