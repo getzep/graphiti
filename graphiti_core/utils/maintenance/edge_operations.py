@@ -34,7 +34,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
-from graphiti_core.prompts.dedupe_edges import EdgeDuplicate, UniqueFacts
+from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
@@ -202,7 +202,7 @@ async def extract_edges(
         target_node_idx = edge_data.target_entity_id
         if not (-1 < source_node_idx < len(nodes) and -1 < target_node_idx < len(nodes)):
             logger.warning(
-                f'WARNING: source or target node not filled {edge_data.edge_name}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
+                f'WARNING: source or target node not filled {edge_data.name}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
@@ -438,7 +438,7 @@ async def resolve_extracted_edge(
     contradicted_facts: list[int] = response_object.contradicted_facts
 
     invalidation_candidates: list[EntityEdge] = [
-        existing_edges[i] for i in contradicted_facts if 0 <= i <= len(related_edges)
+        existing_edges[i] for i in contradicted_facts if 0 <= i < len(existing_edges)
     ]
 
     fact_type: str = response_object.fact_type
