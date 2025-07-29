@@ -68,6 +68,10 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
+<FACT TYPES>
+{context['edge_types']}
+</FACT TYPES>
+
 <PREVIOUS_MESSAGES>
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS_MESSAGES>
@@ -83,10 +87,6 @@ def edge(context: dict[str, Any]) -> list[Message]:
 <REFERENCE_TIME>
 {context['reference_time']}  # ISO 8601 (UTC); used to resolve relative time mentions
 </REFERENCE_TIME>
-
-<FACT TYPES>
-{context['edge_types']}
-</FACT TYPES>
 
 # TASK
 Extract all factual relationships between the given ENTITIES based on the CURRENT MESSAGE.
