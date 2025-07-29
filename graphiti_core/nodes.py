@@ -519,7 +519,7 @@ class CommunityNode(Node):
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
-        if driver.provider == 'neptune':            
+        if driver.provider == 'neptune':
             driver.save_to_aoss('community_name', [{'name': self.name, 'uuid': self.uuid, 
                                                    'group_id': self.group_id}])
             result = await driver.execute_query(
@@ -598,6 +598,7 @@ class CommunityNode(Node):
                 n.name AS name,
                 n.group_id AS group_id,
                 n.created_at AS created_at, 
+                n.name_embedding as name_embedding,
                 n.summary AS summary
             """,
                 uuid=uuid,

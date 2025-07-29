@@ -271,6 +271,9 @@ class EntityEdge(Edge):
         else:
             result = await driver.execute_query(
                 ENTITY_EDGE_SAVE,
+                source_uuid=self.source_node_uuid,
+                target_uuid=self.target_node_uuid,
+                uuid=self.uuid,
                 edge_data=edge_data,
                 database_=DEFAULT_DATABASE,
             )

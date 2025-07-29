@@ -41,7 +41,17 @@ export NEO4J_PASSWORD=password
 
 # Optional FalkorDB connection parameters (defaults shown)
 export FALKORDB_URI=falkor://localhost:6379
+
+# Optional Amazon Neptune connection parameters (requires Amazon OpenSearch Collection as well) (defaults shown)
+export NEPTUNE_HOST=neptune-db://<CLIUSTER ENDPOINT>
+export NEPTUNE_PORT=8182 #Only used when working with Neptune Database
+export AOSS_HOST=<INSERT AOSS HOST>
 ```
+
+**Note:** When specifying the Neptune Endpoint the following formats are expected:
+For Neptune Database: neptune-db://<Cluster Endpoint>
+For Neptune Analytics: neptune-graph://<graph identifier>
+
 
 3. Run the example:
 
@@ -50,11 +60,14 @@ python quickstart_neo4j.py
 
 # For FalkorDB
 python quickstart_falkordb.py
+
+# For Amazon Neptune
+python quickstart_neptune.py
 ```
 
 ## What This Example Demonstrates
 
-- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j or FalkorDB
+- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j, Amazon Neptune/Amazon Opensearch Serverles, or FalkorDB
 - **Adding Episodes**: Adding text content that will be analyzed and converted into knowledge graph nodes and edges
 - **Edge Search Functionality**: Performing hybrid searches that combine semantic similarity and BM25 retrieval to find relationships (edges)
 - **Graph-Aware Search**: Using the source node UUID from the top search result to rerank additional search results based on graph distance

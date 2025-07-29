@@ -382,7 +382,7 @@ async def edge_similarity_search(
                 r.created_at AS created_at,
                 r.name AS name,
                 r.fact AS fact,
-                split(r.episodes, ',') AS episodes,                
+                r.episodes AS episodes,                
                 r.expired_at AS expired_at,
                 r.valid_at AS valid_at,
                 r.invalid_at AS invalid_at,

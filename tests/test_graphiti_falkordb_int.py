@@ -44,7 +44,7 @@ pytest_plugins = ('pytest_asyncio',)
 load_dotenv()
 
 FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
-FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
+FALKORDB_PORT = int(os.getenv('FALKORDB_PORT', '6379'))
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
 

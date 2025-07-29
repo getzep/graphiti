@@ -48,7 +48,7 @@ load_dotenv()
 # Neo4j connection parameters
 # Make sure Neo4j Desktop is running with a local DBMS started
 neptune_uri = os.environ.get('NEPTUNE_HOST')
-neptune_port = 8182
+neptune_port = os.environ.get('NEPTUNE_PORT', 8182)
 aoss_host = os.environ.get('AOSS_HOST')
 
 if not neptune_uri:
@@ -56,7 +56,7 @@ if not neptune_uri:
 
 
 if not aoss_host:
-    raise ValueError('AOSS_HOST must be set')ß
+    raise ValueError('AOSS_HOST must be set')
 
 
 async def main():

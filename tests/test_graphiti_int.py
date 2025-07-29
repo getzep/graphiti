@@ -89,6 +89,7 @@ async def test_graph_integration():
     episode = EpisodicNode(
         name='test_episode',
         labels=[],
+        group_id='',
         created_at=now,
         valid_at=now,
         source='message',
@@ -100,18 +101,22 @@ async def test_graph_integration():
     alice_node = EntityNode(
         name='Alice',
         labels=[],
+        group_id='',
         created_at=now,
         summary='Alice summary',
     )
 
-    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary')
+    bob_node = EntityNode(name='Bob', labels=[], created_at=now, summary='Bob summary',
+        group_id='',)
 
     episodic_edge_1 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=alice_node.uuid, created_at=now,
+        group_id='',
     )
 
     episodic_edge_2 = EpisodicEdge(
-        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now
+        source_node_uuid=episode.uuid, target_node_uuid=bob_node.uuid, created_at=now,
+        group_id='',
     )
 
     entity_edge = EntityEdge(
@@ -121,11 +126,13 @@ async def test_graph_integration():
         name='likes',
         fact='Alice likes Bob',
         episodes=[],
+        group_id='',
         expired_at=now,
         valid_at=now,
         invalid_at=now,
     )
-
+    await alice_node.generate_name_embedding(embedder)
+    await bob_node.generate_name_embedding(embedder)
     await entity_edge.generate_embedding(embedder)
 
     nodes = [episode, alice_node, bob_node]

@@ -27,6 +27,8 @@ from graphiti_core.nodes import (
     EpisodeType,
     EpisodicNode,
 )
+from graphiti_core.graphiti import Graphiti
+
 
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
@@ -72,7 +74,8 @@ def sample_community_node():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_entity_node_save_get_and_delete(sample_entity_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    client = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    neo4j_driver = client.driver
     await sample_entity_node.save(neo4j_driver)
     retrieved = await EntityNode.get_by_uuid(neo4j_driver, sample_entity_node.uuid)
     assert retrieved.uuid == sample_entity_node.uuid
@@ -87,8 +90,8 @@ async def test_entity_node_save_get_and_delete(sample_entity_node):
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_community_node_save_get_and_delete(sample_community_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-
+    client = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    neo4j_driver = client.driver
     await sample_community_node.save(neo4j_driver)
 
     retrieved = await CommunityNode.get_by_uuid(neo4j_driver, sample_community_node.uuid)
@@ -105,8 +108,8 @@ async def test_community_node_save_get_and_delete(sample_community_node):
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_episodic_node_save_get_and_delete(sample_episodic_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-
+    client = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    neo4j_driver = client.driver
     await sample_episodic_node.save(neo4j_driver)
 
     retrieved = await EpisodicNode.get_by_uuid(neo4j_driver, sample_episodic_node.uuid)
