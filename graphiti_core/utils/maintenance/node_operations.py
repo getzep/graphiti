@@ -368,7 +368,7 @@ async def extract_attributes_from_node(
         model_size=ModelSize.small,
     )
 
-    response_object = entity_attributes_model(**llm_response)
+    entity_attributes_model(**llm_response)
 
     node.summary = llm_response.get('summary', '')
     node_attributes = {key: value for key, value in llm_response.items()}

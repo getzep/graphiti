@@ -202,7 +202,7 @@ async def extract_edges(
         target_node_idx = edge_data.target_entity_id
         if not (-1 < source_node_idx < len(nodes) and -1 < target_node_idx < len(nodes)):
             logger.warning(
-                f'WARNING: source or target node not filled {edge_data.name}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
+                f'WARNING: source or target node not filled {edge_data.relation_type}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
