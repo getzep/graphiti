@@ -72,7 +72,7 @@ def edge_search_filter_query_constructor(
 
     if filters.edge_types is not None:
         edge_types = filters.edge_types
-        edge_types_filter = '\nAND r.name in $edge_types'
+        edge_types_filter = '\nAND e.name in $edge_types'
         filter_query += edge_types_filter
         filter_params['edge_types'] = edge_types
 
@@ -88,7 +88,7 @@ def edge_search_filter_query_constructor(
                 filter_params['valid_at_' + str(j)] = date_filter.date
 
             and_filters = [
-                '(r.valid_at ' + date_filter.comparison_operator.value + f' $valid_at_{j})'
+                '(e.valid_at ' + date_filter.comparison_operator.value + f' $valid_at_{j})'
                 for j, date_filter in enumerate(or_list)
             ]
             and_filter_query = ''
@@ -113,7 +113,7 @@ def edge_search_filter_query_constructor(
                 filter_params['invalid_at_' + str(j)] = date_filter.date
 
             and_filters = [
-                '(r.invalid_at ' + date_filter.comparison_operator.value + f' $invalid_at_{j})'
+                '(e.invalid_at ' + date_filter.comparison_operator.value + f' $invalid_at_{j})'
                 for j, date_filter in enumerate(or_list)
             ]
             and_filter_query = ''
@@ -138,7 +138,7 @@ def edge_search_filter_query_constructor(
                 filter_params['created_at_' + str(j)] = date_filter.date
 
             and_filters = [
-                '(r.created_at ' + date_filter.comparison_operator.value + f' $created_at_{j})'
+                '(e.created_at ' + date_filter.comparison_operator.value + f' $created_at_{j})'
                 for j, date_filter in enumerate(or_list)
             ]
             and_filter_query = ''
@@ -163,7 +163,7 @@ def edge_search_filter_query_constructor(
                 filter_params['expired_at_' + str(j)] = date_filter.date
 
             and_filters = [
-                '(r.expired_at ' + date_filter.comparison_operator.value + f' $expired_at_{j})'
+                '(e.expired_at ' + date_filter.comparison_operator.value + f' $expired_at_{j})'
                 for j, date_filter in enumerate(or_list)
             ]
             and_filter_query = ''

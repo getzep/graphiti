@@ -3,9 +3,9 @@ name = "graphiti-core"
 description = "A temporal graph building library"
 version = "0.18.0"
 authors = [
-    { "name" = "Paul Paliychuk", "email" = "paul@getzep.com" },
-    { "name" = "Preston Rasmussen", "email" = "preston@getzep.com" },
-    { "name" = "Daniel Chalef", "email" = "daniel@getzep.com" },
+    { name = "Paul Paliychuk", email = "paul@getzep.com" },
+    { name = "Preston Rasmussen", email = "preston@getzep.com" },
+    { name = "Daniel Chalef", email = "daniel@getzep.com" },
 ]
 readme = "README.md"
 license = "Apache-2.0"
