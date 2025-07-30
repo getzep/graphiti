@@ -60,3 +60,39 @@ class Neo4jDriver(GraphDriver):
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )
+    
+    def sanitize(self, query: str) -> str:
+        # Escape special characters from a query before passing into Lucene
+        # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
+        escape_map = str.maketrans(
+            {
+                '+': r'\+',
+                '-': r'\-',
+                '&': r'\&',
+                '|': r'\|',
+                '!': r'\!',
+                '(': r'\(',
+                ')': r'\)',
+                '{': r'\{',
+                '}': r'\}',
+                '[': r'\[',
+                ']': r'\]',
+                '^': r'\^',
+                '"': r'\"',
+                '~': r'\~',
+                '*': r'\*',
+                '?': r'\?',
+                ':': r'\:',
+                '\\': r'\\',
+                '/': r'\/',
+                'O': r'\O',
+                'R': r'\R',
+                'N': r'\N',
+                'T': r'\T',
+                'A': r'\A',
+                'D': r'\D',
+            }
+        )
+
+        sanitized = query.translate(escape_map)
+        return sanitized

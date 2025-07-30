@@ -62,47 +62,6 @@ def get_default_group_id(db_type: str) -> str:
     else:
         return ''
 
-
-def lucene_sanitize(query: str) -> str:
-    # Escape special characters from a query before passing into Lucene
-    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
-    escape_map = str.maketrans(
-        {
-            '+': r'\+',
-            '-': r'\-',
-            '&': r'\&',
-            '|': r'\|',
-            '!': r'\!',
-            '(': r'\(',
-            ')': r'\)',
-            '{': r'\{',
-            '}': r'\}',
-            '[': r'\[',
-            ']': r'\]',
-            '^': r'\^',
-            '"': r'\"',
-            "'": r"\'",
-            '~': r'\~',
-            '*': r'\*',
-            '?': r'\?',
-            ':': r'\:',
-            '\\': r'\\',
-            '/': r'\/',
-            '@': r'\@',
-            '%': r'\%',
-            'O': r'\O',
-            'R': r'\R',
-            'N': r'\N',
-            'T': r'\T',
-            'A': r'\A',
-            'D': r'\D',
-        }
-    )
-
-    sanitized = query.translate(escape_map)
-    return sanitized
-
-
 def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
     norm = np.linalg.norm(embedding_array, 2, axis=0, keepdims=True)

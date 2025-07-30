@@ -77,3 +77,6 @@ class GraphDriver(ABC):
         cloned._database = database
 
         return cloned
+    
+    def sanitize(self, query: str) -> str:
+        raise NotImplementedError()
