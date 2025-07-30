@@ -29,7 +29,7 @@ from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.prompts import prompt_library
-from graphiti_core.prompts.dedupe_nodes import NodeResolutions
+from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
     ExtractedEntities,
     ExtractedEntity,
@@ -125,10 +125,9 @@ async def extract_nodes(
                 prompt_library.extract_nodes.extract_json(context), response_model=ExtractedEntities
             )
 
-        extracted_entities: list[ExtractedEntity] = [
-            ExtractedEntity(**entity_types_context)
-            for entity_types_context in llm_response.get('extracted_entities', [])
-        ]
+        response_object = ExtractedEntities(**llm_response)
+
+        extracted_entities: list[ExtractedEntity] = response_object.extracted_entities
 
         reflexion_iterations += 1
         if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
@@ -254,14 +253,14 @@ async def resolve_extracted_nodes(
         response_model=NodeResolutions,
     )
 
-    node_resolutions: list = llm_response.get('entity_resolutions', [])
+    node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
 
     resolved_nodes: list[EntityNode] = []
     uuid_map: dict[str, str] = {}
     node_duplicates: list[tuple[EntityNode, EntityNode]] = []
     for resolution in node_resolutions:
-        resolution_id: int = resolution.get('id', -1)
-        duplicate_idx: int = resolution.get('duplicate_idx', -1)
+        resolution_id: int = resolution.id
+        duplicate_idx: int = resolution.duplicate_idx
 
         extracted_node = extracted_nodes[resolution_id]
 
@@ -276,7 +275,7 @@ async def resolve_extracted_nodes(
         resolved_nodes.append(resolved_node)
         uuid_map[extracted_node.uuid] = resolved_node.uuid
 
-        duplicates: list[int] = resolution.get('duplicates', [])
+        duplicates: list[int] = resolution.duplicates
         if duplicate_idx not in duplicates and duplicate_idx > -1:
             duplicates.append(duplicate_idx)
         for idx in duplicates:
@@ -369,7 +368,9 @@ async def extract_attributes_from_node(
         model_size=ModelSize.small,
     )
 
-    node.summary = llm_response.get('summary', node.summary)
+    entity_attributes_model(**llm_response)
+
+    node.summary = llm_response.get('summary', '')
     node_attributes = {key: value for key, value in llm_response.items()}
 
     with suppress(KeyError):
@@ -378,48 +379,3 @@ async def extract_attributes_from_node(
     node.attributes.update(node_attributes)
 
     return node
-
-
-async def dedupe_node_list(
-    llm_client: LLMClient,
-    nodes: list[EntityNode],
-) -> tuple[list[EntityNode], dict[str, str]]:
-    start = time()
-
-    # build node map
-    node_map = {}
-    for node in nodes:
-        node_map[node.uuid] = node
-
-    # Prepare context for LLM
-    nodes_context = [{'uuid': node.uuid, 'name': node.name, **node.attributes} for node in nodes]
-
-    context = {
-        'nodes': nodes_context,
-    }
-
-    llm_response = await llm_client.generate_response(
-        prompt_library.dedupe_nodes.node_list(context)
-    )
-
-    nodes_data = llm_response.get('nodes', [])
-
-    end = time()
-    logger.debug(f'Deduplicated nodes: {nodes_data} in {(end - start) * 1000} ms')
-
-    # Get full node data
-    unique_nodes = []
-    uuid_map: dict[str, str] = {}
-    for node_data in nodes_data:
-        node_instance: EntityNode | None = node_map.get(node_data['uuids'][0])
-        if node_instance is None:
-            logger.warning(f'Node {node_data["uuids"][0]} not found in node map')
-            continue
-        node_instance.summary = node_data['summary']
-        unique_nodes.append(node_instance)
-
-        for uuid in node_data['uuids'][1:]:
-            uuid_value = node_map[node_data['uuids'][0]].uuid
-            uuid_map[uuid] = uuid_value
-
-    return unique_nodes, uuid_map

@@ -34,7 +34,7 @@ class NodeDuplicate(BaseModel):
     )
     duplicates: list[int] = Field(
         ...,
-        description='idx of all duplicate entities.',
+        description='idx of all entities that are a duplicate of the entity with the above id.',
     )
 
 

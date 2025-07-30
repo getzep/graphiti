@@ -75,6 +75,10 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
+<ENTITY TYPES>
+{context['entity_types']}
+</ENTITY TYPES>
+
 <PREVIOUS MESSAGES>
 {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
@@ -82,10 +86,6 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 <CURRENT MESSAGE>
 {context['episode_content']}
 </CURRENT MESSAGE>
-
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
 
 Instructions:
 
@@ -124,15 +124,16 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify relevant entities from JSON files"""
 
     user_prompt = f"""
+<ENTITY TYPES>
+{context['entity_types']}
+</ENTITY TYPES>
+
 <SOURCE DESCRIPTION>:
 {context['source_description']}
 </SOURCE DESCRIPTION>
 <JSON>
 {context['episode_content']}
 </JSON>
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
 
 {context['custom_prompt']}
 
@@ -155,12 +156,13 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the provided text."""
 
     user_prompt = f"""
-<TEXT>
-{context['episode_content']}
-</TEXT>
 <ENTITY TYPES>
 {context['entity_types']}
 </ENTITY TYPES>
+
+<TEXT>
+{context['episode_content']}
+</TEXT>
 
 Given the above text, extract entities from the TEXT that are explicitly or implicitly mentioned.
 For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
