@@ -367,7 +367,7 @@ async def extract_attributes_from_node(
         model_size=ModelSize.small,
     )
 
-    if llm_response != {}:
+    if entity_type is not None:
         entity_type(**llm_response)
 
     node.summary = summary_response.get('summary', '')
