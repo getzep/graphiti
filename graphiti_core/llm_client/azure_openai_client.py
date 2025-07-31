@@ -39,6 +39,15 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         config: LLMConfig | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
+        """
+        Initialize the AzureOpenAILLMClient with the provided configuration, cache setting, and client.
+
+        Args:
+            azure_client (AsyncAzureOpenAI): The Azure OpenAI client to use.
+            config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
+            max_tokens (int): The maximum number of tokens to generate. Defaults to DEFAULT_MAX_TOKENS.
+                            Left for backwards compatibility, but config should be preferred for consistency between clients.
+        """
         super().__init__(config, cache=False, max_tokens=max_tokens)
         self.client = azure_client
 
