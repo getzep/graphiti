@@ -51,7 +51,7 @@ class HelixDriverSession(GraphDriverSession):
                 if 'helix_query' not in converted_params:
                     raise ValueError("Missing 'helix_query' parameter")
 
-                result = await self._helix_query(converted_params['helix_query'], {k, v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
+                result = await self._helix_query(converted_params['helix_query'], {k: v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             converted_params = convert_datetimes_to_strings(params)
@@ -64,7 +64,7 @@ class HelixDriverSession(GraphDriverSession):
             if 'helix_query' not in converted_params:
                 raise ValueError("Missing 'helix_query' parameter")
 
-            result = await self._helix_query(converted_params['helix_query'], {k, v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
+            result = await self._helix_query(converted_params['helix_query'], {k: v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
 
         return result
             
