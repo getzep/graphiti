@@ -57,7 +57,7 @@ def get_default_group_id(db_type: str) -> str:
     This function differentiates the default group id based on the database type.
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
-    if db_type == 'falkordb':
+    if db_type == 'falkordb' or db_type == 'helixdb':
         return '_'
     else:
         return ''
