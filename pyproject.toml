@@ -19,6 +19,9 @@ dependencies = [
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
     "posthog>=3.0.0",
+    "langchain-aws>=0.2.29",
+    "boto3>=1.39.16",
+    "opensearch-py>=3.0.0",
 ]
 
 [project.urls]
@@ -32,6 +35,7 @@ google-genai = ["google-genai>=1.8.0"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
 voyageai = ["voyageai>=0.2.3"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
+neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0"]
 dev = [
     "pyright>=1.1.380",
     "groq>=0.2.0",

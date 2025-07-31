@@ -32,7 +32,7 @@ from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    EPISODIC_NODE_SAVE_BULK,
+    get_episode_node_save_bulk_query,
     get_entity_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
@@ -155,7 +155,7 @@ async def add_nodes_and_edges_bulk_tx(
         edge_data.update(edge.attributes or {})
         edges.append(edge_data)
 
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+    await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
     entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, nodes)
     await tx.run(entity_node_save_bulk, nodes=nodes)
     await tx.run(

@@ -24,13 +24,14 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_RETURN,
     ENTITY_EDGE_RETURN,
+    ENTITY_EDGE_RETURN_NEPTUNE,
     EPISODIC_EDGE_RETURN,
     EPISODIC_EDGE_SAVE,
     get_community_edge_save_query,
@@ -199,11 +200,19 @@ class EntityEdge(Edge):
         return self.fact_embedding
 
     async def load_fact_embedding(self, driver: GraphDriver):
-        records, _, _ = await driver.execute_query(
+        if driver.provider == GraphProvider.NEPTUNE:
+            query: LiteralString = """
+            MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+                RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
+        else:
+            query: LiteralString = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
-            """,
+            """
+
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=self.uuid,
             routing_='r',
         )
@@ -231,6 +240,9 @@ class EntityEdge(Edge):
 
         edge_data.update(self.attributes or {})
 
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
+
         result = await driver.execute_query(
             get_entity_edge_save_query(driver.provider),
             edge_data=edge_data,
@@ -247,7 +259,7 @@ class EntityEdge(Edge):
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN
             """
-            + ENTITY_EDGE_RETURN,
+            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
             uuid=uuid,
             routing_='r',
         )
@@ -269,7 +281,7 @@ class EntityEdge(Edge):
             WHERE e.uuid IN $uuids
             RETURN
             """
-            + ENTITY_EDGE_RETURN,
+            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
             uuids=uuids,
             routing_='r',
         )
@@ -306,7 +318,7 @@ class EntityEdge(Edge):
             + """
             RETURN
             """
-            + ENTITY_EDGE_RETURN
+            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN)
             + with_embeddings_query
             + """
             ORDER BY e.uuid DESC 
@@ -331,7 +343,7 @@ class EntityEdge(Edge):
             MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
             RETURN
             """
-            + ENTITY_EDGE_RETURN,
+            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
             node_uuid=node_uuid,
             routing_='r',
         )
