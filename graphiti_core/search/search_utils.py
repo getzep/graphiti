@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from collections import defaultdict
 from time import time
+import json
 from typing import Any
 
 import numpy as np
@@ -49,6 +50,10 @@ from graphiti_core.search.search_filters import (
     SearchFilters,
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
+    helix_edge_search_filter,
+    helix_edge_bfs_search,
+    helix_node_search_filter,
+    helix_node_bfs_search,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,7 @@ DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
+BM25_MULTIPLIER = 2
 
 
 def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
@@ -100,6 +106,32 @@ async def get_mentioned_nodes(
 ) -> list[EntityNode]:
     episode_uuids = [episode.uuid for episode in episodes]
 
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+        
+        # Get all episode nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
+
+        # Filter episode nodes by episode_uuids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': episode_uuids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
+
+        result = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        uuids = list(set([node.get('uuid') for node in result]))
+
+        nodes = await EntityNode.get_by_uuids(driver, uuids)
+
+        return nodes
+
     query = """
         MATCH (episode:Episodic)-[:MENTIONS]->(n:Entity) WHERE episode.uuid IN $uuids
         RETURN DISTINCT
@@ -127,6 +159,32 @@ async def get_communities_by_nodes(
     driver: GraphDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
     node_uuids = [node.uuid for node in nodes]
+
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        # Filter entity nodes by node_uuids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': node_uuids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Community_Entity', 'edge_type': 'node'})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        uuids = list(set([node.get('uuid') for node in results]))
+
+        communities = await CommunityNode.get_by_uuids(driver, uuids)
+
+        return communities
 
     query = """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity) WHERE n.uuid IN $uuids
@@ -156,6 +214,32 @@ async def edge_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all facts edges
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Fact'})
+
+        await helix_edge_search_filter(driver, connection_id, search_filter, group_ids)
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        # TODO: Add fuzzy search with BM25
+        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Fact'})
+
+        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        bm25_uuids = [result.get('uuid') for result in bm25_results]
+
+        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+
+        uuids = uuids[:limit]
+
+        edges = await EntityEdge.get_by_uuids(driver, uuids)
+
+        return edges
+
     # fulltext search over facts
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
@@ -213,6 +297,37 @@ async def edge_similarity_search(
     limit: int = RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+        
+        # Get all facts edges
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Fact'})
+        
+        await helix_edge_search_filter(driver, connection_id, search_filter, group_ids, source_node_uuid, target_node_uuid)
+
+        # Get all edge embeddings
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'vec'})
+
+        # Similarity search (already sorted by score)
+        await driver.execute_query(
+            "",
+            query="mcp/search_vector",
+            connection_id=connection_id,
+            data={'vector': search_vector, 'k': limit, 'min_score': min_score}
+        )
+
+        # Get edges from embedding
+        await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'node'})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        uuids = list(set([result.get('uuid') for result in results]))
+
+        edges = await EntityEdge.get_by_uuids(driver, uuids)
+
+        return edges
+        
     # vector similarity search over embedded facts
     query_params: dict[str, Any] = {}
 
@@ -290,6 +405,57 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
+    if driver.provider == 'helixdb':
+        results = set()
+        max_depth = 3
+        
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        # Filter entity nodes by uuids & group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        if max_depth > 0:
+            result = await helix_edge_bfs_search(driver, connection_id, search_filter, group_ids, max_depth)
+            results.update(result)
+
+        # Get all episode nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
+
+        # Filter episode nodes by uuids & group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
+
+        if max_depth > 0:
+            result = await helix_edge_bfs_search(driver, connection_id, search_filter, group_ids, max_depth)
+            results.update(result)
+
+        uuids = list(results)
+
+        uuids = uuids[:limit]
+
+        edges = await EntityEdge.get_by_uuids(driver, uuids)
+
+        return edges
+
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     query = (
@@ -342,6 +508,32 @@ async def node_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        await helix_node_search_filter(driver, connection_id, search_filter, group_ids)
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        # TODO: Add fuzzy search with BM25
+        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
+
+        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        bm25_uuids = [result.get('uuid') for result in bm25_results]
+
+        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+        
+        uuids = uuids[:limit]
+
+        nodes = await EntityNode.get_by_uuids(driver, uuids)
+
+        return nodes
+
     # BM25 search to get top nodes
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
@@ -384,6 +576,36 @@ async def node_similarity_search(
     limit=RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        await helix_node_search_filter(driver, connection_id, search_filter, group_ids)
+
+        # Get all entity embeddings
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Entity_to_Embedding', 'edge_type': 'vec'})
+
+        await driver.execute_query(
+            "",
+            query="mcp/search_vector",
+            connection_id=connection_id,
+            data={'vector': search_vector, 'k': limit, 'min_score': min_score}
+        )
+
+        # Get nodes from embeddings
+        await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Entity_to_Embedding', 'edge_type': 'node'})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        uuids = [result.get('uuid') for result in results]
+
+        nodes = await EntityNode.get_by_uuids(driver, uuids)
+
+        return nodes
+
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
@@ -441,6 +663,57 @@ async def node_bfs_search(
     if bfs_origin_node_uuids is None:
         return []
 
+    if driver.provider == 'helixdb':
+        results = set()
+        max_depth = 3
+
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+        
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        # Filter entity nodes by uuids & group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        if max_depth > 0:
+            result = await helix_node_bfs_search(driver, connection_id, search_filter, group_ids, max_depth)
+            results.update(result)
+        
+        # Get all episode nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
+
+        # Filter episode nodes by uuids & group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
+
+        if max_depth > 0:
+            result = await helix_node_bfs_search(driver, connection_id, search_filter, group_ids, max_depth)
+            results.update(result)
+
+        uuids = list(results)
+
+        uuids = uuids[:limit]
+
+        nodes = await EntityNode.get_by_uuids(driver, uuids)
+
+        return nodes
+
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
 
     query = (
@@ -477,6 +750,39 @@ async def episode_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EpisodicNode]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+        
+        # Get all episode nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
+
+        # Filter episode nodes by group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        # TODO: Add fuzzy search with BM25
+        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Episode'})
+
+        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        bm25_uuids = [result.get('uuid') for result in bm25_results]
+
+        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+
+        uuids = uuids[:limit]
+
+        episodes = await EpisodicNode.get_by_uuids(driver, uuids)
+
+        return episodes
+
     # BM25 search to get top episodes
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
@@ -522,6 +828,39 @@ async def community_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all community nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Community'})
+
+        # Filter community nodes by group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        # TODO: Add fuzzy search with BM25
+        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Community'})
+
+        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        bm25_uuids = [result.get('uuid') for result in bm25_results]
+
+        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+
+        uuids = uuids[:limit]
+
+        communities = await CommunityNode.get_by_uuids(driver, uuids)
+
+        return communities
+
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
@@ -563,6 +902,43 @@ async def community_similarity_search(
     limit=RELEVANT_SCHEMA_LIMIT,
     min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        # Get all community nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Community'})
+
+        # Filter community nodes by group_ids
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+            'properties': [
+                [
+                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                ]
+            ]
+        }})
+
+        # Get all community embeddings
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Community_to_Embedding', 'edge_type': 'vec'})
+
+        await driver.execute_query(
+            "",
+            query="mcp/search_vector",
+            connection_id=connection_id,
+            data={'vector': search_vector, 'k': limit, 'min_score': min_score}
+        )
+
+        # Get communities from embeddings
+        await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Community_to_Embedding', 'edge_type': 'node'})
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        uuids = [result.get('uuid') for result in results]
+
+        nodes = await CommunityNode.get_by_uuids(driver, uuids)
+
+        return nodes
+
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
@@ -693,6 +1069,67 @@ async def get_relevant_nodes(
 
     group_id = nodes[0].group_id
 
+    if driver.provider == 'helixdb':
+        relevant_nodes: list[list[EntityNode]] = []
+
+        seen_node_uuids: dict[str, EntityNode] = {}
+
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        for node in nodes:
+            results = set()
+
+            # Get all entity nodes
+            await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+            await helix_node_search_filter(driver, connection_id, search_filter, [group_id])
+
+            res = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+            # TODO: Add fuzzy search with BM25
+            await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': node.name, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
+
+            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+            bm25_uuids = [result.get('uuid') for result in bm25_results]
+
+            results.update([node.get('uuid') for node in res if node.get('uuid') in bm25_uuids])
+
+            # Get all entity nodes
+            await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+            await helix_node_search_filter(driver, connection_id, search_filter, [group_id])
+
+            # Get all entity embeddings
+            await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Entity_to_Embedding', 'edge_type': 'vec'})
+
+            await driver.execute_query(
+                "",
+                query="mcp/search_vector",
+                connection_id=connection_id,
+                data={'vector': node.name_embedding, 'k': limit, 'min_score': min_score}
+            )
+
+            # Get nodes from embeddings
+            await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Entity_to_Embedding', 'edge_type': 'node'})
+
+            res = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+            results.update([node.get('uuid') for node in res])
+
+            await driver.execute_query("", query="mcp/reset", connection_id=connection_id)
+
+            uuids = list(results)
+
+            for uuid in uuids:
+                if uuid not in seen_node_uuids:
+                    seen_node_uuids[uuid] = await EntityNode.get_by_uuid(driver, uuid)
+
+            relevant_nodes.append([seen_node_uuids[uuid] for uuid in uuids])
+
+        return relevant_nodes
+
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
@@ -785,6 +1222,49 @@ async def get_relevant_edges(
     if len(edges) == 0:
         return []
 
+    if driver.provider == 'helixdb':
+        relevant_edges: list[list[EntityEdge]] = []
+
+        seen_edge_uuids: dict[str, EntityEdge] = {}
+
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        for edge in edges:
+            # Get all entity edges
+            await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Fact'})
+
+            await helix_edge_search_filter(driver, connection_id, search_filter)
+
+            # Get all edge embeddings
+            await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'vec'})
+
+            await driver.execute_query(
+                "",
+                query="mcp/search_vector",
+                connection_id=connection_id,
+                data={'vector': edge.fact_embedding, 'k': limit, 'min_score': min_score}
+            )
+
+            # Get edges from embeddings
+            await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'node'})
+
+            res = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+            results= [edge.get('uuid') for edge in res]
+
+            await driver.execute_query("", query="mcp/reset", connection_id=connection_id)
+
+            uuids = list(results)
+
+            for uuid in uuids:
+                if uuid not in seen_edge_uuids:
+                    seen_edge_uuids[uuid] = await EntityEdge.get_by_uuid(driver, uuid)
+
+            relevant_edges.append([seen_edge_uuids[uuid] for uuid in uuids])
+
+        return relevant_edges
+
     query_params: dict[str, Any] = {}
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
@@ -853,6 +1333,51 @@ async def get_edge_invalidation_candidates(
 ) -> list[list[EntityEdge]]:
     if len(edges) == 0:
         return []
+
+    if driver.provider == 'helixdb':
+        invalidation_edges_dict = {}
+
+        seen_edge_uuids: dict[str, EntityEdge] = {}
+
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
+
+        for edge in edges:
+            source_uuid = edge.source_node_uuid
+            target_uuid = edge.target_node_uuid
+
+            # Get all entity edges
+            await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Fact'})
+
+            await helix_edge_search_filter(driver, connection_id, search_filter, source_node_uuid=source_uuid, target_node_uuid=target_uuid)
+
+            # Get all edge embeddings
+            await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'vec'})
+
+            # Similarity search (already sorted by score)
+            await driver.execute_query(
+                "",
+                query="mcp/search_vector",
+                connection_id=connection_id,
+                data={'vector': edge.fact_embedding, 'k': limit, 'min_score': min_score}
+            )
+
+            # Get edges from embedding
+            await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Fact_to_Embedding', 'edge_type': 'node'})
+
+            results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+            uuids = [result.get('uuid') for result in results]
+
+            for uuid in uuids:
+                if uuid not in seen_edge_uuids:
+                    seen_edge_uuids[uuid] = await EntityEdge.get_by_uuid(driver, uuid)
+
+            invalidation_edges_dict[edge.uuid] = [seen_edge_uuids[uuid] for uuid in uuids]
+
+        invalidation_edges = [invalidation_edges_dict[edge.uuid] for edge in edges]
+
+        return invalidation_edges
 
     query_params: dict[str, Any] = {}
 
@@ -942,25 +1467,58 @@ async def node_distance_reranker(
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
-    # Find the shortest path to center node
-    query = """
-        UNWIND $node_uuids AS node_uuid
-        MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
-        RETURN 1 AS score, node_uuid AS uuid
-        """
-    results, header, _ = await driver.execute_query(
-        query,
-        node_uuids=filtered_uuids,
-        center_uuid=center_node_uuid,
-        routing_='r',
-    )
-    if driver.provider == 'falkordb':
-        results = [dict(zip(header, row, strict=True)) for row in results]
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
 
-    for result in results:
-        uuid = result['uuid']
-        score = result['score']
-        scores[uuid] = score
+        # Get all entity nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
+
+        await driver.execute_query(
+            "",
+            query="mcp/filter_items",
+            connection_id=connection_id,
+            data={'filter': {'properties': [{'key': 'uuid', 'value': center_node_uuid, 'operator': '=='}]}}
+        )
+
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Entity_Fact', 'edge_type': 'node'})
+
+        await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Fact_Entity', 'edge_type': 'node'})
+
+        await driver.execute_query(
+            "",
+            query="mcp/filter_items",
+            connection_id=connection_id,
+            data={'filter': {'properties': [{'key': 'uuid', 'value': filtered_uuids, 'operator': '=='}]}}
+        )
+
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        for result in results:
+            uuid = result.get('uuid')
+            score = 1
+            scores[uuid] = score
+    
+    else:
+        # Find the shortest path to center node
+        query = """
+            UNWIND $node_uuids AS node_uuid
+            MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
+            RETURN 1 AS score, node_uuid AS uuid
+            """
+        results, header, _ = await driver.execute_query(
+            query,
+            node_uuids=filtered_uuids,
+            center_uuid=center_node_uuid,
+            routing_='r',
+        )
+        if driver.provider == 'falkordb':
+            results = [dict(zip(header, row, strict=True)) for row in results]
+
+        for result in results:
+            uuid = result['uuid']
+            score = result['score']
+            scores[uuid] = score
 
     for uuid in filtered_uuids:
         if uuid not in scores:
@@ -986,20 +1544,26 @@ async def episode_mentions_reranker(
     sorted_uuids, _ = rrf(node_uuids)
     scores: dict[str, float] = {}
 
-    # Find the shortest path to center node
-    query = """
-        UNWIND $node_uuids AS node_uuid 
-        MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
-        RETURN count(*) AS score, n.uuid AS uuid
-        """
-    results, _, _ = await driver.execute_query(
-        query,
-        node_uuids=sorted_uuids,
-        routing_='r',
-    )
+    if driver.provider == 'helixdb':
+        for node_uuid in sorted_uuids:
+            result = await driver.execute_query("", query="getEntityEpisodeCount", entity_uuid=node_uuid)
+            scores[node_uuid] = result.get('episode_count')
 
-    for result in results:
-        scores[result['uuid']] = result['score']
+    else:
+        # Find the shortest path to center node
+        query = """
+            UNWIND $node_uuids AS node_uuid 
+            MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
+            RETURN count(*) AS score, n.uuid AS uuid
+            """
+        results, _, _ = await driver.execute_query(
+            query,
+            node_uuids=sorted_uuids,
+            routing_='r',
+        )
+
+        for result in results:
+            scores[result['uuid']] = result['score']
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
@@ -1053,6 +1617,24 @@ def maximal_marginal_relevance(
 async def get_embeddings_for_nodes(
     driver: GraphDriver, nodes: list[EntityNode]
 ) -> dict[str, list[float]]:
+    if driver.provider == 'helixdb':
+        embeddings_dict = {}
+        for node in nodes:
+            embed = await driver.execute_query("", query="loadEntityEmbedding", uuid=node.uuid)
+
+            embed = embed.get('embedding', [{}])
+
+            if len(embed) == 0:
+                embed = None
+            else:
+                embedding = embed[0].get('name_embedding', None)
+
+            if embed is not None:
+                embeddings_dict[node.uuid] = embed
+
+        return embeddings_dict
+
+
     query: LiteralString = """MATCH (n:Entity)
                               WHERE n.uuid IN $node_uuids
                               RETURN DISTINCT
@@ -1077,6 +1659,23 @@ async def get_embeddings_for_nodes(
 async def get_embeddings_for_communities(
     driver: GraphDriver, communities: list[CommunityNode]
 ) -> dict[str, list[float]]:
+    if driver.provider == 'helixdb':
+        embeddings_dict = {}
+        for community in communities:
+            embed = await driver.execute_query("", query="loadCommunityEmbedding", uuid=community.uuid)
+
+            embed = embed.get('embedding', [{}])
+
+            if len(embed) == 0:
+                embed = None
+            else:
+                embedding = embed[0].get('name_embedding', None)
+
+            if embed is not None:
+                embeddings_dict[community.uuid] = embed
+
+        return embeddings_dict
+
     query: LiteralString = """MATCH (c:Community)
                               WHERE c.uuid IN $community_uuids
                               RETURN DISTINCT
@@ -1103,6 +1702,23 @@ async def get_embeddings_for_communities(
 async def get_embeddings_for_edges(
     driver: GraphDriver, edges: list[EntityEdge]
 ) -> dict[str, list[float]]:
+    if driver.provider == 'helixdb':
+        embeddings_dict = {}
+        for edge in edges:
+            embed = await driver.execute_query("", query="loadFactEmbedding", uuid=edge.uuid)
+
+            embed = embed.get('embedding', [{}])
+
+            if len(embed) == 0:
+                embed = None
+            else:
+                embedding = embed[0].get('fact_embedding', None)
+
+            if embed is not None:
+                embeddings_dict[edge.uuid] = embed
+
+        return embeddings_dict
+
     query: LiteralString = """MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
                               WHERE e.uuid IN $edge_uuids
                               RETURN DISTINCT

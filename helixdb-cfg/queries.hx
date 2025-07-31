@@ -37,6 +37,18 @@ QUERY deleteEntity (uuid: String) =>
     RETURN "SUCCESS"
 
 // #########################################################
+//                      Entity Search
+// #########################################################
+
+QUERY getMentionedEntities (episode_uuid: String) =>
+    entities <- N<Episode>({uuid: episode_uuid})::Out<Episode_Entity>
+    RETURN entities
+
+QUERY getEntityEpisodeCount (entity_uuid: String) =>
+    episode_count <- N<Entity>({uuid: entity_uuid})::In<Episode_Entity>::COUNT
+    RETURN episode_count
+
+// #########################################################
 //                           Fact
 // #########################################################
 
@@ -255,6 +267,14 @@ QUERY getCommunityEdgesbyGroupLimit (group_id: String, limit: I64) =>
 QUERY deleteCommunityEdge (uuid: String) =>
     DROP E<Community_Entity>::WHERE(_::{uuid}::EQ(uuid))
     RETURN "SUCCESS"
+
+// #########################################################
+//                    Community Search
+// #########################################################
+
+QUERY getCommunitybyEntity (entity_uuid: String) =>
+    communities <- N<Entity>({uuid: entity_uuid})::In<Community_Entity>
+    RETURN communities
 
 // #########################################################
 //                          Global
