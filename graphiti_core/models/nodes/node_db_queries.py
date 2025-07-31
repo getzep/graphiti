@@ -18,23 +18,25 @@ from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
 
+
 def get_episode_node_save_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.NEPTUNE:
-            return  """
+            return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content, 
                 entity_edges: join([x IN coalesce($entity_edges, []) | toString(x) ], '|'), created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
             """
-        case _: #Neo4j and FalkorDB
+        case _:  # Neo4j and FalkorDB
             return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
                 entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
             """
-        
+
+
 def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.NEPTUNE:
@@ -46,14 +48,15 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                 entity_edges: join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
-        case _: #Neo4j and FalkorDB
-            return  """
+        case _:  # Neo4j and FalkorDB
+            return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
                 SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
+
 
 EPISODIC_NODE_RETURN = """
     e.content AS content,
@@ -138,8 +141,8 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                 for label in node['labels']:
                     labels += f' SET n:{label}\n'
                 queries.append(
-                    (
-                    f"""
+                    
+                        f"""
                         UNWIND $nodes AS node
                         MERGE (n:Entity {{uuid: node.uuid}})
                         {labels}
@@ -147,10 +150,10 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                         SET n.name_embedding = join([x IN coalesce(node.name_embedding, []) | toString(x) ], ",")
                         RETURN n.uuid AS uuid
                     """
-                    )
+                    
                 )
             return queries
-        case _: #Neo4j
+        case _:  # Neo4j
             return """
                 UNWIND $nodes AS node
                 MERGE (n:Entity {uuid: node.uuid})
@@ -213,4 +216,3 @@ COMMUNITY_NODE_RETURN_NEPTUNE = """
     n.summary AS summary,
     n.created_at AS created_at
 """
-

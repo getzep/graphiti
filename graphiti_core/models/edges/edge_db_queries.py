@@ -62,7 +62,7 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
                 SET e.episodes = join($edge_data.episodes, ",")
                 RETURN $edge_data.uuid AS uuid
             """
-        case _: #Neo4j
+        case _:  # Neo4j
             return """
                 MATCH (source:Entity {uuid: $edge_data.source_uuid})
                 MATCH (target:Entity {uuid: $edge_data.target_uuid})
@@ -151,7 +151,7 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
                 RETURN e.uuid AS uuid
             """
         case GraphProvider.NEPTUNE:
-            return  """
+            return """
                 MATCH (community:Community {uuid: $community_uuid}) 
                 MATCH (node {uuid: $entity_uuid})
                 WHERE node:Entity OR node:Community
@@ -161,7 +161,7 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
                 SET r.created_at= $created_at
                 RETURN r.uuid AS uuid
             """
-        case _: #Neo4j
+        case _:  # Neo4j
             return """
                 MATCH (community:Community {uuid: $community_uuid})
                 MATCH (node:Entity | Community {uuid: $entity_uuid})

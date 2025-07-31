@@ -516,7 +516,8 @@ async def filter_existing_duplicate_of_edges(
         """
 
         duplicate_nodes = [
-            {'source': source.uuid, 'target': target.uuid} for source, target in duplicates_node_tuples
+            {'source': source.uuid, 'target': target.uuid}
+            for source, target in duplicates_node_tuples
         ]
 
         records, _, _ = await driver.execute_query(

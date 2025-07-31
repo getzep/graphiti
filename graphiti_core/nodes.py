@@ -94,13 +94,13 @@ class Node(BaseModel, ABC):
         match driver.provider:
             case GraphProvider.NEO4J:
                 await driver.execute_query(
-                """
+                    """
                 MATCH (n:Entity|Episodic|Community {uuid: $uuid})
                 DETACH DELETE n
                 """,
-                uuid=self.uuid,
-            )
-            case _: # FalkorDB and Neptune
+                    uuid=self.uuid,
+                )
+            case _:  # FalkorDB and Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -131,8 +131,8 @@ class Node(BaseModel, ABC):
                     """,
                     group_id=group_id,
                 )
-        
-            case _: #FalkorDB and Neptune
+
+            case _:  # FalkorDB and Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -141,7 +141,7 @@ class Node(BaseModel, ABC):
                         """,
                         group_id=group_id,
                     )
-    
+
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
 
@@ -199,7 +199,11 @@ class EpisodicNode(Node):
             MATCH (e:Episodic {uuid: $uuid})
             RETURN
             """
-            + (EPISODIC_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else EPISODIC_NODE_RETURN),
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             uuid=uuid,
             routing_='r',
         )
@@ -219,7 +223,11 @@ class EpisodicNode(Node):
             WHERE e.uuid IN $uuids
             RETURN DISTINCT
             """
-            + (EPISODIC_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else EPISODIC_NODE_RETURN),
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             uuids=uuids,
             routing_='r',
         )
@@ -248,7 +256,11 @@ class EpisodicNode(Node):
             + """
             RETURN DISTINCT
             """
-            + (EPISODIC_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else EPISODIC_NODE_RETURN)
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            )
             + """
             ORDER BY uuid DESC
             """
@@ -270,7 +282,11 @@ class EpisodicNode(Node):
             MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
             RETURN DISTINCT
             """
-            + (EPISODIC_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else EPISODIC_NODE_RETURN),
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             entity_node_uuid=entity_node_uuid,
             routing_='r',
         )
@@ -487,7 +503,11 @@ class CommunityNode(Node):
             MATCH (n:Community {uuid: $uuid})
             RETURN
             """
-            + (COMMUNITY_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else COMMUNITY_NODE_RETURN),
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            ),
             uuid=uuid,
             routing_='r',
         )
@@ -507,7 +527,11 @@ class CommunityNode(Node):
             WHERE n.uuid IN $uuids
             RETURN
             """
-            + (COMMUNITY_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else COMMUNITY_NODE_RETURN),
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            ),
             uuids=uuids,
             routing_='r',
         )
@@ -536,7 +560,11 @@ class CommunityNode(Node):
             + """
             RETURN
             """
-            + (COMMUNITY_NODE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else COMMUNITY_NODE_RETURN)
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            )
             + """
             ORDER BY n.uuid DESC
             """

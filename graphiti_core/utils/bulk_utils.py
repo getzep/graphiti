@@ -32,8 +32,8 @@ from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    get_episode_node_save_bulk_query,
     get_entity_node_save_bulk_query,
+    get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.utils.maintenance.edge_operations import (

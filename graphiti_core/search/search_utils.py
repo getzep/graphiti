@@ -61,6 +61,7 @@ DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
 
+
 def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> float:
     """
     Calculates the cosine similarity between two vectors using NumPy.
@@ -73,6 +74,7 @@ def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> f
         return 0  # Handle cases where one or both vectors are zero vectors
 
     return dot_product / (norm_vector1 * norm_vector2)
+
 
 def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
     group_ids_filter_list = (
@@ -486,7 +488,7 @@ async def node_fulltext_search(
                 LIMIT $limit
                             """
             )
-            records, _ , _ = await driver.execute_query(
+            records, _, _ = await driver.execute_query(
                 query,
                 ids=input_ids,
                 query=fuzzy_query,
@@ -792,7 +794,7 @@ async def community_fulltext_search(
     fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
     if fuzzy_query == '':
         return []
-    
+
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
         if res['hits']['total']['value'] > 0:
@@ -1220,7 +1222,9 @@ async def get_relevant_edges(
             + filter_query
             + """
             WITH e, edge, """
-            + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
+            + get_vector_cosine_func_query(
+                'e.fact_embedding', 'edge.fact_embedding', driver.provider
+            )
             + """ AS score
             WHERE score > $min_score
             WITH edge, e, score
@@ -1279,7 +1283,7 @@ async def get_edge_invalidation_candidates(
 
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
     query_params.update(filter_params)
-    
+
     if driver.provider == GraphProvider.NEPTUNE:
         query = (
             RUNTIME_QUERY
@@ -1358,7 +1362,9 @@ async def get_edge_invalidation_candidates(
             + filter_query
             + """
             WITH edge, e, """
-            + get_vector_cosine_func_query('e.fact_embedding', 'edge.fact_embedding', driver.provider)
+            + get_vector_cosine_func_query(
+                'e.fact_embedding', 'edge.fact_embedding', driver.provider
+            )
             + """ AS score
             WHERE score > $min_score
             WITH edge, e, score
@@ -1541,7 +1547,7 @@ async def get_embeddings_for_nodes(
     driver: GraphDriver, nodes: list[EntityNode]
 ) -> dict[str, list[float]]:
     if driver.provider == GraphProvider.NEPTUNE:
-        query="""
+        query = """
         MATCH (n:Entity)
         WHERE n.uuid IN $node_uuids
         RETURN DISTINCT
@@ -1549,7 +1555,7 @@ async def get_embeddings_for_nodes(
             split(n.name_embedding, ",") AS name_embedding
         """
     else:
-        query="""
+        query = """
         MATCH (n:Entity)
         WHERE n.uuid IN $node_uuids
         RETURN DISTINCT
@@ -1557,7 +1563,7 @@ async def get_embeddings_for_nodes(
             n.name_embedding AS name_embedding
         """
     results, _, _ = await driver.execute_query(
-        query, 
+        query,
         node_uuids=[node.uuid for node in nodes],
         routing_='r',
     )
@@ -1576,7 +1582,7 @@ async def get_embeddings_for_communities(
     driver: GraphDriver, communities: list[CommunityNode]
 ) -> dict[str, list[float]]:
     if driver.provider == GraphProvider.NEPTUNE:
-        query =  """
+        query = """
         MATCH (c:Community)
         WHERE c.uuid IN $community_uuids
         RETURN DISTINCT
@@ -1584,7 +1590,7 @@ async def get_embeddings_for_communities(
             split(c.name_embedding, ",") AS name_embedding
         """
     else:
-        query =  """
+        query = """
         MATCH (c:Community)
         WHERE c.uuid IN $community_uuids
         RETURN DISTINCT

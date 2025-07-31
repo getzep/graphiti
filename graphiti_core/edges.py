@@ -259,7 +259,11 @@ class EntityEdge(Edge):
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN
             """
-            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
+            + (
+                ENTITY_EDGE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else ENTITY_EDGE_RETURN
+            ),
             uuid=uuid,
             routing_='r',
         )
@@ -281,7 +285,11 @@ class EntityEdge(Edge):
             WHERE e.uuid IN $uuids
             RETURN
             """
-            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
+            + (
+                ENTITY_EDGE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else ENTITY_EDGE_RETURN
+            ),
             uuids=uuids,
             routing_='r',
         )
@@ -318,7 +326,11 @@ class EntityEdge(Edge):
             + """
             RETURN
             """
-            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN)
+            + (
+                ENTITY_EDGE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else ENTITY_EDGE_RETURN
+            )
             + with_embeddings_query
             + """
             ORDER BY e.uuid DESC 
@@ -343,7 +355,11 @@ class EntityEdge(Edge):
             MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
             RETURN
             """
-            + (ENTITY_EDGE_RETURN_NEPTUNE if driver.provider == GraphProvider.NEPTUNE else ENTITY_EDGE_RETURN),
+            + (
+                ENTITY_EDGE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else ENTITY_EDGE_RETURN
+            ),
             node_uuid=node_uuid,
             routing_='r',
         )
