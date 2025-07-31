@@ -48,6 +48,23 @@ QUERY getEntityEpisodeCount (entity_uuid: String) =>
     episode_count <- N<Entity>({uuid: entity_uuid})::In<Episode_Entity>::COUNT
     RETURN episode_count
 
+QUERY getEntityGroupIds () =>
+    entities <- N<Entity>
+    RETURN entities::{ group_id }
+
+QUERY getEntityNeighbors (entity_uuid: String) =>
+    neighbors <- N<Entity>({uuid: entity_uuid})::Out<Entity_Fact>::Out<Fact_Entity>
+    RETURN neighbors::{ uuid }
+
+QUERY getEntitiesFactCount (source_uuid: String, target_uuid: String) =>
+    count <- N<Fact>::WHERE(
+        AND(
+            EXISTS(_::In<Entity_Fact>::WHERE(_::{uuid}::EQ(source_uuid))),
+            EXISTS(_::Out<Fact_Entity>::WHERE(_::{uuid}::EQ(target_uuid)))
+        )
+    )::COUNT
+    RETURN count
+
 // #########################################################
 //                           Fact
 // #########################################################
@@ -233,6 +250,10 @@ QUERY deleteCommunity (uuid: String) =>
     DROP N<Community>({uuid: uuid})
     RETURN "SUCCESS"
 
+QUERY deleteAllCommunities () =>
+    DROP N<Community>
+    RETURN "SUCCESS"
+
 QUERY createCommunityEdge (community_uuid: String, entity_uuid: String, group_id: String, created_at: Date, uuid: String) =>
     community <- N<Community>({uuid: community_uuid})
     entity <- N<Entity>({uuid: entity_uuid})
@@ -276,6 +297,11 @@ QUERY getCommunitybyEntity (entity_uuid: String) =>
     communities <- N<Entity>({uuid: entity_uuid})::In<Community_Entity>
     RETURN communities
 
+QUERY getRelatedCommunities (entity_uuid: String) =>
+    related_entities <- N<Entity>({uuid: entity_uuid})::In<Fact_Entity>::In<Entity_Fact>
+    communities <- related_entities::In<Community_Entity>
+    RETURN communities
+
 // #########################################################
 //                          Global
 // #########################################################
@@ -285,4 +311,11 @@ QUERY deleteGroup (group_id: String) =>
     DROP N<Episode>::WHERE(_::{group_id}::EQ(group_id))
     DROP N<Community>::WHERE(_::{group_id}::EQ(group_id))
     DROP N<Fact>::WHERE(_::{group_id}::EQ(group_id))
+    RETURN "SUCCESS"
+
+QUERY deleteAll () =>
+    DROP N<Entity>
+    DROP N<Episode>
+    DROP N<Community>
+    DROP N<Fact>
     RETURN "SUCCESS"

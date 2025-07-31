@@ -230,11 +230,11 @@ async def edge_fulltext_search(
 
         bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results]
+        result_uuids = [result.get('uuid') for result in results]
 
-        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
 
-        uuids = uuids[:limit]
+        uuids = bm25_uuids[:limit]
 
         edges = await EntityEdge.get_by_uuids(driver, uuids)
 
@@ -524,11 +524,11 @@ async def node_fulltext_search(
 
         bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results]
+        result_uuids = [result.get('uuid') for result in results]
 
-        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
-        
-        uuids = uuids[:limit]
+        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+
+        uuids = bm25_uuids[:limit]
 
         nodes = await EntityNode.get_by_uuids(driver, uuids)
 
@@ -773,11 +773,11 @@ async def episode_fulltext_search(
 
         bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results]
+        result_uuids = [result.get('uuid') for result in results]
 
-        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
 
-        uuids = uuids[:limit]
+        uuids = bm25_uuids[:limit]
 
         episodes = await EpisodicNode.get_by_uuids(driver, uuids)
 
@@ -851,11 +851,11 @@ async def community_fulltext_search(
 
         bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results]
+        result_uuids = [result.get('uuid') for result in results]
 
-        uuids = [result.get('uuid') for result in results if result.get('uuid') in bm25_uuids]
+        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
 
-        uuids = uuids[:limit]
+        uuids = bm25_uuids[:limit]
 
         communities = await CommunityNode.get_by_uuids(driver, uuids)
 
@@ -1092,9 +1092,11 @@ async def get_relevant_nodes(
 
             bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
-            bm25_uuids = [result.get('uuid') for result in bm25_results]
+            result_uuids = [node.get('uuid') for node in res]
 
-            results.update([node.get('uuid') for node in res if node.get('uuid') in bm25_uuids])
+            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+
+            results.update(bm25_uuids)
 
             # Get all entity nodes
             await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
@@ -1126,7 +1128,7 @@ async def get_relevant_nodes(
                 if uuid not in seen_node_uuids:
                     seen_node_uuids[uuid] = await EntityNode.get_by_uuid(driver, uuid)
 
-            relevant_nodes.append([seen_node_uuids[uuid] for uuid in uuids])
+            relevant_nodes.append([seen_node_uuids[uuid] for uuid in uuids][:limit])
 
         return relevant_nodes
 

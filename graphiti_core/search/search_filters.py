@@ -181,18 +181,18 @@ async def helix_edge_search_filter(
     target_node_uuid: str | None = None,
 ):
     # Add properties to filter facts
-    fact_properties = [[]]
+    fact_properties = []
     
     # group_id in group_ids
     if group_ids is not None and isinstance(group_ids, list) and len(group_ids) > 0:
-        fact_properties[0].append({
+        fact_properties.append({
             'key': 'group_id',
             'operator': '==',
             'value': group_ids
         })
     
     # Filter edge types (search_filter)
-    fact_properties[0].extend(helix_edge_search_filter_edge_types(search_filter))
+    fact_properties.extend(helix_edge_search_filter_edge_types(search_filter))
 
     # Filter traversals (source and target node filters)
     filter_traversals = []
@@ -216,7 +216,7 @@ async def helix_edge_search_filter(
     if len(filter_traversals) > 0:
         args['filter_traversals'] = filter_traversals
     if len(fact_properties) > 0:
-        args['properties'] = fact_properties
+        args['properties'] = [fact_properties]
 
     if len(args) > 0:
         await driver.execute_query(
@@ -267,11 +267,11 @@ async def helix_node_search_filter(
     group_ids: list[str] | None = None,
 ):
     # Add properties to filter facts
-    fact_properties = [[]]
+    fact_properties = []
 
     # group_id in group_ids
     if group_ids is not None and isinstance(group_ids, list) and len(group_ids) > 0:
-        fact_properties[0].append({
+        fact_properties.append({
             'key': 'group_id',
             'operator': '==',
             'value': group_ids
@@ -279,19 +279,19 @@ async def helix_node_search_filter(
     
 
     if search_filter.node_labels is not None and len(search_filter.node_labels) > 0:
-        fact_properties[0].append({
+        fact_properties.append({
             'key': 'labels', 
             'operator': '==',
             'value': search_filter.node_labels
         })
 
     # Execute filter items
-    if len(fact_properties[0]) > 0:
+    if len(fact_properties) > 0:
         await driver.execute_query(
             "", 
             query="mcp/filter_items", 
             connection_id=connection_id, 
-            data={'filter': {'properties': fact_properties}}
+            data={'filter': {'properties': [fact_properties]}}
         )
 
     # Filter created_at date
