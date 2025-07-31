@@ -38,44 +38,36 @@ class HelixDriverSession(GraphDriverSession):
                 return response
         return result
 
-    async def run(self, query: str | list, **kwargs: Any) -> Any:
-        # HelixDB does not support argument for Label Set, so it's converted into an array of queries
-        queries: dict[str, list[dict[str, Any]]] = {}
+    async def run(self, query: str | list[dict[str, Any]], **kwargs: Any) -> Any:
         if isinstance(query, list):
-            for cypher, params in query:
-                # Ensure params is a dictionary
-                if not isinstance(params, dict):
-                    params = {}
-                converted_params = convert_datetimes_to_strings(params)
+            for params in query:
+                converted_params = convert_datetimes_to_strings(dict(params))
                 
                 # Type assertion to help the type checker
                 if not isinstance(converted_params, dict):
-                    continue
-                
-                # Check if 'query' key exists in params
-                if 'query' not in converted_params:
-                    raise ValueError("Missing 'query' parameter")
-                    
-                endpoint = converted_params['query']
-                filtered_params = {k: v for k, v in converted_params.items() if k != 'query'}
-                if endpoint not in queries:
-                    queries[endpoint] = [filtered_params]
-                else:
-                    queries[endpoint].append(filtered_params)
+                    raise ValueError("Invalid parameters format")
 
-            for endpoint, params in queries.items():
-                await self._helix_query(endpoint, params)  # type: ignore[reportUnknownArgumentType]
+                # Check if 'query' key exists in params
+                if 'helix_query' not in converted_params:
+                    raise ValueError("Missing 'helix_query' parameter")
+
+                result = await self._helix_query(converted_params['helix_query'], {k, v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
-            params = convert_datetimes_to_strings(params)
-            
+            converted_params = convert_datetimes_to_strings(params)
+
+            # Type assertion to help the type checker
+            if not isinstance(converted_params, dict):
+                raise ValueError("Invalid parameters format")
+
             # Check if 'query' key exists in params
-            if 'query' not in params:
-                raise ValueError("Missing 'query' parameter")
-                
-            await self._helix_query(params['query'], {k: v for k, v in params.items() if k != 'query'})  # type: ignore[reportUnknownArgumentType]
-        # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
-        return None
+            if 'helix_query' not in converted_params:
+                raise ValueError("Missing 'helix_query' parameter")
+
+            result = await self._helix_query(converted_params['helix_query'], {k, v for k, v in converted_params.items() if k != 'helix_query'}) # type: ignore[reportUnknownArgumentType]
+
+        return result
+            
 
 class HelixDriver(GraphDriver):
     provider: str = 'helixdb'

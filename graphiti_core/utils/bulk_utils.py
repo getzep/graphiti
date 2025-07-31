@@ -16,7 +16,8 @@ limitations under the License.
 
 import logging
 import typing
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -115,56 +116,144 @@ async def add_nodes_and_edges_bulk_tx(
     embedder: EmbedderClient,
     driver: GraphDriver,
 ):
-    episodes = [dict(episode) for episode in episodic_nodes]
-    for episode in episodes:
-        episode['source'] = str(episode['source'].value)
-    nodes: list[dict[str, Any]] = []
-    for node in entity_nodes:
-        if node.name_embedding is None:
-            await node.generate_name_embedding(embedder)
-        entity_data: dict[str, Any] = {
-            'uuid': node.uuid,
-            'name': node.name,
-            'name_embedding': node.name_embedding,
-            'group_id': node.group_id,
-            'summary': node.summary,
-            'created_at': node.created_at,
-        }
+    if driver.provider == 'helixdb':
+        query: list[dict[str, Any]] = []
+        for episode in episodic_nodes:
+            query.append(
+                dict(
+                    helix_query="createEpisode",
+                    uuid=episode.uuid,
+                    name=episode.name,
+                    group_id=episode.group_id,
+                    source_description=episode.source_description,
+                    content=episode.content,
+                    entity_edges=episode.entity_edges,
+                    created_at=episode.created_at,
+                    valid_at=episode.valid_at,
+                    source=episode.source.value,
+                    labels=episode.labels,
+                )
+            )
+        await tx.run(query) # type: ignore[reportUnknownArgumentType]
 
-        entity_data.update(node.attributes or {})
-        entity_data['labels'] = list(set(node.labels + ['Entity']))
-        nodes.append(entity_data)
+        query = []
+        for node in entity_nodes:
+            if node.name_embedding is None:
+                await node.generate_name_embedding(embedder)
+            query.append(
+                dict(
+                    helix_query="createEntityNode",
+                    uuid=node.uuid,
+                    name=node.name,
+                    name_embedding=node.name_embedding,
+                    group_id=node.group_id,
+                    summary=node.summary,
+                    created_at=node.created_at,
+                    labels=list(set(node.labels + ['Entity'])),
+                    attributes=json.dumps(node.attributes),
+                )
+            )
+        await tx.run(query) # type: ignore[reportUnknownArgumentType]
 
-    edges: list[dict[str, Any]] = []
-    for edge in entity_edges:
-        if edge.fact_embedding is None:
-            await edge.generate_embedding(embedder)
-        edge_data: dict[str, Any] = {
-            'uuid': edge.uuid,
-            'source_node_uuid': edge.source_node_uuid,
-            'target_node_uuid': edge.target_node_uuid,
-            'name': edge.name,
-            'fact': edge.fact,
-            'fact_embedding': edge.fact_embedding,
-            'group_id': edge.group_id,
-            'episodes': edge.episodes,
-            'created_at': edge.created_at,
-            'expired_at': edge.expired_at,
-            'valid_at': edge.valid_at,
-            'invalid_at': edge.invalid_at,
-        }
+        query = []
+        for edge in episodic_edges:
+            query.append(
+                dict(
+                    helix_query="createEpisodeEdge",
+                    uuid=edge.uuid,
+                    episode_uuid=edge.source_node_uuid,
+                    entity_uuid=edge.target_node_uuid,
+                    group_id=edge.group_id,
+                    created_at=edge.created_at,
+                )
+            )
 
-        edge_data.update(edge.attributes or {})
-        edges.append(edge_data)
+        await tx.run(query) # type: ignore[reportUnknownArgumentType]
 
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-    entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
-    await tx.run(entity_node_save_bulk, nodes=nodes)
-    await tx.run(
-        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
-    )
-    entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
-    await tx.run(entity_edge_save_bulk, entity_edges=edges)
+        query = []
+        for edge in entity_edges:
+            if edge.fact_embedding is None:
+                await edge.generate_embedding(embedder)
+            valid_date = edge.valid_at   
+            if valid_date is None:
+                valid_date = datetime.fromtimestamp(0, timezone.utc).isoformat()
+            invalid_date = edge.invalid_at
+            if invalid_date is None:
+                invalid_date = datetime.fromtimestamp(0, timezone.utc).isoformat()
+            expired_date = edge.expired_at
+            if expired_date is None:
+                expired_date = datetime.fromtimestamp(0, timezone.utc).isoformat()
+            query.append(
+                dict(
+                    helix_query="createEntityEdge",
+                    uuid=edge.uuid,
+                    name=edge.name,
+                    fact=edge.fact,
+                    fact_embedding=edge.fact_embedding,
+                    group_id=edge.group_id,
+                    source_uuid=edge.source_node_uuid,
+                    target_uuid=edge.target_node_uuid,
+                    episodes=edge.episodes,
+                    created_at=edge.created_at,
+                    valid_at=valid_date,
+                    invalid_at=invalid_date,
+                    expired_at=expired_date,
+                    attributes=json.dumps(edge.attributes),
+                )
+            )
+
+        await tx.run(query) # type: ignore[reportUnknownArgumentType]
+    else:
+        episodes = [dict(episode) for episode in episodic_nodes]
+        for episode in episodes:
+            episode['source'] = str(episode['source'].value)
+        nodes: list[dict[str, Any]] = []
+        for node in entity_nodes:
+            if node.name_embedding is None:
+                await node.generate_name_embedding(embedder)
+            entity_data: dict[str, Any] = {
+                'uuid': node.uuid,
+                'name': node.name,
+                'name_embedding': node.name_embedding,
+                'group_id': node.group_id,
+                'summary': node.summary,
+                'created_at': node.created_at,
+            }
+
+            entity_data.update(node.attributes or {})
+            entity_data['labels'] = list(set(node.labels + ['Entity']))
+            nodes.append(entity_data)
+
+        edges: list[dict[str, Any]] = []
+        for edge in entity_edges:
+            if edge.fact_embedding is None:
+                await edge.generate_embedding(embedder)
+            edge_data: dict[str, Any] = {
+                'uuid': edge.uuid,
+                'source_node_uuid': edge.source_node_uuid,
+                'target_node_uuid': edge.target_node_uuid,
+                'name': edge.name,
+                'fact': edge.fact,
+                'fact_embedding': edge.fact_embedding,
+                'group_id': edge.group_id,
+                'episodes': edge.episodes,
+                'created_at': edge.created_at,
+                'expired_at': edge.expired_at,
+                'valid_at': edge.valid_at,
+                'invalid_at': edge.invalid_at,
+            }
+
+            edge_data.update(edge.attributes or {})
+            edges.append(edge_data)
+
+        await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
+        entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
+        await tx.run(entity_node_save_bulk, nodes=nodes)
+        await tx.run(
+            EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
+        )
+        entity_edge_save_bulk = get_entity_edge_save_bulk_query(driver.provider)
+        await tx.run(entity_edge_save_bulk, entity_edges=edges)
 
 
 async def extract_nodes_and_edges_bulk(
