@@ -15,13 +15,10 @@ limitations under the License.
 """
 
 import logging
-from contextlib import suppress
 from time import time
 from typing import Any
-from uuid import uuid4
 
-import pydantic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather

@@ -21,7 +21,7 @@ from graphiti_core.nodes import EntityNode
 
 
 def validate_entity_types(
-    entity_types: dict[str, BaseModel] | None,
+    entity_types: dict[str, type[BaseModel]] | None,
 ) -> bool:
     if entity_types is None:
         return True
