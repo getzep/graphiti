@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if driver.provider == 'helixdb':
+        # HelixDB uses a fixed schema
+        return
+
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -66,13 +70,21 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
     async with driver.session() as session:
 
         async def delete_all(tx):
-            await tx.run('MATCH (n) DETACH DELETE n')
+            if driver.provider == 'helixdb':
+                await tx.run("", helix_query="deleteAll")
+            else:
+                await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            await tx.run(
-                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
-                group_ids=group_ids,
-            )
+            if driver.provider == 'helixdb':
+                if group_ids is not None:
+                    for group_id in group_ids:
+                        await tx.run("", helix_query="deleteGroup", group_id=group_id)
+            else:
+                await tx.run(
+                    'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                    group_ids=group_ids,
+                )
 
         if group_ids is None:
             await session.execute_write(delete_all)
@@ -101,37 +113,60 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    group_id_filter: LiteralString = (
-        '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
-    )
-    source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
+    if driver.provider == 'helixdb':
+        # Create MCP connection
+        connection_id = await driver.execute_query("", query="mcp/init")
 
-    query: LiteralString = (
-        """
-                                MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                                """
-        + group_id_filter
-        + source_filter
-        + """
-        RETURN e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.group_id AS group_id,
-            e.name AS name,
-            e.source_description AS source_description,
-            e.source AS source
-        ORDER BY e.valid_at DESC
-        LIMIT $num_episodes
-        """
-    )
-    result, _, _ = await driver.execute_query(
-        query,
-        reference_time=reference_time,
-        source=source.name if source is not None else None,
-        num_episodes=last_n,
-        group_ids=group_ids,
-    )
+        # Get all episode nodes
+        await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
+
+        # Filter episode nodes by group_ids and reference_time and source
+        filter_properties: list[dict[str, str|list[str]]] = [{'key': 'valid_at', 'value': reference_time.isoformat(), 'operator': '<='}]
+        if group_ids is not None:
+            filter_properties.append({'key': 'group_id', 'value': group_ids, 'operator': '=='})
+        if source is not None:
+            filter_properties.append({'key': 'source', 'value': source.value, 'operator': '=='})
+
+        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={
+            'filter': {'properties': [filter_properties]}
+        })
+        
+        results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+
+        results.sort(key=lambda x: x['valid_at'], reverse=True)
+
+    else:
+        group_id_filter: LiteralString = (
+            '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
+        )
+        source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
+
+        query: LiteralString = (
+            """
+                                    MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
+                                    """
+            + group_id_filter
+            + source_filter
+            + """
+            RETURN e.content AS content,
+                e.created_at AS created_at,
+                e.valid_at AS valid_at,
+                e.uuid AS uuid,
+                e.group_id AS group_id,
+                e.name AS name,
+                e.source_description AS source_description,
+                e.source AS source
+            ORDER BY e.valid_at DESC
+            LIMIT $num_episodes
+            """
+        )
+        result, _, _ = await driver.execute_query(
+            query,
+            reference_time=reference_time,
+            source=source.name if source is not None else None,
+            num_episodes=last_n,
+            group_ids=group_ids,
+        )
 
     episodes = [
         EpisodicNode(
