@@ -22,6 +22,7 @@ dependencies = [
     "helix-py>=0.2.24",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
+    "google-genai>=1.20.0",
 ]
 
 [project.urls]

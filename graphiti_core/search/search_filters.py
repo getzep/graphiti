@@ -143,32 +143,39 @@ def helix_edge_search_filter_traversals(
             target_properties.append({'key': 'uuid', 'value': target_node_uuids, 'operator': '=='})
 
     # Filter labels in node_labels
-    filter_traversals = [
-        {
-            'tool_name': 'in_step',
-            'args': {
-                'edge_label': 'Entity_Fact',
-                'edge_type': 'node',
-                'filter': {
-                    'properties': [
-                        source_properties
-                    ]
+    filter_traversals = []
+
+    if len(source_properties) > 0:
+        filter_traversals.append(
+            {
+                'tool_name': 'in_step',
+                'args': {
+                    'edge_label': 'Entity_Fact',
+                    'edge_type': 'node',
+                    'filter': {
+                        'properties': [
+                            source_properties
+                        ]
+                    }
                 }
             }
-        },
-        {
-            'tool_name': 'out_step',
-            'args': {
-                'edge_label': 'Fact_Entity',
-                'edge_type': 'node',
-                'filter': {
-                    'properties': [
-                        target_properties
-                    ]
+        )
+
+    if len(target_properties) > 0:
+        filter_traversals.append(
+            {
+                'tool_name': 'out_step',
+                'args': {
+                    'edge_label': 'Fact_Entity',
+                    'edge_type': 'node',
+                    'filter': {
+                        'properties': [
+                            target_properties
+                        ]
+                    }
                 }
             }
-        }
-    ]
+        )
     
     return filter_traversals
 

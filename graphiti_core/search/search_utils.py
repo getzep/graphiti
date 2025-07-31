@@ -114,13 +114,14 @@ async def get_mentioned_nodes(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
 
         # Filter episode nodes by episode_uuids
-        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': episode_uuids, 'operator': '=='}
+        if len(episode_uuids) > 0:
+            await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+                'properties': [
+                    [
+                        {'key': 'uuid', 'value': episode_uuids, 'operator': '=='}
+                    ]
                 ]
-            ]
-        }})
+            }})
 
         await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
 
@@ -168,13 +169,14 @@ async def get_communities_by_nodes(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
 
         # Filter entity nodes by node_uuids
-        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': node_uuids, 'operator': '=='}
+        if len(node_uuids) > 0:
+            await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+                'properties': [
+                    [
+                        {'key': 'uuid', 'value': node_uuids, 'operator': '=='}
+                    ]
                 ]
-            ]
-        }})
+            }})
 
         await driver.execute_query("", query="mcp/in_step", connection_id=connection_id, data={'edge_label': 'Community_Entity', 'edge_type': 'node'})
 
@@ -226,13 +228,19 @@ async def edge_fulltext_search(
         results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
         # TODO: Add fuzzy search with BM25
-        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Fact'})
+        res = await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Fact'})
 
-        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        if res is not None:
+            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        else:
+            bm25_results = None
 
         result_uuids = [result.get('uuid') for result in results]
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        if bm25_results is not None:
+            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        else:
+            bm25_uuids = result_uuids
 
         uuids = bm25_uuids[:limit]
 
@@ -416,13 +424,12 @@ async def edge_bfs_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
 
         # Filter entity nodes by uuids & group_ids
+        properties = [{'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='}]
+        if group_ids is not None:
+            properties.append({'key': 'group_id', 'value': group_ids, 'operator': '=='})
+
         await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
-                ]
-            ]
+            'properties': [properties]
         }})
 
         if max_depth > 0:
@@ -432,14 +439,13 @@ async def edge_bfs_search(
         # Get all episode nodes
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
 
-        # Filter episode nodes by uuids & group_ids
+        # Filter entity nodes by uuids & group_ids
+        properties = [{'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='}]
+        if group_ids is not None:
+            properties.append({'key': 'group_id', 'value': group_ids, 'operator': '=='})
+
         await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
-                ]
-            ]
+            'properties': [properties]
         }})
 
         await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
@@ -520,13 +526,19 @@ async def node_fulltext_search(
         results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
         # TODO: Add fuzzy search with BM25
-        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
+        res = await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
 
-        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        if res is not None:
+            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        else:
+            bm25_results = None
 
         result_uuids = [result.get('uuid') for result in results]
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        if bm25_results is not None:
+            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        else:
+            bm25_uuids = result_uuids
 
         uuids = bm25_uuids[:limit]
 
@@ -674,13 +686,12 @@ async def node_bfs_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Entity'})
 
         # Filter entity nodes by uuids & group_ids
+        properties = [{'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='}]
+        if group_ids is not None:
+            properties.append({'key': 'group_id', 'value': group_ids, 'operator': '=='})
+
         await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
-                ]
-            ]
+            'properties': [properties]
         }})
 
         if max_depth > 0:
@@ -691,13 +702,12 @@ async def node_bfs_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
 
         # Filter episode nodes by uuids & group_ids
+        properties = [{'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='}]
+        if group_ids is not None:
+            properties.append({'key': 'group_id', 'value': group_ids, 'operator': '=='})
+
         await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'uuid', 'value': bfs_origin_node_uuids, 'operator': '=='},
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
-                ]
-            ]
+            'properties': [properties]
         }})
 
         await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Episode_Entity', 'edge_type': 'node'})
@@ -758,24 +768,31 @@ async def episode_fulltext_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Episode'})
 
         # Filter episode nodes by group_ids
-        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+        if group_ids is not None:
+            await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+                'properties': [
+                    [
+                        {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                    ]
                 ]
-            ]
-        }})
+            }})
 
         results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
         # TODO: Add fuzzy search with BM25
-        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Episode'})
+        res = await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Episode'})
 
-        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        if res is not None:
+            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        else:
+            bm25_results = None
 
         result_uuids = [result.get('uuid') for result in results]
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        if bm25_results is not None:
+            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        else:
+            bm25_uuids = result_uuids
 
         uuids = bm25_uuids[:limit]
 
@@ -836,24 +853,31 @@ async def community_fulltext_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Community'})
 
         # Filter community nodes by group_ids
-        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+        if group_ids is not None:
+            await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+                'properties': [
+                    [
+                        {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                    ]
                 ]
-            ]
-        }})
+            }})
 
         results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
         # TODO: Add fuzzy search with BM25
-        await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Community'})
+        res = await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': query, 'limit': limit*BM25_MULTIPLIER, 'label': 'Community'})
 
-        bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        if res is not None:
+            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+        else:
+            bm25_results = None
 
         result_uuids = [result.get('uuid') for result in results]
 
-        bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        if bm25_results is not None:
+            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+        else:
+            bm25_uuids = result_uuids
 
         uuids = bm25_uuids[:limit]
 
@@ -910,13 +934,14 @@ async def community_similarity_search(
         await driver.execute_query("", query="mcp/n_from_type", connection_id=connection_id, data={'node_type': 'Community'})
 
         # Filter community nodes by group_ids
-        await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
-            'properties': [
-                [
-                    {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+        if group_ids is not None:
+            await driver.execute_query("", query="mcp/filter_items", connection_id=connection_id, data={'filter': {
+                'properties': [
+                    [
+                        {'key': 'group_id', 'value': group_ids, 'operator': '=='}
+                    ]
                 ]
-            ]
-        }})
+            }})
 
         # Get all community embeddings
         await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Community_to_Embedding', 'edge_type': 'vec'})
@@ -1088,13 +1113,22 @@ async def get_relevant_nodes(
             res = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
             # TODO: Add fuzzy search with BM25
-            await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': node.name, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
+            if node.name is not None:
+                res = await driver.execute_query("", query="mcp/search_keyword", connection_id=connection_id, data={'query': node.name, 'limit': limit*BM25_MULTIPLIER, 'label': 'Entity'})
 
-            bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+                if res is not None:
+                    bm25_results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
+                else:
+                    bm25_results = None
+            else:
+                bm25_results = None
 
             result_uuids = [node.get('uuid') for node in res]
 
-            bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+            if bm25_results is not None:
+                bm25_uuids = [result.get('uuid') for result in bm25_results if result.get('uuid') in result_uuids]
+            else:
+                bm25_uuids = result_uuids
 
             results.update(bm25_uuids)
 
@@ -1487,12 +1521,13 @@ async def node_distance_reranker(
 
         await driver.execute_query("", query="mcp/out_step", connection_id=connection_id, data={'edge_label': 'Fact_Entity', 'edge_type': 'node'})
 
-        await driver.execute_query(
-            "",
-            query="mcp/filter_items",
-            connection_id=connection_id,
-            data={'filter': {'properties': [{'key': 'uuid', 'value': filtered_uuids, 'operator': '=='}]}}
-        )
+        if len(filtered_uuids) > 0:
+            await driver.execute_query(
+                "",
+                query="mcp/filter_items",
+                connection_id=connection_id,
+                data={'filter': {'properties': [{'key': 'uuid', 'value': filtered_uuids, 'operator': '=='}]}}
+            )
 
         results = await driver.execute_query("", query="mcp/collect", connection_id=connection_id)
 
