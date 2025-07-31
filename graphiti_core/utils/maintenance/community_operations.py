@@ -3,13 +3,14 @@ import logging
 from collections import defaultdict
 
 from pydantic import BaseModel
+from typing import Any
 
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
+from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record, process_helix_community
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
 from graphiti_core.utils.datetime_utils import utc_now
@@ -31,35 +32,66 @@ async def get_community_clusters(
     community_clusters: list[list[EntityNode]] = []
 
     if group_ids is None:
-        group_id_values, _, _ = await driver.execute_query(
-            """
-        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN 
-            collect(DISTINCT n.group_id) AS group_ids
-        """,
-        )
+        if driver.provider == 'helixdb':
+            result = await driver.execute_query("", query="getEntityGroupIds")
 
-        group_ids = group_id_values[0]['group_ids'] if group_id_values else []
+            if result is None:
+                result = {'entities': []}
+
+            group_ids = result.get('entities', [])
+
+            group_ids = list(set(group_ids))
+        else:
+            group_id_values, _, _ = await driver.execute_query(
+                """
+            MATCH (n:Entity WHERE n.group_id IS NOT NULL)
+            RETURN 
+                collect(DISTINCT n.group_id) AS group_ids
+            """,
+            )
+
+            group_ids = group_id_values[0]['group_ids'] if group_id_values else []
 
     for group_id in group_ids:
         projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
         for node in nodes:
-            records, _, _ = await driver.execute_query(
-                """
-            MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[r:RELATES_TO]-(m: Entity {group_id: $group_id})
-            WITH count(r) AS count, m.uuid AS uuid
-            RETURN
-                uuid,
-                count
-            """,
-                uuid=node.uuid,
-                group_id=group_id,
-            )
+            if driver.provider == 'helixdb':
+                projection[node.uuid] = []
 
-            projection[node.uuid] = [
-                Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
-            ]
+                result = await driver.execute_query("", query="getEntityNeighbors", entity_uuid=node.uuid)
+
+                if result is None:
+                    neighbor_uuids = []
+                else:
+                    neighbor_uuids = result.get('neighbors', [])
+
+                for neighbor_uuid in neighbor_uuids:
+                    result = await driver.execute_query("", query="getEntitiesFactCount", source_uuid=node.uuid, target_uuid=neighbor_uuid)
+
+                    if result is None:
+                        edge_count = 0
+                    else:
+                        edge_count = result.get('count', 0)
+
+                    projection[node.uuid].append(Neighbor(node_uuid=neighbor_uuid, edge_count=edge_count))
+               
+            else:
+                records, _, _ = await driver.execute_query(
+                    """
+                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[r:RELATES_TO]-(m: Entity {group_id: $group_id})
+                WITH count(r) AS count, m.uuid AS uuid
+                RETURN
+                    uuid,
+                    count
+                """,
+                    uuid=node.uuid,
+                    group_id=group_id,
+                )
+
+                projection[node.uuid] = [
+                    Neighbor(node_uuid=record['uuid'], edge_count=record['count']) for record in records
+                ]
 
         cluster_uuids = label_propagation(projection)
 
@@ -217,51 +249,82 @@ async def build_communities(
 
 
 async def remove_communities(driver: GraphDriver):
-    await driver.execute_query(
-        """
-    MATCH (c:Community)
-    DETACH DELETE c
-    """,
-    )
+    if driver.provider == 'helixdb':
+        await driver.execute_query("", query="deleteAllCommunities")
+    else:
+        await driver.execute_query(
+            """
+        MATCH (c:Community)
+        DETACH DELETE c
+        """,
+        )
 
 
 async def determine_entity_community(
     driver: GraphDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
     # Check if the node is already part of a community
-    records, _, _ = await driver.execute_query(
-        """
-    MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid As uuid, 
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at, 
-        c.summary AS summary
-    """,
-        entity_uuid=entity.uuid,
-    )
+    if driver.provider == 'helixdb':
+        results = await driver.execute_query("", query="getCommunitybyEntity", entity_uuid=entity.uuid)
 
-    if len(records) > 0:
-        return get_community_node_from_record(records[0]), False
+        if results is not None:
+            results = results.get('communities', [])
+
+            if len(results) > 0:
+                community = results[0]
+
+                community = await process_helix_community(driver, community)
+
+                return community, False
+
+    else:
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
+        RETURN
+            c.uuid As uuid, 
+            c.name AS name,
+            c.group_id AS group_id,
+            c.created_at AS created_at, 
+            c.summary AS summary
+        """,
+            entity_uuid=entity.uuid,
+        )
+
+        if len(records) > 0:
+            return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    records, _, _ = await driver.execute_query(
-        """
-    MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid As uuid, 
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at, 
-        c.summary AS summary
-    """,
-        entity_uuid=entity.uuid,
-    )
+    if driver.provider == 'helixdb':
+        communities = []
+        
+        results = await driver.execute_query("", query="getRelatedCommunities", entity_uuid=entity.uuid)
 
-    communities: list[CommunityNode] = [
-        get_community_node_from_record(record) for record in records
-    ]
+        if results is not None:
+            results = results.get('communities', [])
+
+            for community in results:
+                community = await process_helix_community(driver, community)
+
+                communities.append(get_community_node_from_record(community))
+
+    else:
+        records, _, _ = await driver.execute_query(
+            """
+        MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+        RETURN
+            c.uuid As uuid, 
+            c.name AS name,
+            c.group_id AS group_id,
+            c.created_at AS created_at, 
+            c.summary AS summary
+        """,
+            entity_uuid=entity.uuid,
+        )
+
+        communities: list[CommunityNode] = [
+            get_community_node_from_record(record) for record in records
+        ]
 
     community_map: dict[str, int] = defaultdict(int)
     for community in communities:

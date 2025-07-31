@@ -871,26 +871,12 @@ class CommunityNode(Node):
             if result is None:
                 raise NodeNotFoundError(uuid)
 
-            embedding = await driver.execute_query(
-                "",
-                query="loadCommunityEmbedding",
-                uuid=uuid,
-            )
-            embedding = embedding.get('embedding', [{}])
-
-            if len(embedding) == 0:
-                embedding = None
-            else:
-                embedding = embedding[0].get('name_embedding', None)
-
             result = result.get('community', None)
 
             if result is None:
                 raise NodeNotFoundError(uuid)
 
-            result['name_embedding'] = embedding
-
-            return get_community_node_from_record(result)
+            return await process_helix_community(driver, result)
 
         records, _, _ = await driver.execute_query(
             """
@@ -927,29 +913,15 @@ class CommunityNode(Node):
                 if result is None:
                     continue
 
-                embedding = await driver.execute_query(
-                    "",
-                    query="loadCommunityEmbedding",
-                    uuid=uuid,
-                )
-                embedding = embedding.get('embedding', [{}])
-
-                if len(embedding) == 0:
-                    embedding = None
-                else:
-                    embedding = embedding[0].get('name_embedding', None)
-
                 result = result.get('community', None)
 
                 if result is None:
                     continue
 
-                result['name_embedding'] = embedding
+                result = await process_helix_community(driver, result)
                 results.append(result)
 
-            nodes = [get_community_node_from_record(result) for result in results]
-
-            return nodes
+            return results
 
         records, _, _ = await driver.execute_query(
             """
@@ -1104,6 +1076,23 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
     )
+
+async def process_helix_community(driver: GraphDriver, community: dict[str, Any]) -> CommunityNode:
+    embedding = await driver.execute_query(
+        "",
+        query="loadCommunityEmbedding",
+        uuid=community.get('uuid'),
+    )
+    embedding = embedding.get('embedding', [{}])
+
+    if len(embedding) == 0:
+        embedding = None
+    else:
+        embedding = embedding[0].get('name_embedding', None)
+
+    community['name_embedding'] = embedding
+
+    return get_community_node_from_record(community)
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
