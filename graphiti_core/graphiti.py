@@ -359,10 +359,10 @@ class Graphiti:
         group_id: str | None = None,
         uuid: str | None = None,
         update_communities: bool = False,
-        entity_types: dict[str, BaseModel] | None = None,
+        entity_types: dict[str, type[BaseModel]] | None = None,
         excluded_entity_types: list[str] | None = None,
         previous_episode_uuids: list[str] | None = None,
-        edge_types: dict[str, BaseModel] | None = None,
+        edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
@@ -555,9 +555,9 @@ class Graphiti:
         self,
         bulk_episodes: list[RawEpisode],
         group_id: str | None = None,
-        entity_types: dict[str, BaseModel] | None = None,
+        entity_types: dict[str, type[BaseModel]] | None = None,
         excluded_entity_types: list[str] | None = None,
-        edge_types: dict[str, BaseModel] | None = None,
+        edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
     ):
         """
