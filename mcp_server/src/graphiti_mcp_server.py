@@ -195,6 +195,7 @@ class GraphitiLLMConfig(BaseModel):
     model: str = DEFAULT_LLM_MODEL
     small_model: str = SMALL_LLM_MODEL
     temperature: float = 0.0
+    max_tokens: int = int(os.environ.get('LLM_MAX_TOKENS', '8192'))
     azure_openai_endpoint: str | None = None
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
@@ -220,6 +221,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=ollama_llm_model,
                 small_model=ollama_llm_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                max_tokens=int(os.environ.get('LLM_MAX_TOKENS', '8192')),
                 use_ollama=True,
                 ollama_base_url=ollama_base_url,
                 ollama_llm_model=ollama_llm_model,
@@ -258,6 +260,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                max_tokens=int(os.environ.get('LLM_MAX_TOKENS', '8192')),
                 use_ollama=False,
             )
         else:
@@ -283,6 +286,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=model,
                 small_model=small_model,
                 temperature=float(os.environ.get('LLM_TEMPERATURE', '0.0')),
+                max_tokens=int(os.environ.get('LLM_MAX_TOKENS', '8192')),
                 use_ollama=False,
             )
 
@@ -322,6 +326,9 @@ class GraphitiLLMConfig(BaseModel):
         if hasattr(args, 'temperature') and args.temperature is not None:
             config.temperature = args.temperature
 
+        if hasattr(args, 'max_tokens') and args.max_tokens is not None:
+            config.max_tokens = args.max_tokens
+
         return config
 
     def create_client(self) -> LLMClient:
@@ -338,6 +345,7 @@ class GraphitiLLMConfig(BaseModel):
                 model=self.ollama_llm_model,
                 small_model=self.ollama_llm_model,
                 temperature=self.temperature,
+                max_tokens=self.max_tokens,
                 base_url=self.ollama_base_url,
             )
             return OpenAIClient(config=llm_client_config)
@@ -359,6 +367,7 @@ class GraphitiLLMConfig(BaseModel):
                         model=self.model,
                         small_model=self.small_model,
                         temperature=self.temperature,
+                        max_tokens=self.max_tokens,
                     ),
                 )
             elif self.api_key:
@@ -375,6 +384,7 @@ class GraphitiLLMConfig(BaseModel):
                         model=self.model,
                         small_model=self.small_model,
                         temperature=self.temperature,
+                        max_tokens=self.max_tokens,
                     ),
                 )
             else:
@@ -387,8 +397,9 @@ class GraphitiLLMConfig(BaseModel):
             api_key=self.api_key, model=self.model, small_model=self.small_model
         )
 
-        # Set temperature
+        # Set temperature and max_tokens
         llm_client_config.temperature = self.temperature
+        llm_client_config.max_tokens = self.max_tokens
 
         return OpenAIClient(config=llm_client_config)
 
@@ -1323,6 +1334,11 @@ async def initialize_server() -> MCPConfig:
         type=float,
         help='Temperature setting for the LLM (0.0-2.0). Lower values make output more deterministic. (default: 0.7)',
     )
+    parser.add_argument(
+        '--max-tokens',
+        type=int,
+        help='Maximum tokens for LLM responses (default: 8192)',
+    )
     parser.add_argument('--destroy-graph', action='store_true', help='Destroy all Graphiti graphs')
     parser.add_argument(
         '--use-custom-entities',
@@ -1386,9 +1402,11 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Using Ollama LLM: {config.llm.ollama_llm_model}')
         logger.info(f'Ollama base URL: {config.llm.ollama_base_url}')
         logger.info(f'LLM temperature: {config.llm.temperature}')
+        logger.info(f'LLM max tokens: {config.llm.max_tokens}')
     else:
         logger.info(f'Using OpenAI/Azure OpenAI LLM: {config.llm.model}')
         logger.info(f'LLM temperature: {config.llm.temperature}')
+        logger.info(f'LLM max tokens: {config.llm.max_tokens}')
 
     # Log embedder configuration
     if config.embedder.use_ollama:

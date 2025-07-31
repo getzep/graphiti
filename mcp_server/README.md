@@ -224,6 +224,7 @@ The server now defaults to using **Ollama** for LLM operations and embeddings. Y
 - `OLLAMA_LLM_MODEL`: Ollama LLM model name (default: `deepseek-r1:7b`)
 - `OLLAMA_EMBEDDING_MODEL`: Ollama embedding model name (default: `nomic-embed-text`)
 - `OLLAMA_EMBEDDING_DIM`: Ollama embedding dimension (default: `768`)
+- `LLM_MAX_TOKENS`: Maximum tokens for LLM responses (default: `8192`)
 
 #### OpenAI Configuration (Alternative)
 To use OpenAI instead of Ollama, set `USE_OLLAMA=false` and configure:
@@ -232,6 +233,7 @@ To use OpenAI instead of Ollama, set `USE_OLLAMA=false` and configure:
 - `MODEL_NAME`: OpenAI model name to use for LLM operations (default: `gpt-4.1-mini`)
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations (default: `gpt-4.1-nano`)
 - `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0)
+- `LLM_MAX_TOKENS`: Maximum tokens for LLM responses (default: `8192`)
 
 #### Azure OpenAI Configuration (Alternative)
 To use Azure OpenAI, set `USE_OLLAMA=false` and configure:
@@ -243,6 +245,7 @@ To use Azure OpenAI, set `USE_OLLAMA=false` and configure:
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Azure OpenAI embedding deployment name
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Azure OpenAI API version
 - `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Use Azure Managed Identities for authentication
+- `LLM_MAX_TOKENS`: Maximum tokens for LLM responses (default: `8192`)
 
 #### General Configuration
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
@@ -269,6 +272,7 @@ Available arguments:
 - `--model`: Overrides the `MODEL_NAME` environment variable (only when not using Ollama).
 - `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable (only when not using Ollama).
 - `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
+- `--max-tokens`: Overrides the `LLM_MAX_TOKENS` environment variable.
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
 - `--port`: Port to bind the MCP server to (default: 8020)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
@@ -309,6 +313,11 @@ uv run src/graphiti_mcp_server.py.py --ollama-llm-model llama3.2:3b
 uv run src/graphiti_mcp_server.py.py --ollama-embedding-model all-minilm-l6-v2 --ollama-embedding-dim 384
 ```
 
+**Use custom max tokens for larger responses:**
+```bash
+uv run src/graphiti_mcp_server.py.py --max-tokens 32768
+```
+
 **Connect to a remote Ollama server:**
 ```bash
 uv run src/graphiti_mcp_server.py.py --ollama-base-url http://remote-server:11434/v1 --ollama-llm-model llama3.2:8b
@@ -331,6 +340,7 @@ OLLAMA_LLM_MODEL=mistral:7b
 OLLAMA_EMBEDDING_MODEL=all-minilm-l6-v2
 OLLAMA_EMBEDDING_DIM=384
 LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=32768
 ```
 
 Then run the server:
@@ -542,7 +552,8 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "OLLAMA_LLM_MODEL": "mistral:7b",
         "OLLAMA_EMBEDDING_MODEL": "nomic-embed-text-v2",
         "OLLAMA_EMBEDDING_DIM": "768",
-        "LLM_TEMPERATURE": "0.1"
+        "LLM_TEMPERATURE": "0.1",
+        "LLM_MAX_TOKENS": "32768"
       }
     }
   }

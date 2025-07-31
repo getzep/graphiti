@@ -66,6 +66,7 @@ services:
       - OLLAMA_LLM_MODEL=deepseek-r1:7b
       - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
       - OLLAMA_EMBEDDING_DIM=768
+      - LLM_MAX_TOKENS=32768
       - OPENAI_API_KEY=abc
       - PATH=/root/.local/bin:${PATH}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}

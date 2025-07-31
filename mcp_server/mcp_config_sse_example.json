@@ -1,8 +1,8 @@
 {
-    "mcpServers": {
-        "graphiti": {
-            "transport": "sse",
-            "url": "http://localhost:8020/sse"
-        }
+  "mcpServers": {
+    "graphiti": {
+      "transport": "sse",
+      "url": "http://localhost:8020/sse"
     }
+  }
 }
