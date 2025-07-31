@@ -148,7 +148,7 @@ def validate_group_id(group_id: str) -> bool:
 
 
 def validate_excluded_entity_types(
-    excluded_entity_types: list[str] | None, entity_types: dict[str, BaseModel] | None = None
+    excluded_entity_types: list[str] | None, entity_types: dict[str, type[BaseModel]] | None = None
 ) -> bool:
     """
     Validate that excluded entity types are valid type names.

@@ -64,7 +64,8 @@ async def test_graphiti_init(driver):
     await graphiti.build_indices_and_constraints()
 
     search_filter = SearchFilters(
-        created_at=[[DateFilter(date=utc_now(), comparison_operator=ComparisonOperator.less_than)]]
+        node_labels=['Person'],
+        created_at=[[DateFilter(date=utc_now(), comparison_operator=ComparisonOperator.less_than)]],
     )
 
     results = await graphiti.search_(

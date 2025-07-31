@@ -52,6 +52,13 @@ class EntityClassification(BaseModel):
     )
 
 
+class EntitySummary(BaseModel):
+    summary: str = Field(
+        ...,
+        description='Summary containing the important information about the entity. Under 250 words',
+    )
+
+
 class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion
@@ -59,6 +66,7 @@ class Prompt(Protocol):
     reflexion: PromptVersion
     classify_nodes: PromptVersion
     extract_attributes: PromptVersion
+    extract_summary: PromptVersion
 
 
 class Versions(TypedDict):
@@ -68,6 +76,7 @@ class Versions(TypedDict):
     reflexion: PromptFunction
     classify_nodes: PromptFunction
     extract_attributes: PromptFunction
+    extract_summary: PromptFunction
 
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
@@ -259,9 +268,39 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
+        
+        <ENTITY>
+        {context['node']}
+        </ENTITY>
+        """,
+        ),
+    ]
+
+
+def extract_summary(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts entity summaries from the provided text.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+
+        <MESSAGES>
+        {json.dumps(context['previous_episodes'], indent=2)}
+        {json.dumps(context['episode_content'], indent=2)}
+        </MESSAGES>
+
+        Given the above MESSAGES and the following ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary.
+        
+        Guidelines:
+        1. Do not hallucinate entity summary information if they cannot be found in the current context.
+        2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
             Summaries must be no longer than 250 words.
-        
+
         <ENTITY>
         {context['node']}
         </ENTITY>
@@ -275,6 +314,7 @@ versions: Versions = {
     'extract_json': extract_json,
     'extract_text': extract_text,
     'reflexion': reflexion,
+    'extract_summary': extract_summary,
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
 }
