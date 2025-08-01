@@ -20,18 +20,35 @@ EPISODIC_EDGE_SAVE = """
     MATCH (episode:Episodic {uuid: $episode_uuid})
     MATCH (node:Entity {uuid: $entity_uuid})
     MERGE (episode)-[e:MENTIONS {uuid: $uuid}]->(node)
-    SET e = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
+    SET
+        e.group_id = $group_id,
+        e.created_at = $created_at
     RETURN e.uuid AS uuid
 """
 
-EPISODIC_EDGE_SAVE_BULK = """
-    UNWIND $episodic_edges AS edge
-    MATCH (episode:Episodic {uuid: edge.source_node_uuid})
-    MATCH (node:Entity {uuid: edge.target_node_uuid})
-    MERGE (episode)-[e:MENTIONS {uuid: edge.uuid}]->(node)
-    SET e = {uuid: edge.uuid, group_id: edge.group_id, created_at: edge.created_at}
-    RETURN e.uuid AS uuid
-"""
+def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
+    if provider == GraphProvider.KUZU:
+        return """
+            UNWIND CAST($episodic_edges AS STRUCT(uuid STRING, source_node_uuid STRING, target_node_uuid STRING, group_id STRING, created_at TIMESTAMP)[]) AS edge
+            MATCH (episode:Episodic {uuid: edge.source_node_uuid})
+            MATCH (node:Entity {uuid: edge.target_node_uuid})
+            MERGE (episode)-[e:MENTIONS {uuid: edge.uuid}]->(node)
+            SET
+                e.group_id = edge.group_id,
+                e.created_at = edge.created_at
+            RETURN e.uuid AS uuid
+        """
+
+    return """
+        UNWIND $episodic_edges AS edge
+        MATCH (episode:Episodic {uuid: edge.source_node_uuid})
+        MATCH (node:Entity {uuid: edge.target_node_uuid})
+        MERGE (episode)-[e:MENTIONS {uuid: edge.uuid}]->(node)
+        SET
+            e.group_id = edge.group_id,
+            e.created_at = edge.created_at
+        RETURN e.uuid AS uuid
+    """
 
 EPISODIC_EDGE_RETURN = """
     e.uuid AS uuid,
@@ -49,6 +66,25 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
             MATCH (target:Entity {uuid: $edge_data.target_uuid})
             MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
             SET e = $edge_data
+            RETURN e.uuid AS uuid
+        """
+
+    if provider == GraphProvider.KUZU:
+        return """
+            MATCH (source:Entity {uuid: $source_uuid})
+            MATCH (target:Entity {uuid: $target_uuid})
+            MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
+            SET
+                e.group_id = $group_id,
+                e.name = $name,
+                e.fact = $fact,
+                e.fact_embedding = $fact_embedding,
+                e.episodes = $episodes,
+                e.created_at = $created_at,
+                e.expired_at = $expired_at,
+                e.valid_at = $valid_at,
+                e.invalid_at = $invalid_at,
+                e.attributes = $attributes
             RETURN e.uuid AS uuid
         """
 
@@ -75,6 +111,27 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
             RETURN edge.uuid AS uuid
         """
 
+    if provider == GraphProvider.KUZU:
+        return """
+            UNWIND CAST($entity_edges AS STRUCT(uuid STRING, source_node_uuid STRING, target_node_uuid STRING, group_id STRING, name STRING, fact STRING, fact_embedding FLOAT[], episodes STRING[], created_at TIMESTAMP, expired_at TIMESTAMP, valid_at TIMESTAMP, invalid_at TIMESTAMP, attributes STRING)[]) AS edge
+            MATCH (source:Entity {uuid: edge.source_node_uuid})
+            MATCH (target:Entity {uuid: edge.target_node_uuid})
+            MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: edge.uuid})-[:RELATES_TO]->(target)
+            SET
+                e.group_id = edge.group_id,
+                e.name = edge.name,
+                e.fact = edge.fact,
+                e.fact_embedding = edge.fact_embedding,
+                e.episodes = edge.episodes,
+                e.created_at = edge.created_at,
+                e.expired_at = edge.expired_at,
+                e.valid_at = edge.valid_at,
+                e.invalid_at = edge.invalid_at,
+                e.attributes = edge.attributes
+            WITH e, edge
+            RETURN edge.uuid AS uuid
+        """
+
     return """
         UNWIND $entity_edges AS edge
         MATCH (source:Entity {uuid: edge.source_node_uuid})
@@ -86,20 +143,24 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
     """
 
 
-ENTITY_EDGE_RETURN = """
-    e.uuid AS uuid,
-    n.uuid AS source_node_uuid,
-    m.uuid AS target_node_uuid,
-    e.group_id AS group_id,
-    e.name AS name,
-    e.fact AS fact,
-    e.episodes AS episodes,
-    e.created_at AS created_at,
-    e.expired_at AS expired_at,
-    e.valid_at AS valid_at,
-    e.invalid_at AS invalid_at,
-    properties(e) AS attributes
-"""
+def get_entity_edge_return_query(provider: GraphProvider) -> str:
+    return """
+        e.uuid AS uuid,
+        n.uuid AS source_node_uuid,
+        m.uuid AS target_node_uuid,
+        e.group_id AS group_id,
+        e.name AS name,
+        e.fact AS fact,
+        e.episodes AS episodes,
+        e.created_at AS created_at,
+        e.expired_at AS expired_at,
+        e.valid_at AS valid_at,
+        e.invalid_at AS invalid_at,
+    """ + (
+        'e.attributes AS attributes'
+        if provider == GraphProvider.KUZU
+        else 'properties(e) AS attributes'
+    )
 
 
 def get_community_edge_save_query(provider: GraphProvider) -> str:
@@ -109,6 +170,25 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
             MATCH (node {uuid: $entity_uuid})
             MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
             SET e = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
+            RETURN e.uuid AS uuid
+        """
+
+    if provider == GraphProvider.KUZU:
+        return """
+            MATCH (community:Community {uuid: $community_uuid})
+            MATCH (node:Entity {uuid: $entity_uuid})
+            MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
+            SET
+                e.group_id = $group_id,
+                e.created_at = $created_at
+            RETURN e.uuid AS uuid
+            UNION
+            MATCH (community:Community {uuid: $community_uuid})
+            MATCH (node:Community {uuid: $entity_uuid})
+            MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
+            SET
+                e.group_id = $group_id,
+                e.created_at = $created_at
             RETURN e.uuid AS uuid
         """
 
