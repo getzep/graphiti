@@ -69,6 +69,14 @@ COPY ./server/graph_service ./graph_service
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Install falkordb if requested
+ARG INSTALL_FALKORDB=false
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$INSTALL_FALKORDB" = "true" ]; then \
+        WHEEL=$(ls /tmp/*.whl | head -n 1); \
+        uv pip install "$WHEEL[falkordb]"; \
+    fi
+
 # Change ownership to app user
 RUN chown -R app:app /app
 
