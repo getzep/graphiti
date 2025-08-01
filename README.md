@@ -291,7 +291,7 @@ from graphiti_core.driver.neptune_driver import NeptuneDriver
 # Create a FalkorDB driver with custom database name
 driver = NeptuneDriver(
     host=<NEPTUNE ENDPOINT>,
-    aoss_host=<Amazon OpenSearch Serverless Host>
+    aoss_host=<Amazon OpenSearch Serverless Host>,
     port=<PORT> # Optional, defaults to 8182,
     aoss_port=<PORT> # Optional, defaults to 443
 )
