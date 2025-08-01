@@ -15,13 +15,10 @@ limitations under the License.
 """
 
 import logging
-from contextlib import suppress
 from time import time
 from typing import Any
-from uuid import uuid4
 
-import pydantic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
@@ -31,6 +28,7 @@ from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_en
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
+    EntitySummary,
     ExtractedEntities,
     ExtractedEntity,
     MissedEntities,
@@ -70,7 +68,7 @@ async def extract_nodes(
     clients: GraphitiClients,
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
 ) -> list[EntityNode]:
     start = time()
@@ -180,7 +178,7 @@ async def resolve_extracted_nodes(
     extracted_nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
     existing_nodes_override: list[EntityNode] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     llm_client = clients.llm_client
@@ -223,7 +221,7 @@ async def resolve_extracted_nodes(
         ],
     )
 
-    entity_types_dict: dict[str, BaseModel] = entity_types if entity_types is not None else {}
+    entity_types_dict: dict[str, type[BaseModel]] = entity_types if entity_types is not None else {}
 
     # Prepare context for LLM
     extracted_nodes_context = [
@@ -297,7 +295,7 @@ async def extract_attributes_from_nodes(
     nodes: list[EntityNode],
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -326,7 +324,7 @@ async def extract_attributes_from_node(
     node: EntityNode,
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
-    entity_type: BaseModel | None = None,
+    entity_type: type[BaseModel] | None = None,
 ) -> EntityNode:
     node_context: dict[str, Any] = {
         'name': node.name,
@@ -335,24 +333,13 @@ async def extract_attributes_from_node(
         'attributes': node.attributes,
     }
 
-    attributes_definitions: dict[str, Any] = {
-        'summary': (
-            str,
-            Field(
-                description='Summary containing the important information about the entity. Under 250 words',
-            ),
-        )
+    attributes_context: dict[str, Any] = {
+        'node': node_context,
+        'episode_content': episode.content if episode is not None else '',
+        'previous_episodes': [ep.content for ep in previous_episodes]
+        if previous_episodes is not None
+        else [],
     }
-
-    if entity_type is not None:
-        for field_name, field_info in entity_type.model_fields.items():
-            attributes_definitions[field_name] = (
-                field_info.annotation,
-                Field(description=field_info.description),
-            )
-
-    unique_model_name = f'EntityAttributes_{uuid4().hex}'
-    entity_attributes_model = pydantic.create_model(unique_model_name, **attributes_definitions)
 
     summary_context: dict[str, Any] = {
         'node': node_context,
@@ -362,19 +349,29 @@ async def extract_attributes_from_node(
         else [],
     }
 
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_attributes(summary_context),
-        response_model=entity_attributes_model,
+    llm_response = (
+        (
+            await llm_client.generate_response(
+                prompt_library.extract_nodes.extract_attributes(attributes_context),
+                response_model=entity_type,
+                model_size=ModelSize.small,
+            )
+        )
+        if entity_type is not None
+        else {}
+    )
+
+    summary_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.extract_summary(summary_context),
+        response_model=EntitySummary,
         model_size=ModelSize.small,
     )
 
-    entity_attributes_model(**llm_response)
+    if entity_type is not None:
+        entity_type(**llm_response)
 
-    node.summary = llm_response.get('summary', '')
+    node.summary = summary_response.get('summary', '')
     node_attributes = {key: value for key, value in llm_response.items()}
-
-    with suppress(KeyError):
-        del node_attributes['summary']
 
     node.attributes.update(node_attributes)
 

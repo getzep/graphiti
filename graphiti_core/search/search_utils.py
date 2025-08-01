@@ -501,21 +501,19 @@ async def node_fulltext_search(
             return []
     else:
         query = (
-            get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
-            + """
-            YIELD node AS n, score
-            WHERE n:Entity AND n.group_id IN $group_ids
-            WITH n, score
-            LIMIT $limit
-            """
-            + filter_query
-            + """
-            RETURN
-            """
-            + ENTITY_NODE_RETURN
-            + """
-            ORDER BY score DESC
-            """
+          get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
+          + """
+          YIELD node AS n, score
+          WHERE n:Entity AND n.group_id IN $group_ids
+          """
+          + filter_query
+          + """
+          WITH n, score
+          ORDER BY score DESC
+          LIMIT $limit
+          RETURN
+          """
+          + ENTITY_NODE_RETURN
         )
 
         records, _, _ = await driver.execute_query(

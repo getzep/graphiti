@@ -114,7 +114,7 @@ async def extract_edges(
     previous_episodes: list[EpisodicNode],
     edge_type_map: dict[tuple[str, str], list[str]],
     group_id: str = '',
-    edge_types: dict[str, BaseModel] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -249,7 +249,7 @@ async def resolve_extracted_edges(
     extracted_edges: list[EntityEdge],
     episode: EpisodicNode,
     entities: list[EntityNode],
-    edge_types: dict[str, BaseModel],
+    edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     driver = clients.driver
@@ -272,7 +272,7 @@ async def resolve_extracted_edges(
     uuid_entity_map: dict[str, EntityNode] = {entity.uuid: entity for entity in entities}
 
     # Determine which edge types are relevant for each edge
-    edge_types_lst: list[dict[str, BaseModel]] = []
+    edge_types_lst: list[dict[str, type[BaseModel]]] = []
     for extracted_edge in extracted_edges:
         source_node = uuid_entity_map.get(extracted_edge.source_node_uuid)
         target_node = uuid_entity_map.get(extracted_edge.target_node_uuid)
@@ -381,7 +381,7 @@ async def resolve_extracted_edge(
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
-    edge_types: dict[str, BaseModel] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, [], []

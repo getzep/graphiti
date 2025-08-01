@@ -169,9 +169,9 @@ async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     edge_type_map: dict[tuple[str, str], list[str]],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
-    edge_types: dict[str, BaseModel] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
         *[
@@ -202,7 +202,7 @@ async def dedupe_nodes_bulk(
     clients: GraphitiClients,
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     embedder = clients.embedder
     min_score = 0.8
@@ -290,7 +290,7 @@ async def dedupe_edges_bulk(
     extracted_edges: list[list[EntityEdge]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     _entities: list[EntityNode],
-    edge_types: dict[str, BaseModel],
+    edge_types: dict[str, type[BaseModel]],
     _edge_type_map: dict[tuple[str, str], list[str]],
 ) -> dict[str, list[EntityEdge]]:
     embedder = clients.embedder
