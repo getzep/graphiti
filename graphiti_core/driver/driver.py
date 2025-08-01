@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 class GraphProvider(Enum):
     NEO4J = 'neo4j'
     FALKORDB = 'falkordb'
+    NEPTUNE = 'neptune'
 
 
 class GraphDriverSession(ABC):

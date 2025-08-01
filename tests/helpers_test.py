@@ -20,12 +20,14 @@ import pytest
 from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.neptune_driver import NeptuneDriver
 from graphiti_core.helpers import lucene_sanitize
 
 load_dotenv()
 
 HAS_NEO4J = False
 HAS_FALKORDB = False
+HAS_NEPTUNE = False
 if os.getenv('DISABLE_NEO4J') is None:
     try:
         from graphiti_core.driver.neo4j_driver import Neo4jDriver
@@ -42,6 +44,14 @@ if os.getenv('DISABLE_FALKORDB') is None:
     except ImportError:
         pass
 
+if os.getenv('DISABLE_NEPTUNE') is None:
+    try:
+        from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+        HAS_NEPTUNE = True
+    except ImportError:
+        pass
+
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
@@ -50,6 +60,10 @@ FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
 FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
+
+NEPTUNE_HOST = os.getenv('NEPTUNE_HOST', 'localhost')
+NEPTUNE_PORT = os.getenv('NEPTUNE_PORT', 8182)
+AOSS_HOST = os.getenv('AOSS_HOST', None)
 
 
 def get_driver(driver_name: str) -> GraphDriver:
@@ -66,6 +80,12 @@ def get_driver(driver_name: str) -> GraphDriver:
             username=FALKORDB_USER,
             password=FALKORDB_PASSWORD,
         )
+    elif driver_name == 'neptune':
+        return NeptuneDriver(
+            host=NEPTUNE_HOST,
+            port=int(NEPTUNE_PORT),
+            aoss_host=AOSS_HOST,
+        )
     else:
         raise ValueError(f'Driver {driver_name} not available')
 
@@ -75,6 +95,8 @@ if HAS_NEO4J:
     drivers.append('neo4j')
 if HAS_FALKORDB:
     drivers.append('falkordb')
+if HAS_NEPTUNE:
+    drivers.append('neptune')
 
 
 def test_lucene_sanitize():
