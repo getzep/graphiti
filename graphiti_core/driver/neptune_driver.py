@@ -225,7 +225,7 @@ class NeptuneDriver(GraphDriver):
             if not client.indices.exists(index=index_name):
                 client.indices.create(index=index_name, body=index['body'])
         # Sleep for 1 minute to let the index creation complete
-        time.sleep(60)
+        await asyncio.sleep(60)
 
     async def delete_aoss_indices(self):
         for index in aoss_indices:
