@@ -175,7 +175,7 @@ async def edge_fulltext_search(
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
-            # Match the edge ides and return the values
+            # Match the edge ids and return the values
             query = (
                 """
                 UNWIND $ids as id
@@ -501,19 +501,19 @@ async def node_fulltext_search(
             return []
     else:
         query = (
-          get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
-          + """
+            get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
+            + """
           YIELD node AS n, score
           WHERE n:Entity AND n.group_id IN $group_ids
           """
-          + filter_query
-          + """
+            + filter_query
+            + """
           WITH n, score
           ORDER BY score DESC
           LIMIT $limit
           RETURN
           """
-          + ENTITY_NODE_RETURN
+            + ENTITY_NODE_RETURN
         )
 
         records, _, _ = await driver.execute_query(

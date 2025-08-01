@@ -120,7 +120,6 @@ Optional:
 > [!TIP]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
 > interface to manage Neo4j instances and databases.
-> If you would like a fully managed service
 > Alternatively, you can use FalkorDB on-premises via Docker and instantly start with the quickstart example:
 
 ```bash

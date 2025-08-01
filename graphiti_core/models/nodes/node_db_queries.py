@@ -93,12 +93,12 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.NEPTUNE:
-            labels = ''
-            for label in labels:
-                labels += f' SET n:{label}\n'
+            label_subquery = ''
+            for label in labels.split(':'):
+                label_subquery += f' SET n:{label}\n'
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
-                {labels}
+                {label_subquery}
                 SET n = removeKeyFromMap(removeKeyFromMap($entity_data, "labels"), "name_embedding")
                 SET n.name_embedding = join([x IN coalesce($entity_data.name_embedding, []) | toString(x) ], ",")
                 RETURN n.uuid AS uuid
@@ -141,8 +141,7 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                 for label in node['labels']:
                     labels += f' SET n:{label}\n'
                 queries.append(
-                    
-                        f"""
+                    f"""
                         UNWIND $nodes AS node
                         MERGE (n:Entity {{uuid: node.uuid}})
                         {labels}
@@ -150,7 +149,6 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                         SET n.name_embedding = join([x IN coalesce(node.name_embedding, []) | toString(x) ], ",")
                         RETURN n.uuid AS uuid
                     """
-                    
                 )
             return queries
         case _:  # Neo4j
