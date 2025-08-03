@@ -14,16 +14,76 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import os
+
 import pytest
+from dotenv import load_dotenv
+
+from graphiti_core.driver.driver import GraphDriver
+
+load_dotenv()
+
+HAS_NEO4J = False
+HAS_FALKORDB = False
+if os.getenv('DISABLE_NEO4J') is None:
+    try:
+        from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+        HAS_NEO4J = True
+    except ImportError:
+        pass
+
+if os.getenv('DISABLE_FALKORDB') is None:
+    try:
+        from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+        HAS_FALKORDB = True
+    except ImportError:
+        pass
+
+NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
+NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
+NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
+
+FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
+FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
+FALKORDB_USER = os.getenv('FALKORDB_USER', None)
+FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
+
+
+def get_driver(driver_name: str) -> GraphDriver:
+    if driver_name == 'neo4j':
+        return Neo4jDriver(
+            uri=NEO4J_URI,
+            user=NEO4J_USER,
+            password=NEO4J_PASSWORD,
+        )
+    elif driver_name == 'falkordb':
+        return FalkorDriver(
+            host=FALKORDB_HOST,
+            port=int(FALKORDB_PORT),
+            username=FALKORDB_USER,
+            password=FALKORDB_PASSWORD,
+        )
+    else:
+        raise ValueError(f'Driver {driver_name} not available')
+
+
+drivers: list[str] = []
+if HAS_NEO4J:
+    drivers.append('neo4j')
+if HAS_FALKORDB:
+    drivers.append('falkordb')
 
 
 def test_neo4j_sanitize():
     """Test Neo4j sanitization by importing the driver and using its sanitize method."""
-    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+    if not HAS_NEO4J:
+        pytest.skip("Neo4j not available - skipping sanitize test")
     
     # Create a driver instance - if it fails, we'll handle it gracefully
     try:
-        driver = Neo4jDriver(uri="bolt://localhost:7687", user="test", password="test")
+        driver = Neo4jDriver(uri=NEO4J_URI, user=NEO4J_USER, password=NEO4J_PASSWORD)
     except Exception:
         # If we can't create a real driver, skip this test
         pytest.skip("Neo4j driver connection failed - skipping sanitize test")
@@ -44,11 +104,16 @@ def test_neo4j_sanitize():
 
 def test_falkordb_sanitize():
     """Test FalkorDB sanitization by importing the driver and using its sanitize method."""
+    if not HAS_FALKORDB:
+        pytest.skip("FalkorDB not available - skipping sanitize test")
+    
     try:
-        from graphiti_core.driver.falkordb_driver import FalkorDriver
-        driver = FalkorDriver()
-    except ImportError:
-        pytest.skip("FalkorDB not installed - skipping sanitize test")
+        driver = FalkorDriver(
+            host=FALKORDB_HOST,
+            port=int(FALKORDB_PORT),
+            username=FALKORDB_USER,
+            password=FALKORDB_PASSWORD,
+        )
     except Exception:
         # If we can't create a real driver, skip this test
         pytest.skip("FalkorDB driver connection failed - skipping sanitize test")
@@ -67,21 +132,6 @@ def test_falkordb_sanitize():
     for query, expected_result in queries:
         result = driver.sanitize(query)
         assert expected_result == result
-
-
-# Keep the drivers and get_driver functions for other tests that import from this file
-drivers = ['neo4j', 'falkordb']
-
-def get_driver(driver_name: str):
-    """Helper function to get a driver instance for testing"""
-    if driver_name == 'neo4j':
-        from graphiti_core.driver.neo4j_driver import Neo4jDriver
-        return Neo4jDriver(uri="bolt://localhost:7687", user="neo4j", password="test")
-    elif driver_name == 'falkordb':
-        from graphiti_core.driver.falkordb_driver import FalkorDriver
-        return FalkorDriver()
-    else:
-        raise ValueError(f"Unknown driver: {driver_name}")
 
 
 if __name__ == '__main__':

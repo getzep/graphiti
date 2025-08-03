@@ -18,9 +18,15 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class GraphProvider(Enum):
+    NEO4J = 'neo4j'
+    FALKORDB = 'falkordb'
 
 
 class GraphDriverSession(ABC):
@@ -46,7 +52,7 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(ABC):
-    provider: str
+    provider: GraphProvider
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )

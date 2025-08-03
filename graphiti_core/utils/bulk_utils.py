@@ -25,17 +25,15 @@ from typing_extensions import Any
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
-from graphiti_core.graph_queries import (
-    get_entity_edge_save_bulk_query,
-    get_entity_node_save_bulk_query,
-)
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
     EPISODIC_EDGE_SAVE_BULK,
+    get_entity_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_SAVE_BULK,
+    get_entity_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.utils.maintenance.edge_operations import (
@@ -158,7 +156,7 @@ async def add_nodes_and_edges_bulk_tx(
         edges.append(edge_data)
 
     await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-    entity_node_save_bulk = get_entity_node_save_bulk_query(nodes, driver.provider)
+    entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, nodes)
     await tx.run(entity_node_save_bulk, nodes=nodes)
     await tx.run(
         EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
@@ -171,9 +169,9 @@ async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     edge_type_map: dict[tuple[str, str], list[str]],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
-    edge_types: dict[str, BaseModel] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
         *[
@@ -204,7 +202,7 @@ async def dedupe_nodes_bulk(
     clients: GraphitiClients,
     extracted_nodes: list[list[EntityNode]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
-    entity_types: dict[str, BaseModel] | None = None,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
     embedder = clients.embedder
     min_score = 0.8
@@ -292,7 +290,7 @@ async def dedupe_edges_bulk(
     extracted_edges: list[list[EntityEdge]],
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     _entities: list[EntityNode],
-    edge_types: dict[str, BaseModel],
+    edge_types: dict[str, type[BaseModel]],
     _edge_type_map: dict[tuple[str, str], list[str]],
 ) -> dict[str, list[EntityEdge]]:
     embedder = clients.embedder
