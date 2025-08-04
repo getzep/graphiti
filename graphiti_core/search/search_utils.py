@@ -314,17 +314,15 @@ async def node_fulltext_search(
         + """
         YIELD node AS n, score
         WHERE n:Entity AND n.group_id IN $group_ids
-        WITH n, score
-        LIMIT $limit
         """
         + filter_query
         + """
+        WITH n, score
+        ORDER BY score DESC
+        LIMIT $limit
         RETURN
         """
         + ENTITY_NODE_RETURN
-        + """
-        ORDER BY score DESC
-        """
     )
 
     records, _, _ = await driver.execute_query(
