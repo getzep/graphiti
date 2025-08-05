@@ -105,7 +105,7 @@ Graphiti is specifically designed to address the challenges of dynamic and frequ
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune or higher (serves as the embeddings storage backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -492,7 +492,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Amazon Neptune)
+  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
