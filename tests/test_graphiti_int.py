@@ -71,7 +71,6 @@ async def test_graphiti_init(driver):
     results = await graphiti.search_(
         query='Who is Tania',
         search_filter=search_filter,
-        bfs_origin_node_uuids=['7b4e74ec-7598-4608-b53b-57f3fc4abfad'],
     )
 
     pretty_results = search_results_to_context_string(results)
