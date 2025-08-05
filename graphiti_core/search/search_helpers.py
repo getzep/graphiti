@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
-
 from graphiti_core.edges import EntityEdge
 from graphiti_core.prompts.prompt_helpers import to_prompt_json
 from graphiti_core.search.search_config import SearchResults
