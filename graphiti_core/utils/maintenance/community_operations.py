@@ -124,7 +124,10 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
     # Prepare context for LLM
-    context = {'node_summaries': [{'summary': summary} for summary in summary_pair]}
+    context = {
+        'node_summaries': [{'summary': summary} for summary in summary_pair],
+        'ensure_ascii': True,  # Default for summarize_pair
+    }
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
@@ -136,7 +139,10 @@ async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -
 
 
 async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
-    context = {'summary': summary}
+    context = {
+        'summary': summary,
+        'ensure_ascii': True,  # Default for generate_summary_description
+    }
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),

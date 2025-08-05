@@ -41,6 +41,7 @@ async def extract_edge_dates(
         'current_episode': current_episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_timestamp': current_episode.valid_at.isoformat(),
+        'ensure_ascii': True,  # Default for extract_edge_dates
     }
     llm_response = await llm_client.generate_response(
         prompt_library.extract_edge_dates.v1(context), response_model=EdgeDates
@@ -79,7 +80,11 @@ async def get_edge_contradictions(
         {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
     ]
 
-    context = {'new_edge': new_edge_context, 'existing_edges': existing_edge_context}
+    context = {
+        'new_edge': new_edge_context, 
+        'existing_edges': existing_edge_context,
+        'ensure_ascii': True,  # Default for get_edge_contradictions
+    }
 
     llm_response = await llm_client.generate_response(
         prompt_library.invalidate_edges.v2(context),

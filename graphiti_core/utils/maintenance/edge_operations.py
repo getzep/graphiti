@@ -151,6 +151,7 @@ async def extract_edges(
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
         'custom_prompt': '',
+        'ensure_ascii': clients.ensure_ascii,
     }
 
     facts_missed = True
@@ -415,6 +416,7 @@ async def resolve_extracted_edge(
         'new_edge': extracted_edge.fact,
         'edge_invalidation_candidates': invalidation_edge_candidates_context,
         'edge_types': edge_types_context,
+        'ensure_ascii': True,  # Default for resolve_extracted_edge
     }
 
     llm_response = await llm_client.generate_response(

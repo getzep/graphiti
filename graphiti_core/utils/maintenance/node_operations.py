@@ -54,6 +54,7 @@ async def extract_nodes_reflexion(
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': node_names,
+        'ensure_ascii': True,  # Default for reflexion function
     }
 
     llm_response = await llm_client.generate_response(
@@ -106,6 +107,7 @@ async def extract_nodes(
         'custom_prompt': custom_prompt,
         'entity_types': entity_types_context,
         'source_description': episode.source_description,
+        'ensure_ascii': clients.ensure_ascii,
     }
 
     while entities_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
@@ -244,6 +246,7 @@ async def resolve_extracted_nodes(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
+        'ensure_ascii': clients.ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
