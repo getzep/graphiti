@@ -27,6 +27,14 @@ from graphiti_core.models.nodes.field_db_queries import (
     CLUSTER_NODE_GET_BY_ORGANIZATION,
     CLUSTER_NODE_SAVE_BULK,
 )
+from graphiti_core.cluster_metadata.cluster_service import ClusterMetadataService
+from graphiti_core.cluster_metadata.exceptions import (
+    ClusterNotFoundError as MongoClusterNotFoundError,
+    ClusterValidationError,
+    DuplicateClusterError,
+    InvalidOrganizationError,
+)
+from graphiti_core.cluster_metadata.models import ClusterCreateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +71,7 @@ async def search_fields_by_name(
 
 
 async def save_fields_bulk(driver: GraphDriver, fields: list[FieldNode]) -> Any:
-    """Save multiple Field nodes in bulk operation"""
+    """Save multiple Field nodes in bulk operation with MongoDB synchronization"""
     if not fields:
         return []
 
@@ -95,6 +103,9 @@ async def save_fields_bulk(driver: GraphDriver, fields: list[FieldNode]) -> Any:
         fields=field_data,
     )
 
+    # Sync field counts with MongoDB cluster metadata in batch
+    await _sync_field_counts_bulk(fields)
+
     logger.debug(f'Saved {len(fields)} Field Nodes to Graph in bulk')
     return result
 
@@ -125,7 +136,7 @@ async def get_clusters_by_organization(driver: GraphDriver, organization: str) -
 
 
 async def save_clusters_bulk(driver: GraphDriver, clusters: list[ClusterNode]) -> Any:
-    """Save multiple Cluster nodes in bulk operation"""
+    """Save multiple Cluster nodes in bulk operation with MongoDB synchronization"""
     if not clusters:
         return []
 
@@ -151,6 +162,9 @@ async def save_clusters_bulk(driver: GraphDriver, clusters: list[ClusterNode]) -
         CLUSTER_NODE_SAVE_BULK,
         clusters=cluster_data,
     )
+
+    # Sync clusters with MongoDB cluster metadata in batch
+    await _sync_clusters_bulk(clusters)
 
     logger.debug(f'Saved {len(clusters)} Cluster Nodes to Graph in bulk')
     return result
@@ -293,3 +307,79 @@ async def validate_field_cluster_consistency(
             validation_results['warnings'].append(f"Field {field.name} has no embedding")
     
     return validation_results
+
+
+# ==================== MONGODB SYNCHRONIZATION HELPERS ====================
+
+async def _sync_field_counts_bulk(fields: list[FieldNode]) -> None:
+    """Sync field counts with MongoDB cluster metadata in batch"""
+    if not fields:
+        return
+    
+    # Group fields by cluster to optimize MongoDB operations
+    cluster_field_counts = {}
+    for field in fields:
+        cluster_id = field.primary_cluster_id
+        cluster_field_counts[cluster_id] = cluster_field_counts.get(cluster_id, 0) + 1
+    
+    # Initialize cluster metadata service
+    cluster_service = ClusterMetadataService()
+    
+    # Update field counts for each cluster
+    for cluster_id, field_count in cluster_field_counts.items():
+        try:
+            # Validate cluster exists before updating
+            cluster_exists = await cluster_service.validate_cluster_exists(cluster_id)
+            if cluster_exists:
+                # For bulk operations, we increment by the number of fields being added
+                for _ in range(field_count):
+                    await cluster_service.increment_field_count(cluster_id)
+                logger.debug(f'Synchronized {field_count} fields with MongoDB cluster {cluster_id}')
+            else:
+                logger.warning(f'Cluster {cluster_id} not found in MongoDB for {field_count} fields')
+                
+        except (MongoClusterNotFoundError, ClusterValidationError) as e:
+            # Log the error but don't fail the bulk operation
+            logger.warning(f'MongoDB sync failed for cluster {cluster_id}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the bulk operation
+            logger.error(f'Unexpected error during MongoDB sync for cluster {cluster_id}: {e}')
+
+
+async def _sync_clusters_bulk(clusters: list[ClusterNode]) -> None:
+    """Sync cluster data with MongoDB cluster metadata in batch"""
+    if not clusters:
+        return
+    
+    # Initialize cluster metadata service
+    cluster_service = ClusterMetadataService()
+    
+    for cluster in clusters:
+        try:
+            # Check if cluster already exists in MongoDB
+            existing_cluster = await cluster_service.get_cluster(cluster.name)
+            
+            if not existing_cluster:
+                # Create new cluster in MongoDB
+                cluster_request = ClusterCreateRequest(
+                    cluster_id=cluster.name,
+                    cluster_uuid=cluster.uuid,
+                    macro_name=cluster.macro_name,
+                    organization=cluster.organization,
+                    description=f"Cluster for {cluster.macro_name} in {cluster.organization}",
+                    status="active",
+                    total_fields=0,
+                    created_by="neo4j_bulk_sync"
+                )
+                
+                await cluster_service.create_cluster(cluster_request)
+                logger.debug(f'Created cluster in MongoDB: {cluster.name}')
+            else:
+                logger.debug(f'Cluster {cluster.name} already exists in MongoDB')
+                
+        except (DuplicateClusterError, InvalidOrganizationError, ClusterValidationError) as e:
+            # Log the error but don't fail the bulk operation
+            logger.warning(f'MongoDB sync failed for cluster {cluster.uuid}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the bulk operation
+            logger.error(f'Unexpected error during MongoDB sync for cluster {cluster.uuid}: {e}')

@@ -28,6 +28,11 @@ from graphiti_core.models.edges.field_edges_db_queries import (
     FIELD_RELATIONSHIP_EDGES_GET_BY_CLUSTER,
     FIELD_RELATIONSHIP_EDGE_SAVE_BULK,
 )
+from graphiti_core.cluster_metadata.cluster_service import ClusterMetadataService
+from graphiti_core.cluster_metadata.exceptions import (
+    ClusterNotFoundError as MongoClusterNotFoundError,
+    ClusterValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +51,12 @@ async def get_belongs_to_edges_by_cluster(driver: GraphDriver, cluster_uuid: str
 
 
 async def save_belongs_to_edges_bulk(driver: GraphDriver, edges: list[BelongsToEdge]) -> Any:
-    """Save multiple BELONGS_TO edges in bulk operation"""
+    """Save multiple BELONGS_TO edges in bulk operation with MongoDB validation"""
     if not edges:
         return []
+
+    # Validate clusters exist in MongoDB before creating relationships
+    await _validate_clusters_bulk([edge.target_node_uuid for edge in edges])
 
     edge_data = [
         {
@@ -122,9 +130,12 @@ async def save_field_relationship_edges_bulk(
     driver: GraphDriver, 
     edges: list[FieldRelationshipEdge]
 ) -> Any:
-    """Save multiple Field relationship edges in bulk operation"""
+    """Save multiple Field relationship edges in bulk operation with MongoDB validation"""
     if not edges:
         return []
+
+    # Validate clusters exist in MongoDB before creating relationships
+    await _validate_clusters_bulk([edge.cluster_partition_id for edge in edges])
 
     edge_data = [
         {
@@ -175,12 +186,16 @@ async def build_field_cluster_membership(
     field_uuids: list[str],
     cluster_uuid: str
 ) -> list[BelongsToEdge]:
-    """Build BELONGS_TO relationships for fields joining a cluster"""
+    """Build and save BELONGS_TO relationships for fields joining a cluster with MongoDB validation"""
     from graphiti_core.utils.datetime_utils import utc_now
+    
+    # Validate cluster exists in MongoDB before creating relationships
+    await _validate_clusters_bulk([cluster_uuid])
     
     edges = []
     current_time = utc_now()
     
+    # Create BelongsToEdge objects
     for field_uuid in field_uuids:
         edge = BelongsToEdge(
             source_node_uuid=field_uuid,
@@ -189,6 +204,11 @@ async def build_field_cluster_membership(
             created_at=current_time,
         )
         edges.append(edge)
+    
+    # Save all edges to database using bulk operation
+    if edges:
+        await save_belongs_to_edges_bulk(driver, edges)
+        logger.debug(f'Built and saved {len(edges)} BELONGS_TO relationships for cluster {cluster_uuid}')
     
     return edges
 
@@ -421,3 +441,31 @@ async def get_field_relationship_network(
         'network_size': len(visited_fields),
         'relationship_count': len(unique_relationships),
     }
+
+
+# ==================== MONGODB SYNCHRONIZATION HELPERS ====================
+
+async def _validate_clusters_bulk(cluster_ids: list[str]) -> None:
+    """Validate that clusters exist in MongoDB for bulk edge operations"""
+    if not cluster_ids:
+        return
+    
+    # Remove duplicates
+    unique_cluster_ids = list(set(cluster_ids))
+    
+    # Initialize cluster metadata service
+    cluster_service = ClusterMetadataService()
+    
+    # Validate each cluster
+    for cluster_id in unique_cluster_ids:
+        try:
+            cluster_exists = await cluster_service.validate_cluster_exists(cluster_id)
+            if not cluster_exists:
+                logger.warning(f'Cluster {cluster_id} not found or inactive in MongoDB for bulk edge operation')
+                
+        except (MongoClusterNotFoundError, ClusterValidationError) as e:
+            # Log the warning but don't fail the bulk operation
+            logger.warning(f'MongoDB cluster validation failed for cluster {cluster_id}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the bulk operation
+            logger.error(f'Unexpected error during MongoDB cluster validation for cluster {cluster_id}: {e}')

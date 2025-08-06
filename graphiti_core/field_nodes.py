@@ -40,6 +40,14 @@ from graphiti_core.models.nodes.field_db_queries import (
     CLUSTER_NODE_DELETE,
 )
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.cluster_metadata.cluster_service import ClusterMetadataService
+from graphiti_core.cluster_metadata.exceptions import (
+    ClusterNotFoundError as MongoClusterNotFoundError,
+    ClusterValidationError,
+    DuplicateClusterError,
+    InvalidOrganizationError,
+)
+from graphiti_core.cluster_metadata.models import ClusterCreateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +166,7 @@ class FieldNode(Node):
         self.embedding = records[0]['embedding']
 
     async def save(self, driver: GraphDriver):
-        """Save Field node to Neo4j database with relationship-based approach"""
+        """Save Field node to Neo4j database with MongoDB synchronization"""
         # Update temporal fields before saving
         self.update_temporal_fields()
 
@@ -178,6 +186,9 @@ class FieldNode(Node):
             last_updated=self.last_updated,
             created_at=self.created_at,
         )
+
+        # Sync field count with MongoDB cluster metadata
+        await self._sync_with_mongodb()
 
         logger.debug(f'Saved Field Node to Graph: {self.uuid}')
         return result
@@ -203,6 +214,27 @@ class FieldNode(Node):
 
         logger.debug(f'Updated Field Node: {self.uuid}')
         return result
+
+    async def _sync_with_mongodb(self):
+        """Sync field data with MongoDB cluster metadata"""
+        try:
+            # Initialize cluster metadata service
+            cluster_service = ClusterMetadataService()
+            
+            # Validate that cluster exists and increment field count
+            cluster_exists = await cluster_service.validate_cluster_exists(self.primary_cluster_id)
+            if cluster_exists:
+                await cluster_service.increment_field_count(self.primary_cluster_id)
+                logger.debug(f'Synchronized field {self.uuid} with MongoDB cluster {self.primary_cluster_id}')
+            else:
+                logger.warning(f'Cluster {self.primary_cluster_id} not found in MongoDB for field {self.uuid}')
+                
+        except (MongoClusterNotFoundError, ClusterValidationError) as e:
+            # Log the error but don't fail the Neo4j operation
+            logger.warning(f'MongoDB sync failed for field {self.uuid}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the Neo4j operation
+            logger.error(f'Unexpected error during MongoDB sync for field {self.uuid}: {e}')
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
@@ -255,7 +287,7 @@ class ClusterNode(Node):
         super().__init__(**data)
 
     async def save(self, driver: GraphDriver):
-        """Save Cluster node to Neo4j database"""
+        """Save Cluster node to Neo4j database with MongoDB synchronization"""
         # Update temporal fields before saving
         self.update_temporal_fields()
 
@@ -270,6 +302,9 @@ class ClusterNode(Node):
             last_updated=self.last_updated,
             created_at=self.created_at,
         )
+
+        # Sync cluster with MongoDB
+        await self._sync_with_mongodb()
 
         logger.debug(f'Saved Cluster Node to Graph: {self.uuid}')
         return result
@@ -291,6 +326,40 @@ class ClusterNode(Node):
 
         logger.debug(f'Updated Cluster Node: {self.uuid}')
         return result
+
+    async def _sync_with_mongodb(self):
+        """Sync cluster data with MongoDB cluster metadata"""
+        try:
+            # Initialize cluster metadata service
+            cluster_service = ClusterMetadataService()
+            
+            # Check if cluster already exists in MongoDB
+            existing_cluster = await cluster_service.get_cluster(self.name)
+            
+            if not existing_cluster:
+                # Create new cluster in MongoDB
+                cluster_request = ClusterCreateRequest(
+                    cluster_id=self.name,
+                    cluster_uuid=self.uuid,
+                    macro_name=self.macro_name,
+                    organization=self.organization,
+                    description=f"Cluster for {self.macro_name} in {self.organization}",
+                    status="active",
+                    total_fields=0,
+                    created_by="neo4j_sync"
+                )
+                
+                await cluster_service.create_cluster(cluster_request)
+                logger.debug(f'Created cluster in MongoDB: {self.name}')
+            else:
+                logger.debug(f'Cluster {self.name} already exists in MongoDB')
+                
+        except (DuplicateClusterError, InvalidOrganizationError, ClusterValidationError) as e:
+            # Log the error but don't fail the Neo4j operation
+            logger.warning(f'MongoDB sync failed for cluster {self.uuid}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the Neo4j operation
+            logger.error(f'Unexpected error during MongoDB sync for cluster {self.uuid}: {e}')
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):

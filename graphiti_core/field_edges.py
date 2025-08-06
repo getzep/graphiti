@@ -38,6 +38,11 @@ from graphiti_core.models.edges.field_edges_db_queries import (
     FIELD_RELATIONSHIP_EDGE_DELETE,
 )
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.cluster_metadata.cluster_service import ClusterMetadataService
+from graphiti_core.cluster_metadata.exceptions import (
+    ClusterNotFoundError as MongoClusterNotFoundError,
+    ClusterValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +120,10 @@ class BelongsToEdge(Edge):
     # ==================== RELATIONSHIP OPERATIONS ====================
 
     async def save(self, driver: GraphDriver):
-        """Save BELONGS_TO relationship to Neo4j database"""
+        """Save BELONGS_TO relationship to Neo4j database with MongoDB validation"""
+        # Validate cluster exists in MongoDB before creating relationship
+        await self._validate_cluster_exists()
+        
         result = await driver.execute_query(
             BELONGS_TO_EDGE_SAVE,
             source_node_uuid=self.source_node_uuid,
@@ -138,6 +146,24 @@ class BelongsToEdge(Edge):
 
         logger.debug(f'Deleted BELONGS_TO edge: {self.uuid}')
         return result
+
+    async def _validate_cluster_exists(self):
+        """Validate that the target cluster exists in MongoDB"""
+        try:
+            # Initialize cluster metadata service
+            cluster_service = ClusterMetadataService()
+            
+            # Check if cluster exists and is active
+            cluster_exists = await cluster_service.validate_cluster_exists(self.target_node_uuid)
+            if not cluster_exists:
+                logger.warning(f'Target cluster {self.target_node_uuid} not found or inactive in MongoDB for BELONGS_TO edge {self.uuid}')
+                
+        except (MongoClusterNotFoundError, ClusterValidationError) as e:
+            # Log the warning but don't fail the Neo4j operation
+            logger.warning(f'MongoDB cluster validation failed for BELONGS_TO edge {self.uuid}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the Neo4j operation
+            logger.error(f'Unexpected error during MongoDB cluster validation for BELONGS_TO edge {self.uuid}: {e}')
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
@@ -223,7 +249,10 @@ class FieldRelationshipEdge(Edge):
         self.description_embedding = records[0]['description_embedding']
 
     async def save(self, driver: GraphDriver):
-        """Save Field-to-Field relationship to Neo4j database with cluster isolation validation"""
+        """Save Field-to-Field relationship to Neo4j database with MongoDB cluster validation"""
+        # Validate cluster exists in MongoDB before creating relationship
+        await self._validate_cluster_exists()
+        
         result = await driver.execute_query(
             FIELD_RELATIONSHIP_EDGE_SAVE,
             source_node_uuid=self.source_node_uuid,
@@ -279,6 +308,24 @@ class FieldRelationshipEdge(Edge):
 
         logger.debug(f'Deleted FIELD_RELATES_TO edge: {self.uuid}')
         return result
+
+    async def _validate_cluster_exists(self):
+        """Validate that the cluster_partition_id exists in MongoDB"""
+        try:
+            # Initialize cluster metadata service
+            cluster_service = ClusterMetadataService()
+            
+            # Check if cluster exists and is active
+            cluster_exists = await cluster_service.validate_cluster_exists(self.cluster_partition_id)
+            if not cluster_exists:
+                logger.warning(f'Cluster partition {self.cluster_partition_id} not found or inactive in MongoDB for FIELD_RELATES_TO edge {self.uuid}')
+                
+        except (MongoClusterNotFoundError, ClusterValidationError) as e:
+            # Log the warning but don't fail the Neo4j operation
+            logger.warning(f'MongoDB cluster validation failed for FIELD_RELATES_TO edge {self.uuid}: {e}')
+        except Exception as e:
+            # Log unexpected errors but don't fail the Neo4j operation
+            logger.error(f'Unexpected error during MongoDB cluster validation for FIELD_RELATES_TO edge {self.uuid}: {e}')
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
