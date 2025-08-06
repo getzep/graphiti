@@ -59,7 +59,7 @@ def get_default_group_id(provider: GraphProvider) -> str:
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
     if provider == GraphProvider.FALKORDB:
-        return '_'
+        return '\\_'
     else:
         return ''
 
