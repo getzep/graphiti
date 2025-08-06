@@ -49,9 +49,9 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
         )
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
+    fulltext_indices: list[str] = get_fulltext_indices(driver.provider)
 
-    index_queries: list[LiteralString] = range_indices + fulltext_indices
+    index_queries: list[str] = range_indices + fulltext_indices
 
     await semaphore_gather(
         *[

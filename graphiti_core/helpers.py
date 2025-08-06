@@ -83,7 +83,7 @@ async def semaphore_gather(
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
 
 
-def validate_group_id(group_id: str) -> bool:
+def validate_group_id(group_id: str | None) -> bool:
     """
     Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
 
