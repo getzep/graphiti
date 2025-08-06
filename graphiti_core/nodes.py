@@ -88,7 +88,7 @@ class EpisodeType(Enum):
 class Node(BaseModel, ABC):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(description='name of the node')
-    group_id: str = Field(description='partition of the graph')
+    group_id: str | None = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
 
@@ -332,12 +332,7 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        query = (
-            """
-                                                                                MATCH (n:Entity {uuid: $uuid})
-                                                                                """
-            + ENTITY_NODE_RETURN
-        )
+        query = """MATCH (n:Entity {uuid: $uuid})""" + ENTITY_NODE_RETURN
         records, _, _ = await driver.execute_query(
             query,
             uuid=uuid,

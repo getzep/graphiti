@@ -183,6 +183,7 @@ class Graphiti:
         else:
             self.cross_encoder = OpenAIRerankerClient()
 
+        # Create GraphitiClients instance to hold all clients
         self.clients = GraphitiClients(
             driver=self.driver,
             llm_client=self.llm_client,
@@ -190,60 +191,6 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
         )
 
-        # Capture telemetry event
-        self._capture_initialization_telemetry()
-
-    def _capture_initialization_telemetry(self):
-        """Capture telemetry event for Graphiti initialization."""
-        try:
-            # Detect provider types from class names
-            llm_provider = self._get_provider_type(self.llm_client)
-            embedder_provider = self._get_provider_type(self.embedder)
-            reranker_provider = self._get_provider_type(self.cross_encoder)
-            database_provider = self._get_provider_type(self.driver)
-
-            properties = {
-                'llm_provider': llm_provider,
-                'embedder_provider': embedder_provider,
-                'reranker_provider': reranker_provider,
-                'database_provider': database_provider,
-            }
-
-            capture_event('graphiti_initialized', properties)
-        except Exception:
-            # Silently handle telemetry errors
-            pass
-
-    def _get_provider_type(self, client) -> str:
-        """Get provider type from client class name."""
-        if client is None:
-            return 'none'
-
-        class_name = client.__class__.__name__.lower()
-
-        # LLM providers
-        if 'openai' in class_name:
-            return 'openai'
-        elif 'azure' in class_name:
-            return 'azure'
-        elif 'anthropic' in class_name:
-            return 'anthropic'
-        elif 'crossencoder' in class_name:
-            return 'crossencoder'
-        elif 'gemini' in class_name:
-            return 'gemini'
-        elif 'groq' in class_name:
-            return 'groq'
-        # Database providers
-        elif 'neo4j' in class_name:
-            return 'neo4j'
-        elif 'falkor' in class_name:
-            return 'falkordb'
-        # Embedder providers
-        elif 'voyage' in class_name:
-            return 'voyage'
-        else:
-            return 'unknown'
 
     async def close(self):
         """
@@ -311,6 +258,24 @@ class Graphiti:
         and could impact database performance during execution.
         """
         await build_indices_and_constraints(self.driver, delete_existing)
+
+    async def setup_field_database(self):
+        """Set up database constraints and indexes for FieldNode system."""
+        from graphiti_core.models.nodes.field_db_queries import (
+            CREATE_FIELD_CLUSTER_CONSTRAINT,
+            CREATE_FIELD_INDEXES,
+        )
+        
+        logger.info("Setting up field database constraints and indexes...")
+        
+        # Create field uniqueness constraint
+        await self.driver.execute_query(CREATE_FIELD_CLUSTER_CONSTRAINT)
+        
+        # Create field indexes for efficient queries
+        for index_query in CREATE_FIELD_INDEXES:
+            await self.driver.execute_query(index_query)
+        
+        logger.info("✅ Field database setup complete!")
 
     async def retrieve_episodes(
         self,

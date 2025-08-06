@@ -186,6 +186,7 @@ class EpisodicEdge(Edge):
         if len(edges) == 0:
             raise GroupsEdgesNotFoundError(group_ids)
         return edges
+    
 
 
 class EntityEdge(Edge):

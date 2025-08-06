@@ -106,6 +106,7 @@ async def test_graph_falkordb_integration():
         name='test_episode',
         labels=[],
         created_at=now,
+        group_id='test_group',
         valid_at=now,
         source='message',
         source_description='conversation message',

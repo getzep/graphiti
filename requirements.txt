@@ -1,0 +1,38 @@
+# Core MongoDB dependencies
+pymongo>=4.6.0
+motor>=3.3.0
+
+# Data validation and modeling
+pydantic>=2.11.5
+
+# Caching
+diskcache>=5.6.3
+
+# Date and time utilities (part of standard library, but for clarity)
+# datetime - built-in
+# typing - built-in
+
+# Logging (built-in)
+# logging - built-in
+
+# Testing framework
+pytest>=8.3.3
+pytest-asyncio>=0.24.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# For async testing and development
+pytest-xdist>=3.6.1
+
+# Optional: For better development experience
+ipython>=8.0.0
+jupyter>=1.0.0
+
+# Optional: Code formatting and linting
+ruff>=0.7.1
+black>=24.0.0
+
+# Optional: Type checking
+pyright>=1.1.380
+mypy>=1.0.0

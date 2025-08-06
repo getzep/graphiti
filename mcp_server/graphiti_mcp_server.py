@@ -859,8 +859,14 @@ async def search_memory_nodes(
 
         # Configure the search
         if center_node_uuid is not None:
+            # Search using NODE_HYBRID_SEARCH_NODE_DISTANCE that stands for "Node Distance Hybrid Search"
+            # This search is centered around a specific node and finds nodes that are close to it and search for 1, 2, 3, ... connections away
+            # It is useful for finding nodes that are related to a specific node, such as finding related entities or facts about NODE
             search_config = NODE_HYBRID_SEARCH_NODE_DISTANCE.model_copy(deep=True)
         else:
+            # Search using RRF that stands for "Reciprocal Rank Fusion"
+            # This is a more general search that does not depend on a center node
+            # It searches the entire graph and ranks results based on how well they match the query
             search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
         search_config.limit = max_nodes
 
