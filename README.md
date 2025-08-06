@@ -317,7 +317,7 @@ graphiti = Graphiti(
     "neo4j",
     "password",
     llm_client=OpenAIClient(
-        llm_config=azure_llm_config,
+        config=azure_llm_config,
         client=llm_client_azure
     ),
     embedder=OpenAIEmbedder(
@@ -327,7 +327,7 @@ graphiti = Graphiti(
         client=embedding_client_azure
     ),
     cross_encoder=OpenAIRerankerClient(
-        llm_config=LLMConfig(
+        config=LLMConfig(
             model=azure_llm_config.small_model  # Use small model for reranking
         ),
         client=llm_client_azure
