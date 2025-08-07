@@ -22,10 +22,11 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder.openai import OpenAIEmbedder
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.utils.maintenance.graph_data_operations import build_indices_and_constraints
 from tests.helpers_test import drivers, get_driver
 
 pytestmark = pytest.mark.integration
@@ -60,7 +61,6 @@ def setup_logging():
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_episodic_edge(driver):
     graph_driver = get_driver(driver)
@@ -156,7 +156,6 @@ async def test_episodic_edge(driver):
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_entity_edge(driver):
     graph_driver = get_driver(driver)
@@ -263,7 +262,6 @@ async def test_entity_edge(driver):
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_community_edge(driver):
     graph_driver = get_driver(driver)
@@ -376,8 +374,8 @@ async def get_edge_count(driver: GraphDriver, uuid: str):
         MATCH (n)-[e {uuid: $uuid}]->(m)
         RETURN COUNT(e) as count
         UNION ALL
-        MATCH (n)-[e:RELATES_TO]->(m {uuid: $uuid})-[e2:RELATES_TO]->(m2)
-        RETURN COUNT(m) as count
+        MATCH (n)-[:RELATES_TO]->(e {uuid: $uuid})-[:RELATES_TO]->(m)
+        RETURN COUNT(e) as count
         """,
         uuid=uuid,
     )
