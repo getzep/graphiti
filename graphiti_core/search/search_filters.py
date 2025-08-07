@@ -31,7 +31,7 @@ class ComparisonOperator(Enum):
 
 
 class DateFilter(BaseModel):
-    date: datetime = Field(description='A datetime to filter on')
+    date: datetime | None = Field(description='A datetime to filter on')
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for date filter'
     )
