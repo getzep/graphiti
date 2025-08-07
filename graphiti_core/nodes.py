@@ -129,17 +129,18 @@ class Node(BaseModel, ABC):
                     group_id=group_id,
                 )
         else:
-            await driver.execute_query(
-                """
-                MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+            async with driver.session() as session:
+                await session.run(
+                    """
+                    MATCH (n:Entity|Episodic|Community {group_id: $group_id})
                     CALL {
                         WITH n
                         DETACH DELETE n
                     } IN TRANSACTIONS OF $batch_size ROWS
-                """,
-                group_id=group_id,
-                batch_size=batch_size,
-            )
+                    """,
+                    group_id=group_id,
+                    batch_size=batch_size,
+                )
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
