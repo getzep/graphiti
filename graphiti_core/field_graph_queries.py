@@ -197,6 +197,8 @@ def get_field_relationship_constraints() -> list[LiteralString]:
         'CREATE CONSTRAINT field_relationship_cluster_partition_not_null IF NOT EXISTS FOR ()-[r:FIELD_RELATES_TO]-() REQUIRE r.cluster_partition_id IS NOT NULL',
         'CREATE CONSTRAINT field_relationship_confidence_valid IF NOT EXISTS FOR ()-[r:FIELD_RELATES_TO]-() REQUIRE r.confidence >= 0.0 AND r.confidence <= 1.0',
         'CREATE CONSTRAINT field_relationship_no_self_relationship IF NOT EXISTS FOR ()-[r:FIELD_RELATES_TO]-() REQUIRE r.source_node_uuid <> r.target_node_uuid',
+        '''CREATE CONSTRAINT field_relationship_direction_by_count IF NOT EXISTS
+        FOR (f1:Field)-[r:FIELD_RELATES_TO]->(f2:Field) REQUIRE f1.count >= f2.count''',
     ]
 
 

@@ -51,7 +51,8 @@ async def initialize_mongo_client() -> AsyncIOMotorClient:
             )
             
             # Verify connection
-            await _mongo_client.admin.command('ping')
+            if _mongo_client is not None:
+                await _mongo_client.admin.command('ping')
             logger.info("Successfully connected to MongoDB for cluster metadata.")
             
         except ConfigurationError:

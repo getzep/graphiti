@@ -20,8 +20,9 @@ Usage:
 
 import logging
 
-# Main service class
+# Main service classes
 from .cluster_service import ClusterMetadataService
+from .cluster_fields_service import ClusterFieldsService
 
 # Pydantic models
 from .models import (
@@ -31,6 +32,12 @@ from .models import (
     ClusterSearchRequest,
     ClusterCriteriaRequest,
     FieldCreateRequest,
+    FieldUpdateRequest,
+    FieldSearchByUuidRequest,
+    FieldSearchByNameAndClusterRequest,
+    FieldSearchByClusterUuidRequest,
+    FieldSearchByCreatorRequest,
+    FieldSearchByFieldNameRequest,
     ClusterValidationResult
 )
 
@@ -45,7 +52,12 @@ from .exceptions import (
     ClusterValidationError,
     InvalidOrganizationError,
     ClusterConnectionError,
-    ClusterUpdateError
+    ClusterUpdateError,
+    FieldError,
+    FieldNotFoundError,
+    FieldAlreadyExistsError,
+    FieldValidationError,
+    FieldUpdateError
 )
 
 # Set up logging for the module
@@ -53,8 +65,9 @@ logger = logging.getLogger(__name__)
 
 # Export public API
 __all__ = [
-    # Service
+    # Services
     'ClusterMetadataService',
+    'ClusterFieldsService',
     
     # Models
     'ClusterCreateRequest',
@@ -63,6 +76,12 @@ __all__ = [
     'ClusterSearchRequest',
     'ClusterCriteriaRequest',
     'FieldCreateRequest',
+    'FieldUpdateRequest',
+    'FieldSearchByUuidRequest',
+    'FieldSearchByNameAndClusterRequest',
+    'FieldSearchByClusterUuidRequest',
+    'FieldSearchByCreatorRequest',
+    'FieldSearchByFieldNameRequest',
     'ClusterValidationResult',
     
     # Validators
@@ -75,19 +94,26 @@ __all__ = [
     'ClusterValidationError',
     'InvalidOrganizationError',
     'ClusterConnectionError',
-    'ClusterUpdateError'
+    'ClusterUpdateError',
+    'FieldError',
+    'FieldNotFoundError',
+    'FieldAlreadyExistsError',
+    'FieldValidationError',
+    'FieldUpdateError'
 ]
 
 # Module metadata
 __version__ = '1.0.0'
 __author__ = 'Graphiti Hybrid Architecture Team'
-__description__ = 'MongoDB cluster metadata management for hybrid architecture'
+__description__ = 'MongoDB cluster metadata and field management for hybrid architecture'
 
 # Initialize module
 logger.info(f"Initialized cluster_metadata module v{__version__}")
 
 # Configuration constants
-DEFAULT_COLLECTION_NAME = "cluster_metadata"
+DEFAULT_CLUSTER_COLLECTION_NAME = "cluster_metadata"
+DEFAULT_FIELDS_COLLECTION_NAME = "cluster_fields"
 MAX_CLUSTER_NAME_LENGTH = 100
 MAX_DESCRIPTION_LENGTH = 1000
 MAX_SUB_CLUSTERS_PER_CLUSTER = 50
+MAX_FIELD_NAME_LENGTH = 100

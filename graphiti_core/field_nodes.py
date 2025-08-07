@@ -41,13 +41,17 @@ from graphiti_core.models.nodes.field_db_queries import (
 )
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.cluster_metadata.cluster_service import ClusterMetadataService
+from graphiti_core.cluster_metadata.cluster_fields_service import ClusterFieldsService
 from graphiti_core.cluster_metadata.exceptions import (
     ClusterNotFoundError as MongoClusterNotFoundError,
     ClusterValidationError,
     DuplicateClusterError,
     InvalidOrganizationError,
+    FieldAlreadyExistsError,
+    FieldValidationError,
+    FieldNotFoundError as MongoFieldNotFoundError
 )
-from graphiti_core.cluster_metadata.models import ClusterCreateRequest
+from graphiti_core.cluster_metadata.models import ClusterCreateRequest, FieldCreateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +354,8 @@ class ClusterNode(Node):
                 )
                 
                 await cluster_service.create_cluster(cluster_request)
+
+            
                 logger.debug(f'Created cluster in MongoDB: {self.name}')
             else:
                 logger.debug(f'Cluster {self.name} already exists in MongoDB')

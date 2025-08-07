@@ -17,8 +17,11 @@ limitations under the License.
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
+from dotenv import load_dotenv
 import pytest
+
+load_dotenv()
+
 
 from graphiti_core.embedder.openai import (
     DEFAULT_EMBEDDING_MODEL,

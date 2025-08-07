@@ -9,8 +9,24 @@ and Neo4j manages field relationships.
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
-
+from bson import ObjectId
 from graphiti_core.utils.datetime_utils import utc_now
+
+
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
 class ClusterCreateRequest(BaseModel):
     """Request model for creating a new cluster"""
@@ -242,19 +258,6 @@ class ClusterSearchRequest(BaseModel):
             return cleaned.lower()
         return v
 
-class FieldCreateRequest(BaseModel):
-    """Request model for creating a field (used by hybrid field manager)"""
-    field_name: str = Field(description="Security field name")
-    field_uuid: str = Field(description="Unique field UUID from the graphiti UUID service")
-    description: str = Field(description="Field description")
-    examples: List[str] = Field(default_factory=lambda: [], description="Example values")
-    data_type: str = Field(description="Field data type")
-    cluster_uuid: str = Field(description="Target cluster UUID")
-    created_by: Optional[str] = Field(default="system", description="User creating the field")
-    created_at: datetime = Field(default_factory=utc_now, description="Field creation timestamp")
-    last_updated: datetime = Field(default_factory=utc_now, description="Last updated timestamp")
-
-
 class ClusterValidationResult(BaseModel):
     """Result of cluster validation"""
     is_valid: bool = Field(description="Overall validation result")
@@ -343,3 +346,99 @@ class ClusterCriteriaRequest(BaseModel):
             raise ValueError("At least one search criteria must be provided")
         
         return self
+
+
+
+########################################################################
+# Field Metadata Models
+########################################################################
+
+class FieldCreateRequest(BaseModel):
+    """Request model for creating a field (used by hybrid field manager)"""
+    field_uuid: str = Field(description="Unique field UUID from graphiti UUID service")
+    field_name: str = Field(description="Security field name (same as 'name' in Neo4j)")
+    cluster_parent_id: str = Field(description="Cluster parent identifier (e.g., 'linux_audit_batelco')")
+    cluster_uuid: str = Field(description="Target cluster UUID")
+    description: str = Field(description="Field description for AI context")
+    examples: List[str] = Field(default_factory=list, description="Example values for validation")
+    data_type: str = Field(description="Field data type (string, integer, etc.)")
+    count: int = Field(default=0, description="Field occurrences in events")
+    distinct_count: int = Field(default=0, description="Distinct value count in events")
+    
+    # Neo4j temporal fields synchronized
+    labels: List[str] = Field(default_factory=lambda: ["Field"], description="Node labels from Neo4j")
+    created_at: datetime = Field(default_factory=utc_now, description="Field creation timestamp")
+    validated_at: datetime = Field(default_factory=utc_now, description="Validation timestamp")
+    invalidated_at: Optional[datetime] = Field(default=None, description="Invalidation timestamp")
+    last_updated: datetime = Field(default_factory=utc_now, description="Last update timestamp")
+    created_by: Optional[str] = Field(default="system", description="User creating the field")
+    
+    # Optional embedding for future use (can be stored as string or list)
+    embedding: Optional[List[float]] = Field(default=None, description="Vector embedding for semantic search")
+
+
+    # MONGODB Specific Validations
+    mongodb_cluster_id: PyObjectId = Field(description="MongoDB cluster ID for direct lookup")
+
+
+    @field_validator('field_name')
+    @classmethod
+    def validate_field_name(cls, v):
+        """Validate field name format"""
+        if not v or not isinstance(v, str):
+            raise ValueError("field_name must be a non-empty string")
+        
+        cleaned = v.strip()
+        if len(cleaned) > 100:
+            raise ValueError("field_name too long (max 100 characters)")
+        
+        return cleaned
+        
+    @field_validator('mongodb_cluster_id')
+    @classmethod
+    def validate_mongodb_cluster_id(cls, v):
+        """Validate MongoDB cluster ID format"""
+        if not v or not isinstance(v, PyObjectId):
+            raise ValueError("mongodb_cluster_id must be a non-empty ObjectId")
+        return v
+        
+
+
+class FieldUpdateRequest(BaseModel):
+    """Request model for updating field metadata"""
+    field_uuid: str = Field(description="Unique field UUID")
+    field_name: Optional[str] = Field(None, description="Updated field name")
+    description: Optional[str] = Field(None, description="Updated description")
+    examples: Optional[List[str]] = Field(None, description="Updated example values")
+    data_type: Optional[str] = Field(None, description="Updated data type")
+    count: Optional[int] = Field(None, description="Updated field occurrence count")
+    distinct_count: Optional[int] = Field(None, description="Updated distinct value count")
+    embedding: Optional[List[float]] = Field(None, description="Updated embedding vector")
+    last_updated: Optional[datetime] = Field(default_factory=utc_now, description="Last updated timestamp")
+    cluster_parent_id: Optional[str] = Field(None, description="Updated cluster parent identifier")
+
+class FieldSearchByUuidRequest(BaseModel):
+    """Request model for searching field by UUID"""
+    field_uuid: str = Field(description="Search by field UUID")
+
+
+class FieldSearchByNameAndClusterRequest(BaseModel):
+    """Request model for searching field by name within a specific cluster"""
+    field_name: str = Field(description="Search by field name")
+    cluster_parent_id: str = Field(description="Filter by cluster parent ID")
+    
+class FieldSearchByClusterUuidRequest(BaseModel):
+    """Request model for searching fields by cluster UUID"""
+    cluster_uuid: str = Field(description="Filter by cluster UUID")
+    field_name: Optional[str] = Field(None, description="Optional field name filter")
+
+class FieldSearchByCreatorRequest(BaseModel):
+    """Request model for searching fields by creator"""
+    created_by: str = Field(description="Filter by creator")
+    cluster_parent_id: Optional[str] = Field(None, description="Optional cluster parent ID filter")
+
+
+# This should return a list of fields that match the criteria
+class FieldSearchByFieldNameRequest(BaseModel):
+    """Request model for searching fields by field name"""
+    field_name: str = Field(description="Search by field name")
