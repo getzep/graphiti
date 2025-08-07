@@ -24,7 +24,9 @@ def format_edge_date_range(edge: EntityEdge) -> str:
     return f'{edge.valid_at if edge.valid_at else "date unknown"} - {(edge.invalid_at if edge.invalid_at else "present")}'
 
 
-def search_results_to_context_string(search_results: SearchResults, ensure_ascii: bool = True) -> str:
+def search_results_to_context_string(
+    search_results: SearchResults, ensure_ascii: bool = True
+) -> str:
     """Reformats a set of SearchResults into a single string to pass directly to an LLM as context"""
     fact_json = [
         {

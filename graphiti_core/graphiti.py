@@ -548,7 +548,9 @@ class Graphiti:
             if update_communities:
                 communities, community_edges = await semaphore_gather(
                     *[
-                        update_community(self.driver, self.llm_client, self.embedder, node)
+                        update_community(
+                            self.driver, self.llm_client, self.embedder, node, self.ensure_ascii
+                        )
                         for node in nodes
                     ],
                     max_coroutines=self.max_coroutines,
@@ -1028,6 +1030,8 @@ class Graphiti:
                 entity_edges=[],
                 group_id=edge.group_id,
             ),
+            None,
+            self.ensure_ascii,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges

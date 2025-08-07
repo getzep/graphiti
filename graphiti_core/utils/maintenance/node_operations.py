@@ -48,13 +48,14 @@ async def extract_nodes_reflexion(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     node_names: list[str],
+    ensure_ascii: bool = True,
 ) -> list[str]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': node_names,
-        'ensure_ascii': True,  # Default for reflexion function
+        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
@@ -136,6 +137,7 @@ async def extract_nodes(
                 episode,
                 previous_episodes,
                 [entity.name for entity in extracted_entities],
+                clients.ensure_ascii,
             )
 
             entities_missed = len(missing_entities) != 0
@@ -312,6 +314,7 @@ async def extract_attributes_from_nodes(
                 entity_types.get(next((item for item in node.labels if item != 'Entity'), ''))
                 if entity_types is not None
                 else None,
+                clients.ensure_ascii,
             )
             for node in nodes
         ]
@@ -328,6 +331,7 @@ async def extract_attributes_from_node(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_type: type[BaseModel] | None = None,
+    ensure_ascii: bool = True,
 ) -> EntityNode:
     node_context: dict[str, Any] = {
         'name': node.name,
@@ -342,6 +346,7 @@ async def extract_attributes_from_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
+        'ensure_ascii': ensure_ascii,
     }
 
     summary_context: dict[str, Any] = {
@@ -350,6 +355,7 @@ async def extract_attributes_from_node(
         'previous_episodes': [ep.content for ep in previous_episodes]
         if previous_episodes is not None
         else [],
+        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = (
