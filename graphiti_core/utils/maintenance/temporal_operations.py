@@ -35,7 +35,7 @@ async def extract_edge_dates(
     edge: EntityEdge,
     current_episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
-    ensure_ascii: bool = True,
+    ensure_ascii: bool = False,
 ) -> tuple[datetime | None, datetime | None]:
     context = {
         'edge_fact': edge.fact,
@@ -75,7 +75,7 @@ async def get_edge_contradictions(
     llm_client: LLMClient,
     new_edge: EntityEdge,
     existing_edges: list[EntityEdge],
-    ensure_ascii: bool = True,
+    ensure_ascii: bool = False,
 ) -> list[EntityEdge]:
     start = time()
 

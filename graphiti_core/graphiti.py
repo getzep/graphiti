@@ -123,7 +123,7 @@ class Graphiti:
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
         max_coroutines: int | None = None,
-        ensure_ascii: bool = True,
+        ensure_ascii: bool = False,
     ):
         """
         Initialize a Graphiti instance.
@@ -157,7 +157,7 @@ class Graphiti:
             The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
             If not set, the Graphiti default is used.
         ensure_ascii : bool, optional
-            Whether to escape non-ASCII characters in JSON serialization for prompts. Defaults to True.
+            Whether to escape non-ASCII characters in JSON serialization for prompts. Defaults to False.
             Set to False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
             original form, making them readable in LLM logs and improving model understanding.
 

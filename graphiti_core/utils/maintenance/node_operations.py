@@ -48,7 +48,7 @@ async def extract_nodes_reflexion(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     node_names: list[str],
-    ensure_ascii: bool = True,
+    ensure_ascii: bool = False,
 ) -> list[str]:
     # Prepare context for LLM
     context = {
@@ -331,7 +331,7 @@ async def extract_attributes_from_node(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_type: type[BaseModel] | None = None,
-    ensure_ascii: bool = True,
+    ensure_ascii: bool = False,
 ) -> EntityNode:
     node_context: dict[str, Any] = {
         'name': node.name,
