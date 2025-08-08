@@ -33,7 +33,7 @@ class ComparisonOperator(Enum):
 
 
 class DateFilter(BaseModel):
-    date: datetime = Field(description='A datetime to filter on')
+    date: datetime | None = Field(description='A datetime to filter on')
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for date filter'
     )
@@ -53,7 +53,7 @@ class SearchFilters(BaseModel):
 
 
 def node_search_filter_query_constructor(
-    filters: SearchFilters,
+        filters: SearchFilters,
 ) -> tuple[str, dict[str, Any]]:
     filter_query: str = ''
     filter_params: dict[str, Any] = {}
@@ -67,7 +67,7 @@ def node_search_filter_query_constructor(
 
 
 def date_filter_query_constructor(
-    value_name: str, param_name: str, operator: ComparisonOperator
+        value_name: str, param_name: str, operator: ComparisonOperator
 ) -> str:
     query = '(' + value_name + ' '
 
@@ -80,7 +80,7 @@ def date_filter_query_constructor(
 
 
 def edge_search_filter_query_constructor(
-    filters: SearchFilters,
+        filters: SearchFilters,
 ) -> tuple[str, dict[str, Any]]:
     filter_query: str = ''
     filter_params: dict[str, Any] = {}
