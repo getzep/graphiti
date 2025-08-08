@@ -64,20 +64,20 @@ def node(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         <PREVIOUS MESSAGES>
-        {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
         {context['episode_content']}
         </CURRENT MESSAGE>
         <NEW ENTITY>
-        {to_prompt_json(context['extracted_node'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['extracted_node'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </NEW ENTITY>
         <ENTITY TYPE DESCRIPTION>
-        {to_prompt_json(context['entity_type_description'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['entity_type_description'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </ENTITY TYPE DESCRIPTION>
 
         <EXISTING ENTITIES>
-        {to_prompt_json(context['existing_nodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['existing_nodes'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </EXISTING ENTITIES>
         
         Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
