@@ -53,7 +53,7 @@ class SearchFilters(BaseModel):
 
 
 def node_search_filter_query_constructor(
-        filters: SearchFilters,
+    filters: SearchFilters,
 ) -> tuple[str, dict[str, Any]]:
     filter_query: str = ''
     filter_params: dict[str, Any] = {}
@@ -67,7 +67,7 @@ def node_search_filter_query_constructor(
 
 
 def date_filter_query_constructor(
-        value_name: str, param_name: str, operator: ComparisonOperator
+    value_name: str, param_name: str, operator: ComparisonOperator
 ) -> str:
     query = '(' + value_name + ' '
 
@@ -80,7 +80,7 @@ def date_filter_query_constructor(
 
 
 def edge_search_filter_query_constructor(
-        filters: SearchFilters,
+    filters: SearchFilters,
 ) -> tuple[str, dict[str, Any]]:
     filter_query: str = ''
     filter_params: dict[str, Any] = {}
@@ -100,7 +100,11 @@ def edge_search_filter_query_constructor(
         valid_at_filter = '\nAND ('
         for i, or_list in enumerate(filters.valid_at):
             for j, date_filter in enumerate(or_list):
-                filter_params['valid_at_' + str(j)] = date_filter.date
+                if date_filter.comparison_operator not in [
+                    ComparisonOperator.is_null,
+                    ComparisonOperator.is_not_null,
+                ]:
+                    filter_params['valid_at_' + str(j)] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
@@ -127,7 +131,11 @@ def edge_search_filter_query_constructor(
         invalid_at_filter = ' AND ('
         for i, or_list in enumerate(filters.invalid_at):
             for j, date_filter in enumerate(or_list):
-                filter_params['invalid_at_' + str(j)] = date_filter.date
+                if date_filter.comparison_operator not in [
+                    ComparisonOperator.is_null,
+                    ComparisonOperator.is_not_null,
+                ]:
+                    filter_params['invalid_at_' + str(j)] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
@@ -154,7 +162,11 @@ def edge_search_filter_query_constructor(
         created_at_filter = ' AND ('
         for i, or_list in enumerate(filters.created_at):
             for j, date_filter in enumerate(or_list):
-                filter_params['created_at_' + str(j)] = date_filter.date
+                if date_filter.comparison_operator not in [
+                    ComparisonOperator.is_null,
+                    ComparisonOperator.is_not_null,
+                ]:
+                    filter_params['created_at_' + str(j)] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
@@ -181,7 +193,11 @@ def edge_search_filter_query_constructor(
         expired_at_filter = ' AND ('
         for i, or_list in enumerate(filters.expired_at):
             for j, date_filter in enumerate(or_list):
-                filter_params['expired_at_' + str(j)] = date_filter.date
+                if date_filter.comparison_operator not in [
+                    ComparisonOperator.is_null,
+                    ComparisonOperator.is_not_null,
+                ]:
+                    filter_params['expired_at_' + str(j)] = date_filter.date
 
             and_filters = [
                 date_filter_query_constructor(
