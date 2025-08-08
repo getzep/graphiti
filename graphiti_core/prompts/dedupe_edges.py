@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+from .prompt_helpers import to_prompt_json
 
 
 class EdgeDuplicate(BaseModel):
@@ -67,11 +67,11 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Given the following context, determine whether the New Edge represents any of the edges in the list of Existing Edges.
 
         <EXISTING EDGES>
-        {json.dumps(context['related_edges'], indent=2)}
+        {to_prompt_json(context['related_edges'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </EXISTING EDGES>
 
         <NEW EDGE>
-        {json.dumps(context['extracted_edges'], indent=2)}
+        {to_prompt_json(context['extracted_edges'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </NEW EDGE>
         
         Task:
@@ -98,7 +98,7 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
         Given the following context, find all of the duplicates in a list of facts:
 
         Facts:
-        {json.dumps(context['edges'], indent=2)}
+        {to_prompt_json(context['edges'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 
         Task:
         If any facts in Facts is a duplicate of another fact, return a new fact with one of their uuid's.
