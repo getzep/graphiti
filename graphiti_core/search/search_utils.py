@@ -455,7 +455,7 @@ async def episode_fulltext_search(
         YIELD node AS episode, score
         MATCH (e:Episodic)
         WHERE e.uuid = episode.uuid
-        AND e.group_id IN $group_ids
+        AND (size(coalesce($group_ids, [])) = 0 OR e.group_id IN $group_ids)
         RETURN
         """
         + EPISODIC_NODE_RETURN
