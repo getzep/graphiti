@@ -217,7 +217,7 @@ Please see the [server README](./server/README.md) for more information.
 
 ## Optional Environment Variables
 
-In addition to the Neo4j and OpenAi-compatible credentials, Graphiti also has a few optional environment variables.
+In addition to the Neo4j and OpenAI-compatible credentials, Graphiti also has a few optional environment variables.
 If you are using one of our supported models, such as Anthropic or Voyage models, the necessary environment variables
 must be set.
 
