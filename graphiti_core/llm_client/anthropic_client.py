@@ -204,8 +204,10 @@ class AnthropicClient(LLMClient):
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]]
         user_messages_cast = typing.cast(list[MessageParam], user_messages)
 
-        # TODO: Replace hacky min finding solution after fixing hardcoded EXTRACT_EDGES_MAX_TOKENS = 16384 in
-        # edge_operations.py. Throws errors with cheaper models that lower max_tokens.
+        # NOTE: We clamp requested max_tokens against Anthropic DEFAULT_MAX_TOKENS here.
+        # The edge extraction flow now sources its token limit from helpers.EXTRACT_EDGES_MAX_TOKENS
+        # (no longer hardcoded in edge_operations.py). This min() guard remains to prevent
+        # errors when using smaller/cheaper models with lower provider-side limits.
         max_creation_tokens: int = min(
             max_tokens if max_tokens is not None else self.config.max_tokens,
             DEFAULT_MAX_TOKENS,
