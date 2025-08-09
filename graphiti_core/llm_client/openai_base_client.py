@@ -24,10 +24,10 @@ import openai
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
-from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient, Message
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+from .utils import resolve_max_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class BaseOpenAIClient(LLMClient):
         self,
         config: LLMConfig | None = None,
         cache: bool = False,
+        # Left for backwards compatibility, but config should be preferred for consistency between clients
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
         if cache:
@@ -59,7 +60,13 @@ class BaseOpenAIClient(LLMClient):
             config = LLMConfig()
 
         super().__init__(config, cache)
-        self.max_tokens = max_tokens
+        
+        # Use the standard precedence resolution utility
+        self.max_tokens = resolve_max_tokens(
+            config_max_tokens=config.max_tokens,
+            instance_max_tokens=max_tokens if max_tokens != DEFAULT_MAX_TOKENS else None,
+            default_max_tokens=DEFAULT_MAX_TOKENS,
+        )
 
     @abstractmethod
     async def _create_completion(
@@ -132,13 +139,20 @@ class BaseOpenAIClient(LLMClient):
         openai_messages = self._convert_messages_to_openai_format(messages)
         model = self._get_model_for_size(model_size)
 
+        # Use the standard precedence resolution utility
+        resolved_max_tokens = resolve_max_tokens(
+            requested_max_tokens=max_tokens if max_tokens != DEFAULT_MAX_TOKENS else None,
+            instance_max_tokens=self.max_tokens,
+            default_max_tokens=DEFAULT_MAX_TOKENS,
+        )
+
         try:
             if response_model:
                 response = await self._create_structured_completion(
                     model=model,
                     messages=openai_messages,
                     temperature=self.temperature,
-                    max_tokens=max_tokens or self.max_tokens,
+                    max_tokens=resolved_max_tokens,
                     response_model=response_model,
                 )
                 return self._handle_structured_response(response)
@@ -147,12 +161,12 @@ class BaseOpenAIClient(LLMClient):
                     model=model,
                     messages=openai_messages,
                     temperature=self.temperature,
-                    max_tokens=max_tokens or self.max_tokens,
+                    max_tokens=resolved_max_tokens,
                 )
                 return self._handle_json_response(response)
 
         except openai.LengthFinishReasonError as e:
-            raise Exception(f'Output length exceeded max tokens {self.max_tokens}: {e}') from e
+            raise Exception(f'Output length exceeded max tokens {resolved_max_tokens}: {e}') from e
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
