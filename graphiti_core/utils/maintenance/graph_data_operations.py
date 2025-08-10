@@ -32,21 +32,8 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if delete_existing:
-        records, _, _ = await driver.execute_query(
-            """
-            SHOW INDEXES YIELD name
-            """,
-        )
-        index_names = [record['name'] for record in records]
-        await semaphore_gather(
-            *[
-                driver.execute_query(
-                    """DROP INDEX $name""",
-                    name=name,
-                )
-                for name in index_names
-            ]
-        )
+        await driver.delete_all_indexes()
+        
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
     fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
