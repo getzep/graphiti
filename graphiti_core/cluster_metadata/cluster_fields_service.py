@@ -16,7 +16,6 @@ Key Features:
 import logging
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Set
-from bson import ObjectId
 from pymongo import UpdateOne, InsertOne, DeleteOne
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 from .exceptions import (

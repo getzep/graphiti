@@ -482,3 +482,5 @@ class ClusterMetadataService:
         except Exception as e:
             logger.error(f"Error listing macros{' for organization ' + organization if organization else ''}: {e}")
             raise ClusterValidationError(f"Failed to list macros: {e}")
+        
+        
