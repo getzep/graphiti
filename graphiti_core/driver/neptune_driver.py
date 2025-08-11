@@ -27,6 +27,7 @@ from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnecti
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
+DEFAULT_SIZE = 10
 
 aoss_indices = [
     {
@@ -34,7 +35,7 @@ aoss_indices = [
         'body': {
             'mappings': {
                 'properties': {
-                    'uuid': {'type': 'text'},
+                    'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'summary': {'type': 'text'},
                     'group_id': {'type': 'text'},
@@ -43,7 +44,7 @@ aoss_indices = [
         },
         'query': {
             'query': {'multi_match': {'query': '', 'fields': ['name', 'summary', 'group_id']}},
-            'size': 10,
+            'size': DEFAULT_SIZE,
         },
     },
     {
@@ -51,7 +52,7 @@ aoss_indices = [
         'body': {
             'mappings': {
                 'properties': {
-                    'uuid': {'type': 'text'},
+                    'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'group_id': {'type': 'text'},
                 }
@@ -59,7 +60,7 @@ aoss_indices = [
         },
         'query': {
             'query': {'multi_match': {'query': '', 'fields': ['name', 'group_id']}},
-            'size': 10,
+            'size': DEFAULT_SIZE,
         },
     },
     {
@@ -67,7 +68,7 @@ aoss_indices = [
         'body': {
             'mappings': {
                 'properties': {
-                    'uuid': {'type': 'text'},
+                    'uuid': {'type': 'keyword'},
                     'content': {'type': 'text'},
                     'source': {'type': 'text'},
                     'source_description': {'type': 'text'},
@@ -82,7 +83,7 @@ aoss_indices = [
                     'fields': ['content', 'source', 'source_description', 'group_id'],
                 }
             },
-            'size': 10,
+            'size': DEFAULT_SIZE,
         },
     },
     {
@@ -90,7 +91,7 @@ aoss_indices = [
         'body': {
             'mappings': {
                 'properties': {
-                    'uuid': {'type': 'text'},
+                    'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'fact': {'type': 'text'},
                     'group_id': {'type': 'text'},
@@ -99,7 +100,7 @@ aoss_indices = [
         },
         'query': {
             'query': {'multi_match': {'query': '', 'fields': ['name', 'fact', 'group_id']}},
-            'size': 10,
+            'size': DEFAULT_SIZE,
         },
     },
 ]
@@ -109,38 +110,46 @@ class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
     def __init__(self, host: str, aoss_host: str, port: int = 8182, aoss_port: int = 443):
-        if host:
-            if host.startswith('neptune-db://'):
-                # This is a Neptune Database Cluster
-                endpoint = host.replace('neptune-db://', '')
-                self.client = NeptuneGraph(endpoint, port)
-                logger.debug('Creating Neptune Database session for %s', host)
-            elif host.startswith('neptune-graph://'):
-                # This is a Neptune Analytics Graph
-                graphId = host.replace('neptune-graph://', '')
-                self.client = NeptuneAnalyticsGraph(graphId)
-                logger.debug('Creating Neptune Graph session for %s', host)
-            else:
-                raise ValueError(
-                    'You must provide an endpoint to create a NeptuneDriver as either neptune-db://<endpoint> or neptune-graph://<graphid>'
-                )
-        else:
+        """This initializes a NeptuneDriver for use with Neptune as a backend
+
+        Args:
+            host (str): The Neptune Database or Neptune Analytics host
+            aoss_host (str): The OpenSearch host value
+            port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
+            aoss_port (int, optional): The OpenSearch port. Defaults to 443.
+        """
+        if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
-        if aoss_host:
-            session = boto3.Session()
-            self.aoss_client = OpenSearch(
-                hosts=[{'host': aoss_host, 'port': aoss_port}],
-                http_auth=Urllib3AWSV4SignerAuth(
-                    session.get_credentials(), session.region_name, 'aoss'
-                ),
-                use_ssl=True,
-                verify_certs=True,
-                connection_class=Urllib3HttpConnection,
-                pool_maxsize=20,
-            )
+        if host.startswith('neptune-db://'):
+            # This is a Neptune Database Cluster
+            endpoint = host.replace('neptune-db://', '')
+            self.client = NeptuneGraph(endpoint, port)
+            logger.debug('Creating Neptune Database session for %s', host)
+        elif host.startswith('neptune-graph://'):
+            # This is a Neptune Analytics Graph
+            graphId = host.replace('neptune-graph://', '')
+            self.client = NeptuneAnalyticsGraph(graphId)
+            logger.debug('Creating Neptune Graph session for %s', host)
         else:
-            raise ValueError('You must provide an AOSS endpoint to create a NeptuneDriver')
+            raise ValueError(
+                'You must provide an endpoint to create a NeptuneDriver as either neptune-db://<endpoint> or neptune-graph://<graphid>'
+            )
+
+        if not aoss_host:
+            raise ValueError('You must provide an AOSS endpoint to create an OpenSearch driver.')
+
+        session = boto3.Session()
+        self.aoss_client = OpenSearch(
+            hosts=[{'host': aoss_host, 'port': aoss_port}],
+            http_auth=Urllib3AWSV4SignerAuth(
+                session.get_credentials(), session.region_name, 'aoss'
+            ),
+            use_ssl=True,
+            verify_certs=True,
+            connection_class=Urllib3HttpConnection,
+            pool_maxsize=20,
+        )
 
     def _sanitize_parameters(self, query, params: dict):
         if isinstance(query, list):

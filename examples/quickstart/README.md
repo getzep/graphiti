@@ -54,7 +54,7 @@ AOSS_PORT=your_port_or_443
 ```
 
 TIP: For Amazon Neptune host string please use the following formats
-* For Neptune Database: `neptune-db://<Cluster Endpoint>`
+* For Neptune Database: `neptune-db://<cluster endpoint>`
 * For Neptune Analytics: `neptune-graph://<graph identifier>`
 
 3. Run the example:

@@ -786,14 +786,11 @@ name = "graphiti-core"
 version = "0.18.2"
 source = { editable = "." }
 dependencies = [
-    { name = "boto3" },
     { name = "diskcache" },
-    { name = "langchain-aws" },
     { name = "neo4j" },
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "openai" },
-    { name = "opensearch-py" },
     { name = "posthog" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -835,6 +832,7 @@ groq = [
     { name = "groq" },
 ]
 neptune = [
+    { name = "boto3" },
     { name = "langchain-aws" },
     { name = "opensearch-py" },
 ]
@@ -849,7 +847,7 @@ voyageai = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.49.0" },
-    { name = "boto3", specifier = ">=1.39.16" },
+    { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
     { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
@@ -861,7 +859,6 @@ requires-dist = [
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.2.4" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
-    { name = "langchain-aws", specifier = ">=0.2.29" },
     { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
     { name = "langchain-openai", marker = "extra == 'dev'", specifier = ">=0.2.6" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2.15" },
@@ -869,7 +866,6 @@ requires-dist = [
     { name = "neo4j", specifier = ">=5.26.0" },
     { name = "numpy", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.91.0" },
-    { name = "opensearch-py", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neptune'", specifier = ">=3.0.0" },
     { name = "posthog", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
