@@ -121,16 +121,21 @@ class Node(BaseModel, ABC):
         return False
 
     @classmethod
-    async def delete_by_group_id(cls, driver: GraphDriver, group_id: str):
+    async def delete_by_group_id(cls, driver: GraphDriver, group_id: str, batch_size: int = 100):
         match driver.provider:
             case GraphProvider.NEO4J:
-                await driver.execute_query(
-                    """
-                    MATCH (n:Entity|Episodic|Community {group_id: $group_id})
-                    DETACH DELETE n
-                    """,
-                    group_id=group_id,
-                )
+                async with driver.session() as session:
+                    await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+                        CALL {
+                            WITH n
+                            DETACH DELETE n
+                        } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        group_id=group_id,
+                        batch_size=batch_size,
+                    )
 
             case _:  # FalkorDB and Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
