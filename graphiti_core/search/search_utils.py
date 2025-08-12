@@ -266,8 +266,10 @@ async def edge_bfs_search(
     query = (
         f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
-            WHERE origin:Entity OR origin:Episodic
+            OPTIONAL MATCH (en:Entity {{uuid: origin_uuid}})
+            OPTIONAL MATCH (ep:Episodic {{uuid: origin_uuid}})
+            WITH coalesce(en, ep) AS origin
+            MATCH path = (origin)-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
             UNWIND relationships(path) AS rel
             MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
             WHERE e.uuid = rel.uuid
@@ -411,9 +413,11 @@ async def node_bfs_search(
     query = (
         f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
-            WHERE origin:Entity OR origin:Episodic
-            AND n.group_id = origin.group_id
+            OPTIONAL MATCH (en:Entity {{uuid: origin_uuid}})
+            OPTIONAL MATCH (ep:Episodic {{uuid: origin_uuid}})
+            WITH coalesce(en, ep) AS origin
+            MATCH (origin)-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+            WHERE n.group_id = origin.group_id
             AND origin.group_id IN $group_ids
         """
         + filter_query
