@@ -55,7 +55,6 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
@@ -796,7 +795,10 @@ async def get_relevant_nodes(
     )
 
     if driver.provider == GraphProvider.KUZU:
-        embedding_size = len(nodes[0].name_embedding)
+        embedding_size = len(nodes[0].name_embedding) if nodes[0].name_embedding is not None else 0
+        if embedding_size == 0:
+            return []
+
         query = (
             RUNTIME_QUERY
             + """
@@ -921,7 +923,10 @@ async def get_relevant_edges(
     )
 
     if driver.provider == GraphProvider.KUZU:
-        embedding_size = len(edges[0].fact_embedding)
+        embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+        if embedding_size == 0:
+            return []
+
         query = (
             RUNTIME_QUERY
             + """
@@ -1042,7 +1047,10 @@ async def get_edge_invalidation_candidates(
     )
 
     if driver.provider == GraphProvider.KUZU:
-        embedding_size = len(edges[0].fact_embedding)
+        embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+        if embedding_size == 0:
+            return []
+
         query = (
             RUNTIME_QUERY
             + """

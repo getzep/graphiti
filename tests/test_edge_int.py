@@ -22,11 +22,10 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder.openai import OpenAIEmbedder
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.utils.maintenance.graph_data_operations import build_indices_and_constraints
 from tests.helpers_test import drivers, get_driver
 
 pytestmark = pytest.mark.integration
