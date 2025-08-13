@@ -13,6 +13,8 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "uvicorn>=0.30.6",
     "httpx>=0.28.1",
+    "openai>=1.0.0",
+    "azure-identity>=1.15.0",
 ]
 
 [project.optional-dependencies]

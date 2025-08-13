@@ -1,11 +1,18 @@
 import logging
+import os
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
+from openai import AsyncAzureOpenAI
+
 from graphiti_core import Graphiti  # type: ignore
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge  # type: ignore
+from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, NodeNotFoundError
-from graphiti_core.llm_client import LLMClient  # type: ignore
+from graphiti_core.llm_client import LLMClient, LLMConfig, OpenAIClient  # type: ignore
+from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
 from graph_service.config import ZepEnvDep
@@ -15,8 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 class ZepGraphiti(Graphiti):
-    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
-        super().__init__(uri, user, password, llm_client)
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        llm_client: LLMClient | None = None,
+        embedder: OpenAIEmbedder | None = None,
+        cross_encoder: OpenAIRerankerClient | None = None,
+    ):
+        super().__init__(uri, user, password, llm_client, embedder, cross_encoder)
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -72,17 +87,57 @@ class ZepGraphiti(Graphiti):
 
 
 async def get_graphiti(settings: ZepEnvDep):
+    # Default model names
+    DEFAULT_LLM_MODEL = 'gpt-4o-mini'
+    SMALL_LLM_MODEL = 'gpt-4o-mini'
+            
+    # Get model from settings, or use default if not set or empty
+    model = settings.model_name if settings.model_name and settings.model_name.strip() else DEFAULT_LLM_MODEL
+    small_model = settings.small_model_name if settings.small_model_name and settings.small_model_name.strip() else SMALL_LLM_MODEL
+
+    api_key = settings.api_key
+    api_version = settings.api_version
+    llm_endpoint = settings.llm_endpoint
+    embedding_endpoint = settings.embedding_endpoint
+    embedding_model = settings.embedding_model
+
+    # Create separate Azure OpenAI clients for different services
+    llm_client_azure = AsyncAzureOpenAI(
+        api_key=api_key, api_version=api_version, azure_endpoint=llm_endpoint
+    )
+
+    embedding_client_azure = AsyncAzureOpenAI(
+        api_key=api_key, api_version=api_version, azure_endpoint=embedding_endpoint
+    )
+
+    # Create LLM Config with your Azure deployment names
+    azure_llm_config = LLMConfig(
+        small_model=small_model,
+        model=model,
+    )
+
+    llm_client = OpenAIClient(config=azure_llm_config, client=llm_client_azure)
+    embedder = OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            embedding_model=embedding_model  # Your Azure embedding deployment name
+        ),
+        client=embedding_client_azure,
+    )
+    cross_encoder = OpenAIRerankerClient(
+        config=LLMConfig(
+            model=azure_llm_config.small_model  # Use small model for reranking
+        ),
+        client=llm_client_azure,
+    )
+
     client = ZepGraphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
     )
-    if settings.openai_base_url is not None:
-        client.llm_client.config.base_url = settings.openai_base_url
-    if settings.openai_api_key is not None:
-        client.llm_client.config.api_key = settings.openai_api_key
-    if settings.model_name is not None:
-        client.llm_client.model = settings.model_name
 
     try:
         yield client
@@ -91,10 +146,55 @@ async def get_graphiti(settings: ZepEnvDep):
 
 
 async def initialize_graphiti(settings: ZepEnvDep):
+    # Default model names
+    DEFAULT_LLM_MODEL = 'gpt-4o-mini'
+    SMALL_LLM_MODEL = 'gpt-4o-mini'
+
+    # Get model from settings, or use default if not set or empty
+    model = settings.model_name if settings.model_name and settings.model_name.strip() else DEFAULT_LLM_MODEL
+    small_model = settings.small_model_name if settings.small_model_name and settings.small_model_name.strip() else SMALL_LLM_MODEL
+
+    api_key = settings.api_key
+    api_version = settings.api_version
+    llm_endpoint = settings.llm_endpoint
+    embedding_endpoint = settings.embedding_endpoint
+    embedding_model = settings.embedding_model
+
+    # Create separate Azure OpenAI clients for different services
+    llm_client_azure = AsyncAzureOpenAI(
+        api_key=api_key, api_version=api_version, azure_endpoint=llm_endpoint
+    )
+
+    embedding_client_azure = AsyncAzureOpenAI(
+        api_key=api_key, api_version=api_version, azure_endpoint=embedding_endpoint
+    )
+
+    # Create LLM Config with your Azure deployment names
+    azure_llm_config = LLMConfig(
+        small_model=small_model,
+        model=model,
+    )
+
+    llm_client = OpenAIClient(config=azure_llm_config, client=llm_client_azure)
+    embedder = OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            embedding_model=embedding_model  # Your Azure embedding deployment name
+        ),
+        client=embedding_client_azure,
+    )
+    cross_encoder = OpenAIRerankerClient(
+        config=LLMConfig(
+            model=azure_llm_config.small_model  # Use small model for reranking
+        ),
+        client=llm_client_azure,
+    )
     client = ZepGraphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
     )
     await client.build_indices_and_constraints()
 
