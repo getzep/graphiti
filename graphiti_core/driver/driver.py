@@ -57,6 +57,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
+    default_group_id: str = ''
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -74,12 +75,10 @@ class GraphDriver(ABC):
     def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
 
-    def with_database(self, database: str) -> 'GraphDriver':
-        """
-        Returns a shallow copy of this driver with a different default database.
-        Reuses the same connection (e.g. FalkorDB, Neo4j).
-        """
-        cloned = copy.copy(self)
-        cloned._database = database
+    @abstractmethod
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        raise NotImplementedError()
 
-        return cloned
+    def clone(self, database: str) -> 'GraphDriver':
+        """Clone the driver with a different database or graph name."""
+        return self

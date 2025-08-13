@@ -20,47 +20,12 @@ from datetime import datetime
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import EPISODIC_NODE_RETURN
 from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_from_record
 
 EPISODE_WINDOW_LEN = 3
 
 logger = logging.getLogger(__name__)
-
-
-async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
-    if delete_existing:
-        records, _, _ = await driver.execute_query(
-            """
-            SHOW INDEXES YIELD name
-            """,
-        )
-        index_names = [record['name'] for record in records]
-        await semaphore_gather(
-            *[
-                driver.execute_query(
-                    """DROP INDEX $name""",
-                    name=name,
-                )
-                for name in index_names
-            ]
-        )
-    range_indices: list[LiteralString] = get_range_indices(driver.provider)
-
-    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
-
-    index_queries: list[LiteralString] = range_indices + fulltext_indices
-
-    await semaphore_gather(
-        *[
-            driver.execute_query(
-                query,
-            )
-            for query in index_queries
-        ]
-    )
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):

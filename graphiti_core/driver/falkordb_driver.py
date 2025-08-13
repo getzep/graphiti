@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import LiteralString
+
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
     from falkordb.asyncio import FalkorDB
@@ -33,6 +35,8 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,8 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
+    default_group_id: str = '\\_'
+    fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
 
     def __init__(
         self,
@@ -80,7 +86,7 @@ class FalkorDriver(GraphDriver):
         username: str | None = None,
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
-        database: str = 'default_db',
+        database: str = '\\_',
     ):
         """
         Initialize the FalkorDB driver.
@@ -98,7 +104,16 @@ class FalkorDriver(GraphDriver):
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
 
-        self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
+        # Schedule the indices and constraints to be built
+        import asyncio
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_running_loop()
+            # Schedule the build_indices_and_constraints to run
+            loop.create_task(self.build_indices_and_constraints())
+        except RuntimeError:
+            # No event loop running, this will be handled later
+            pass
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
@@ -152,8 +167,64 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.close()
 
     async def delete_all_indexes(self) -> None:
-        await self.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
+        from collections import defaultdict
+        
+        result = await self.execute_query('CALL db.indexes()')
+        if result is None:
+            return
+        
+        records, _, _ = result
+        
+        # Organize indexes by type and label
+        range_indexes = defaultdict(list)
+        fulltext_indexes = defaultdict(list)
+        entity_types = {}
+        
+        for record in records:
+            label = record['label']
+            entity_types[label] = record['entitytype']
+            
+            for field_name, index_type in record['types'].items():
+                if 'RANGE' in index_type:
+                    range_indexes[label].append(field_name)
+                if 'FULLTEXT' in index_type:
+                    fulltext_indexes[label].append(field_name)
+        
+        # Drop all range indexes
+        for label, fields in range_indexes.items():
+            for field in fields:
+                await self.execute_query(f'DROP INDEX ON :{label}({field})')
+
+        # Drop all fulltext indexes
+        for label, fields in fulltext_indexes.items():
+            entity_type = entity_types[label]
+            for field in fields:
+                if entity_type == 'NODE':
+                    await self.execute_query(
+                        f'DROP FULLTEXT INDEX FOR (n:{label}) ON (n.{field})'
+                    )
+                elif entity_type == 'RELATIONSHIP':
+                    await self.execute_query(
+                        f'DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field})'
+                    )
+
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        if delete_existing:
+            await self.delete_all_indexes()
+            
+        range_indices: list[LiteralString] = get_range_indices(self.provider)
+
+        fulltext_indices: list[LiteralString] = get_fulltext_indices(self.provider)
+
+        index_queries: list[LiteralString] = range_indices + fulltext_indices
+
+        await semaphore_gather(
+            *[
+                self.execute_query(
+                    query,
+                )
+                for query in index_queries
+            ]
         )
 
     def clone(self, database: str) -> 'GraphDriver':
@@ -161,8 +232,12 @@ class FalkorDriver(GraphDriver):
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
         """
-        cloned = FalkorDriver(falkor_db=self.client, database=database)
-
+        if database == self._database:
+            cloned = self
+        else:
+            # Create a new instance of FalkorDriver with the same connection but a different database
+            cloned = FalkorDriver(falkor_db=self.client, database=database)
+        
         return cloned
 
 
