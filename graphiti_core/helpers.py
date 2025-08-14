@@ -28,7 +28,6 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
 
 load_dotenv()

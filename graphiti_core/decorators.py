@@ -16,8 +16,8 @@ limitations under the License.
 
 import functools
 import inspect
-
-from typing import Any, Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.helpers import semaphore_gather
@@ -96,7 +96,7 @@ def get_parameter_position(func: Callable, param_name: str) -> int | None:
     If the parameter is not found, returns None.
     """
     sig = inspect.signature(func)
-    for idx, (name, param) in enumerate(sig.parameters.items()):
+    for idx, (name, _param) in enumerate(sig.parameters.items()):
         if name == param_name:
             return idx
     return None

@@ -18,8 +18,6 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import LiteralString
-
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
     from falkordb.asyncio import FalkorDB
@@ -36,7 +34,6 @@ else:
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
