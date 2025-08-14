@@ -157,7 +157,7 @@ class Graphiti:
             If not set, the Graphiti default is used.
         ensure_ascii : bool, optional
             Whether to escape non-ASCII characters in JSON serialization for prompts. Defaults to False.
-            Set to False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
+            Set as False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
             original form, making them readable in LLM logs and improving model understanding.
 
         Returns
