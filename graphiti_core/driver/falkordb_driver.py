@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -152,46 +153,38 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.close()
 
     async def delete_all_indexes(self) -> None:
-        from collections import defaultdict
-        
-        result = await self.execute_query('CALL db.indexes()')
-        if result is None:
+        result = await self.execute_query("CALL db.indexes()")
+        if not result:
             return
-        
-        records, _, _ = result
-        
-        # Organize indexes by type and label
-        range_indexes = defaultdict(list)
-        fulltext_indexes = defaultdict(list)
-        entity_types = {}
-        
-        for record in records:
-            label = record['label']
-            entity_types[label] = record['entitytype']
-            
-            for field_name, index_type in record['types'].items():
-                if 'RANGE' in index_type:
-                    range_indexes[label].append(field_name)
-                if 'FULLTEXT' in index_type:
-                    fulltext_indexes[label].append(field_name)
-        
-        # Drop all range indexes
-        for label, fields in range_indexes.items():
-            for field in fields:
-                await self.execute_query(f'DROP INDEX ON :{label}({field})')
 
-        # Drop all fulltext indexes
-        for label, fields in fulltext_indexes.items():
-            entity_type = entity_types[label]
-            for field in fields:
-                if entity_type == 'NODE':
-                    await self.execute_query(
-                        f'DROP FULLTEXT INDEX FOR (n:{label}) ON (n.{field})'
+        records, _, _ = result
+        drop_tasks = []
+
+        for record in records:
+            label = record["label"]
+            entity_type = record["entitytype"]
+
+            for field_name, index_type in record["types"].items():
+                if "RANGE" in index_type:
+                    drop_tasks.append(
+                        self.execute_query(f"DROP INDEX ON :{label}({field_name})")
                     )
-                elif entity_type == 'RELATIONSHIP':
-                    await self.execute_query(
-                        f'DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field})'
-                    )
+                elif "FULLTEXT" in index_type:
+                    if entity_type == "NODE":
+                        drop_tasks.append(
+                            self.execute_query(
+                                f"DROP FULLTEXT INDEX FOR (n:{label}) ON (n.{field_name})"
+                            )
+                        )
+                    elif entity_type == "RELATIONSHIP":
+                        drop_tasks.append(
+                            self.execute_query(
+                                f"DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field_name})"
+                            )
+                        )
+
+        if drop_tasks:
+            await asyncio.gather(*drop_tasks)
 
     def clone(self, database: str) -> 'GraphDriver':
         """
