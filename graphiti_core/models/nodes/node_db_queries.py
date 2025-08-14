@@ -111,7 +111,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
     if provider == GraphProvider.FALKORDB:
         return """
             MERGE (n:Community {uuid: $uuid})
-            SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: $name_embedding}
+            SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: vecf32($name_embedding)}
             RETURN n.uuid AS uuid
         """
 
@@ -130,4 +130,6 @@ COMMUNITY_NODE_RETURN = """
     n.group_id AS group_id,
     n.summary AS summary,
     n.created_at AS created_at
-"""
+""" 
+
+
