@@ -6,7 +6,7 @@ from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
-from graph_service.dto import AddEntityNodeRequest, AddEpisodeRequest, AddMessagesRequest, Message, Result
+from graph_service.dto import AddEntityNodeRequest, AddEpisodesRequest, AddMessagesRequest, Episode, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 
@@ -85,25 +85,26 @@ async def add_entity_node(
 
 
 @router.post('/episodes', status_code=status.HTTP_202_ACCEPTED)
-async def add_episode(
-    request: AddEpisodeRequest,
+async def add_episodes(
+    request: AddEpisodesRequest,
     graphiti: ZepGraphitiDep,
 ):
-    async def add_episode_task():
+    async def add_episode_task(episode: Episode):
         await graphiti.add_episode(
-            uuid=request.uuid,
+            uuid=episode.uuid,
             group_id=request.group_id,
-            name=request.name,
-            episode_body=request.episode_body,
-            reference_time=request.reference_time,
-            source=EpisodeType.from_str(request.source),
-            source_description=request.source_description,
-            update_communities=request.update_communities,
+            name=episode.name,
+            episode_body=episode.episode_body,
+            reference_time=episode.reference_time,
+            source=EpisodeType.from_str(episode.source),
+            source_description=episode.source_description,
+            update_communities=episode.update_communities,
         )
 
-    await async_worker.queue.put(add_episode_task)
+    for episode in request.episodes:
+        await async_worker.queue.put(partial(add_episode_task, episode))
 
-    return Result(message='Episode added to processing queue', success=True)
+    return Result(message='Episodes added to processing queue', success=True)
 
 
 @router.delete('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)

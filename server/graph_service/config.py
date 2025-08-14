@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     openai_base_url: str | None = Field(None)
     
     # Neo4j settings
-    neo4j_uri: str
-    neo4j_user: str
-    neo4j_password: str
+    neo4j_uri: str = Field(alias='NEO4J_URI')
+    neo4j_user: str = Field(alias='NEO4J_USER')
+    neo4j_password: str = Field(alias='NEO4J_PASSWORD')
 
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 

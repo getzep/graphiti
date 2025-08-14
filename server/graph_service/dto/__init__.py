@@ -1,13 +1,14 @@
-from .common import Message, Result
-from .ingest import AddEntityNodeRequest, AddEpisodeRequest, AddMessagesRequest
+from .common import Episode, Message, Result
+from .ingest import AddEntityNodeRequest, AddEpisodesRequest, AddMessagesRequest
 from .retrieve import FactResult, GetMemoryRequest, GetMemoryResponse, SearchQuery, SearchResults
 
 __all__ = [
     'SearchQuery',
     'Message',
+    'Episode',
     'AddMessagesRequest',
     'AddEntityNodeRequest',
-    'AddEpisodeRequest',
+    'AddEpisodesRequest',
     'SearchResults',
     'FactResult',
     'Result',
