@@ -15,6 +15,8 @@ limitations under the License.
 """
 
 import functools
+import inspect
+
 from typing import Any, Awaitable, Callable, TypeVar
 
 from graphiti_core.driver.driver import GraphProvider
@@ -31,7 +33,13 @@ def handle_multiple_group_ids(func: F) -> F:
     """
     @functools.wraps(func)
     async def wrapper(self, *args, **kwargs):
+        group_ids_func_pos = get_parameter_position(func, 'group_ids')
+        group_ids_pos = group_ids_func_pos - 1 if group_ids_func_pos is not None else None  # Adjust for zero-based index
         group_ids = kwargs.get('group_ids')
+
+        # If not in kwargs and position exists, get from args
+        if group_ids is None and group_ids_pos is not None and len(args) > group_ids_pos:
+            group_ids = args[group_ids_pos]
         
         # Only handle FalkorDB with multiple group_ids
         if (hasattr(self, 'clients') and hasattr(self.clients, 'driver') and 
@@ -42,9 +50,14 @@ def handle_multiple_group_ids(func: F) -> F:
             driver = self.clients.driver
             
             async def execute_for_group(gid: str):
+                # Remove group_ids from args if it was passed positionally
+                filtered_args = list(args)
+                if group_ids_pos is not None and len(args) > group_ids_pos:
+                    filtered_args.pop(group_ids_pos)
+                
                 return await func(
                     self,
-                    *args,
+                    *filtered_args,
                     **{**kwargs, "group_ids": [gid], "driver": driver.clone(database=gid)},
                 )
             
@@ -75,3 +88,15 @@ def handle_multiple_group_ids(func: F) -> F:
         return await func(self, *args, **kwargs)
     
     return wrapper  # type: ignore
+
+
+def get_parameter_position(func: Callable, param_name: str) -> int | None:
+    """
+    Returns the positional index of a parameter in the function signature.
+    If the parameter is not found, returns None.
+    """
+    sig = inspect.signature(func)
+    for idx, (name, param) in enumerate(sig.parameters.items()):
+        if name == param_name:
+            return idx
+    return None

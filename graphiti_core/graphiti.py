@@ -447,6 +447,7 @@ class Graphiti:
 
             if group_id is None:
                 # if group_id is None, use the default group id by the provider
+                # and the preset database name will be used
                 group_id = self.driver.default_group_id
             else:
                 validate_group_id(group_id)
