@@ -143,6 +143,33 @@ class Node(BaseModel, ABC):
                 )
 
     @classmethod
+    async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
+        if driver.provider == GraphProvider.FALKORDB:
+            for label in ['Entity', 'Episodic', 'Community']:
+                await driver.execute_query(
+                    f"""
+                       MATCH (n:{label})
+                       WHERE n.uuid IN $uuids
+                       DETACH DELETE n
+                       """,
+                    uuids=uuids,
+                )
+        else:
+            async with driver.session() as session:
+                await session.run(
+                    """
+                    MATCH (n:Entity|Episodic|Community)
+                    WHERE n.uuid IN $uuids
+                    CALL {
+                        WITH n
+                        DETACH DELETE n
+                    } IN TRANSACTIONS OF $batch_size ROWS
+                    """,
+                    uuids=uuids,
+                    batch_size=batch_size,
+                )
+
+    @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
 
     @classmethod
