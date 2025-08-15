@@ -69,7 +69,7 @@ class Edge(BaseModel, ABC):
         result = await driver.execute_query(
             """
             MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER]->(m)
-            WHERE e.uuid IN uuids
+            WHERE e.uuid IN $uuids
             DELETE e
             """,
             uuida=uuids,
