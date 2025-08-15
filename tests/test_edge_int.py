@@ -22,11 +22,10 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder.openai import OpenAIEmbedder
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
-from tests.helpers_test import drivers, get_driver
+from tests.helpers_test import drivers, get_driver, get_edge_count, get_node_count
 
 pytestmark = pytest.mark.integration
 
@@ -79,10 +78,10 @@ async def test_episodic_edge(driver):
         entity_edges=[],
         group_id=group_id,
     )
-    node_count = await get_node_count(graph_driver, episode_node.uuid)
+    node_count = await get_node_count(graph_driver, [episode_node.uuid])
     assert node_count == 0
     await episode_node.save(graph_driver)
-    node_count = await get_node_count(graph_driver, episode_node.uuid)
+    node_count = await get_node_count(graph_driver, [episode_node.uuid])
     assert node_count == 1
 
     # Create entity node
@@ -94,10 +93,10 @@ async def test_episodic_edge(driver):
         group_id=group_id,
     )
     await alice_node.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 1
 
     # Create episodic to entity edge
@@ -107,10 +106,10 @@ async def test_episodic_edge(driver):
         created_at=now,
         group_id=group_id,
     )
-    edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [episodic_edge.uuid])
     assert edge_count == 0
     await episodic_edge.save(graph_driver)
-    edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [episodic_edge.uuid])
     assert edge_count == 1
 
     # Get edge by uuid
@@ -139,23 +138,31 @@ async def test_episodic_edge(driver):
     assert retrieved[0].created_at == now
     assert retrieved[0].group_id == group_id
 
+    # Get episodic node by entity node uuid
+    retrieved = await EpisodicNode.get_by_entity_node_uuid(graph_driver, alice_node.uuid)
+    assert len(retrieved) == 1
+    assert retrieved[0].uuid == episode_node.uuid
+    assert retrieved[0].name == 'test_episode'
+    assert retrieved[0].created_at == now
+    assert retrieved[0].group_id == group_id
+
     # Delete edge by uuid
     await episodic_edge.delete(graph_driver)
-    edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [episodic_edge.uuid])
     assert edge_count == 0
 
     # Delete edge by uuids
     await episodic_edge.save(graph_driver)
     await episodic_edge.delete_by_uuids(graph_driver, [episodic_edge.uuid])
-    edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [episodic_edge.uuid])
     assert edge_count == 0
 
     # Cleanup nodes
     await episode_node.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, episode_node.uuid)
+    node_count = await get_node_count(graph_driver, [episode_node.uuid])
     assert node_count == 0
     await alice_node.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
 
     await graph_driver.close()
@@ -181,10 +188,10 @@ async def test_entity_edge(driver):
         group_id=group_id,
     )
     await alice_node.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 1
 
     # Create entity node
@@ -192,10 +199,10 @@ async def test_entity_edge(driver):
         name='Bob', labels=[], created_at=now, summary='Bob summary', group_id=group_id
     )
     await bob_node.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, bob_node.uuid)
+    node_count = await get_node_count(graph_driver, [bob_node.uuid])
     assert node_count == 0
     await bob_node.save(graph_driver)
-    node_count = await get_node_count(graph_driver, bob_node.uuid)
+    node_count = await get_node_count(graph_driver, [bob_node.uuid])
     assert node_count == 1
 
     # Create entity to entity edge
@@ -212,10 +219,10 @@ async def test_entity_edge(driver):
         group_id=group_id,
     )
     edge_embedding = await entity_edge.generate_embedding(embedder)
-    edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 0
     await entity_edge.save(graph_driver)
-    edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 1
 
     # Get edge by uuid
@@ -253,26 +260,27 @@ async def test_entity_edge(driver):
     assert retrieved[0].created_at == now
     assert retrieved[0].group_id == group_id
 
+    # Get fact embedding
     await entity_edge.load_fact_embedding(graph_driver)
     assert np.allclose(entity_edge.fact_embedding, edge_embedding)
 
     # Delete edge by uuid
     await entity_edge.delete(graph_driver)
-    edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 0
 
     # Delete edge by uuids
     await entity_edge.save(graph_driver)
     await entity_edge.delete_by_uuids(graph_driver, [entity_edge.uuid])
-    edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 0
 
     # Cleanup nodes
     await alice_node.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await bob_node.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, bob_node.uuid)
+    node_count = await get_node_count(graph_driver, [bob_node.uuid])
     assert node_count == 0
 
     await graph_driver.close()
@@ -296,10 +304,10 @@ async def test_community_edge(driver):
         summary='Community A summary',
     )
     await community_node_1.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, community_node_1.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_1.uuid])
     assert node_count == 0
     await community_node_1.save(graph_driver)
-    node_count = await get_node_count(graph_driver, community_node_1.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_1.uuid])
     assert node_count == 1
 
     # Create community node
@@ -309,10 +317,10 @@ async def test_community_edge(driver):
         summary='Community B summary',
     )
     await community_node_2.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, community_node_2.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_2.uuid])
     assert node_count == 0
     await community_node_2.save(graph_driver)
-    node_count = await get_node_count(graph_driver, community_node_2.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_2.uuid])
     assert node_count == 1
 
     # Create entity node
@@ -320,10 +328,10 @@ async def test_community_edge(driver):
         name='Alice', labels=[], created_at=now, summary='Alice summary', group_id=group_id
     )
     await alice_node.generate_name_embedding(embedder)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 1
 
     # Create community to community edge
@@ -333,10 +341,10 @@ async def test_community_edge(driver):
         created_at=now,
         group_id=group_id,
     )
-    edge_count = await get_edge_count(graph_driver, community_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [community_edge.uuid])
     assert edge_count == 0
     await community_edge.save(graph_driver)
-    edge_count = await get_edge_count(graph_driver, community_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [community_edge.uuid])
     assert edge_count == 1
 
     # Get edge by uuid
@@ -367,49 +375,24 @@ async def test_community_edge(driver):
 
     # Delete edge by uuid
     await community_edge.delete(graph_driver)
-    edge_count = await get_edge_count(graph_driver, community_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [community_edge.uuid])
     assert edge_count == 0
 
     # Delete edge by uuids
     await community_edge.save(graph_driver)
     await community_edge.delete_by_uuids(graph_driver, [community_edge.uuid])
-    edge_count = await get_edge_count(graph_driver, community_edge.uuid)
+    edge_count = await get_edge_count(graph_driver, [community_edge.uuid])
     assert edge_count == 0
 
     # Cleanup nodes
     await alice_node.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, alice_node.uuid)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await community_node_1.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, community_node_1.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_1.uuid])
     assert node_count == 0
     await community_node_2.delete(graph_driver)
-    node_count = await get_node_count(graph_driver, community_node_2.uuid)
+    node_count = await get_node_count(graph_driver, [community_node_2.uuid])
     assert node_count == 0
 
     await graph_driver.close()
-
-
-async def get_node_count(driver: GraphDriver, uuid: str):
-    results, _, _ = await driver.execute_query(
-        """
-        MATCH (n {uuid: $uuid})
-        RETURN COUNT(n) as count
-        """,
-        uuid=uuid,
-    )
-    return int(results[0]['count'])
-
-
-async def get_edge_count(driver: GraphDriver, uuid: str):
-    results, _, _ = await driver.execute_query(
-        """
-        MATCH (n)-[e {uuid: $uuid}]->(m)
-        RETURN COUNT(e) as count
-        UNION ALL
-        MATCH (n)-[:RELATES_TO]->(e {uuid: $uuid})-[:RELATES_TO]->(m)
-        RETURN COUNT(e) as count
-        """,
-        uuid=uuid,
-    )
-    return sum(int(result['count']) for result in results)

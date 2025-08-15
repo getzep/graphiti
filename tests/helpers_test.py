@@ -100,5 +100,33 @@ def test_lucene_sanitize():
         assert assert_result == result
 
 
+async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
+    results, _, _ = await driver.execute_query(
+        """
+        MATCH (n)
+        WHERE n.uuid IN $uuids
+        RETURN COUNT(n) as count
+        """,
+        uuids=uuids,
+    )
+    return int(results[0]['count'])
+
+
+async def get_edge_count(driver: GraphDriver, uuids: list[str]) -> int:
+    results, _, _ = await driver.execute_query(
+        """
+        MATCH (n)-[e]->(m)
+        WHERE e.uuid IN $uuids
+        RETURN COUNT(e) as count
+        UNION ALL
+        MATCH (n)-[:RELATES_TO]->(e)-[:RELATES_TO]->(m)
+        WHERE e.uuid IN $uuids
+        RETURN COUNT(e) as count
+        """,
+        uuids=uuids,
+    )
+    return sum(int(result['count']) for result in results)
+
+
 if __name__ == '__main__':
     pytest.main([__file__])

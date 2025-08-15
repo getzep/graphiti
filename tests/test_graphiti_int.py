@@ -54,7 +54,6 @@ def setup_logging():
 @pytest.mark.parametrize(
     'driver',
     drivers,
-    ids=drivers,
 )
 async def test_graphiti_init(driver):
     logger = setup_logging()

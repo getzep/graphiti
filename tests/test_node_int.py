@@ -20,14 +20,13 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
     EpisodeType,
     EpisodicNode,
 )
-from tests.helpers_test import drivers, get_driver
+from tests.helpers_test import drivers, get_driver, get_node_count
 
 group_id = f'test_group_{str(uuid4())}'
 
@@ -78,10 +77,10 @@ async def test_entity_node(sample_entity_node, driver):
     uuid = sample_entity_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
     await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
@@ -103,28 +102,29 @@ async def test_entity_node(sample_entity_node, driver):
     assert retrieved[0].name == 'Test Entity'
     assert retrieved[0].group_id == group_id
 
+    # Get name embedding
     await sample_entity_node.load_name_embedding(driver)
     assert np.allclose(sample_entity_node.name_embedding, [0.5] * 1024)
 
     # Delete node by uuid
     await sample_entity_node.delete(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
     await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_entity_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
     await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_entity_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     await driver.close()
@@ -140,10 +140,10 @@ async def test_community_node(sample_community_node, driver):
     uuid = sample_community_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
     await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
@@ -167,25 +167,29 @@ async def test_community_node(sample_community_node, driver):
     assert retrieved[0].name == 'Community A'
     assert retrieved[0].group_id == group_id
 
+    # Get name embedding
+    await sample_community_node.load_name_embedding(driver)
+    assert np.allclose(sample_community_node.name_embedding, [0.5] * 1024)
+
     # Delete node by uuid
     await sample_community_node.delete(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
     await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_community_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
     await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_community_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     await driver.close()
@@ -201,10 +205,10 @@ async def test_episodic_node(sample_episodic_node, driver):
     uuid = sample_episodic_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
     await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
@@ -240,34 +244,23 @@ async def test_episodic_node(sample_episodic_node, driver):
 
     # Delete node by uuid
     await sample_episodic_node.delete(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
     await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_episodic_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
     await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 1
     await sample_episodic_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, uuid)
+    node_count = await get_node_count(driver, [uuid])
     assert node_count == 0
 
     await driver.close()
-
-
-async def get_node_count(driver: GraphDriver, uuid: str):
-    result, _, _ = await driver.execute_query(
-        """
-        MATCH (n {uuid: $uuid})
-        RETURN COUNT(n) as count
-        """,
-        uuid=uuid,
-    )
-    return int(result[0]['count'])
