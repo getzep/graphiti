@@ -84,16 +84,19 @@ async def test_entity_node(sample_entity_node, driver):
     node_count = await get_node_count(driver, uuid)
     assert node_count == 1
 
+    # Get node by uuid
     retrieved = await EntityNode.get_by_uuid(driver, sample_entity_node.uuid)
     assert retrieved.uuid == sample_entity_node.uuid
     assert retrieved.name == 'Test Entity'
     assert retrieved.group_id == group_id
 
+    # Get node by uuids
     retrieved = await EntityNode.get_by_uuids(driver, [sample_entity_node.uuid])
     assert retrieved[0].uuid == sample_entity_node.uuid
     assert retrieved[0].name == 'Test Entity'
     assert retrieved[0].group_id == group_id
 
+    # Get node by group ids
     retrieved = await EntityNode.get_by_group_ids(driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_entity_node.uuid
@@ -143,18 +146,21 @@ async def test_community_node(sample_community_node, driver):
     node_count = await get_node_count(driver, uuid)
     assert node_count == 1
 
+    # Get node by uuid
     retrieved = await CommunityNode.get_by_uuid(driver, sample_community_node.uuid)
     assert retrieved.uuid == sample_community_node.uuid
     assert retrieved.name == 'Community A'
     assert retrieved.group_id == group_id
     assert retrieved.summary == 'Community summary'
 
+    # Get node by uuids
     retrieved = await CommunityNode.get_by_uuids(driver, [sample_community_node.uuid])
     assert retrieved[0].uuid == sample_community_node.uuid
     assert retrieved[0].name == 'Community A'
     assert retrieved[0].group_id == group_id
     assert retrieved[0].summary == 'Community summary'
 
+    # Get node by group ids
     retrieved = await CommunityNode.get_by_group_ids(driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_community_node.uuid
@@ -201,6 +207,7 @@ async def test_episodic_node(sample_episodic_node, driver):
     node_count = await get_node_count(driver, uuid)
     assert node_count == 1
 
+    # Get node by uuid
     retrieved = await EpisodicNode.get_by_uuid(driver, sample_episodic_node.uuid)
     assert retrieved.uuid == sample_episodic_node.uuid
     assert retrieved.name == 'Episode 1'
@@ -210,6 +217,7 @@ async def test_episodic_node(sample_episodic_node, driver):
     assert retrieved.content == 'Some content here'
     assert retrieved.valid_at == sample_episodic_node.valid_at
 
+    # Get node by uuids
     retrieved = await EpisodicNode.get_by_uuids(driver, [sample_episodic_node.uuid])
     assert retrieved[0].uuid == sample_episodic_node.uuid
     assert retrieved[0].name == 'Episode 1'
@@ -219,6 +227,7 @@ async def test_episodic_node(sample_episodic_node, driver):
     assert retrieved[0].content == 'Some content here'
     assert retrieved[0].valid_at == sample_episodic_node.valid_at
 
+    # Get node by group ids
     retrieved = await EpisodicNode.get_by_group_ids(driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_episodic_node.uuid
