@@ -108,6 +108,14 @@ async def test_entity_node(sample_entity_node, driver):
     node_count = await get_node_count(driver, uuid)
     assert node_count == 0
 
+    # Delete node by uuids
+    await sample_entity_node.save(driver)
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 1
+    await sample_entity_node.delete_by_uuids(driver, [uuid])
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 0
+
     # Delete node by group id
     await sample_entity_node.save(driver)
     node_count = await get_node_count(driver, uuid)
@@ -155,6 +163,14 @@ async def test_community_node(sample_community_node, driver):
 
     # Delete node by uuid
     await sample_community_node.delete(driver)
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 0
+
+    # Delete node by uuids
+    await sample_community_node.save(driver)
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 1
+    await sample_community_node.delete_by_uuids(driver, [uuid])
     node_count = await get_node_count(driver, uuid)
     assert node_count == 0
 
@@ -215,6 +231,14 @@ async def test_episodic_node(sample_episodic_node, driver):
 
     # Delete node by uuid
     await sample_episodic_node.delete(driver)
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 0
+
+    # Delete node by uuids
+    await sample_episodic_node.save(driver)
+    node_count = await get_node_count(driver, uuid)
+    assert node_count == 1
+    await sample_episodic_node.delete_by_uuids(driver, [uuid])
     node_count = await get_node_count(driver, uuid)
     assert node_count == 0
 

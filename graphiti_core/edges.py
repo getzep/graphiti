@@ -99,7 +99,7 @@ class Edge(BaseModel, ABC):
                 uuids=uuids,
             )
         else:
-            result = await driver.execute_query(
+            await driver.execute_query(
                 """
                 MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER]->(m)
                 WHERE e.uuid IN $uuids
@@ -109,8 +109,6 @@ class Edge(BaseModel, ABC):
             )
 
         logger.debug(f'Deleted Edges: {uuids}')
-
-        return result
 
     def __hash__(self):
         return hash(self.uuid)

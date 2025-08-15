@@ -140,6 +140,11 @@ async def test_episodic_edge(driver):
     edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
     assert edge_count == 0
 
+    await episodic_edge.save(graph_driver)
+    await episodic_edge.delete_by_uuids(graph_driver, [episodic_edge.uuid])
+    edge_count = await get_edge_count(graph_driver, episodic_edge.uuid)
+    assert edge_count == 0
+
     await episode_node.delete(graph_driver)
     node_count = await get_node_count(graph_driver, episode_node.uuid)
     assert node_count == 0
@@ -246,6 +251,11 @@ async def test_entity_edge(driver):
     edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
     assert edge_count == 0
 
+    await entity_edge.save(graph_driver)
+    await entity_edge.delete_by_uuids(graph_driver, [entity_edge.uuid])
+    edge_count = await get_edge_count(graph_driver, entity_edge.uuid)
+    assert edge_count == 0
+
     await alice_node.delete(graph_driver)
     node_count = await get_node_count(graph_driver, alice_node.uuid)
     assert node_count == 0
@@ -338,6 +348,11 @@ async def test_community_edge(driver):
     assert retrieved[0].group_id == group_id
 
     await community_edge.delete(graph_driver)
+    edge_count = await get_edge_count(graph_driver, community_edge.uuid)
+    assert edge_count == 0
+
+    await community_edge.save(graph_driver)
+    await community_edge.delete_by_uuids(graph_driver, [community_edge.uuid])
     edge_count = await get_edge_count(graph_driver, community_edge.uuid)
     assert edge_count == 0
 
