@@ -56,7 +56,7 @@ class Edge(BaseModel, ABC):
         if driver.provider == GraphProvider.KUZU:
             await driver.execute_query(
                 """
-                MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER {uuid: $uuid}]->(m)
+                MATCH (n)-[e:MENTIONS|HAS_MEMBER {uuid: $uuid}]->(m)
                 DELETE e
                 """,
                 uuid=self.uuid,
@@ -81,14 +81,32 @@ class Edge(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
-        result = await driver.execute_query(
-            """
-            MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER]->(m)
-            WHERE e.uuid IN $uuids
-            DELETE e
-            """,
-            uuids=uuids,
-        )
+        if driver.provider == GraphProvider.KUZU:
+            await driver.execute_query(
+                """
+                MATCH (n)-[e:MENTIONS|HAS_MEMBER]->(m)
+                WHERE e.uuid IN $uuids
+                DELETE e
+                """,
+                uuids=uuids,
+            )
+            await driver.execute_query(
+                """
+                MATCH (n)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m)
+                WHERE e.uuid IN $uuids
+                DETACH DELETE e
+                """,
+                uuids=uuids,
+            )
+        else:
+            result = await driver.execute_query(
+                """
+                MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER]->(m)
+                WHERE e.uuid IN $uuids
+                DELETE e
+                """,
+                uuids=uuids,
+            )
 
         logger.debug(f'Deleted Edges: {uuids}')
 

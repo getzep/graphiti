@@ -136,7 +136,7 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
-        if driver.provider == GraphProvider.FALKORDB:
+        if driver.provider == GraphProvider.FALKORDB or driver.provider == GraphProvider.KUZU:
             for label in ['Entity', 'Episodic', 'Community']:
                 await driver.execute_query(
                     f"""
