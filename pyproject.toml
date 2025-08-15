@@ -52,6 +52,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
+    "mcp>=1.9.4",
 ]
 
 [build-system]
