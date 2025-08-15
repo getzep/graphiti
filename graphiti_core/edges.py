@@ -72,7 +72,7 @@ class Edge(BaseModel, ABC):
             WHERE e.uuid IN $uuids
             DELETE e
             """,
-            uuida=uuids,
+            uuids=uuids,
         )
 
         logger.debug(f'Deleted Edgea: {uuids}')
