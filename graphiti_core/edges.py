@@ -75,7 +75,7 @@ class Edge(BaseModel, ABC):
             uuids=uuids,
         )
 
-        logger.debug(f'Deleted Edgea: {uuids}')
+        logger.debug(f'Deleted Edges: {uuids}')
 
         return result
 
