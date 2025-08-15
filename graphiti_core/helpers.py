@@ -59,47 +59,9 @@ def get_default_group_id(provider: GraphProvider) -> str:
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
     if provider == GraphProvider.FALKORDB:
-        return '_'
+        return '\\_'
     else:
         return ''
-
-
-def lucene_sanitize(query: str) -> str:
-    # Escape special characters from a query before passing into Lucene
-    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
-    escape_map = str.maketrans(
-        {
-            '+': r'\+',
-            '-': r'\-',
-            '&': r'\&',
-            '|': r'\|',
-            '!': r'\!',
-            '(': r'\(',
-            ')': r'\)',
-            '{': r'\{',
-            '}': r'\}',
-            '[': r'\[',
-            ']': r'\]',
-            '^': r'\^',
-            '"': r'\"',
-            '~': r'\~',
-            '*': r'\*',
-            '?': r'\?',
-            ':': r'\:',
-            '\\': r'\\',
-            '/': r'\/',
-            'O': r'\O',
-            'R': r'\R',
-            'N': r'\N',
-            'T': r'\T',
-            'A': r'\A',
-            'D': r'\D',
-        }
-    )
-
-    sanitized = query.translate(escape_map)
-    return sanitized
-
 
 def normalize_l2(embedding: list[float]) -> NDArray:
     embedding_array = np.array(embedding)
@@ -121,7 +83,7 @@ async def semaphore_gather(
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
 
 
-def validate_group_id(group_id: str) -> bool:
+def validate_group_id(group_id: str | None) -> bool:
     """
     Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
 
