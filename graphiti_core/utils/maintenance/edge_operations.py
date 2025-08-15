@@ -207,7 +207,7 @@ async def extract_edges(
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
-        target_node_uuid = nodes[edge_data.target_entity_id].uuid
+        target_node_uuid = nodes[target_node_idx].uuid
 
         if valid_at:
             try:

@@ -152,9 +152,17 @@ async def extract_nodes(
     # Convert the extracted data into EntityNode objects
     extracted_nodes = []
     for extracted_entity in filtered_extracted_entities:
-        entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
-            'entity_type_name'
-        )
+        # Add bounds checking to prevent "list index out of range" error
+        if extracted_entity.entity_type_id >= len(entity_types_context):
+            logger.warning(
+                f"Entity type ID {extracted_entity.entity_type_id} is out of range "
+                f"(max: {len(entity_types_context) - 1}). Using default 'Entity' type for '{extracted_entity.name}'"
+            )
+            entity_type_name = 'Entity'
+        else:
+            entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
+                'entity_type_name'
+            )
 
         # Check if this entity type should be excluded
         if excluded_entity_types and entity_type_name in excluded_entity_types:
@@ -264,6 +272,14 @@ async def resolve_extracted_nodes(
     for resolution in node_resolutions:
         resolution_id: int = resolution.id
         duplicate_idx: int = resolution.duplicate_idx
+
+        # Add bounds checking for extracted_nodes
+        if resolution_id >= len(extracted_nodes):
+            logger.warning(
+                f"Resolution ID {resolution_id} is out of range for extracted_nodes "
+                f"(max: {len(extracted_nodes) - 1}). Skipping this resolution."
+            )
+            continue
 
         extracted_node = extracted_nodes[resolution_id]
 
