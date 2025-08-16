@@ -33,10 +33,10 @@ async def get_community_clusters(
     if group_ids is None:
         group_id_values, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN
-            collect(DISTINCT n.group_id) AS group_ids
-        """,
+            MATCH (n:Entity WHERE n.group_id IS NOT NULL)
+            RETURN
+                collect(DISTINCT n.group_id) AS group_ids
+            """,
         )
 
         group_ids = group_id_values[0]['group_ids'] if group_id_values else []
@@ -240,9 +240,9 @@ async def build_communities(
 async def remove_communities(driver: GraphDriver):
     await driver.execute_query(
         """
-    MATCH (c:Community)
-    DETACH DELETE c
-    """,
+        MATCH (c:Community)
+        DETACH DELETE c
+        """
     )
 
 
@@ -252,14 +252,14 @@ async def determine_entity_community(
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
         """
-    MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid AS uuid,
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at,
-        c.summary AS summary
-    """,
+        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
+        RETURN
+            c.uuid AS uuid,
+            c.name AS name,
+            c.group_id AS group_id,
+            c.created_at AS created_at,
+            c.summary AS summary
+        """,
         entity_uuid=entity.uuid,
     )
 
@@ -269,14 +269,14 @@ async def determine_entity_community(
     # If the node has no community, add it to the mode community of surrounding entities
     records, _, _ = await driver.execute_query(
         """
-    MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid AS uuid,
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at,
-        c.summary AS summary
-    """,
+        MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+        RETURN
+            c.uuid AS uuid,
+            c.name AS name,
+            c.group_id AS group_id,
+            c.created_at AS created_at,
+            c.summary AS summary
+        """,
         entity_uuid=entity.uuid,
     )
 
