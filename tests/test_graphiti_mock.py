@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -109,7 +109,9 @@ def mock_cross_encoder_client():
     'driver',
     drivers,
 )
-async def test_graphiti(driver, mock_llm_client, mock_embedder, mock_cross_encoder_client):
+async def test_graphiti_remove_episode(
+    driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
     graph_driver = get_driver(driver)
     graphiti = Graphiti(
         graph_driver=graph_driver,
@@ -210,5 +212,82 @@ async def test_graphiti(driver, mock_llm_client, mock_embedder, mock_cross_encod
     assert node_count == 0
     edge_count = await get_edge_count(graph_driver, edge_ids)
     assert edge_count == 0
+
+    await graphiti.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+)
+async def test_graphiti_retrieve_episodes(
+    driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graph_driver = get_driver(driver)
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+    valid_at_1 = now - timedelta(days=2)
+    valid_at_2 = now - timedelta(days=4)
+    valid_at_3 = now - timedelta(days=6)
+
+    # Create episodic nodes
+    episode_node_1 = EpisodicNode(
+        name='test_episode_1',
+        labels=[],
+        created_at=now,
+        valid_at=valid_at_1,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Test message 1',
+        entity_edges=[],
+        group_id=group_id,
+    )
+    episode_node_2 = EpisodicNode(
+        name='test_episode_2',
+        labels=[],
+        created_at=now,
+        valid_at=valid_at_2,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Test message 2',
+        entity_edges=[],
+        group_id=group_id,
+    )
+    episode_node_3 = EpisodicNode(
+        name='test_episode_3',
+        labels=[],
+        created_at=now,
+        valid_at=valid_at_3,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Test message 3',
+        entity_edges=[],
+        group_id=group_id,
+    )
+
+    # Save the nodes
+    await episode_node_1.save(graph_driver)
+    await episode_node_2.save(graph_driver)
+    await episode_node_3.save(graph_driver)
+
+    node_ids = [episode_node_1.uuid, episode_node_2.uuid, episode_node_3.uuid]
+    node_count = await get_node_count(graph_driver, node_ids)
+    assert node_count == 3
+
+    # Retrieve episodes
+    query_time = now - timedelta(days=3)
+    episodes = await graphiti.retrieve_episodes(query_time, last_n=5, group_ids=[group_id], source=EpisodeType.message)
+    assert len(episodes) == 2
+    assert episodes[0].uuid == episode_node_3.uuid
+    assert episodes[1].uuid == episode_node_2.uuid
 
     await graphiti.close()
