@@ -126,16 +126,6 @@ class KuzuDriver(GraphDriver):
             dict_results = list(results.rows_as_dict())
         return dict_results, None, None  # type: ignore
 
-    async def print_graph(self):
-        res = await self.execute_query('MATCH (n) RETURN n')
-        print('Nodes:')
-        for r in res:
-            print('  ', r)
-        res = await self.execute_query('MATCH (n)-[r]->(m) RETURN r')
-        print('Edges:')
-        for r in res:
-            print('  ', r)
-
     def session(self, _database: str | None = None) -> GraphDriverSession:
         return KuzuDriverSession(self)
 
