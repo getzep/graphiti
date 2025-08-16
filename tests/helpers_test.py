@@ -19,18 +19,17 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.helpers import lucene_sanitize
 
 load_dotenv()
 
-HAS_NEO4J = False
-HAS_FALKORDB = False
+drivers: list[GraphProvider] = []
 if os.getenv('DISABLE_NEO4J') is None:
     try:
         from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
-        HAS_NEO4J = True
+        drivers.append(GraphProvider.NEO4J)
     except ImportError:
         pass
 
@@ -38,9 +37,18 @@ if os.getenv('DISABLE_FALKORDB') is None:
     try:
         from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-        HAS_FALKORDB = True
+        drivers.append(GraphProvider.FALKORDB)
     except ImportError:
         pass
+
+if os.getenv('DISABLE_KUZU') is None:
+    try:
+        from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+        drivers.append(GraphProvider.KUZU)
+    except ImportError:
+        raise
+
 
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
@@ -51,30 +59,30 @@ FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
 
+KUZU_DB = os.getenv('KUZU_DB', ':memory:')
 
-def get_driver(driver_name: str) -> GraphDriver:
-    if driver_name == 'neo4j':
+
+def get_driver(provider: GraphProvider) -> GraphDriver:
+    if provider == GraphProvider.NEO4J:
         return Neo4jDriver(
             uri=NEO4J_URI,
             user=NEO4J_USER,
             password=NEO4J_PASSWORD,
         )
-    elif driver_name == 'falkordb':
+    elif provider == GraphProvider.FALKORDB:
         return FalkorDriver(
             host=FALKORDB_HOST,
             port=int(FALKORDB_PORT),
             username=FALKORDB_USER,
             password=FALKORDB_PASSWORD,
         )
+    elif provider == GraphProvider.KUZU:
+        driver = KuzuDriver(
+            db=KUZU_DB,
+        )
+        return driver
     else:
-        raise ValueError(f'Driver {driver_name} not available')
-
-
-drivers: list[str] = []
-if HAS_NEO4J:
-    drivers.append('neo4j')
-if HAS_FALKORDB:
-    drivers.append('falkordb')
+        raise ValueError(f'Driver {provider} not available')
 
 
 def test_lucene_sanitize():
@@ -90,6 +98,34 @@ def test_lucene_sanitize():
     for query, assert_result in queries:
         result = lucene_sanitize(query)
         assert assert_result == result
+
+
+async def get_node_count(driver: GraphDriver, uuids: list[str]) -> int:
+    results, _, _ = await driver.execute_query(
+        """
+        MATCH (n)
+        WHERE n.uuid IN $uuids
+        RETURN COUNT(n) as count
+        """,
+        uuids=uuids,
+    )
+    return int(results[0]['count'])
+
+
+async def get_edge_count(driver: GraphDriver, uuids: list[str]) -> int:
+    results, _, _ = await driver.execute_query(
+        """
+        MATCH (n)-[e]->(m)
+        WHERE e.uuid IN $uuids
+        RETURN COUNT(e) as count
+        UNION ALL
+        MATCH (n)-[:RELATES_TO]->(e)-[:RELATES_TO]->(m)
+        WHERE e.uuid IN $uuids
+        RETURN COUNT(e) as count
+        """,
+        uuids=uuids,
+    )
+    return sum(int(result['count']) for result in results)
 
 
 if __name__ == '__main__':
