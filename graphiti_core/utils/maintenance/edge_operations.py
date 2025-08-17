@@ -507,7 +507,7 @@ async def filter_existing_duplicate_of_edges(
     if len(duplicates_node_tuples) == 0:
         return []
 
-    query: LiteralString = """
+    query = """
         UNWIND $duplicate_node_uuids AS duplicate_tuple
         MATCH (n:Entity {uuid: duplicate_tuple.src})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple.dst})
         RETURN DISTINCT
@@ -515,7 +515,7 @@ async def filter_existing_duplicate_of_edges(
             m.uuid AS target_uuid
     """
     if driver.provider == GraphProvider.KUZU:
-        query: LiteralString = """
+        query = """
             UNWIND $duplicate_node_uuids AS duplicate
             MATCH (n:Entity {uuid: duplicate.src})-[:RELATES_TO]->(e:RelatesToNode_ {name: 'IS_DUPLICATE_OF'})-[:RELATES_TO]->(m:Entity {uuid: duplicate.dst})
             RETURN DISTINCT

@@ -22,11 +22,13 @@ import numpy as np
 import pytest
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
-from graphiti_core.edges import EntityEdge, EpisodicEdge
+from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.utils.maintenance.community_operations import determine_entity_community
+from graphiti_core.utils.maintenance.edge_operations import filter_existing_duplicate_of_edges
 from tests.helpers_test import drivers, get_driver, get_edge_count, get_node_count
 
 pytest_plugins = ('pytest_asyncio',)
@@ -35,9 +37,8 @@ pytest_plugins = ('pytest_asyncio',)
 group_id = f'test_group_{str(uuid4())}'
 embedding_dim = 384
 embeddings = {
-    'Alice': np.random.uniform(0.0, 0.9, embedding_dim).tolist(),
-    'Bob': np.random.uniform(0.0, 0.9, embedding_dim).tolist(),
-    'Alice likes Bob': np.random.uniform(0.0, 0.9, embedding_dim).tolist(),
+    key: np.random.uniform(0.0, 0.9, embedding_dim).tolist()
+    for key in ['Alice', 'Bob', 'Alice likes Bob', 'test_entity_1', 'test_entity_2', 'test_entity_3', 'test_entity_4', 'test_entity_1 is a duplicate of test_entity_2', 'test_entity_3 is a duplicate of test_entity_4', 'test_entity_1 relates to test_entity_4', 'test_entity_2 relates to test_entity_4', 'test_entity_3 relates to test_entity_4', 'test_community_1', 'test_community_2']
 }
 
 
@@ -290,4 +291,237 @@ async def test_graphiti_retrieve_episodes(
     assert episodes[0].uuid == episode_node_3.uuid
     assert episodes[1].uuid == episode_node_2.uuid
 
+    # Clean up
+    await EpisodicNode.delete_by_uuids(graph_driver, node_ids)
+
     await graphiti.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+)
+async def test_filter_existing_duplicate_of_edges(
+    driver, mock_embedder
+):
+    graph_driver = get_driver(driver)
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+    entity_node_3 = EntityNode(
+        name='test_entity_3',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+    entity_node_4 = EntityNode(
+        name='test_entity_4',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_4.generate_name_embedding(mock_embedder)
+
+    # Save the nodes
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_node_3.save(graph_driver)
+    await entity_node_4.save(graph_driver)
+
+    node_ids = [entity_node_1.uuid, entity_node_2.uuid, entity_node_3.uuid, entity_node_4.uuid]
+    node_count = await get_node_count(graph_driver, node_ids)
+    assert node_count == 4
+
+    # Create duplicate entity edge
+    entity_edge = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        name='IS_DUPLICATE_OF',
+        fact='test_entity_1 is a duplicate of test_entity_2',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge.generate_embedding(mock_embedder)
+    await entity_edge.save(graph_driver)
+
+    # Filter duplicate entity edges
+    duplicate_node_tuples = [
+        (entity_node_1, entity_node_2),
+        (entity_node_3, entity_node_4),
+    ]
+    filtered_duplicate_node_tuples = await filter_existing_duplicate_of_edges(graph_driver, duplicate_node_tuples)
+    assert len(filtered_duplicate_node_tuples) == 1
+    assert filtered_duplicate_node_tuples[0] == (entity_node_3, entity_node_4)
+
+    # Clean up
+    await EntityNode.delete_by_uuids(graph_driver, node_ids)
+    await EntityEdge.delete_by_uuids(graph_driver, [entity_edge.uuid])
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'driver',
+    drivers,
+)
+async def test_determine_entity_community(
+    driver, mock_embedder
+):
+    graph_driver = get_driver(driver)
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+    entity_node_3 = EntityNode(
+        name='test_entity_3',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+    entity_node_4 = EntityNode(
+        name='test_entity_4',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_4.generate_name_embedding(mock_embedder)
+
+    # Create entity edges
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_4.uuid,
+        name='RELATES_TO',
+        fact='test_entity_1 relates to test_entity_4',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_1.generate_embedding(mock_embedder)
+    entity_edge_2 = EntityEdge(
+        source_node_uuid=entity_node_2.uuid,
+        target_node_uuid=entity_node_4.uuid,
+        name='RELATES_TO',
+        fact='test_entity_2 relates to test_entity_4',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_2.generate_embedding(mock_embedder)
+    entity_edge_3 = EntityEdge(
+        source_node_uuid=entity_node_3.uuid,
+        target_node_uuid=entity_node_4.uuid,
+        name='RELATES_TO',
+        fact='test_entity_3 relates to test_entity_4',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_3.generate_embedding(mock_embedder)
+
+    # Create community nodes
+    community_node_1 = CommunityNode(
+        name='test_community_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await community_node_1.generate_name_embedding(mock_embedder)
+    community_node_2 = CommunityNode(
+        name='test_community_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await community_node_2.generate_name_embedding(mock_embedder)
+
+    # Create community to entity edges
+    community_edge_1 = CommunityEdge(
+        source_node_uuid=community_node_1.uuid,
+        target_node_uuid=entity_node_1.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    community_edge_2 = CommunityEdge(
+        source_node_uuid=community_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    community_edge_3 = CommunityEdge(
+        source_node_uuid=community_node_2.uuid,
+        target_node_uuid=entity_node_3.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_node_3.save(graph_driver)
+    await entity_node_4.save(graph_driver)
+    await community_node_1.save(graph_driver)
+    await community_node_2.save(graph_driver)
+
+    await entity_edge_1.save(graph_driver)
+    await entity_edge_2.save(graph_driver)
+    await entity_edge_3.save(graph_driver)
+    await community_edge_1.save(graph_driver)
+    await community_edge_2.save(graph_driver)
+    await community_edge_3.save(graph_driver)
+
+    node_ids = [entity_node_1.uuid, entity_node_2.uuid, entity_node_3.uuid, entity_node_4.uuid, community_node_1.uuid, community_node_2.uuid]
+    edge_ids = [entity_edge_1.uuid, entity_edge_2.uuid, entity_edge_3.uuid, community_edge_1.uuid, community_edge_2.uuid, community_edge_3.uuid]
+    node_count = await get_node_count(graph_driver, node_ids)
+    assert node_count == 6
+    edge_count = await get_edge_count(graph_driver, edge_ids)
+    assert edge_count == 6
+
+    # Determine entity community
+    community, is_new = await determine_entity_community(graph_driver, entity_node_4)
+    print(type(community))
+    print(community)
+    assert community.uuid == community_node_1.uuid
+    assert is_new
+
+    # Add entity to community edge
+    community_edge_4 = CommunityEdge(
+        source_node_uuid=community_node_1.uuid,
+        target_node_uuid=entity_node_4.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await community_edge_4.save(graph_driver)
+
+    # Determine entity community again
+    community, is_new = await determine_entity_community(graph_driver, entity_node_4)
+    print(type(community))
+    print(community)
+    assert community.uuid == community_node_1.uuid
+    assert not is_new
+
+    # Clean up
+    await EntityNode.delete_by_uuids(graph_driver, node_ids)
+    await EntityEdge.delete_by_uuids(graph_driver, edge_ids)
