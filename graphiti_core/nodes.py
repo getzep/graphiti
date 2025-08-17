@@ -475,7 +475,7 @@ class CommunityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community {uuid: $uuid})
+            MATCH (c:Community {uuid: $uuid})
             RETURN
             """
             + COMMUNITY_NODE_RETURN,
@@ -494,8 +494,8 @@ class CommunityNode(Node):
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)
-            WHERE n.uuid IN $uuids
+            MATCH (c:Community)
+            WHERE c.uuid IN $uuids
             RETURN
             """
             + COMMUNITY_NODE_RETURN,
@@ -515,13 +515,13 @@ class CommunityNode(Node):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ):
-        cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
+        cursor_query: LiteralString = 'AND c.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)
-            WHERE n.group_id IN $group_ids
+            MATCH (c:Community)
+            WHERE c.group_id IN $group_ids
             """
             + cursor_query
             + """
@@ -529,7 +529,7 @@ class CommunityNode(Node):
             """
             + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY n.uuid DESC
+            ORDER BY c.uuid DESC
             """
             + limit_query,
             group_ids=group_ids,

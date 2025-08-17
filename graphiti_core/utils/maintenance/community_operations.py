@@ -9,6 +9,7 @@ from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.models.nodes.node_db_queries import COMMUNITY_NODE_RETURN
 from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
@@ -53,7 +54,8 @@ async def get_community_clusters(
                 MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
                 """
             records, _, _ = await driver.execute_query(
-                match_query + """
+                match_query
+                + """
                 WITH count(e) AS count, m.uuid AS uuid
                 RETURN
                     uuid,
@@ -254,12 +256,8 @@ async def determine_entity_community(
         """
         MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
         RETURN
-            c.uuid AS uuid,
-            c.name AS name,
-            c.group_id AS group_id,
-            c.created_at AS created_at,
-            c.summary AS summary
-        """,
+        """
+        + COMMUNITY_NODE_RETURN,
         entity_uuid=entity.uuid,
     )
 
@@ -267,16 +265,19 @@ async def determine_entity_community(
         return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    records, _, _ = await driver.execute_query(
-        """
+    match_query = """
         MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+    """
+    if driver.provider == GraphProvider.KUZU:
+        match_query = """
+            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+        """
+    records, _, _ = await driver.execute_query(
+        match_query
+        + """
         RETURN
-            c.uuid AS uuid,
-            c.name AS name,
-            c.group_id AS group_id,
-            c.created_at AS created_at,
-            c.summary AS summary
-        """,
+        """
+        + COMMUNITY_NODE_RETURN,
         entity_uuid=entity.uuid,
     )
 

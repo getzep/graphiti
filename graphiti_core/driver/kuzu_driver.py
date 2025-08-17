@@ -75,8 +75,7 @@ SCHEMA_QUERIES = """
     );
     CREATE REL TABLE IF NOT EXISTS RELATES_TO(
         FROM Entity TO RelatesToNode_,
-        FROM RelatesToNode_ TO Entity,
-        ONE_ONE
+        FROM RelatesToNode_ TO Entity
     );
     CREATE REL TABLE IF NOT EXISTS HAS_MEMBER(
         FROM Community TO Entity,

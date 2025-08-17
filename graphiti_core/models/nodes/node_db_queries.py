@@ -201,10 +201,10 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
 
 
 COMMUNITY_NODE_RETURN = """
-    n.uuid AS uuid,
-    n.name AS name,
-    n.name_embedding AS name_embedding,
-    n.group_id AS group_id,
-    n.summary AS summary,
-    n.created_at AS created_at
+    c.uuid AS uuid,
+    c.name AS name,
+    c.name_embedding AS name_embedding,
+    c.group_id AS group_id,
+    c.summary AS summary,
+    c.created_at AS created_at
 """

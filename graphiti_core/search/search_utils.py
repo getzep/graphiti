@@ -136,7 +136,7 @@ async def get_communities_by_nodes(
 
     records, _, _ = await driver.execute_query(
         """
-        MATCH (n:Community)-[:HAS_MEMBER]->(m:Entity)
+        MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)
         WHERE m.uuid IN $uuids
         RETURN DISTINCT
         """
@@ -606,18 +606,18 @@ async def community_fulltext_search(
     filter_params: dict[str, Any] = {}
     group_filter_query: LiteralString = ''
     if group_ids is not None:
-        group_filter_query = 'WHERE n.group_id IN $group_ids'
+        group_filter_query = 'WHERE c.group_id IN $group_ids'
         filter_params['group_ids'] = group_ids
 
-    yield_query = 'YIELD node AS n, score'
+    yield_query = 'YIELD node AS c, score'
     if driver.provider == GraphProvider.KUZU:
-        yield_query = 'WITH node AS n, score'
+        yield_query = 'WITH node AS c, score'
 
     query = (
         get_nodes_query('community_name', '$query', limit=limit, provider=driver.provider)
         + yield_query
         + """
-        WITH n, score
+        WITH c, score
         """
         + group_filter_query
         + """
@@ -652,9 +652,9 @@ async def community_similarity_search(
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
-    group_filter_query: LiteralString = 'WHERE n.group_id IS NOT NULL'
+    group_filter_query: LiteralString = 'WHERE c.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += '\nAND n.group_id IN $group_ids'
+        group_filter_query += '\nAND c.group_id IN $group_ids'
         query_params['group_ids'] = group_ids
 
     search_vector_var = '$search_vector'
@@ -664,13 +664,13 @@ async def community_similarity_search(
     query = (
         RUNTIME_QUERY
         + """
-        MATCH (n:Community)
+        MATCH (c:Community)
         """
         + group_filter_query
         + """
-        WITH n,
+        WITH c,
         """
-        + get_vector_cosine_func_query('n.name_embedding', search_vector_var, driver.provider)
+        + get_vector_cosine_func_query('c.name_embedding', search_vector_var, driver.provider)
         + """ AS score
         WHERE score > $min_score
         RETURN
