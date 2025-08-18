@@ -224,7 +224,6 @@ async def edge_similarity_search(
     limit: int = RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityEdge]:
-    # vector similarity search over embedded facts
     match_query = """
         MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
     """
@@ -313,7 +312,7 @@ async def edge_bfs_search(
         UNWIND $bfs_origin_node_uuids AS origin_uuid
         MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
         UNWIND relationships(path) AS rel
-        MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+        MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]->(m:Entity)
         """
     ]
     if driver.provider == GraphProvider.KUZU:
@@ -325,7 +324,7 @@ async def edge_bfs_search(
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH path = (origin:Entity {{uuid: origin_uuid}})-[:RELATES_TO*1..{depth}]->(:RelatesToNode_)
             UNWIND nodes(path) AS relNode
-            MATCH (n:Entity)-[:RELATES_TO]-(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]-(m:Entity)
+            MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]->(m:Entity)
             """,
         ]
         if bfs_max_depth > 1:
@@ -334,7 +333,7 @@ async def edge_bfs_search(
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Episodic {{uuid: origin_uuid}})-[:MENTIONS]->(:Entity)-[:RELATES_TO*1..{depth}]->(:RelatesToNode_)
                 UNWIND nodes(path) AS relNode
-                MATCH (n:Entity)-[:RELATES_TO]-(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]-(m:Entity)
+                MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {{uuid: relNode.uuid}})-[:RELATES_TO]->(m:Entity)
             """)
 
     all_records = []
@@ -505,6 +504,11 @@ async def node_bfs_search(
     if driver.provider == GraphProvider.KUZU:
         depth = bfs_max_depth * 2
         match_queries = [
+            """
+            UNWIND $bfs_origin_node_uuids AS origin_uuid
+            MATCH (origin:Episodic {uuid: origin_uuid})-[:MENTIONS]->(n:Entity)
+            WHERE n.group_id = origin.group_id
+            """,
             f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH (origin:Entity {{uuid: origin_uuid}})-[:RELATES_TO*2..{depth}]->(n:Entity)
@@ -539,7 +543,7 @@ async def node_bfs_search(
         )
         all_records.extend(records)
 
-    nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
+    nodes = [get_entity_node_from_record(record, driver.provider) for record in all_records]
 
     return nodes
 
@@ -1354,13 +1358,12 @@ async def get_embeddings_for_communities(
 async def get_embeddings_for_edges(
     driver: GraphDriver, edges: list[EntityEdge]
 ) -> dict[str, list[float]]:
+    match_query = """
+    MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
+    """
     if driver.provider == GraphProvider.KUZU:
         match_query = """
         MATCH (n:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity)
-        """
-    else:
-        match_query = """
-        MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
         """
 
     results, _, _ = await driver.execute_query(

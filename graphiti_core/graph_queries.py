@@ -80,10 +80,10 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
 
     if provider == GraphProvider.KUZU:
         return [
-            "CALL CREATE_FTS_INDEX('Episodic', 'episode_content', ['content', 'source', 'source_description', 'group_id']);",
-            "CALL CREATE_FTS_INDEX('Entity', 'node_name_and_summary', ['name', 'summary', 'group_id']);",
-            "CALL CREATE_FTS_INDEX('Community', 'community_name', ['name', 'group_id']);",
-            "CALL CREATE_FTS_INDEX('RelatesToNode_', 'edge_name_and_fact', ['name', 'fact', 'group_id']);",
+            "CALL CREATE_FTS_INDEX('Episodic', 'episode_content', ['content', 'source', 'source_description']);",
+            "CALL CREATE_FTS_INDEX('Entity', 'node_name_and_summary', ['name', 'summary']);",
+            "CALL CREATE_FTS_INDEX('Community', 'community_name', ['name']);",
+            "CALL CREATE_FTS_INDEX('RelatesToNode_', 'edge_name_and_fact', ['name', 'fact']);",
         ]
 
     return [
