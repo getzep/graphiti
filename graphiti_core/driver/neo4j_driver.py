@@ -23,6 +23,8 @@ from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
+from .driver_db_queries import DROP_INDEXES_QUERY
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +63,4 @@ class Neo4jDriver(GraphDriver):
         return await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
-        return self.client.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        return self.client.execute_query(DROP_INDEXES_QUERY)
