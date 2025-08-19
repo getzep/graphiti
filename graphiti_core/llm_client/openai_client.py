@@ -63,7 +63,7 @@ class OpenAIClient(BaseOpenAIClient):
     async def _create_structured_completion(
         self,
         model: str,
-        messages: list[ChatCompletionMessageParam],
+        messages,
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
