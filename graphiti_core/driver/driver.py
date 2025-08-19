@@ -84,6 +84,24 @@ class GraphDriver(ABC):
         cloned._database = database
 
         return cloned
+    
+    def sanitize(self, query: str) -> str:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def build_fulltext_query(self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128) -> str:
+        """
+        Build a fulltext query string appropriate for this graph provider.
+        
+        Args:
+            query: The search query text
+            group_ids: Optional list of group IDs to filter by
+            max_query_length: Maximum allowed query length
+            
+        Returns:
+            A formatted fulltext query string for this provider
+        """
+        raise NotImplementedError()
 
     @abstractmethod
     async def build_indices_and_constraints(self, delete_existing: bool = False):

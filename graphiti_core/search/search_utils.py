@@ -32,7 +32,6 @@ from graphiti_core.graph_queries import (
 )
 from graphiti_core.helpers import (
     RUNTIME_QUERY,
-    lucene_sanitize,
     normalize_l2,
     semaphore_gather,
 )
@@ -60,26 +59,6 @@ DEFAULT_MIN_SCORE = 0.6
 DEFAULT_MMR_LAMBDA = 0.5
 MAX_SEARCH_DEPTH = 3
 MAX_QUERY_LENGTH = 128
-
-
-def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
-    group_ids_filter_list = (
-        [fulltext_syntax + f'group_id:"{g}"' for g in group_ids] if group_ids is not None else []
-    )
-    group_ids_filter = ''
-    for f in group_ids_filter_list:
-        group_ids_filter += f if not group_ids_filter else f' OR {f}'
-
-    group_ids_filter += ' AND ' if group_ids_filter else ''
-
-    lucene_query = lucene_sanitize(query)
-    # If the lucene query is too long return no query
-    if len(lucene_query.split(' ')) + len(group_ids or '') >= MAX_QUERY_LENGTH:
-        return ''
-
-    full_query = group_ids_filter + '(' + lucene_query + ')'
-
-    return full_query
 
 
 async def get_episodes_by_mentions(
@@ -147,7 +126,7 @@ async def edge_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
     # fulltext search over facts
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
+    fuzzy_query = driver.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
     if fuzzy_query == '':
         return []
 
@@ -307,7 +286,7 @@ async def node_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
     # BM25 search to get top nodes
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
+    fuzzy_query = driver.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
     if fuzzy_query == '':
         return []
     filter_query, filter_params = node_search_filter_query_constructor(search_filter)
@@ -451,7 +430,7 @@ async def episode_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[EpisodicNode]:
     # BM25 search to get top episodes
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
+    fuzzy_query = driver.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
     if fuzzy_query == '':
         return []
 
@@ -490,7 +469,7 @@ async def community_fulltext_search(
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
     # BM25 search to get top communities
-    fuzzy_query = fulltext_query(query, group_ids, driver.fulltext_syntax)
+    fuzzy_query = driver.build_fulltext_query(query, group_ids, MAX_QUERY_LENGTH)
     if fuzzy_query == '':
         return []
 
@@ -710,7 +689,7 @@ async def get_relevant_nodes(
             'uuid': node.uuid,
             'name': node.name,
             'name_embedding': node.name_embedding,
-            'fulltext_query': fulltext_query(node.name, [node.group_id], driver.fulltext_syntax),
+            'fulltext_query': driver.build_fulltext_query(node.name, [node.group_id], MAX_QUERY_LENGTH),
         }
         for node in nodes
     ]

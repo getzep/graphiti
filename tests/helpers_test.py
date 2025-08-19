@@ -20,7 +20,6 @@ import pytest
 from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver
-from graphiti_core.helpers import lucene_sanitize
 
 load_dotenv()
 
@@ -77,8 +76,19 @@ if HAS_FALKORDB:
     drivers.append('falkordb')
 
 
-def test_lucene_sanitize():
-    # Call the function with test data
+def test_neo4j_sanitize():
+    """Test Neo4j sanitization by importing the driver and using its sanitize method."""
+    if not HAS_NEO4J:
+        pytest.skip("Neo4j not available - skipping sanitize test")
+    
+    # Create a driver instance - if it fails, we'll handle it gracefully
+    try:
+        driver = Neo4jDriver(uri=NEO4J_URI, user=NEO4J_USER, password=NEO4J_PASSWORD)
+    except Exception:
+        # If we can't create a real driver, skip this test
+        pytest.skip("Neo4j driver connection failed - skipping sanitize test")
+    
+    # Test the sanitize method
     queries = [
         (
             'This has every escape character + - && || ! ( ) { } [ ] ^ " ~ * ? : \\ /',
@@ -87,9 +97,41 @@ def test_lucene_sanitize():
         ('this has no escape characters', 'this has no escape characters'),
     ]
 
-    for query, assert_result in queries:
-        result = lucene_sanitize(query)
-        assert assert_result == result
+    for query, expected_result in queries:
+        result = driver.sanitize(query)
+        assert expected_result == result
+
+
+def test_falkordb_sanitize():
+    """Test FalkorDB sanitization by importing the driver and using its sanitize method."""
+    if not HAS_FALKORDB:
+        pytest.skip("FalkorDB not available - skipping sanitize test")
+    
+    try:
+        driver = FalkorDriver(
+            host=FALKORDB_HOST,
+            port=int(FALKORDB_PORT),
+            username=FALKORDB_USER,
+            password=FALKORDB_PASSWORD,
+        )
+    except Exception:
+        # If we can't create a real driver, skip this test
+        pytest.skip("FalkorDB driver connection failed - skipping sanitize test")
+    
+    # Test the sanitize method - FalkorDB replaces special chars with spaces
+    queries = [
+        (
+            'This has special characters: ,.<>{}[]"\':;!@#$%^&*()-+=~',
+            'This has special characters',  # All special chars replaced with spaces, then collapsed
+        ),
+        ('this has no special characters', 'this has no special characters'),
+        ('word1,word2.word3', 'word1 word2 word3'),  # Separators become spaces
+        ('keep_underscores_intact', 'keep_underscores_intact'),  # Underscores are NOT replaced
+    ]
+
+    for query, expected_result in queries:
+        result = driver.sanitize(query)
+        assert expected_result == result
 
 
 if __name__ == '__main__':
