@@ -152,9 +152,13 @@ async def extract_nodes(
     # Convert the extracted data into EntityNode objects
     extracted_nodes = []
     for extracted_entity in filtered_extracted_entities:
-        entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
-            'entity_type_name'
-        )
+        type_id = extracted_entity.entity_type_id
+        if 0 <= type_id < len(entity_types_context):
+            entity_type_name = entity_types_context[extracted_entity.entity_type_id].get(
+                'entity_type_name'
+            )
+        else:
+            entity_type_name = 'Entity'
 
         # Check if this entity type should be excluded
         if excluded_entity_types and entity_type_name in excluded_entity_types:

@@ -69,13 +69,15 @@ class OpenAIClient(BaseOpenAIClient):
         response_model: type[BaseModel],
     ):
         """Create a structured completion using OpenAI's beta parse API."""
-        return await self.client.beta.chat.completions.parse(
+        response = await self.client.responses.parse(
             model=model,
-            messages=messages,
+            input=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_model,  # type: ignore
+            max_output_tokens=max_tokens,
+            text_format=response_model,  # type: ignore
         )
+
+        return response
 
     async def _create_completion(
         self,
