@@ -746,7 +746,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.18.4"
+version = "0.18.7"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
