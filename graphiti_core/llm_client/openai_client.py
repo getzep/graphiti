@@ -21,7 +21,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
-from .openai_base_client import BaseOpenAIClient
+from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
 
 
 class OpenAIClient(BaseOpenAIClient):
@@ -67,6 +67,8 @@ class OpenAIClient(BaseOpenAIClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
+        reasoning: str | None = None,
+        verbosity: str | None = None,
     ):
         """Create a structured completion using OpenAI's beta parse API."""
         response = await self.client.responses.parse(
@@ -75,6 +77,8 @@ class OpenAIClient(BaseOpenAIClient):
             temperature=temperature,
             max_output_tokens=max_tokens,
             text_format=response_model,  # type: ignore
+            reasoning={'effort': reasoning} if reasoning is not None else None,
+            text={'verbosity': verbosity} if verbosity is not None else None,
         )
 
         return response
@@ -86,12 +90,16 @@ class OpenAIClient(BaseOpenAIClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel] | None = None,
+        reasoning: str | None = None,
+        verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        return await self.client.chat.completions.create(
+        return await self.client.response.parse(
             model=model,
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
+            max_output_tokens=max_tokens,
+            text_format={'type': 'json_object'},
+            reasoning={'effort': reasoning},
+            text={'verbosity': verbosity},
         )
