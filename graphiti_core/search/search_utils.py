@@ -173,22 +173,21 @@ async def edge_fulltext_search(
         MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
         """
 
-    query_params: dict[str, Any] = {}
-
-    group_filter_query = 'WHERE e.group_id IS NOT NULL'
-    if group_ids is not None:
-        group_filter_query += '\nAND e.group_id IN $group_ids'
-        query_params['group_ids'] = group_ids
-
-    filter_query, filter_params = edge_search_filter_query_constructor(
+    filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
-    query_params.update(filter_params)
+
+    if group_ids is not None:
+        filter_queries.append('e.group_id IN $group_ids')
+        filter_params['group_ids'] = group_ids
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     query = (
         get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
         + match_query
-        + group_filter_query
         + filter_query
         + """
         WITH e, score, n, m
@@ -206,7 +205,7 @@ async def edge_fulltext_search(
         query=fuzzy_query,
         limit=limit,
         routing_='r',
-        **query_params,
+        **filter_params,
     )
 
     edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
@@ -232,22 +231,25 @@ async def edge_similarity_search(
             MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m:Entity)
         """
 
-    filter_query, filter_params = edge_search_filter_query_constructor(
+    filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
 
-    group_filter_query: LiteralString = 'WHERE e.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += '\nAND e.group_id IN $group_ids'
+        filter_queries.append('e.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
 
         if source_node_uuid is not None:
             filter_params['source_uuid'] = source_node_uuid
-            group_filter_query += '\nAND (n.uuid = $source_uuid)'
+            filter_queries.append('n.uuid = $source_uuid')
 
         if target_node_uuid is not None:
             filter_params['target_uuid'] = target_node_uuid
-            group_filter_query += '\nAND (m.uuid = $target_uuid)'
+            filter_queries.append('m.uuid = $target_uuid')
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     search_vector_var = '$search_vector'
     if driver.provider == GraphProvider.KUZU:
@@ -256,7 +258,6 @@ async def edge_similarity_search(
     query = (
         RUNTIME_QUERY
         + match_query
-        + group_filter_query
         + filter_query
         + """
         WITH DISTINCT e, n, m, """
@@ -298,14 +299,17 @@ async def edge_bfs_search(
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0:
         return []
 
-    filter_query, filter_params = edge_search_filter_query_constructor(
+    filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
 
-    group_filter_query: LiteralString = 'WHERE e.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += '\nAND e.group_id IN $group_ids'
+        filter_queries.append('e.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     match_queries = [
         f"""
@@ -340,7 +344,6 @@ async def edge_bfs_search(
     for match_query in match_queries:
         records, _, _ = await driver.execute_query(
             match_query
-            + group_filter_query
             + filter_query
             + """
             RETURN DISTINCT
@@ -373,14 +376,17 @@ async def node_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    filter_query, filter_params = node_search_filter_query_constructor(
+    filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
     )
 
-    group_filter_query = '\nWHERE n.group_id IS NOT NULL'
     if group_ids is not None:
-        group_filter_query += '\nAND n.group_id IN $group_ids'
+        filter_queries.append('n.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     yield_query = 'YIELD node AS n, score'
     if driver.provider == GraphProvider.KUZU:
@@ -389,7 +395,6 @@ async def node_fulltext_search(
     query = (
         get_nodes_query('node_name_and_summary', '$query', limit=limit, provider=driver.provider)
         + yield_query
-        + group_filter_query
         + filter_query
         + """
         WITH n, score
@@ -421,18 +426,17 @@ async def node_similarity_search(
     limit=RELEVANT_SCHEMA_LIMIT,
     min_score: float = DEFAULT_MIN_SCORE,
 ) -> list[EntityNode]:
-    # vector similarity search over entity names
-    query_params: dict[str, Any] = {}
-
-    group_filter_query: LiteralString = 'WHERE n.group_id IS NOT NULL'
-    if group_ids is not None:
-        group_filter_query += ' AND n.group_id IN $group_ids'
-        query_params['group_ids'] = group_ids
-
-    filter_query, filter_params = node_search_filter_query_constructor(
+    filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
     )
-    query_params.update(filter_params)
+
+    if group_ids is not None:
+        filter_queries.append('n.group_id IN $group_ids')
+        filter_params['group_ids'] = group_ids
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     search_vector_var = '$search_vector'
     if driver.provider == GraphProvider.KUZU:
@@ -443,7 +447,6 @@ async def node_similarity_search(
         + """
         MATCH (n:Entity)
         """
-        + group_filter_query
         + filter_query
         + """
         WITH n, """
@@ -465,7 +468,7 @@ async def node_similarity_search(
         limit=limit,
         min_score=min_score,
         routing_='r',
-        **query_params,
+        **filter_params,
     )
 
     nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
@@ -484,14 +487,17 @@ async def node_bfs_search(
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0 or bfs_max_depth < 1:
         return []
 
-    filter_query, filter_params = node_search_filter_query_constructor(
+    filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
     )
 
-    group_filter_query: LiteralString = ''
     if group_ids is not None:
-        group_filter_query += '\nAND origin.group_id IN $group_ids'
+        filter_queries.append('n.group_id IN $group_ids')
         filter_params['group_ids'] = group_ids
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' AND ' + (' AND '.join(filter_queries))
 
     match_queries = [
         f"""
@@ -527,7 +533,6 @@ async def node_bfs_search(
     for match_query in match_queries:
         records, _, _ = await driver.execute_query(
             match_query
-            + group_filter_query
             + filter_query
             + """
             RETURN
@@ -794,15 +799,20 @@ async def get_relevant_nodes(
         for node in nodes
     ]
 
-    filter_query, filter_params = node_search_filter_query_constructor(
+    filter_queries, filter_params = node_search_filter_query_constructor(
         search_filter, driver.provider
     )
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = 'WHERE ' + (' AND '.join(filter_queries))
 
     if driver.provider == GraphProvider.KUZU:
         embedding_size = len(nodes[0].name_embedding) if nodes[0].name_embedding is not None else 0
         if embedding_size == 0:
             return []
 
+        # FIXME: Kuzu currently does not support using variables such as `node.fulltext_query` as an input to FTS, which means `get_relevant_nodes()` won't work with Kuzu as the graph driver.
         query = (
             RUNTIME_QUERY
             + """
@@ -821,7 +831,7 @@ async def get_relevant_nodes(
                 'node_name_and_summary', 'node.fulltext_query', limit=limit, provider=driver.provider
             )
             + """
-            YIELD node AS m
+            WITH node AS m
             WHERE m.group_id = $group_id AND NOT m.uuid IN vector_node_uuids
             WITH node, top_vector_nodes, collect(m) AS fulltext_nodes
 
@@ -922,9 +932,13 @@ async def get_relevant_edges(
     if len(edges) == 0:
         return []
 
-    filter_query, filter_params = edge_search_filter_query_constructor(
+    filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
     if driver.provider == GraphProvider.KUZU:
         embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
@@ -1046,9 +1060,13 @@ async def get_edge_invalidation_candidates(
     if len(edges) == 0:
         return []
 
-    filter_query, filter_params = edge_search_filter_query_constructor(
+    filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
+
+    filter_query = ''
+    if filter_queries:
+        filter_query = ' AND ' + (' AND '.join(filter_queries))
 
     if driver.provider == GraphProvider.KUZU:
         embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
@@ -1190,16 +1208,15 @@ async def node_distance_reranker(
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {center_node_uuid: 0.0}
 
+    query = """
+    UNWIND $node_uuids AS node_uuid
+    MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
+    RETURN 1 AS score, node_uuid AS uuid
+    """
     if driver.provider == GraphProvider.KUZU:
         query = """
         UNWIND $node_uuids AS node_uuid
         MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(n:Entity {uuid: node_uuid})
-        RETURN 1 AS score, node_uuid AS uuid
-        """
-    else:
-        query = """
-        UNWIND $node_uuids AS node_uuid
-        MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
         RETURN 1 AS score, node_uuid AS uuid
         """
 
@@ -1255,6 +1272,10 @@ async def episode_mentions_reranker(
 
     for result in results:
         scores[result['uuid']] = result['score']
+
+    for uuid in sorted_uuids:
+        if uuid not in scores:
+            scores[uuid] = float('inf')
 
     # rerank on shortest distance
     sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
