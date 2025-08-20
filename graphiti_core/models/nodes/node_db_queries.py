@@ -176,11 +176,11 @@ ENTITY_NODE_RETURN = """
 def get_community_node_save_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.FALKORDB:
-        return """
-            MERGE (n:Community {uuid: $uuid})
-            SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: vecf32($name_embedding)}
-            RETURN n.uuid AS uuid
-        """
+            return """
+                MERGE (n:Community {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: vecf32($name_embedding)}
+                RETURN n.uuid AS uuid
+            """
         case GraphProvider.NEPTUNE:
             return """
                 MERGE (n:Community {uuid: $uuid})
@@ -190,11 +190,11 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
             """
         case _:  # Neo4j
             return """
-        MERGE (n:Community {uuid: $uuid})
-        SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
-        WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
-        RETURN n.uuid AS uuid
-    """
+                MERGE (n:Community {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+                WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+                RETURN n.uuid AS uuid
+            """
 
 
 COMMUNITY_NODE_RETURN = """
