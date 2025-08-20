@@ -21,7 +21,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
-from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
+from .openai_base_client import BaseOpenAIClient
 
 
 class OpenAIClient(BaseOpenAIClient):
