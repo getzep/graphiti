@@ -15,11 +15,14 @@ limitations under the License.
 """
 
 import os
+from unittest.mock import Mock
 
+import numpy as np
 import pytest
 from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import EntityNode
 
@@ -122,6 +125,53 @@ async def graph_driver(request):
         # always called, even if the test fails or raises
         # await clean_up(graph_driver)
         await graph_driver.close()
+
+
+embedding_dim = 384
+embeddings = {
+    key: np.random.uniform(0.0, 0.9, embedding_dim).tolist()
+    for key in [
+        'Alice',
+        'Bob',
+        'Alice likes Bob',
+        'test_entity_1',
+        'test_entity_2',
+        'test_entity_3',
+        'test_entity_4',
+        'test_entity_alice',
+        'test_entity_bob',
+        'test_entity_1 is a duplicate of test_entity_2',
+        'test_entity_3 is a duplicate of test_entity_4',
+        'test_entity_1 relates to test_entity_2',
+        'test_entity_1 relates to test_entity_3',
+        'test_entity_2 relates to test_entity_3',
+        'test_entity_1 relates to test_entity_4',
+        'test_entity_2 relates to test_entity_4',
+        'test_entity_3 relates to test_entity_4',
+        'test_entity_1 relates to test_entity_2',
+        'test_entity_3 relates to test_entity_4',
+        'test_entity_2 relates to test_entity_3',
+        'test_community_1',
+        'test_community_2',
+    ]
+}
+embeddings['Alice Smith'] = embeddings['Alice']
+
+@pytest.fixture
+def mock_embedder():
+    mock_model = Mock(spec=EmbedderClient)
+
+    def mock_embed(input_data):
+        if isinstance(input_data, str):
+            return embeddings[input_data]
+        elif isinstance(input_data, list):
+            combined_input = ' '.join(input_data)
+            return embeddings[combined_input]
+        else:
+            raise ValueError(f'Unsupported input type: {type(input_data)}')
+
+    mock_model.create.side_effect = mock_embed
+    return mock_model
 
 
 def test_lucene_sanitize():

@@ -26,9 +26,7 @@ from graphiti_core.nodes import (
     EpisodeType,
     EpisodicNode,
 )
-from tests.helpers_test import drivers, get_driver, get_node_count
-
-group_id = f'test_group_{str(uuid4())}'
+from tests.helpers_test import get_node_count, group_id
 
 
 @pytest.fixture
@@ -68,151 +66,136 @@ def sample_community_node():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_entity_node(sample_entity_node, driver):
-    driver = get_driver(driver)
+async def test_entity_node(sample_entity_node, graph_driver):
     uuid = sample_entity_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
-    await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
-    retrieved = await EntityNode.get_by_uuid(driver, sample_entity_node.uuid)
+    retrieved = await EntityNode.get_by_uuid(graph_driver, sample_entity_node.uuid)
     assert retrieved.uuid == sample_entity_node.uuid
     assert retrieved.name == 'Test Entity'
     assert retrieved.group_id == group_id
 
     # Get node by uuids
-    retrieved = await EntityNode.get_by_uuids(driver, [sample_entity_node.uuid])
+    retrieved = await EntityNode.get_by_uuids(graph_driver, [sample_entity_node.uuid])
     assert retrieved[0].uuid == sample_entity_node.uuid
     assert retrieved[0].name == 'Test Entity'
     assert retrieved[0].group_id == group_id
 
     # Get node by group ids
-    retrieved = await EntityNode.get_by_group_ids(driver, [group_id], limit=2)
+    retrieved = await EntityNode.get_by_group_ids(graph_driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_entity_node.uuid
     assert retrieved[0].name == 'Test Entity'
     assert retrieved[0].group_id == group_id
 
     # Get name embedding
-    await sample_entity_node.load_name_embedding(driver)
+    await sample_entity_node.load_name_embedding(graph_driver)
     assert np.allclose(sample_entity_node.name_embedding, [0.5] * 1024)
 
     # Delete node by uuid
-    await sample_entity_node.delete(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
-    await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_entity_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
-    await sample_entity_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_entity_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_entity_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
-    await driver.close()
+    await graph_driver.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_community_node(sample_community_node, driver):
-    driver = get_driver(driver)
+async def test_community_node(sample_community_node, graph_driver):
     uuid = sample_community_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
-    await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
-    retrieved = await CommunityNode.get_by_uuid(driver, sample_community_node.uuid)
+    retrieved = await CommunityNode.get_by_uuid(graph_driver, sample_community_node.uuid)
     assert retrieved.uuid == sample_community_node.uuid
     assert retrieved.name == 'Community A'
     assert retrieved.group_id == group_id
     assert retrieved.summary == 'Community summary'
 
     # Get node by uuids
-    retrieved = await CommunityNode.get_by_uuids(driver, [sample_community_node.uuid])
+    retrieved = await CommunityNode.get_by_uuids(graph_driver, [sample_community_node.uuid])
     assert retrieved[0].uuid == sample_community_node.uuid
     assert retrieved[0].name == 'Community A'
     assert retrieved[0].group_id == group_id
     assert retrieved[0].summary == 'Community summary'
 
     # Get node by group ids
-    retrieved = await CommunityNode.get_by_group_ids(driver, [group_id], limit=2)
+    retrieved = await CommunityNode.get_by_group_ids(graph_driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_community_node.uuid
     assert retrieved[0].name == 'Community A'
     assert retrieved[0].group_id == group_id
 
     # Get name embedding
-    await sample_community_node.load_name_embedding(driver)
+    await sample_community_node.load_name_embedding(graph_driver)
     assert np.allclose(sample_community_node.name_embedding, [0.5] * 1024)
 
     # Delete node by uuid
-    await sample_community_node.delete(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
-    await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_community_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
-    await sample_community_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_community_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_community_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
-    await driver.close()
+    await graph_driver.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_episodic_node(sample_episodic_node, driver):
-    driver = get_driver(driver)
+async def test_episodic_node(sample_episodic_node, graph_driver):
     uuid = sample_episodic_node.uuid
 
     # Create node
-    node_count = await get_node_count(driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
-    await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
 
     # Get node by uuid
-    retrieved = await EpisodicNode.get_by_uuid(driver, sample_episodic_node.uuid)
+    retrieved = await EpisodicNode.get_by_uuid(graph_driver, sample_episodic_node.uuid)
     assert retrieved.uuid == sample_episodic_node.uuid
     assert retrieved.name == 'Episode 1'
     assert retrieved.group_id == group_id
@@ -222,7 +205,7 @@ async def test_episodic_node(sample_episodic_node, driver):
     assert retrieved.valid_at == sample_episodic_node.valid_at
 
     # Get node by uuids
-    retrieved = await EpisodicNode.get_by_uuids(driver, [sample_episodic_node.uuid])
+    retrieved = await EpisodicNode.get_by_uuids(graph_driver, [sample_episodic_node.uuid])
     assert retrieved[0].uuid == sample_episodic_node.uuid
     assert retrieved[0].name == 'Episode 1'
     assert retrieved[0].group_id == group_id
@@ -232,7 +215,7 @@ async def test_episodic_node(sample_episodic_node, driver):
     assert retrieved[0].valid_at == sample_episodic_node.valid_at
 
     # Get node by group ids
-    retrieved = await EpisodicNode.get_by_group_ids(driver, [group_id], limit=2)
+    retrieved = await EpisodicNode.get_by_group_ids(graph_driver, [group_id], limit=2)
     assert len(retrieved) == 1
     assert retrieved[0].uuid == sample_episodic_node.uuid
     assert retrieved[0].name == 'Episode 1'
@@ -243,24 +226,24 @@ async def test_episodic_node(sample_episodic_node, driver):
     assert retrieved[0].valid_at == sample_episodic_node.valid_at
 
     # Delete node by uuid
-    await sample_episodic_node.delete(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by uuids
-    await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_episodic_node.delete_by_uuids(driver, [uuid])
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
     # Delete node by group id
-    await sample_episodic_node.save(driver)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 1
-    await sample_episodic_node.delete_by_group_id(driver, group_id)
-    node_count = await get_node_count(driver, [uuid])
+    await sample_episodic_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
     assert node_count == 0
 
-    await driver.close()
+    await graph_driver.close()

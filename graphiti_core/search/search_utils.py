@@ -505,7 +505,7 @@ async def edge_bfs_search(
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
                 UNWIND relationships(path) AS rel
                 MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
                 """
@@ -762,7 +762,7 @@ async def node_bfs_search(
     match_queries = [
         f"""
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+        MATCH (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
         WHERE n.group_id = origin.group_id
         """
     ]

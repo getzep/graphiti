@@ -22,7 +22,6 @@ import pytest
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
-from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.graphiti import Graphiti
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
@@ -63,54 +62,6 @@ from tests.helpers_test import (
 )
 
 pytest_plugins = ('pytest_asyncio',)
-
-
-embedding_dim = 384
-embeddings = {
-    key: np.random.uniform(0.0, 0.9, embedding_dim).tolist()
-    for key in [
-        'Alice',
-        'Bob',
-        'Alice likes Bob',
-        'test_entity_1',
-        'test_entity_2',
-        'test_entity_3',
-        'test_entity_4',
-        'test_entity_alice',
-        'test_entity_bob',
-        'test_entity_1 is a duplicate of test_entity_2',
-        'test_entity_3 is a duplicate of test_entity_4',
-        'test_entity_1 relates to test_entity_2',
-        'test_entity_1 relates to test_entity_3',
-        'test_entity_2 relates to test_entity_3',
-        'test_entity_1 relates to test_entity_4',
-        'test_entity_2 relates to test_entity_4',
-        'test_entity_3 relates to test_entity_4',
-        'test_entity_1 relates to test_entity_2',
-        'test_entity_3 relates to test_entity_4',
-        'test_entity_2 relates to test_entity_3',
-        'test_community_1',
-        'test_community_2',
-    ]
-}
-embeddings['Alice Smith'] = embeddings['Alice']
-
-
-@pytest.fixture
-def mock_embedder():
-    mock_model = Mock(spec=EmbedderClient)
-
-    def mock_embed(input_data):
-        if isinstance(input_data, str):
-            return embeddings[input_data]
-        elif isinstance(input_data, list):
-            combined_input = ' '.join(input_data)
-            return embeddings[combined_input]
-        else:
-            raise ValueError(f'Unsupported input type: {type(input_data)}')
-
-    mock_model.create.side_effect = mock_embed
-    return mock_model
 
 
 @pytest.fixture
@@ -1682,7 +1633,6 @@ async def test_get_relevant_edges_and_invalidation_candidates(
     assert set({edge.name for edge in edges}) == {entity_edge_1.name, entity_edge_3.name}
 
 
-
 @pytest.mark.asyncio
 async def test_node_distance_reranker(graph_driver, mock_embedder):
     if graph_driver.provider == GraphProvider.FALKORDB:
@@ -1734,7 +1684,11 @@ async def test_node_distance_reranker(graph_driver, mock_embedder):
         [entity_node_2.uuid, entity_node_3.uuid],
         entity_node_1.uuid,
     )
-    uuid_to_name = {entity_node_1.uuid: entity_node_1.name, entity_node_2.uuid: entity_node_2.name, entity_node_3.uuid: entity_node_3.name}
+    uuid_to_name = {
+        entity_node_1.uuid: entity_node_1.name,
+        entity_node_2.uuid: entity_node_2.name,
+        entity_node_3.uuid: entity_node_3.name,
+    }
     names = [uuid_to_name[uuid] for uuid in reranked_uuids]
     assert names == [entity_node_2.name, entity_node_3.name]
     assert np.allclose(reranked_scores, [1.0, 0.0])

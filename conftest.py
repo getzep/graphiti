@@ -5,6 +5,6 @@ import sys
 # Without this file, you might encounter ModuleNotFoundError when trying to import modules from your project, especially when running tests.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
-from tests.helpers_test import graph_driver
+from tests.helpers_test import graph_driver, mock_embedder
 
-__all__ = ['graph_driver']
+__all__ = ['graph_driver', 'mock_embedder']

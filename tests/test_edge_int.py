@@ -23,11 +23,8 @@ import numpy as np
 import pytest
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
-from graphiti_core.embedder.openai import OpenAIEmbedder
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
-from tests.helpers_test import drivers, get_driver, get_edge_count, get_node_count
-
-pytestmark = pytest.mark.integration
+from tests.helpers_test import get_edge_count, get_node_count
 
 pytest_plugins = ('pytest_asyncio',)
 
@@ -56,14 +53,7 @@ def setup_logging():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_episodic_edge(driver):
-    graph_driver = get_driver(driver)
-    embedder = OpenAIEmbedder()
-
+async def test_episodic_edge(graph_driver, mock_embedder):
     now = datetime.now()
 
     # Create episodic node
@@ -92,7 +82,7 @@ async def test_episodic_edge(driver):
         summary='Alice summary',
         group_id=group_id,
     )
-    await alice_node.generate_name_embedding(embedder)
+    await alice_node.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
@@ -169,14 +159,7 @@ async def test_episodic_edge(driver):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_entity_edge(driver):
-    graph_driver = get_driver(driver)
-    embedder = OpenAIEmbedder()
-
+async def test_entity_edge(graph_driver, mock_embedder):
     now = datetime.now()
 
     # Create entity node
@@ -187,7 +170,7 @@ async def test_entity_edge(driver):
         summary='Alice summary',
         group_id=group_id,
     )
-    await alice_node.generate_name_embedding(embedder)
+    await alice_node.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
@@ -198,7 +181,7 @@ async def test_entity_edge(driver):
     bob_node = EntityNode(
         name='Bob', labels=[], created_at=now, summary='Bob summary', group_id=group_id
     )
-    await bob_node.generate_name_embedding(embedder)
+    await bob_node.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [bob_node.uuid])
     assert node_count == 0
     await bob_node.save(graph_driver)
@@ -218,7 +201,7 @@ async def test_entity_edge(driver):
         invalid_at=now,
         group_id=group_id,
     )
-    edge_embedding = await entity_edge.generate_embedding(embedder)
+    edge_embedding = await entity_edge.generate_embedding(mock_embedder)
     edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 0
     await entity_edge.save(graph_driver)
@@ -287,23 +270,16 @@ async def test_entity_edge(driver):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'driver',
-    drivers,
-)
-async def test_community_edge(driver):
-    graph_driver = get_driver(driver)
-    embedder = OpenAIEmbedder()
-
+async def test_community_edge(graph_driver, mock_embedder):
     now = datetime.now()
 
     # Create community node
     community_node_1 = CommunityNode(
-        name='Community A',
+        name='test_community_1',
         group_id=group_id,
         summary='Community A summary',
     )
-    await community_node_1.generate_name_embedding(embedder)
+    await community_node_1.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [community_node_1.uuid])
     assert node_count == 0
     await community_node_1.save(graph_driver)
@@ -312,11 +288,11 @@ async def test_community_edge(driver):
 
     # Create community node
     community_node_2 = CommunityNode(
-        name='Community B',
+        name='test_community_2',
         group_id=group_id,
         summary='Community B summary',
     )
-    await community_node_2.generate_name_embedding(embedder)
+    await community_node_2.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [community_node_2.uuid])
     assert node_count == 0
     await community_node_2.save(graph_driver)
@@ -327,7 +303,7 @@ async def test_community_edge(driver):
     alice_node = EntityNode(
         name='Alice', labels=[], created_at=now, summary='Alice summary', group_id=group_id
     )
-    await alice_node.generate_name_embedding(embedder)
+    await alice_node.generate_name_embedding(mock_embedder)
     node_count = await get_node_count(graph_driver, [alice_node.uuid])
     assert node_count == 0
     await alice_node.save(graph_driver)
