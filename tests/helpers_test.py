@@ -20,7 +20,6 @@ import pytest
 from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
-from graphiti_core.driver.neptune_driver import NeptuneDriver
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import EntityNode
 

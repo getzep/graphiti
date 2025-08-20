@@ -79,7 +79,7 @@ def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> f
     return dot_product / (norm_vector1 * norm_vector2)
 
 
-def fulltext_query(query: str, group_ids: list[str] | None = None, fulltext_syntax: str = ''):
+def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver):
     if driver.provider == GraphProvider.KUZU:
         # Kuzu only supports simple queries.
         if len(query.split(' ')) > MAX_QUERY_LENGTH:
@@ -236,7 +236,6 @@ async def edge_fulltext_search(
             records, _, _ = await driver.execute_query(
                 query,
                 query=fuzzy_query,
-                group_ids=group_ids,
                 ids=input_ids,
                 limit=limit,
                 routing_='r',
@@ -263,7 +262,6 @@ async def edge_fulltext_search(
         records, _, _ = await driver.execute_query(
             query,
             query=fuzzy_query,
-            group_ids=group_ids,
             limit=limit,
             routing_='r',
             **filter_params,
@@ -333,7 +331,7 @@ async def edge_similarity_search(
             limit=limit,
             min_score=min_score,
             routing_='r',
-            **query_params,
+            **filter_params,
         )
 
         if len(resp) > 0:
@@ -375,7 +373,7 @@ async def edge_similarity_search(
                 limit=limit,
                 min_score=min_score,
                 routing_='r',
-                **query_params,
+                **filter_params,
             )
         else:
             return []
@@ -404,7 +402,7 @@ async def edge_similarity_search(
             limit=limit,
             min_score=min_score,
             routing_='r',
-            **query_params,
+            **filter_params,
         )
 
     edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
@@ -427,7 +425,6 @@ async def edge_bfs_search(
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
     )
-
 
     if group_ids is not None:
         filter_queries.append('e.group_id IN $group_ids')
@@ -484,8 +481,7 @@ async def edge_bfs_search(
                 MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS *1..{bfs_max_depth}]->(n:Entity)
                 WHERE origin:Entity OR origin:Episodic
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
-                WHERE e.uuid = rel.uuid
+                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -511,9 +507,7 @@ async def edge_bfs_search(
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
                 MATCH path = (origin:Entity|Episodic {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO]-(m:Entity)
-                WHERE e.uuid = rel.uuid
-                AND e.group_id IN $group_ids
+                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -529,7 +523,6 @@ async def edge_bfs_search(
             query,
             bfs_origin_node_uuids=bfs_origin_node_uuids,
             depth=bfs_max_depth,
-            group_ids=group_ids,
             limit=limit,
             routing_='r',
             **filter_params,
@@ -584,7 +577,7 @@ async def node_fulltext_search(
                 WHERE n.uuid=i.id
                 RETURN
                 """
-                + ENTITY_NODE_RETURN
+                + get_entity_node_return_query(driver.provider)
                 + """
                 ORDER BY i.score DESC
                 LIMIT $limit
@@ -594,7 +587,6 @@ async def node_fulltext_search(
                 query,
                 ids=input_ids,
                 query=fuzzy_query,
-                group_ids=group_ids,
                 limit=limit,
                 routing_='r',
                 **filter_params,
@@ -618,7 +610,6 @@ async def node_fulltext_search(
         records, _, _ = await driver.execute_query(
             query,
             query=fuzzy_query,
-            group_ids=group_ids,
             limit=limit,
             routing_='r',
             **filter_params,
@@ -668,7 +659,6 @@ async def node_similarity_search(
             query,
             params=filter_params,
             search_vector=search_vector,
-            group_ids=group_ids,
             limit=limit,
             min_score=min_score,
             routing_='r',
@@ -881,9 +871,9 @@ async def episode_fulltext_search(
                 query,
                 ids=input_ids,
                 query=fuzzy_query,
-                group_ids=group_ids,
                 limit=limit,
                 routing_='r',
+                **filter_params,
             )
         else:
             return []
@@ -967,9 +957,9 @@ async def community_fulltext_search(
                 query,
                 ids=input_ids,
                 query=fuzzy_query,
-                group_ids=group_ids,
                 limit=limit,
                 routing_='r',
+                **filter_params,
             )
         else:
             return []
