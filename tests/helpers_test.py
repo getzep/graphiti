@@ -96,7 +96,7 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             db=KUZU_DB,
         )
         return driver
-    elif provider == 'neptune':
+    elif provider == GraphProvider.NEPTUNE:
         return NeptuneDriver(
             host=NEPTUNE_HOST,
             port=int(NEPTUNE_PORT),

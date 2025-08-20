@@ -58,7 +58,6 @@ from tests.helpers_test import (
     GraphProvider,
     get_edge_count,
     get_node_count,
-    graph_driver,
     group_id,
     group_id_2,
 )

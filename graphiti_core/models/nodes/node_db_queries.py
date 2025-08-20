@@ -18,6 +18,7 @@ from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
 
+
 def get_episode_node_save_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.NEPTUNE:
