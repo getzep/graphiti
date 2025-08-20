@@ -34,7 +34,7 @@ from graphiti_core.models.edges.edge_db_queries import (
 )
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
-    get_episodic_node_save_bulk_query,
+    get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
@@ -173,7 +173,7 @@ async def add_nodes_and_edges_bulk_tx(
         nodes = json.dumps(convert_datetimes_to_strings(nodes))
         edges = json.dumps(convert_datetimes_to_strings(edges))
 
-    await tx.run(get_episodic_node_save_bulk_query(driver.provider), episodes=episodes)
+    await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
     await tx.run(get_entity_node_save_bulk_query(driver.provider, nodes), nodes=nodes)
     await tx.run(
         get_episodic_edge_save_bulk_query(driver.provider),

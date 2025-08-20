@@ -107,10 +107,10 @@ class BaseOpenAIClient(LLMClient):
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation."""
-        response_object = response.choices[0].message
+        response_object = response.output_text
 
-        if response_object.parsed:
-            return response_object.parsed.model_dump()
+        if response_object:
+            return json.loads(response_object)
         elif response_object.refusal:
             raise RefusalError(response_object.refusal)
         else:

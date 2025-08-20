@@ -22,7 +22,10 @@ from typing_extensions import LiteralString
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.models.nodes.node_db_queries import EPISODIC_NODE_RETURN
+from graphiti_core.models.nodes.node_db_queries import (
+    EPISODIC_NODE_RETURN,
+    EPISODIC_NODE_RETURN_NEPTUNE,
+)
 from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_from_record
 
 EPISODE_WINDOW_LEN = 3
@@ -31,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if driver.provider == GraphProvider.NEPTUNE:
+        return  # Neptune does not need indexes built
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -146,7 +151,11 @@ async def retrieve_episodes(
         + """
         RETURN
         """
-        + EPISODIC_NODE_RETURN
+        + (
+            EPISODIC_NODE_RETURN_NEPTUNE
+            if driver.provider == GraphProvider.NEPTUNE
+            else EPISODIC_NODE_RETURN
+        )
         + """
         ORDER BY e.valid_at DESC
         LIMIT $num_episodes

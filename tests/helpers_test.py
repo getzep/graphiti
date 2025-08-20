@@ -20,6 +20,7 @@ import pytest
 from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.neptune_driver import NeptuneDriver
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import EntityNode
 
@@ -50,6 +51,13 @@ if os.getenv('DISABLE_KUZU') is None:
     except ImportError:
         raise
 
+if os.getenv('DISABLE_NEPTUNE') is None:
+    try:
+        from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+        drivers.append(GraphProvider.NEPTUNE)
+    except ImportError:
+        pass
 
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
@@ -59,6 +67,10 @@ FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
 FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
+
+NEPTUNE_HOST = os.getenv('NEPTUNE_HOST', 'localhost')
+NEPTUNE_PORT = os.getenv('NEPTUNE_PORT', 8182)
+AOSS_HOST = os.getenv('AOSS_HOST', None)
 
 KUZU_DB = os.getenv('KUZU_DB', ':memory:')
 
@@ -85,6 +97,12 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             db=KUZU_DB,
         )
         return driver
+    elif provider == 'neptune':
+        return NeptuneDriver(
+            host=NEPTUNE_HOST,
+            port=int(NEPTUNE_PORT),
+            aoss_host=AOSS_HOST,
+        )
     else:
         raise ValueError(f'Driver {provider} not available')
 

@@ -252,6 +252,11 @@ class EntityEdge(Edge):
             match_query = """
                 MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(m:Entity)
             """
+        if driver.provider == GraphProvider.NEPTUNE:
+            match_query: LiteralString = """
+                MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+                RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
+            """
 
         records, _, _ = await driver.execute_query(
             match_query
@@ -291,6 +296,9 @@ class EntityEdge(Edge):
             )
         else:
             edge_data.update(self.attributes or {})
+
+            if driver.provider == GraphProvider.NEPTUNE:
+                driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
