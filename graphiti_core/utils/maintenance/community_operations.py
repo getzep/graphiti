@@ -33,7 +33,8 @@ async def get_community_clusters(
     if group_ids is None:
         group_id_values, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
+        MATCH (n:Entity)
+        WHERE n.group_id IS NOT NULL
         RETURN
             collect(DISTINCT n.group_id) AS group_ids
         """,

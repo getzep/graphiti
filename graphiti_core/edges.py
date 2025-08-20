@@ -65,6 +65,21 @@ class Edge(BaseModel, ABC):
 
         return result
 
+    @classmethod
+    async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        result = await driver.execute_query(
+            """
+            MATCH (n)-[e:MENTIONS|RELATES_TO|HAS_MEMBER]->(m)
+            WHERE e.uuid IN $uuids
+            DELETE e
+            """,
+            uuids=uuids,
+        )
+
+        logger.debug(f'Deleted Edges: {uuids}')
+
+        return result
+
     def __hash__(self):
         return hash(self.uuid)
 

@@ -77,7 +77,11 @@ class IsPresidentOf(BaseModel):
 
 async def main(use_bulk: bool = False):
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    client = Graphiti(
+        neo4j_uri,
+        neo4j_user,
+        neo4j_password,
+    )
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()

@@ -28,6 +28,7 @@ from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
+    Edge,
     EntityEdge,
     EpisodicEdge,
     create_entity_edge_embeddings,
@@ -46,6 +47,7 @@ from graphiti_core.nodes import (
     EntityNode,
     EpisodeType,
     EpisodicNode,
+    Node,
     create_entity_node_embeddings,
 )
 from graphiti_core.search.search import SearchConfig, search
@@ -158,7 +160,7 @@ class Graphiti:
             If not set, the Graphiti default is used.
         ensure_ascii : bool, optional
             Whether to escape non-ASCII characters in JSON serialization for prompts. Defaults to False.
-            Set to False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
+            Set as False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
             original form, making them readable in LLM logs and improving model understanding.
 
         Returns
@@ -1066,12 +1068,7 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        await semaphore_gather(
-            *[node.delete(self.driver) for node in nodes_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
-        await semaphore_gather(
-            *[edge.delete(self.driver) for edge in edges_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
+        await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+
+        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
         await episode.delete(self.driver)

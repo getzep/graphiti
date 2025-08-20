@@ -108,7 +108,7 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates'
-            'of existing entities.',
+            ' of existing entities.',
         ),
         Message(
             role='user',
