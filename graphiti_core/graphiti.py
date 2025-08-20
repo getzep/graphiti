@@ -264,7 +264,7 @@ class Graphiti:
             return 'falkordb'
         # Embedder providers
         elif 'voyage' in class_name:
-            return 'voyage'
+            return 'voyageai'
         else:
             return 'unknown'
 
