@@ -34,10 +34,9 @@ from graphiti_core.search.search_utils import (
     edge_fulltext_search,
     edge_similarity_search,
     episode_fulltext_search,
+    episode_mentions_reranker,
     get_communities_by_nodes,
     get_edge_invalidation_candidates,
-    episode_mentions_reranker,
-    node_distance_reranker,
     get_embeddings_for_communities,
     get_embeddings_for_edges,
     get_embeddings_for_nodes,
@@ -45,6 +44,7 @@ from graphiti_core.search.search_utils import (
     get_relevant_edges,
     get_relevant_nodes,
     node_bfs_search,
+    node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
 )
@@ -54,13 +54,18 @@ from graphiti_core.utils.maintenance.community_operations import (
     remove_communities,
 )
 from graphiti_core.utils.maintenance.edge_operations import filter_existing_duplicate_of_edges
-from tests.helpers_test import GraphProvider, drivers, get_driver, get_edge_count, get_node_count
+from tests.helpers_test import (
+    GraphProvider,
+    get_edge_count,
+    get_node_count,
+    graph_driver,
+    group_id,
+    group_id_2,
+)
 
 pytest_plugins = ('pytest_asyncio',)
 
 
-group_id = 'graphiti_test_group'
-group_id_2 = 'graphiti_test_group_2'
 embedding_dim = 384
 embeddings = {
     key: np.random.uniform(0.0, 0.9, embedding_dim).tolist()
@@ -153,24 +158,6 @@ def mock_cross_encoder_client():
     }
 
     return mock_llm
-
-
-async def clean_up(graph_driver):
-    await EntityNode.delete_by_group_id(graph_driver, group_id)
-    await EntityNode.delete_by_group_id(graph_driver, group_id_2)
-
-
-@pytest.fixture(params=drivers)
-async def graph_driver(request):
-    driver = request.param
-    graph_driver = get_driver(driver)
-    await clean_up(graph_driver)
-    try:
-        yield graph_driver  # provide driver to the test
-    finally:
-        # always called, even if the test fails or raises
-        # await clean_up(graph_driver)
-        await graph_driver.close()
 
 
 @pytest.mark.asyncio

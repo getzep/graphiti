@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.helpers import lucene_sanitize
+from graphiti_core.nodes import EntityNode
 
 load_dotenv()
 
@@ -61,6 +62,9 @@ FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
 
 KUZU_DB = os.getenv('KUZU_DB', ':memory:')
 
+group_id = 'graphiti_test_group'
+group_id_2 = 'graphiti_test_group_2'
+
 
 def get_driver(provider: GraphProvider) -> GraphDriver:
     if provider == GraphProvider.NEO4J:
@@ -83,6 +87,24 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
         return driver
     else:
         raise ValueError(f'Driver {provider} not available')
+
+
+async def clean_up(graph_driver):
+    await EntityNode.delete_by_group_id(graph_driver, group_id)
+    await EntityNode.delete_by_group_id(graph_driver, group_id_2)
+
+
+@pytest.fixture(params=drivers)
+async def graph_driver(request):
+    driver = request.param
+    graph_driver = get_driver(driver)
+    await clean_up(graph_driver)
+    try:
+        yield graph_driver  # provide driver to the test
+    finally:
+        # always called, even if the test fails or raises
+        # await clean_up(graph_driver)
+        await graph_driver.close()
 
 
 def test_lucene_sanitize():

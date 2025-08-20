@@ -105,9 +105,7 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
 
     if provider == GraphProvider.KUZU:
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
-        # FIXME: Kuzu doesn't support `TOP := $limit` syntax, so we need to inline the limit
-        # Remove this once https://github.com/kuzudb/kuzu/issues/5835 is fixed.
-        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := {limit})"
+        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
@@ -130,8 +128,6 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
 
     if provider == GraphProvider.KUZU:
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
-        # FIXME: Kuzu doesn't support `TOP := $limit` syntax, so we need to inline the limit
-        # Remove this once https://github.com/kuzudb/kuzu/issues/5835 is fixed.
-        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := {limit})"
+        return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
