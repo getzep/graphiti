@@ -35,10 +35,15 @@ from graphiti_core.search.search_utils import (
     edge_similarity_search,
     episode_fulltext_search,
     get_communities_by_nodes,
+    get_edge_invalidation_candidates,
+    episode_mentions_reranker,
+    node_distance_reranker,
     get_embeddings_for_communities,
     get_embeddings_for_edges,
     get_embeddings_for_nodes,
     get_mentioned_nodes,
+    get_relevant_edges,
+    get_relevant_nodes,
     node_bfs_search,
     node_fulltext_search,
     node_similarity_search,
@@ -71,6 +76,9 @@ embeddings = {
         'test_entity_bob',
         'test_entity_1 is a duplicate of test_entity_2',
         'test_entity_3 is a duplicate of test_entity_4',
+        'test_entity_1 relates to test_entity_2',
+        'test_entity_1 relates to test_entity_3',
+        'test_entity_2 relates to test_entity_3',
         'test_entity_1 relates to test_entity_4',
         'test_entity_2 relates to test_entity_4',
         'test_entity_3 relates to test_entity_4',
@@ -79,10 +87,9 @@ embeddings = {
         'test_entity_2 relates to test_entity_3',
         'test_community_1',
         'test_community_2',
-        'alice',
-        'bob',
     ]
 }
+embeddings['Alice Smith'] = embeddings['Alice']
 
 
 @pytest.fixture
@@ -277,7 +284,7 @@ async def test_graphiti_retrieve_episodes(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
     if graph_driver.provider == GraphProvider.FALKORDB:
-        pytest.skip("Skipping as test fails on FalkorDB")
+        pytest.skip('Skipping as test fails on FalkorDB')
 
     graphiti = Graphiti(
         graph_driver=graph_driver,
@@ -414,7 +421,7 @@ async def test_filter_existing_duplicate_of_edges(graph_driver, mock_embedder):
 @pytest.mark.asyncio
 async def test_determine_entity_community(graph_driver, mock_embedder):
     if graph_driver.provider == GraphProvider.FALKORDB:
-        pytest.skip("Skipping as test fails on FalkorDB")
+        pytest.skip('Skipping as test fails on FalkorDB')
 
     # Create entity nodes
     entity_node_1 = EntityNode(
@@ -652,88 +659,6 @@ async def test_get_community_clusters(graph_driver, mock_embedder):
         ['test_entity_3', 'test_entity_4']
     )
 
-@pytest.mark.asyncio
-async def test_get_embeddings_for_edges(graph_driver, mock_embedder):
-    # Create entity nodes
-    entity_node_1 = EntityNode(
-        name='test_entity_1',
-        labels=[],
-        created_at=datetime.now(),
-        group_id=group_id,
-    )
-    await entity_node_1.generate_name_embedding(mock_embedder)
-    entity_node_2 = EntityNode(
-        name='test_entity_2',
-        labels=[],
-        created_at=datetime.now(),
-        group_id=group_id,
-    )
-    await entity_node_2.generate_name_embedding(mock_embedder)
-
-    # Create entity edges
-    entity_edge_1 = EntityEdge(
-        source_node_uuid=entity_node_1.uuid,
-        target_node_uuid=entity_node_2.uuid,
-        name='RELATES_TO',
-        fact='test_entity_1 relates to test_entity_2',
-        created_at=datetime.now(),
-        group_id=group_id,
-    )
-    await entity_edge_1.generate_embedding(mock_embedder)
-
-    # Save the graph
-    await entity_node_1.save(graph_driver)
-    await entity_node_2.save(graph_driver)
-    await entity_edge_1.save(graph_driver)
-
-    # Get embeddings for edges
-    embeddings = await get_embeddings_for_edges(graph_driver, [entity_edge_1])
-    assert len(embeddings) == 1
-    assert entity_edge_1.uuid in embeddings
-    assert np.allclose(embeddings[entity_edge_1.uuid], entity_edge_1.fact_embedding)
-
-
-@pytest.mark.asyncio
-async def test_get_embeddings_for_nodes(graph_driver, mock_embedder):
-    # Create entity nodes
-    entity_node_1 = EntityNode(
-        name='test_entity_1',
-        labels=[],
-        created_at=datetime.now(),
-        group_id=group_id,
-    )
-    await entity_node_1.generate_name_embedding(mock_embedder)
-
-    # Save the graph
-    await entity_node_1.save(graph_driver)
-
-    # Get embeddings for edges
-    embeddings = await get_embeddings_for_nodes(graph_driver, [entity_node_1])
-    assert len(embeddings) == 1
-    assert entity_node_1.uuid in embeddings
-    assert np.allclose(embeddings[entity_node_1.uuid], entity_node_1.name_embedding)
-
-
-@pytest.mark.asyncio
-async def test_get_embeddings_for_communities(graph_driver, mock_embedder):
-    # Create community nodes
-    community_node_1 = CommunityNode(
-        name='test_community_1',
-        labels=[],
-        created_at=datetime.now(),
-        group_id=group_id,
-    )
-    await community_node_1.generate_name_embedding(mock_embedder)
-
-    # Save the graph
-    await community_node_1.save(graph_driver)
-
-    # Get embeddings for communities
-    embeddings = await get_embeddings_for_communities(graph_driver, [community_node_1])
-    assert len(embeddings) == 1
-    assert community_node_1.uuid in embeddings
-    assert np.allclose(embeddings[community_node_1.uuid], community_node_1.name_embedding)
-
 
 @pytest.mark.asyncio
 async def test_get_mentioned_nodes(graph_driver, mock_embedder):
@@ -816,7 +741,9 @@ async def test_get_communities_by_nodes(graph_driver, mock_embedder):
 
 
 @pytest.mark.asyncio
-async def test_edge_fulltext_search(graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client):
+async def test_edge_fulltext_search(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
@@ -880,15 +807,36 @@ async def test_edge_fulltext_search(graph_driver, mock_embedder, mock_llm_client
             [DateFilter(date=now, comparison_operator=ComparisonOperator.not_equals)],
         ],
         valid_at=[
-            [DateFilter(date=now + timedelta(days=1), comparison_operator=ComparisonOperator.greater_than_equal)],
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.less_than_equal)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=1),
+                    comparison_operator=ComparisonOperator.greater_than_equal,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.less_than_equal,
+                )
+            ],
         ],
         invalid_at=[
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.greater_than)],
-            [DateFilter(date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.greater_than,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than
+                )
+            ],
         ],
     )
-    edges = await edge_fulltext_search(graph_driver, 'test_entity_1 relates to test_entity_2', search_filters, group_ids=[group_id])
+    edges = await edge_fulltext_search(
+        graph_driver, 'test_entity_1 relates to test_entity_2', search_filters, group_ids=[group_id]
+    )
     assert len(edges) == 1
     assert edges[0].name == entity_edge_1.name
 
@@ -950,12 +898,31 @@ async def test_edge_similarity_search(graph_driver, mock_embedder):
             [DateFilter(date=now, comparison_operator=ComparisonOperator.not_equals)],
         ],
         valid_at=[
-            [DateFilter(date=now + timedelta(days=1), comparison_operator=ComparisonOperator.greater_than_equal)],
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.less_than_equal)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=1),
+                    comparison_operator=ComparisonOperator.greater_than_equal,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.less_than_equal,
+                )
+            ],
         ],
         invalid_at=[
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.greater_than)],
-            [DateFilter(date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.greater_than,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than
+                )
+            ],
         ],
     )
     edges = await edge_similarity_search(
@@ -1067,12 +1034,31 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
             [DateFilter(date=now, comparison_operator=ComparisonOperator.not_equals)],
         ],
         valid_at=[
-            [DateFilter(date=now + timedelta(days=1), comparison_operator=ComparisonOperator.greater_than_equal)],
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.less_than_equal)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=1),
+                    comparison_operator=ComparisonOperator.greater_than_equal,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.less_than_equal,
+                )
+            ],
         ],
         invalid_at=[
-            [DateFilter(date=now + timedelta(days=3), comparison_operator=ComparisonOperator.greater_than)],
-            [DateFilter(date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than)],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.greater_than,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than
+                )
+            ],
         ],
     )
 
@@ -1107,7 +1093,10 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
     )
     edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
     assert len(edges_deduplicated) == 2
-    assert edges_deduplicated == {'test_entity_1 relates to test_entity_2', 'test_entity_2 relates to test_entity_3'}
+    assert edges_deduplicated == {
+        'test_entity_1 relates to test_entity_2',
+        'test_entity_2 relates to test_entity_3',
+    }
 
     # Test bfs from entity node
 
@@ -1131,11 +1120,16 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
     )
     edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
     assert len(edges_deduplicated) == 2
-    assert edges_deduplicated == {'test_entity_1 relates to test_entity_2', 'test_entity_2 relates to test_entity_3'}
+    assert edges_deduplicated == {
+        'test_entity_1 relates to test_entity_2',
+        'test_entity_2 relates to test_entity_3',
+    }
 
 
 @pytest.mark.asyncio
-async def test_node_fulltext_search(graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client):
+async def test_node_fulltext_search(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
@@ -1170,9 +1164,7 @@ async def test_node_fulltext_search(graph_driver, mock_embedder, mock_llm_client
     await entity_node_2.save(graph_driver)
 
     # Search for entity edges
-    search_filters = SearchFilters(
-        node_labels=['Entity']
-    )
+    search_filters = SearchFilters(node_labels=['Entity'])
     nodes = await node_fulltext_search(
         graph_driver,
         'Alice',
@@ -1211,9 +1203,7 @@ async def test_node_similarity_search(graph_driver, mock_embedder):
     await entity_node_2.save(graph_driver)
 
     # Search for entity edges
-    search_filters = SearchFilters(
-        node_labels=['Entity']
-    )
+    search_filters = SearchFilters(node_labels=['Entity'])
     nodes = await node_similarity_search(
         graph_driver,
         entity_node_1.name_embedding,
@@ -1262,22 +1252,13 @@ async def test_node_bfs_search(graph_driver, mock_embedder):
     )
     await entity_node_3.generate_name_embedding(mock_embedder)
 
-    now = datetime.now()
-    created_at = now
-    expired_at = now + timedelta(days=6)
-    valid_at = now + timedelta(days=2)
-    invalid_at = now + timedelta(days=4)
-
     # Create entity edges
     entity_edge_1 = EntityEdge(
         source_node_uuid=entity_node_1.uuid,
         target_node_uuid=entity_node_2.uuid,
         name='RELATES_TO',
         fact='test_entity_1 relates to test_entity_2',
-        created_at=created_at,
-        valid_at=valid_at,
-        invalid_at=invalid_at,
-        expired_at=expired_at,
+        created_at=datetime.now(),
         group_id=group_id,
     )
     await entity_edge_1.generate_embedding(mock_embedder)
@@ -1286,10 +1267,7 @@ async def test_node_bfs_search(graph_driver, mock_embedder):
         target_node_uuid=entity_node_3.uuid,
         name='RELATES_TO',
         fact='test_entity_2 relates to test_entity_3',
-        created_at=created_at,
-        valid_at=valid_at,
-        invalid_at=invalid_at,
-        expired_at=expired_at,
+        created_at=datetime.now(),
         group_id=group_id,
     )
     await entity_edge_2.generate_embedding(mock_embedder)
@@ -1355,7 +1333,9 @@ async def test_node_bfs_search(graph_driver, mock_embedder):
 
 
 @pytest.mark.asyncio
-async def test_episode_fulltext_search(graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client):
+async def test_episode_fulltext_search(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
@@ -1392,9 +1372,7 @@ async def test_episode_fulltext_search(graph_driver, mock_embedder, mock_llm_cli
     await episodic_node_2.save(graph_driver)
 
     # Search for episodic nodes
-    search_filters = SearchFilters(
-        node_labels=['Episodic']
-    )
+    search_filters = SearchFilters(node_labels=['Episodic'])
     nodes = await episode_fulltext_search(
         graph_driver,
         'Alice',
@@ -1406,7 +1384,9 @@ async def test_episode_fulltext_search(graph_driver, mock_embedder, mock_llm_cli
 
 
 @pytest.mark.asyncio
-async def test_community_fulltext_search(graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client):
+async def test_community_fulltext_search(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
@@ -1420,13 +1400,13 @@ async def test_community_fulltext_search(graph_driver, mock_embedder, mock_llm_c
 
     # Create community nodes
     community_node_1 = CommunityNode(
-        name='alice',
+        name='Alice',
         created_at=datetime.now(),
         group_id=group_id,
     )
     await community_node_1.generate_name_embedding(mock_embedder)
     community_node_2 = CommunityNode(
-        name='bob',
+        name='Bob',
         created_at=datetime.now(),
         group_id=group_id,
     )
@@ -1439,7 +1419,7 @@ async def test_community_fulltext_search(graph_driver, mock_embedder, mock_llm_c
     # Search for community nodes
     nodes = await community_fulltext_search(
         graph_driver,
-        'alice',
+        'Alice',
         group_ids=[group_id],
     )
     assert len(nodes) == 1
@@ -1447,7 +1427,9 @@ async def test_community_fulltext_search(graph_driver, mock_embedder, mock_llm_c
 
 
 @pytest.mark.asyncio
-async def test_community_similarity_search(graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client):
+async def test_community_similarity_search(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
 
@@ -1461,13 +1443,13 @@ async def test_community_similarity_search(graph_driver, mock_embedder, mock_llm
 
     # Create community nodes
     community_node_1 = CommunityNode(
-        name='alice',
+        name='Alice',
         created_at=datetime.now(),
         group_id=group_id,
     )
     await community_node_1.generate_name_embedding(mock_embedder)
     community_node_2 = CommunityNode(
-        name='bob',
+        name='Bob',
         created_at=datetime.now(),
         group_id=group_id,
     )
@@ -1486,3 +1468,418 @@ async def test_community_similarity_search(graph_driver, mock_embedder, mock_llm
     )
     assert len(nodes) == 1
     assert nodes[0].name == community_node_1.name
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_nodes(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
+    if graph_driver.provider == GraphProvider.FALKORDB:
+        pytest.skip('Skipping as tests fail on Falkordb')
+
+    if graph_driver.provider == GraphProvider.KUZU:
+        pytest.skip('Skipping as tests fail on Kuzu')
+
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='Alice',
+        summary='Alice',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='Bob',
+        summary='Bob',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+    entity_node_3 = EntityNode(
+        name='Alice Smith',
+        summary='Alice Smith',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_node_3.save(graph_driver)
+
+    # Search for entity nodes
+    search_filters = SearchFilters(node_labels=['Entity'])
+    nodes = (
+        await get_relevant_nodes(
+            graph_driver,
+            [entity_node_1],
+            search_filters,
+            min_score=0.9,
+        )
+    )[0]
+    assert len(nodes) == 2
+    assert set({node.name for node in nodes}) == {entity_node_1.name, entity_node_3.name}
+
+
+@pytest.mark.asyncio
+async def test_get_relevant_edges_and_invalidation_candidates(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
+    if graph_driver.provider == GraphProvider.FALKORDB:
+        pytest.skip('Skipping as tests fail on Falkordb')
+
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        summary='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        summary='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+    entity_node_3 = EntityNode(
+        name='test_entity_3',
+        summary='test_entity_3',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+
+    now = datetime.now()
+    created_at = now
+    expired_at = now + timedelta(days=6)
+    valid_at = now + timedelta(days=2)
+    invalid_at = now + timedelta(days=4)
+
+    # Create entity edges
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        name='RELATES_TO',
+        fact='Alice',
+        created_at=created_at,
+        expired_at=expired_at,
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+        group_id=group_id,
+    )
+    await entity_edge_1.generate_embedding(mock_embedder)
+    entity_edge_2 = EntityEdge(
+        source_node_uuid=entity_node_2.uuid,
+        target_node_uuid=entity_node_3.uuid,
+        name='RELATES_TO',
+        fact='Bob',
+        created_at=created_at,
+        expired_at=expired_at,
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+        group_id=group_id,
+    )
+    await entity_edge_2.generate_embedding(mock_embedder)
+    entity_edge_3 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_3.uuid,
+        name='RELATES_TO',
+        fact='Alice',
+        created_at=created_at,
+        expired_at=expired_at,
+        valid_at=valid_at,
+        invalid_at=invalid_at,
+        group_id=group_id,
+    )
+    await entity_edge_3.generate_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_node_3.save(graph_driver)
+    await entity_edge_1.save(graph_driver)
+    await entity_edge_2.save(graph_driver)
+    await entity_edge_3.save(graph_driver)
+
+    # Search for entity nodes
+    search_filters = SearchFilters(
+        node_labels=['Entity'],
+        edge_types=['RELATES_TO'],
+        created_at=[
+            [DateFilter(date=created_at, comparison_operator=ComparisonOperator.equals)],
+        ],
+        expired_at=[
+            [DateFilter(date=now, comparison_operator=ComparisonOperator.not_equals)],
+        ],
+        valid_at=[
+            [
+                DateFilter(
+                    date=now + timedelta(days=1),
+                    comparison_operator=ComparisonOperator.greater_than_equal,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.less_than_equal,
+                )
+            ],
+        ],
+        invalid_at=[
+            [
+                DateFilter(
+                    date=now + timedelta(days=3),
+                    comparison_operator=ComparisonOperator.greater_than,
+                )
+            ],
+            [
+                DateFilter(
+                    date=now + timedelta(days=5), comparison_operator=ComparisonOperator.less_than
+                )
+            ],
+        ],
+    )
+    edges = (
+        await get_relevant_edges(
+            graph_driver,
+            [entity_edge_1],
+            search_filters,
+            min_score=0.9,
+        )
+    )[0]
+    assert len(edges) == 1
+    assert set({edge.name for edge in edges}) == {entity_edge_1.name}
+
+    edges = (
+        await get_edge_invalidation_candidates(
+            graph_driver,
+            [entity_edge_1],
+            search_filters,
+            min_score=0.9,
+        )
+    )[0]
+    assert len(edges) == 2
+    assert set({edge.name for edge in edges}) == {entity_edge_1.name, entity_edge_3.name}
+
+
+
+@pytest.mark.asyncio
+async def test_node_distance_reranker(graph_driver, mock_embedder):
+    if graph_driver.provider == GraphProvider.FALKORDB:
+        pytest.skip('Skipping as tests fail on Falkordb')
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+    entity_node_3 = EntityNode(
+        name='test_entity_3',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+
+    # Create entity edges
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        name='RELATES_TO',
+        fact='test_entity_1 relates to test_entity_2',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_1.generate_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_node_3.save(graph_driver)
+    await entity_edge_1.save(graph_driver)
+
+    # Test reranker
+    reranked_uuids, reranked_scores = await node_distance_reranker(
+        graph_driver,
+        [entity_node_2.uuid, entity_node_3.uuid],
+        entity_node_1.uuid,
+    )
+    uuid_to_name = {entity_node_1.uuid: entity_node_1.name, entity_node_2.uuid: entity_node_2.name, entity_node_3.uuid: entity_node_3.name}
+    names = [uuid_to_name[uuid] for uuid in reranked_uuids]
+    assert names == [entity_node_2.name, entity_node_3.name]
+    assert np.allclose(reranked_scores, [1.0, 0.0])
+
+
+@pytest.mark.asyncio
+async def test_episode_mentions_reranker(graph_driver, mock_embedder):
+    if graph_driver.provider == GraphProvider.FALKORDB:
+        pytest.skip('Skipping as tests fail on Falkordb')
+
+    # Create episodic nodes
+    episodic_node_1 = EpisodicNode(
+        name='test_episodic_1',
+        content='test_content',
+        created_at=datetime.now(),
+        valid_at=datetime.now(),
+        group_id=group_id,
+        source=EpisodeType.message,
+        source_description='Description about Alice',
+    )
+
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+
+    # Create entity edges
+    episodic_edge_1 = EpisodicEdge(
+        source_node_uuid=episodic_node_1.uuid,
+        target_node_uuid=entity_node_1.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await episodic_node_1.save(graph_driver)
+    await episodic_edge_1.save(graph_driver)
+
+    # Test reranker
+    reranked_uuids, reranked_scores = await episode_mentions_reranker(
+        graph_driver,
+        [[entity_node_1.uuid, entity_node_2.uuid]],
+    )
+    uuid_to_name = {entity_node_1.uuid: entity_node_1.name, entity_node_2.uuid: entity_node_2.name}
+    names = [uuid_to_name[uuid] for uuid in reranked_uuids]
+    assert names == [entity_node_1.name, entity_node_2.name]
+    assert np.allclose(reranked_scores, [1.0, float('inf')])
+
+
+@pytest.mark.asyncio
+async def test_get_embeddings_for_edges(graph_driver, mock_embedder):
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+
+    # Create entity edges
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        name='RELATES_TO',
+        fact='test_entity_1 relates to test_entity_2',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_1.generate_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_edge_1.save(graph_driver)
+
+    # Get embeddings for edges
+    embeddings = await get_embeddings_for_edges(graph_driver, [entity_edge_1])
+    assert len(embeddings) == 1
+    assert entity_edge_1.uuid in embeddings
+    assert np.allclose(embeddings[entity_edge_1.uuid], entity_edge_1.fact_embedding)
+
+
+@pytest.mark.asyncio
+async def test_get_embeddings_for_nodes(graph_driver, mock_embedder):
+    # Create entity nodes
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+
+    # Get embeddings for edges
+    embeddings = await get_embeddings_for_nodes(graph_driver, [entity_node_1])
+    assert len(embeddings) == 1
+    assert entity_node_1.uuid in embeddings
+    assert np.allclose(embeddings[entity_node_1.uuid], entity_node_1.name_embedding)
+
+
+@pytest.mark.asyncio
+async def test_get_embeddings_for_communities(graph_driver, mock_embedder):
+    # Create community nodes
+    community_node_1 = CommunityNode(
+        name='test_community_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await community_node_1.generate_name_embedding(mock_embedder)
+
+    # Save the graph
+    await community_node_1.save(graph_driver)
+
+    # Get embeddings for communities
+    embeddings = await get_embeddings_for_communities(graph_driver, [community_node_1])
+    assert len(embeddings) == 1
+    assert community_node_1.uuid in embeddings
+    assert np.allclose(embeddings[community_node_1.uuid], community_node_1.name_embedding)
