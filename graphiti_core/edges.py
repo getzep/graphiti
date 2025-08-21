@@ -245,24 +245,25 @@ class EntityEdge(Edge):
         return self.fact_embedding
 
     async def load_fact_embedding(self, driver: GraphDriver):
-        match_query = """
+        query = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
+            RETURN e.fact_embedding AS fact_embedding
         """
-        if driver.provider == GraphProvider.KUZU:
-            match_query = """
-                MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(m:Entity)
-            """
+
         if driver.provider == GraphProvider.NEPTUNE:
-            match_query: LiteralString = """
+            query = """
                 MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
 
+        if driver.provider == GraphProvider.KUZU:
+            query = """
+                MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(m:Entity)
+                RETURN e.fact_embedding AS fact_embedding
+            """
+
         records, _, _ = await driver.execute_query(
-            match_query
-            + """
-            RETURN e.fact_embedding AS fact_embedding
-            """,
+            query,
             uuid=self.uuid,
             routing_='r',
         )
