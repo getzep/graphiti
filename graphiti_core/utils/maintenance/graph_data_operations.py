@@ -15,14 +15,18 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import parse_db_date, semaphore_gather
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.helpers import semaphore_gather
+from graphiti_core.models.nodes.node_db_queries import (
+    EPISODIC_NODE_RETURN,
+    EPISODIC_NODE_RETURN_NEPTUNE,
+)
+from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_from_record
 
 EPISODE_WINDOW_LEN = 3
 
@@ -30,11 +34,13 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if driver.provider == GraphProvider.NEPTUNE:
+        return  # Neptune does not need indexes built
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
-        SHOW INDEXES YIELD name
-        """,
+            SHOW INDEXES YIELD name
+            """,
         )
         index_names = [record['name'] for record in records]
         await semaphore_gather(
@@ -70,7 +76,7 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_group_ids(tx):
             await tx.run(
-                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                'MATCH (n) WHERE (n:Entity OR n:Episodic OR n:Community) AND n.group_id IN $group_ids DETACH DELETE n',
                 group_ids=group_ids,
             )
 
@@ -108,19 +114,20 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                                MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                                """
+        MATCH (e:Episodic)
+        WHERE e.valid_at <= $reference_time
+        """
         + group_id_filter
         + source_filter
         + """
-        RETURN e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.group_id AS group_id,
-            e.name AS name,
-            e.source_description AS source_description,
-            e.source AS source
+        RETURN
+        """
+        + (
+            EPISODIC_NODE_RETURN_NEPTUNE
+            if driver.provider == GraphProvider.NEPTUNE
+            else EPISODIC_NODE_RETURN
+        )
+        + """
         ORDER BY e.valid_at DESC
         LIMIT $num_episodes
         """
@@ -133,18 +140,5 @@ async def retrieve_episodes(
         group_ids=group_ids,
     )
 
-    episodes = [
-        EpisodicNode(
-            content=record['content'],
-            created_at=parse_db_date(record['created_at'])
-            or datetime.min.replace(tzinfo=timezone.utc),
-            valid_at=parse_db_date(record['valid_at']) or datetime.min.replace(tzinfo=timezone.utc),
-            uuid=record['uuid'],
-            group_id=record['group_id'],
-            source=EpisodeType.from_str(record['source']),
-            name=record['name'],
-            source_description=record['source_description'],
-        )
-        for record in result
-    ]
+    episodes = [get_episodic_node_from_record(record) for record in result]
     return list(reversed(episodes))  # Return in chronological order

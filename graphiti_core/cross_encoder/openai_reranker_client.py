@@ -84,7 +84,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
             responses = await semaphore_gather(
                 *[
                     self.client.chat.completions.create(
-                        model=DEFAULT_MODEL,
+                        model=self.config.model or DEFAULT_MODEL,
                         messages=openai_messages,
                         temperature=0,
                         max_tokens=1,

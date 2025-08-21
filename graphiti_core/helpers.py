@@ -28,6 +28,7 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
 
 load_dotenv()
@@ -50,6 +51,17 @@ def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None
         if neo_date
         else None
     )
+
+
+def get_default_group_id(provider: GraphProvider) -> str:
+    """
+    This function differentiates the default group id based on the database type.
+    For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
+    """
+    if provider == GraphProvider.FALKORDB:
+        return '_'
+    else:
+        return ''
 
 
 def lucene_sanitize(query: str) -> str:
@@ -136,7 +148,7 @@ def validate_group_id(group_id: str) -> bool:
 
 
 def validate_excluded_entity_types(
-    excluded_entity_types: list[str] | None, entity_types: dict[str, BaseModel] | None = None
+    excluded_entity_types: list[str] | None, entity_types: dict[str, type[BaseModel]] | None = None
 ) -> bool:
     """
     Validate that excluded entity types are valid type names.
