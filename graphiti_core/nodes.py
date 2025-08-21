@@ -96,12 +96,37 @@ class Node(BaseModel, ABC):
             case GraphProvider.NEO4J:
                 await driver.execute_query(
                     """
-                MATCH (n:Entity|Episodic|Community {uuid: $uuid})
-                DETACH DELETE n
-                """,
+                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                    DETACH DELETE n
+                    """,
                     uuid=self.uuid,
                 )
-            case _:  # FalkorDB, Neptune, Kuzu
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{uuid: $uuid}})
+                        DETACH DELETE n
+                        """,
+                        uuid=self.uuid,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {uuid: $uuid})-[:RELATES_TO]->(e:RelatesToNode_)
+                    DETACH DELETE e
+                    """,
+                    uuid=self.uuid,
+                )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {uuid: $uuid})
+                    DETACH DELETE n
+                    """,
+                    uuid=self.uuid,
+                )
+            case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -137,8 +162,32 @@ class Node(BaseModel, ABC):
                         group_id=group_id,
                         batch_size=batch_size,
                     )
-
-            case _:  # FalkorDB, Neptune, Kuzu
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{group_id: $group_id}})
+                        DETACH DELETE n
+                        """,
+                        group_id=group_id,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]->(e:RelatesToNode_)
+                    DETACH DELETE e
+                    """,
+                    group_id=group_id,
+                )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {group_id: $group_id})
+                    DETACH DELETE n
+                    """,
+                    group_id=group_id,
+                )
+            case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -150,30 +199,59 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
-        if driver.provider == GraphProvider.FALKORDB or driver.provider == GraphProvider.KUZU:
-            for label in ['Entity', 'Episodic', 'Community']:
-                await driver.execute_query(
-                    f"""
-                       MATCH (n:{label})
-                       WHERE n.uuid IN $uuids
-                       DETACH DELETE n
-                       """,
-                    uuids=uuids,
-                )
-        else:
-            async with driver.session() as session:
-                await session.run(
-                    """
-                    MATCH (n:Entity|Episodic|Community)
-                    WHERE n.uuid IN $uuids
-                    CALL {
-                        WITH n
+        match driver.provider:
+            case GraphProvider.FALKORDB:
+                for label in ['Entity', 'Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label})
+                        WHERE n.uuid IN $uuids
                         DETACH DELETE n
-                    } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        uuids=uuids,
+                    )
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label})
+                        WHERE n.uuid IN $uuids
+                        DETACH DELETE n
+                        """,
+                        uuids=uuids,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)
+                    WHERE n.uuid IN $uuids
+                    DETACH DELETE e
                     """,
                     uuids=uuids,
-                    batch_size=batch_size,
                 )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity)
+                    WHERE n.uuid IN $uuids
+                    DETACH DELETE n
+                    """,
+                    uuids=uuids,
+                )
+            case _:  # Neo4J, Neptune
+                async with driver.session() as session:
+                    await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community)
+                        WHERE n.uuid IN $uuids
+                        CALL {
+                            WITH n
+                            DETACH DELETE n
+                        } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        uuids=uuids,
+                        batch_size=batch_size,
+                    )
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...

@@ -63,7 +63,7 @@ class Edge(BaseModel, ABC):
             )
             await driver.execute_query(
                 """
-                MATCH (n)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(m)
+                MATCH (e:RelatesToNode_ {uuid: $uuid})
                 DETACH DELETE e
                 """,
                 uuid=self.uuid,

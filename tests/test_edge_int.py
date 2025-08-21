@@ -17,18 +17,15 @@ limitations under the License.
 import logging
 import sys
 from datetime import datetime
-from uuid import uuid4
 
 import numpy as np
 import pytest
 
 from graphiti_core.edges import CommunityEdge, EntityEdge, EpisodicEdge
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
-from tests.helpers_test import get_edge_count, get_node_count
+from tests.helpers_test import get_edge_count, get_node_count, group_id
 
 pytest_plugins = ('pytest_asyncio',)
-
-group_id = f'test_group_{str(uuid4())}'
 
 
 def setup_logging():
@@ -255,6 +252,32 @@ async def test_entity_edge(graph_driver, mock_embedder):
     # Delete edge by uuids
     await entity_edge.save(graph_driver)
     await entity_edge.delete_by_uuids(graph_driver, [entity_edge.uuid])
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
+    assert edge_count == 0
+
+    # Deleting node should delete the edge
+    await entity_edge.save(graph_driver)
+    await alice_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
+    assert node_count == 0
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
+    assert edge_count == 0
+
+    # Deleting node by uuids should delete the edge
+    await alice_node.save(graph_driver)
+    await entity_edge.save(graph_driver)
+    await alice_node.delete_by_uuids(graph_driver, [alice_node.uuid])
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
+    assert node_count == 0
+    edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
+    assert edge_count == 0
+
+    # Deleting node by group id should delete the edge
+    await alice_node.save(graph_driver)
+    await entity_edge.save(graph_driver)
+    await alice_node.delete_by_group_id(graph_driver, alice_node.group_id)
+    node_count = await get_node_count(graph_driver, [alice_node.uuid])
+    assert node_count == 0
     edge_count = await get_edge_count(graph_driver, [entity_edge.uuid])
     assert edge_count == 0
 
