@@ -165,6 +165,22 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
 
 
 def get_entity_edge_return_query(provider: GraphProvider) -> str:
+    if provider == GraphProvider.NEPTUNE:
+        return """
+        e.uuid AS uuid,
+        n.uuid AS source_node_uuid,
+        m.uuid AS target_node_uuid,
+        e.group_id AS group_id,
+        e.name AS name,
+        e.fact AS fact,
+        split(e.episodes, ',') AS episodes,
+        e.created_at AS created_at,
+        e.expired_at AS expired_at,
+        e.valid_at AS valid_at,
+        e.invalid_at AS invalid_at,
+        properties(e) AS attributes
+    """
+
     return """
         e.uuid AS uuid,
         n.uuid AS source_node_uuid,
@@ -182,21 +198,6 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         if provider == GraphProvider.KUZU
         else 'properties(e) AS attributes'
     )
-
-ENTITY_EDGE_RETURN_NEPTUNE = """
-    e.uuid AS uuid,
-    n.uuid AS source_node_uuid,
-    m.uuid AS target_node_uuid,
-    e.group_id AS group_id,
-    e.name AS name,
-    e.fact AS fact,
-    split(e.episodes, ',') AS episodes,
-    e.created_at AS created_at,
-    e.expired_at AS expired_at,
-    e.valid_at AS valid_at,
-    e.invalid_at AS invalid_at,
-    properties(e) AS attributes
-"""
 
 
 def get_community_edge_save_query(provider: GraphProvider) -> str:
