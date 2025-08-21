@@ -167,14 +167,13 @@ async def add_nodes_and_edges_bulk_tx(
 
         edges.append(edge_data)
 
+    entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, nodes)
+
     if driver.provider == GraphProvider.KUZU:
         # Raw structs are currently order sensitive in Kuzu: https://github.com/kuzudb/kuzu/issues/5834
         episodes = json.dumps(convert_datetimes_to_strings(episodes))
         nodes = json.dumps(convert_datetimes_to_strings(nodes))
         edges = json.dumps(convert_datetimes_to_strings(edges))
-        entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, [])
-    else:
-        entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, nodes)
 
     await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
     await tx.run(entity_node_save_bulk, nodes=nodes)

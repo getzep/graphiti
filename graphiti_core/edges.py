@@ -92,7 +92,7 @@ class Edge(BaseModel, ABC):
             )
             await driver.execute_query(
                 """
-                MATCH (n)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m)
+                MATCH (e:RelatesToNode_)
                 WHERE e.uuid IN $uuids
                 DETACH DELETE e
                 """,
@@ -539,8 +539,11 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
 
 
 def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityEdge:
+    episodes = record['episodes']
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes'])
+        if episodes:
+            episodes = [episode.strip('"\'') for episode in episodes]
     else:
         attributes = record['attributes']
         attributes.pop('uuid', None)
@@ -563,7 +566,7 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         fact_embedding=record.get('fact_embedding'),
         name=record['name'],
         group_id=record['group_id'],
-        episodes=record['episodes'],
+        episodes=episodes,
         created_at=parse_db_date(record['created_at']),  # type: ignore
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),

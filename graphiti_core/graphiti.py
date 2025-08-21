@@ -1068,7 +1068,7 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
+        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
         await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
 
-        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
         await episode.delete(self.driver)

@@ -25,6 +25,7 @@ from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.nodes import EntityNode
+from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
@@ -109,16 +110,11 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
         raise ValueError(f'Driver {provider} not available')
 
 
-async def clean_up(graph_driver):
-    await EntityNode.delete_by_group_id(graph_driver, group_id)
-    await EntityNode.delete_by_group_id(graph_driver, group_id_2)
-
-
 @pytest.fixture(params=drivers)
 async def graph_driver(request):
     driver = request.param
     graph_driver = get_driver(driver)
-    await clean_up(graph_driver)
+    await clear_data(graph_driver, [group_id, group_id_2])
     try:
         yield graph_driver  # provide driver to the test
     finally:
@@ -156,6 +152,7 @@ embeddings = {
     ]
 }
 embeddings['Alice Smith'] = embeddings['Alice']
+
 
 @pytest.fixture
 def mock_embedder():
@@ -208,13 +205,34 @@ async def get_edge_count(driver: GraphDriver, uuids: list[str]) -> int:
         WHERE e.uuid IN $uuids
         RETURN COUNT(e) as count
         UNION ALL
-        MATCH (n)-[:RELATES_TO]->(e)-[:RELATES_TO]->(m)
+        MATCH (e:RelatesToNode_)
         WHERE e.uuid IN $uuids
         RETURN COUNT(e) as count
         """,
         uuids=uuids,
     )
     return sum(int(result['count']) for result in results)
+
+
+async def print_graph(graph_driver: GraphDriver):
+    nodes, _, _ = await graph_driver.execute_query(
+        """
+        MATCH (n)
+        RETURN n.uuid, n.name
+        """,
+    )
+    print('Nodes:')
+    for node in nodes:
+        print('  ', node)
+    edges, _, _ = await graph_driver.execute_query(
+        """
+        MATCH (n)-[e]->(m)
+        RETURN n.name, e.uuid, m.name
+        """,
+    )
+    print('Edges:')
+    for edge in edges:
+        print('  ', edge)
 
 
 if __name__ == '__main__':

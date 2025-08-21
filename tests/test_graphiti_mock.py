@@ -47,6 +47,7 @@ from graphiti_core.search.search_utils import (
     node_fulltext_search,
     node_similarity_search,
 )
+from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk
 from graphiti_core.utils.maintenance.community_operations import (
     determine_entity_community,
     get_community_clusters,
@@ -111,7 +112,7 @@ def mock_cross_encoder_client():
 
 
 @pytest.mark.asyncio
-async def test_graphiti_remove_episode(
+async def test_add_bulk_remove_episode(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
     graphiti = Graphiti(
@@ -193,13 +194,15 @@ async def test_graphiti_remove_episode(
     episode_node.entity_edges = [entity_edge.uuid]
     entity_edge.episodes = [episode_node.uuid]
 
-    # Save the nodes and edges
-    await episode_node.save(graph_driver)
-    await alice_node.save(graph_driver)
-    await bob_node.save(graph_driver)
-    await entity_edge.save(graph_driver)
-    await episodic_alice_edge.save(graph_driver)
-    await episodic_bob_edge.save(graph_driver)
+    # Test add bulk
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode_node],
+        [episodic_alice_edge, episodic_bob_edge],
+        [alice_node, bob_node],
+        [entity_edge],
+        mock_embedder,
+    )
 
     node_ids = [episode_node.uuid, alice_node.uuid, bob_node.uuid]
     edge_ids = [episodic_alice_edge.uuid, episodic_bob_edge.uuid, entity_edge.uuid]
@@ -214,6 +217,19 @@ async def test_graphiti_remove_episode(
     assert node_count == 0
     edge_count = await get_edge_count(graph_driver, edge_ids)
     assert edge_count == 0
+
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode_node],
+        [episodic_alice_edge, episodic_bob_edge],
+        [alice_node, bob_node],
+        [entity_edge],
+        mock_embedder,
+    )
+    node_count = await get_node_count(graph_driver, node_ids)
+    assert node_count == 3
+    edge_count = await get_edge_count(graph_driver, edge_ids)
+    assert edge_count == 3
 
 
 @pytest.mark.asyncio
