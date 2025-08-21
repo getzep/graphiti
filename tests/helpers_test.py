@@ -48,7 +48,7 @@ if os.getenv('DISABLE_NEPTUNE') is None:
     try:
         from graphiti_core.driver.neptune_driver import NeptuneDriver
 
-        HAS_NEPTUNE = True
+        HAS_NEPTUNE = False
     except ImportError:
         pass
 
