@@ -24,7 +24,6 @@ from dotenv import load_dotenv
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.helpers import lucene_sanitize
-from graphiti_core.nodes import EntityNode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
