@@ -53,6 +53,14 @@ class Versions(TypedDict):
     node_list: PromptFunction
     nodes: PromptFunction
 
+def json_serial(obj):
+    import datetime
+    import enum
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    if isinstance(obj, enum.Enum):
+        return obj.value
+    return str(obj)
 
 def node(context: dict[str, Any]) -> list[Message]:
     return [
