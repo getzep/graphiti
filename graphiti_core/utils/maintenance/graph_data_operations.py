@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if driver.provider == GraphProvider.NEPTUNE:
-        await driver.create_aoss_indices()
+        await driver.create_aoss_indices() # pyright: ignore[reportAttributeAccessIssue]
         return
     if delete_existing:
         records, _, _ = await driver.execute_query(
