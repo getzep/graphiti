@@ -41,6 +41,8 @@ class OpenAIClient(BaseOpenAIClient):
         cache: bool = False,
         client: typing.Any = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        reasoning=DEFAULT_REASONING,
+        verbosity=DEFAULT_VERBOSITY,
     ):
         """
         Initialize the OpenAIClient with the provided configuration, cache setting, and client.

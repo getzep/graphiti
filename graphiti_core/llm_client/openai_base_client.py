@@ -87,8 +87,8 @@ class BaseOpenAIClient(LLMClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
-        reasoning: str,
-        verbosity: str,
+        reasoning: str | None,
+        verbosity: str | None,
     ) -> Any:
         """Create a structured completion using the specific client implementation."""
         pass
