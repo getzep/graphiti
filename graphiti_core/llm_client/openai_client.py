@@ -21,7 +21,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
-from .openai_base_client import BaseOpenAIClient
+from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
 
 
 class OpenAIClient(BaseOpenAIClient):
@@ -41,8 +41,8 @@ class OpenAIClient(BaseOpenAIClient):
         cache: bool = False,
         client: typing.Any = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
-        reasoning=DEFAULT_REASONING,
-        verbosity=DEFAULT_VERBOSITY,
+        reasoning: str = DEFAULT_REASONING,
+        verbosity: str = DEFAULT_VERBOSITY,
     ):
         """
         Initialize the OpenAIClient with the provided configuration, cache setting, and client.
@@ -52,7 +52,7 @@ class OpenAIClient(BaseOpenAIClient):
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
         """
-        super().__init__(config, cache, max_tokens)
+        super().__init__(config, cache, max_tokens, reasoning, verbosity)
 
         if config is None:
             config = LLMConfig()
