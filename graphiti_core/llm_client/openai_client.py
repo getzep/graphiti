@@ -96,12 +96,10 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        return await self.client.response.parse(
+        return await self.client.chst.completions.create(
             model=model,
             messages=messages,
             temperature=temperature,
-            max_output_tokens=max_tokens,
-            text_format={'type': 'json_object'},
-            reasoning={'effort': reasoning} if reasoning is not None else None,  # type: ignore
-            text={'verbosity': verbosity} if verbosity is not None else None,  # type: ignore
+            max_tokens=max_tokens,
+            response_format={'type': 'json_object'},
         )
