@@ -96,7 +96,7 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        return await self.client.chst.completions.create(
+        return await self.client.chat.completions.create(
             model=model,
             messages=messages,
             temperature=temperature,
