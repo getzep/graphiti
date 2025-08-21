@@ -47,7 +47,7 @@ load_dotenv()
 
 # Neptune and OpenSearch connection parameters
 neptune_uri = os.environ.get('NEPTUNE_HOST')
-neptune_port = os.environ.get('NEPTUNE_PORT', 8182)
+neptune_port = int(os.environ.get('NEPTUNE_PORT', 8182))
 aoss_host = os.environ.get('AOSS_HOST')
 
 if not neptune_uri:
@@ -62,7 +62,7 @@ async def main():
     #################################################
     # INITIALIZATION
     #################################################
-    # Connect to Neo4j and set up Graphiti indices
+    # Connect to Neptune and set up Graphiti indices
     # This is required before using other Graphiti
     # functionality
     #################################################
@@ -239,7 +239,7 @@ async def main():
         #################################################
         # CLEANUP
         #################################################
-        # Always close the connection to Neo4j when
+        # Always close the connection to Neptune when
         # finished to properly release resources
         #################################################
 
@@ -250,3 +250,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+    
