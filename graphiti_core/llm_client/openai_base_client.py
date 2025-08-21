@@ -31,8 +31,10 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4.1-mini'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
+DEFAULT_MODEL = 'gpt-5-mini'
+DEFAULT_SMALL_MODEL = 'gpt-5-nano'
+DEFAULT_REASONING = 'minimal'
+DEFAULT_VERBOSITY = 'low'
 
 
 class BaseOpenAIClient(LLMClient):
@@ -51,6 +53,8 @@ class BaseOpenAIClient(LLMClient):
         config: LLMConfig | None = None,
         cache: bool = False,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        reasoning: str | None = DEFAULT_REASONING,
+        verbosity: str | None = DEFAULT_VERBOSITY,
     ):
         if cache:
             raise NotImplementedError('Caching is not implemented for OpenAI-based clients')
@@ -60,6 +64,8 @@ class BaseOpenAIClient(LLMClient):
 
         super().__init__(config, cache)
         self.max_tokens = max_tokens
+        self.reasoning = reasoning
+        self.verbosity = verbosity
 
     @abstractmethod
     async def _create_completion(
@@ -81,6 +87,8 @@ class BaseOpenAIClient(LLMClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
+        reasoning: str | None,
+        verbosity: str | None,
     ) -> Any:
         """Create a structured completion using the specific client implementation."""
         pass
@@ -140,6 +148,8 @@ class BaseOpenAIClient(LLMClient):
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
                     response_model=response_model,
+                    reasoning=self.reasoning,
+                    verbosity=self.verbosity,
                 )
                 return self._handle_structured_response(response)
             else:

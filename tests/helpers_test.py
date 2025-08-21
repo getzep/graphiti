@@ -35,7 +35,7 @@ if os.getenv('DISABLE_NEO4J') is None:
 
         drivers.append(GraphProvider.NEO4J)
     except ImportError:
-        pass
+        raise
 
 if os.getenv('DISABLE_FALKORDB') is None:
     try:
@@ -43,7 +43,7 @@ if os.getenv('DISABLE_FALKORDB') is None:
 
         drivers.append(GraphProvider.FALKORDB)
     except ImportError:
-        pass
+        raise
 
 if os.getenv('DISABLE_KUZU') is None:
     try:
@@ -53,13 +53,15 @@ if os.getenv('DISABLE_KUZU') is None:
     except ImportError:
         raise
 
+# Disable Neptune for now
+os.environ['DISABLE_NEPTUNE'] = 'True'
 if os.getenv('DISABLE_NEPTUNE') is None:
     try:
         from graphiti_core.driver.neptune_driver import NeptuneDriver
 
         drivers.append(GraphProvider.NEPTUNE)
     except ImportError:
-        pass
+        raise
 
 NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
