@@ -50,6 +50,7 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                 RETURN n.uuid AS uuid
             """
 
+
 def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
     match provider:
         case GraphProvider.NEPTUNE:
@@ -84,6 +85,7 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
+
 
 EPISODIC_NODE_RETURN = """
     e.content AS content,

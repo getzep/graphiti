@@ -100,7 +100,9 @@ def edge_search_filter_query_constructor(
 
     if filters.node_labels is not None:
         if provider == GraphProvider.KUZU:
-            node_label_filter = 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
+            node_label_filter = (
+                'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
+            )
             filter_params['labels'] = filters.node_labels
         else:
             node_labels = '|'.join(filters.node_labels)

@@ -139,8 +139,8 @@ async def retrieve_episodes(
     query_params: dict = {}
     query_filter = ''
     if group_ids and len(group_ids) > 0:
-         query_filter += '\nAND e.group_id IN $group_ids'
-         query_params['group_ids'] = group_ids
+        query_filter += '\nAND e.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
 
     if source is not None:
         query_filter += '\nAND e.source = $source'

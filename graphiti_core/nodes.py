@@ -459,7 +459,7 @@ class EntityNode(Node):
             entity_data['attributes'] = json.dumps(self.attributes)
             entity_data['labels'] = list(set(self.labels + ['Entity']))
             result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels=""),
+                get_entity_node_save_query(driver.provider, labels=''),
                 **entity_data,
             )
         else:
@@ -728,7 +728,6 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 
 
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
-
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
         # Strip quotes

@@ -26,6 +26,7 @@ EPISODIC_EDGE_SAVE = """
     RETURN e.uuid AS uuid
 """
 
+
 def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
     if provider == GraphProvider.KUZU:
         return """
@@ -49,6 +50,7 @@ def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
             e.created_at = edge.created_at
         RETURN e.uuid AS uuid
     """
+
 
 EPISODIC_EDGE_RETURN = """
     e.uuid AS uuid,

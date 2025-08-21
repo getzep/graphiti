@@ -23,6 +23,10 @@ from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphPr
 
 logger = logging.getLogger(__name__)
 
+# Kuzu requires an explicit schema.
+# As Kuzu currently does not support creating full text indexes on edge properties,
+# we work around this by representing (n:Entity)-[:RELATES_TO]->(m:Entity) as
+# (n)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m).
 SCHEMA_QUERIES = """
     CREATE NODE TABLE IF NOT EXISTS Episodic (
         uuid STRING PRIMARY KEY,
@@ -106,6 +110,7 @@ class KuzuDriver(GraphDriver):
         self, cypher_query_: str, **kwargs: Any
     ) -> tuple[list[dict[str, Any]] | list[list[dict[str, Any]]], None, None]:
         params = {k: v for k, v in kwargs.items() if v is not None}
+        # Kuzu does not support these parameters.
         params.pop('database_', None)
         params.pop('routing_', None)
 
@@ -150,11 +155,11 @@ class KuzuDriverSession(GraphDriverSession):
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        # No cleanup needed for Kuzu, but method must exist
+        # No cleanup needed for Kuzu, but method must exist.
         pass
 
     async def close(self):
-        # No explicit close needed for Kuzu, but method must exist
+        # Do not close the session here, as we're reusing the driver connection.
         pass
 
     async def execute_write(self, func, *args, **kwargs):

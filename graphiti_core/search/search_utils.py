@@ -595,7 +595,9 @@ async def node_fulltext_search(
             return []
     else:
         query = (
-            get_nodes_query('node_name_and_summary', '$query', limit=limit, provider=driver.provider)
+            get_nodes_query(
+                'node_name_and_summary', '$query', limit=limit, provider=driver.provider
+            )
             + yield_query
             + filter_query
             + """
@@ -789,7 +791,7 @@ async def node_bfs_search(
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH (origin:Entity {{uuid: origin_uuid}})-[:RELATES_TO*2..{depth}]->(n:Entity)
             WHERE n.group_id = origin.group_id
-            """
+            """,
         ]
         if bfs_max_depth > 1:
             depth = (bfs_max_depth - 1) * 2
@@ -897,11 +899,7 @@ async def episode_fulltext_search(
         )
 
         records, _, _ = await driver.execute_query(
-            query,
-            query=fuzzy_query,
-            limit=limit,
-            routing_='r',
-            **filter_params
+            query, query=fuzzy_query, limit=limit, routing_='r', **filter_params
         )
 
     episodes = [get_episodic_node_from_record(record) for record in records]
@@ -982,11 +980,7 @@ async def community_fulltext_search(
         )
 
         records, _, _ = await driver.execute_query(
-            query,
-            query=fuzzy_query,
-            limit=limit,
-            routing_='r',
-            **filter_params
+            query, query=fuzzy_query, limit=limit, routing_='r', **filter_params
         )
 
     communities = [get_community_node_from_record(record) for record in records]
@@ -1224,13 +1218,20 @@ async def get_relevant_nodes(
             + filter_query
             + """
             WITH node, n, """
-            + get_vector_cosine_func_query('n.name_embedding', f'CAST(node.name_embedding AS FLOAT[{embedding_size}])', driver.provider)
+            + get_vector_cosine_func_query(
+                'n.name_embedding',
+                f'CAST(node.name_embedding AS FLOAT[{embedding_size}])',
+                driver.provider,
+            )
             + """ AS score
             WHERE score > $min_score
             WITH node, collect(n)[:$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
             """
             + get_nodes_query(
-                'node_name_and_summary', 'node.fulltext_query', limit=limit, provider=driver.provider
+                'node_name_and_summary',
+                'node.fulltext_query',
+                limit=limit,
+                provider=driver.provider,
             )
             + """
             WITH node AS m
@@ -1265,13 +1266,18 @@ async def get_relevant_nodes(
             + filter_query
             + """
             WITH node, n, """
-            + get_vector_cosine_func_query('n.name_embedding', 'node.name_embedding', driver.provider)
+            + get_vector_cosine_func_query(
+                'n.name_embedding', 'node.name_embedding', driver.provider
+            )
             + """ AS score
             WHERE score > $min_score
             WITH node, collect(n)[..$limit] AS top_vector_nodes, collect(n.uuid) AS vector_node_uuids
             """
             + get_nodes_query(
-                'node_name_and_summary', 'node.fulltext_query', limit=limit, provider=driver.provider
+                'node_name_and_summary',
+                'node.fulltext_query',
+                limit=limit,
+                provider=driver.provider,
             )
             + """
             YIELD node AS m
@@ -1410,7 +1416,9 @@ async def get_relevant_edges(
         )
     else:
         if driver.provider == GraphProvider.KUZU:
-            embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+            embedding_size = (
+                len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+            )
             if embedding_size == 0:
                 return []
 
@@ -1597,7 +1605,9 @@ async def get_edge_invalidation_candidates(
         )
     else:
         if driver.provider == GraphProvider.KUZU:
-            embedding_size = len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+            embedding_size = (
+                len(edges[0].fact_embedding) if edges[0].fact_embedding is not None else 0
+            )
             if embedding_size == 0:
                 return []
 
@@ -1935,12 +1945,15 @@ async def get_embeddings_for_edges(
                 MATCH (n:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m:Entity)
             """
 
-        query = match_query + """
+        query = (
+            match_query
+            + """
         WHERE e.uuid IN $edge_uuids
         RETURN DISTINCT
             e.uuid AS uuid,
             e.fact_embedding AS fact_embedding
         """
+        )
     results, _, _ = await driver.execute_query(
         query,
         edge_uuids=[edge.uuid for edge in edges],
