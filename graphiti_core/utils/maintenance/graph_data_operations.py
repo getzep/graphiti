@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if driver.provider == GraphProvider.NEPTUNE:
-        return  # Neptune does not need indexes built
+        await driver.create_aoss_indices()
+        return
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
