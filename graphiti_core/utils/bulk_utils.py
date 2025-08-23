@@ -118,6 +118,7 @@ async def add_nodes_and_edges_bulk_tx(
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
+        episode.pop('labels', None)
 
     nodes = []
     for node in entity_nodes:
@@ -135,7 +136,8 @@ async def add_nodes_and_edges_bulk_tx(
 
         entity_data['labels'] = list(set(node.labels + ['Entity']))
         if driver.provider == GraphProvider.KUZU:
-            entity_data['attributes'] = node.attributes or {}
+            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
+            entity_data['attributes'] = json.dumps(attributes)
         else:
             entity_data.update(node.attributes or {})
 
@@ -161,27 +163,35 @@ async def add_nodes_and_edges_bulk_tx(
         }
 
         if driver.provider == GraphProvider.KUZU:
-            edge_data['attributes'] = edge.attributes or {}
+            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
+            edge_data['attributes'] = json.dumps(attributes)
         else:
             edge_data.update(edge.attributes or {})
 
         edges.append(edge_data)
 
-    entity_node_save_bulk = get_entity_node_save_bulk_query(driver.provider, nodes)
-
     if driver.provider == GraphProvider.KUZU:
-        # Raw structs are currently order sensitive in Kuzu: https://github.com/kuzudb/kuzu/issues/5834
-        episodes = json.dumps(convert_datetimes_to_strings(episodes))
-        nodes = json.dumps(convert_datetimes_to_strings(nodes))
-        edges = json.dumps(convert_datetimes_to_strings(edges))
-
-    await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
-    await tx.run(entity_node_save_bulk, nodes=nodes)
-    await tx.run(
-        get_episodic_edge_save_bulk_query(driver.provider),
-        episodic_edges=[edge.model_dump() for edge in episodic_edges],
-    )
-    await tx.run(get_entity_edge_save_bulk_query(driver.provider), entity_edges=edges)
+        # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
+        episode_query = get_episode_node_save_bulk_query(driver.provider)
+        for episode in episodes:
+            await tx.run(episode_query, **episode)
+        entity_node_query = get_entity_node_save_bulk_query(driver.provider, nodes)
+        for node in nodes:
+            await tx.run(entity_node_query, **node)
+        entity_edge_query = get_entity_edge_save_bulk_query(driver.provider)
+        for edge in edges:
+            await tx.run(entity_edge_query, **edge)
+        episodic_edge_query = get_episodic_edge_save_bulk_query(driver.provider)
+        for edge in episodic_edges:
+            await tx.run(episodic_edge_query, **edge.model_dump())
+    else:
+        await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
+        await tx.run(get_entity_node_save_bulk_query(driver.provider, nodes), nodes=nodes)
+        await tx.run(
+            get_episodic_edge_save_bulk_query(driver.provider),
+            episodic_edges=[edge.model_dump() for edge in episodic_edges],
+        )
+        await tx.run(get_entity_edge_save_bulk_query(driver.provider), entity_edges=edges)
 
 
 async def extract_nodes_and_edges_bulk(

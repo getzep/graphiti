@@ -30,13 +30,12 @@ EPISODIC_EDGE_SAVE = """
 def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
     if provider == GraphProvider.KUZU:
         return """
-            UNWIND CAST($episodic_edges AS STRUCT(uuid STRING, source_node_uuid STRING, target_node_uuid STRING, group_id STRING, created_at TIMESTAMP)[]) AS edge
-            MATCH (episode:Episodic {uuid: edge.source_node_uuid})
-            MATCH (node:Entity {uuid: edge.target_node_uuid})
-            MERGE (episode)-[e:MENTIONS {uuid: edge.uuid}]->(node)
+            MATCH (episode:Episodic {uuid: $source_node_uuid})
+            MATCH (node:Entity {uuid: $target_node_uuid})
+            MERGE (episode)-[e:MENTIONS {uuid: $uuid}]->(node)
             SET
-                e.group_id = edge.group_id,
-                e.created_at = edge.created_at
+                e.group_id = $group_id,
+                e.created_at = $created_at
             RETURN e.uuid AS uuid
         """
 
@@ -136,23 +135,21 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
             """
         case GraphProvider.KUZU:
             return """
-                UNWIND CAST($entity_edges AS STRUCT(uuid STRING, source_node_uuid STRING, target_node_uuid STRING, group_id STRING, name STRING, fact STRING, fact_embedding FLOAT[], episodes STRING[], created_at TIMESTAMP, expired_at TIMESTAMP, valid_at TIMESTAMP, invalid_at TIMESTAMP, attributes STRING)[]) AS edge
-                MATCH (source:Entity {uuid: edge.source_node_uuid})
-                MATCH (target:Entity {uuid: edge.target_node_uuid})
-                MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: edge.uuid})-[:RELATES_TO]->(target)
+                MATCH (source:Entity {uuid: $source_node_uuid})
+                MATCH (target:Entity {uuid: $target_node_uuid})
+                MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
                 SET
-                    e.group_id = edge.group_id,
-                    e.name = edge.name,
-                    e.fact = edge.fact,
-                    e.fact_embedding = edge.fact_embedding,
-                    e.episodes = edge.episodes,
-                    e.created_at = edge.created_at,
-                    e.expired_at = edge.expired_at,
-                    e.valid_at = edge.valid_at,
-                    e.invalid_at = edge.invalid_at,
-                    e.attributes = edge.attributes
-                WITH e, edge
-                RETURN edge.uuid AS uuid
+                    e.group_id = $group_id,
+                    e.name = $name,
+                    e.fact = $fact,
+                    e.fact_embedding = $fact_embedding,
+                    e.episodes = $episodes,
+                    e.created_at = $created_at,
+                    e.expired_at = $expired_at,
+                    e.valid_at = $valid_at,
+                    e.invalid_at = $invalid_at,
+                    e.attributes = $attributes
+                RETURN e.uuid AS uuid
             """
         case _:
             return """

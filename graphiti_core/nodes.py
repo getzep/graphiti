@@ -709,11 +709,6 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     if valid_at is None:
         raise ValueError(f'valid_at cannot be None for episode {record.get("uuid", "unknown")}')
 
-    entity_edges = record['entity_edges']
-    if entity_edges:
-        # Workaround for Kuzu
-        entity_edges = [edge.strip('"\'') for edge in entity_edges]
-
     return EpisodicNode(
         content=record['content'],
         created_at=created_at,
@@ -723,15 +718,13 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         source=EpisodeType.from_str(record['source']),
         name=record['name'],
         source_description=record['source_description'],
-        entity_edges=entity_edges,
+        entity_edges=record['entity_edges'],
     )
 
 
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
-        # Strip quotes
-        record['labels'] = [label.strip('"\'') for label in record['labels']]
     else:
         attributes = record['attributes']
         attributes.pop('uuid', None)
@@ -740,6 +733,7 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         attributes.pop('name_embedding', None)
         attributes.pop('summary', None)
         attributes.pop('created_at', None)
+        attributes.pop('labels', None)
 
     entity_node = EntityNode(
         uuid=record['uuid'],

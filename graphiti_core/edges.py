@@ -541,9 +541,7 @@ def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
 def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityEdge:
     episodes = record['episodes']
     if provider == GraphProvider.KUZU:
-        attributes = json.loads(record['attributes'])
-        if episodes:
-            episodes = [episode.strip('"\'') for episode in episodes]
+        attributes = json.loads(record['attributes']) if record['attributes'] else {}
     else:
         attributes = record['attributes']
         attributes.pop('uuid', None)

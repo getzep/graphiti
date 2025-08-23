@@ -134,7 +134,8 @@ class KuzuDriver(GraphDriver):
         return KuzuDriverSession(self)
 
     async def close(self):
-        self.client.close()
+        # self.client.close()
+        pass
 
     def delete_all_indexes(self, database_: str):
         pass

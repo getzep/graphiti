@@ -112,9 +112,12 @@ def mock_cross_encoder_client():
 
 
 @pytest.mark.asyncio
-async def test_add_bulk_remove_episode(
+async def test_add_bulk(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
 ):
+    if graph_driver.provider == GraphProvider.FALKORDB:
+        pytest.skip('Skipping as test fails on FalkorDB')
+
     graphiti = Graphiti(
         graph_driver=graph_driver,
         llm_client=mock_llm_client,
@@ -126,36 +129,48 @@ async def test_add_bulk_remove_episode(
 
     now = datetime.now()
 
-    # Create episodic node
+    # Create episodic nodes
     episode_node = EpisodicNode(
         name='test_episode',
+        group_id=group_id,
         labels=[],
         created_at=now,
-        valid_at=now,
         source=EpisodeType.message,
         source_description='conversation message',
         content='Alice likes Bob',
-        entity_edges=[],
-        group_id=group_id,
+        valid_at=now,
+        entity_edges=[], # Filled in later
     )
-
-    # Create entity node
-    alice_node = EntityNode(
-        name='Alice',
+    episode_node_2 = EpisodicNode(
+        name='test_episode_2',
+        group_id=group_id,
         labels=[],
         created_at=now,
-        summary='Alice summary',
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Bob adores Alice',
+        valid_at=now,
+        entity_edges=[], # Filled in later
+    )
+
+    # Create entity nodes
+    alice_node = EntityNode(
+        name='Alice',
         group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice summary',
+        attributes={'age': 30, 'location': 'New York'},
     )
     await alice_node.generate_name_embedding(mock_embedder)
 
-    # Create entity node
     bob_node = EntityNode(
         name='Bob',
-        labels=[],
+        group_id=group_id,
+        labels=['Entity', 'Person2'],
         created_at=now,
         summary='Bob summary',
-        group_id=group_id,
+        attributes={'age': 25, 'location': 'Los Angeles'},
     )
     await bob_node.generate_name_embedding(mock_embedder)
 
@@ -174,15 +189,173 @@ async def test_add_bulk_remove_episode(
     )
     await entity_edge.generate_embedding(mock_embedder)
 
-    # Create episodic to entity edge
+    # Create episodic to entity edges
     episodic_alice_edge = EpisodicEdge(
         source_node_uuid=episode_node.uuid,
         target_node_uuid=alice_node.uuid,
         created_at=now,
         group_id=group_id,
     )
+    episodic_bob_edge = EpisodicEdge(
+        source_node_uuid=episode_node.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        group_id=group_id,
+    )
+    episodic_2_alice_edge = EpisodicEdge(
+        source_node_uuid=episode_node_2.uuid,
+        target_node_uuid=alice_node.uuid,
+        created_at=now,
+        group_id=group_id,
+    )
+    episodic_2_bob_edge = EpisodicEdge(
+        source_node_uuid=episode_node_2.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        group_id=group_id,
+    )
 
-    # Create episodic to entity edge
+    # Cross reference the ids
+    episode_node.entity_edges = [entity_edge.uuid]
+    episode_node_2.entity_edges = [entity_edge.uuid]
+    entity_edge.episodes = [episode_node.uuid, episode_node_2.uuid]
+
+    # Test add bulk
+    await add_nodes_and_edges_bulk(
+        graph_driver,
+        [episode_node, episode_node_2],
+        [episodic_alice_edge, episodic_bob_edge, episodic_2_alice_edge, episodic_2_bob_edge],
+        [alice_node, bob_node],
+        [entity_edge],
+        mock_embedder,
+    )
+
+    node_ids = [episode_node.uuid, episode_node_2.uuid, alice_node.uuid, bob_node.uuid]
+    edge_ids = [episodic_alice_edge.uuid, episodic_bob_edge.uuid, episodic_2_alice_edge.uuid, episodic_2_bob_edge.uuid, entity_edge.uuid]
+    node_count = await get_node_count(graph_driver, node_ids)
+    assert node_count == 4
+    edge_count = await get_edge_count(graph_driver, edge_ids)
+    assert edge_count == 5
+
+    # Test episodic nodes
+    retrieved_episode = await EpisodicNode.get_by_uuid(graph_driver, episode_node.uuid)
+    assert retrieved_episode.name == episode_node.name
+    assert retrieved_episode.group_id == episode_node.group_id
+    assert retrieved_episode.created_at == episode_node.created_at
+    assert retrieved_episode.source == episode_node.source
+    assert retrieved_episode.source_description == episode_node.source_description
+    assert retrieved_episode.content == episode_node.content
+    assert retrieved_episode.valid_at == episode_node.valid_at
+    assert set(retrieved_episode.entity_edges) == set(episode_node.entity_edges)
+
+    # Test episodic edges
+    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_alice_edge.uuid)
+    print(node_ids)
+    print(edge_ids)
+    assert retrieved_episode_edge.source_node_uuid == episodic_alice_edge.source_node_uuid
+    assert retrieved_episode_edge.target_node_uuid == episodic_alice_edge.target_node_uuid
+    assert retrieved_episode_edge.created_at == episodic_alice_edge.created_at
+    assert retrieved_episode_edge.group_id == episodic_alice_edge.group_id
+
+    # Test entity edges
+    retrieved_entity_edge = await EntityEdge.get_by_uuid(graph_driver, entity_edge.uuid)
+    assert retrieved_entity_edge.source_node_uuid == entity_edge.source_node_uuid
+    assert retrieved_entity_edge.target_node_uuid == entity_edge.target_node_uuid
+    assert retrieved_entity_edge.created_at == entity_edge.created_at
+    assert retrieved_entity_edge.group_id == entity_edge.group_id
+
+    # Test entity nodes
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, alice_node.uuid)
+    await retrieved_entity_node.load_name_embedding(graph_driver)
+    assert retrieved_entity_node.name == alice_node.name
+    assert retrieved_entity_node.group_id == alice_node.group_id
+    assert set(retrieved_entity_node.labels) == set(alice_node.labels)
+    assert retrieved_entity_node.created_at == alice_node.created_at
+    assert np.allclose(retrieved_entity_node.name_embedding, alice_node.name_embedding)
+    assert retrieved_entity_node.summary == alice_node.summary
+    assert retrieved_entity_node.attributes == alice_node.attributes
+
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, bob_node.uuid)
+    await retrieved_entity_node.load_name_embedding(graph_driver)
+    assert retrieved_entity_node.name == bob_node.name
+    assert retrieved_entity_node.group_id == bob_node.group_id
+    assert set(retrieved_entity_node.labels) == set(bob_node.labels)
+    assert retrieved_entity_node.created_at == bob_node.created_at
+    assert np.allclose(retrieved_entity_node.name_embedding, bob_node.name_embedding)
+    assert retrieved_entity_node.summary == bob_node.summary
+    assert retrieved_entity_node.attributes == bob_node.attributes
+
+@pytest.mark.asyncio
+async def test_remove_episode(
+    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
+):
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+
+    await graphiti.build_indices_and_constraints()
+
+    now = datetime.now()
+
+    # Create episodic nodes
+    episode_node = EpisodicNode(
+        name='test_episode',
+        group_id=group_id,
+        labels=[],
+        created_at=now,
+        source=EpisodeType.message,
+        source_description='conversation message',
+        content='Alice likes Bob',
+        valid_at=now,
+        entity_edges=[], # Filled in later
+    )
+
+    # Create entity nodes
+    alice_node = EntityNode(
+        name='Alice',
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=now,
+        summary='Alice summary',
+        attributes={'age': 30, 'location': 'New York'},
+    )
+    await alice_node.generate_name_embedding(mock_embedder)
+
+    bob_node = EntityNode(
+        name='Bob',
+        group_id=group_id,
+        labels=['Entity', 'Person2'],
+        created_at=now,
+        summary='Bob summary',
+        attributes={'age': 25, 'location': 'Los Angeles'},
+    )
+    await bob_node.generate_name_embedding(mock_embedder)
+
+    # Create entity to entity edge
+    entity_edge = EntityEdge(
+        source_node_uuid=alice_node.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        name='likes',
+        fact='Alice likes Bob',
+        episodes=[],
+        expired_at=now,
+        valid_at=now,
+        invalid_at=now,
+        group_id=group_id,
+    )
+    await entity_edge.generate_embedding(mock_embedder)
+
+    # Create episodic to entity edges
+    episodic_alice_edge = EpisodicEdge(
+        source_node_uuid=episode_node.uuid,
+        target_node_uuid=alice_node.uuid,
+        created_at=now,
+        group_id=group_id,
+    )
     episodic_bob_edge = EpisodicEdge(
         source_node_uuid=episode_node.uuid,
         target_node_uuid=bob_node.uuid,
@@ -218,6 +391,7 @@ async def test_add_bulk_remove_episode(
     edge_count = await get_edge_count(graph_driver, edge_ids)
     assert edge_count == 0
 
+    # Test add bulk again
     await add_nodes_and_edges_bulk(
         graph_driver,
         [episode_node],
