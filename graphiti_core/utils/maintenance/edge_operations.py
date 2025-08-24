@@ -29,7 +29,7 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
+from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather, EXTRACT_EDGES_MAX_TOKENS
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
@@ -118,7 +118,7 @@ async def extract_edges(
 ) -> list[EntityEdge]:
     start = time()
 
-    extract_edges_max_tokens = 16384
+    extract_edges_max_tokens = EXTRACT_EDGES_MAX_TOKENS
     llm_client = clients.llm_client
 
     edge_type_signature_map: dict[str, tuple[str, str]] = {
