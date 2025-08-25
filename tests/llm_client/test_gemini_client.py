@@ -474,9 +474,9 @@ class TestGeminiClientGenerateResponse:
             # Verify correct max tokens is used from model mapping
             call_args = mock_gemini_client.aio.models.generate_content.call_args
             config = call_args[1]['config']
-            assert config.max_output_tokens == expected_max_tokens, (
-                f'Model {model_name} should use {expected_max_tokens} tokens'
-            )
+            assert (
+                config.max_output_tokens == expected_max_tokens
+            ), f'Model {model_name} should use {expected_max_tokens} tokens'
 
 
 if __name__ == '__main__':
