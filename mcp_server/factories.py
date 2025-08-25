@@ -25,14 +25,14 @@ except ImportError:
     HAS_AZURE_EMBEDDER = False
 
 try:
-    from graphiti_core.embedder.gemini_embedder import GeminiEmbedder
+    from graphiti_core.embedder.gemini import GeminiEmbedder
 
     HAS_GEMINI_EMBEDDER = True
 except ImportError:
     HAS_GEMINI_EMBEDDER = False
 
 try:
-    from graphiti_core.embedder.voyage_embedder import VoyageEmbedder
+    from graphiti_core.embedder.voyage import VoyageEmbedder
 
     HAS_VOYAGE_EMBEDDER = True
 except ImportError:
