@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from functools import partial
+import logging
 
 from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
@@ -18,7 +19,7 @@ class AsyncWorker:
     async def worker(self):
         while True:
             try:
-                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
+                logging.info(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
                 await job()
             except asyncio.CancelledError:
