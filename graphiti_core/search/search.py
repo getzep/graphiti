@@ -89,13 +89,13 @@ async def search(
         or NodeSearchMethod in config.node_config.search_methods
         or NodeReranker.mmr == config.node_config.reranker
     ):
-        query_vector = (
+        search_vector = (
             query_vector
             if query_vector is not None
             else await embedder.create(input_data=[query.replace('\n', ' ')])
         )
     else:
-        query_vector = [0] * EMBEDDING_DIM
+        search_vector = [0] * EMBEDDING_DIM
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids and group_ids != [''] else None
@@ -109,7 +109,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.edge_config,
             search_filter,
@@ -122,7 +122,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.node_config,
             search_filter,
@@ -135,7 +135,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.episode_config,
             search_filter,
@@ -146,7 +146,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.community_config,
             config.limit,
