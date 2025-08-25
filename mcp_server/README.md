@@ -78,6 +78,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Create a virtual environment and install dependencies in one step
 uv sync
+
+# Optional: Install additional LLM providers (anthropic, gemini, groq, voyage, sentence-transformers)
+uv sync --extra providers
 ```
 
 ## Configuration
