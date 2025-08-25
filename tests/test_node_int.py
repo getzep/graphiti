@@ -17,7 +17,6 @@ limitations under the License.
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-import numpy as np
 import pytest
 
 from graphiti_core.nodes import (
