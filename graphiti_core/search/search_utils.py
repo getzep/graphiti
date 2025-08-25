@@ -180,11 +180,11 @@ async def edge_fulltext_search(
             # Match the edge ids and return the values
             query = (
                 """
-                    UNWIND $ids as id
-                    MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                    WHERE e.group_id IN $group_ids 
-                    AND id(e)=id 
-                    """
+                        UNWIND $ids as id
+                        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                        WHERE e.group_id IN $group_ids 
+                        AND id(e)=id 
+                        """
                 + filter_query
                 + """
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
@@ -479,11 +479,11 @@ async def node_fulltext_search(
             # Match the edge ides and return the values
             query = (
                 """
-                    UNWIND $ids as i
-                    MATCH (n:Entity)
-                    WHERE n.uuid=i.id
-                    RETURN
-                    """
+                        UNWIND $ids as i
+                        MATCH (n:Entity)
+                        WHERE n.uuid=i.id
+                        RETURN
+                        """
                 + ENTITY_NODE_RETURN
                 + """
                 ORDER BY i.score DESC
@@ -505,7 +505,8 @@ async def node_fulltext_search(
         index_name = (
             'node_name_and_summary'
             if not USE_HNSW
-            else 'node_name_and_summary_' + group_ids[0].replace('-', '')
+            else 'node_name_and_summary_'
+            + (group_ids[0].replace('-', '') if len(group_ids) > 0 else '')
         )
         query = (
             get_nodes_query(driver.provider, index_name, '$query')
@@ -592,11 +593,11 @@ async def node_similarity_search(
             # Match the edge ides and return the values
             query = (
                 """
-                        UNWIND $ids as i
-                        MATCH (n:Entity)
-                        WHERE id(n)=i.id
-                        RETURN 
-                        """
+                            UNWIND $ids as i
+                            MATCH (n:Entity)
+                            WHERE id(n)=i.id
+                            RETURN 
+                            """
                 + ENTITY_NODE_RETURN
                 + """
                     ORDER BY i.score DESC
@@ -615,7 +616,9 @@ async def node_similarity_search(
         else:
             return []
     elif driver.provider == GraphProvider.NEO4J and USE_HNSW:
-        index_name = 'group_entity_vector_' + group_ids[0].replace('-', '')
+        index_name = 'group_entity_vector_' + (
+            group_ids[0].replace('-', '') if len(group_ids) > 0 else ''
+        )
         query = (
             f"""
                     CALL db.index.vector.queryNodes('{index_name}', {limit}, $search_vector) YIELD node AS n, score
@@ -792,7 +795,7 @@ async def episode_fulltext_search(
         index_name = (
             'episode_content'
             if not USE_HNSW
-            else 'episode_content_' + group_ids[0].replace('-', '')
+            else 'episode_content_' + (group_ids[0].replace('-', '') if len(group_ids) > 0 else '')
         )
         query = (
             get_nodes_query(driver.provider, index_name, '$query')

@@ -24,7 +24,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,

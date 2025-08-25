@@ -30,7 +30,7 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id, batch_size: int
         await session.run(
             episode_query,
             group_id=group_id,
-            group_label='Episodic_' + group_id,
+            group_label='Episodic_' + group_id.replace('-', ''),
             batch_size=batch_size,
         )
 
@@ -38,7 +38,7 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id, batch_size: int
         await session.run(
             entity_query,
             group_id=group_id,
-            group_label='Entity_' + group_id,
+            group_label='Entity_' + group_id.replace('-', ''),
             batch_size=batch_size,
         )
 
@@ -46,6 +46,6 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id, batch_size: int
         await session.run(
             community_query,
             group_id=group_id,
-            group_label='Community' + group_id,
+            group_label='Community' + group_id.replace('-', ''),
             batch_size=batch_size,
         )
