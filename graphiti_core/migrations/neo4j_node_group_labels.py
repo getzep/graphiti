@@ -3,7 +3,7 @@ from graphiti_core.helpers import validate_group_id
 from graphiti_core.utils.maintenance.graph_data_operations import build_dynamic_indexes
 
 
-async def neo4j_node_group_labels(driver: GraphDriver, group_id, batch_size: int = 100):
+async def neo4j_node_group_labels(driver: GraphDriver, group_id: str, batch_size: int = 100):
     validate_group_id(group_id)
     await build_dynamic_indexes(driver, group_id)
 
