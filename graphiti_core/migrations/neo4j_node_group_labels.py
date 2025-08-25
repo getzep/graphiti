@@ -48,6 +48,6 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id, batch_size: int
         await session.run(
             community_query,
             group_id=group_id,
-            group_label='Community' + group_id.replace('-', ''),
+            group_label='Community_' + group_id.replace('-', ''),
             batch_size=batch_size,
         )

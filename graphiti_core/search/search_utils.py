@@ -55,7 +55,7 @@ from graphiti_core.search.search_filters import (
 )
 
 logger = logging.getLogger(__name__)
-USE_HNSW = os.getenv('USE_HNSW', False)
+USE_HNSW = os.getenv('USE_HNSW', '').lower() in ('true', '1', 'yes')
 
 RELEVANT_SCHEMA_LIMIT = 10
 DEFAULT_MIN_SCORE = 0.6
@@ -180,11 +180,11 @@ async def edge_fulltext_search(
             # Match the edge ids and return the values
             query = (
                 """
-                        UNWIND $ids as id
-                        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                        WHERE e.group_id IN $group_ids 
-                        AND id(e)=id 
-                        """
+                            UNWIND $ids as id
+                            MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                            WHERE e.group_id IN $group_ids 
+                            AND id(e)=id 
+                            """
                 + filter_query
                 + """
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
@@ -479,11 +479,11 @@ async def node_fulltext_search(
             # Match the edge ides and return the values
             query = (
                 """
-                        UNWIND $ids as i
-                        MATCH (n:Entity)
-                        WHERE n.uuid=i.id
-                        RETURN
-                        """
+                            UNWIND $ids as i
+                            MATCH (n:Entity)
+                            WHERE n.uuid=i.id
+                            RETURN
+                            """
                 + ENTITY_NODE_RETURN
                 + """
                 ORDER BY i.score DESC
@@ -593,11 +593,11 @@ async def node_similarity_search(
             # Match the edge ides and return the values
             query = (
                 """
-                            UNWIND $ids as i
-                            MATCH (n:Entity)
-                            WHERE id(n)=i.id
-                            RETURN 
-                            """
+                                UNWIND $ids as i
+                                MATCH (n:Entity)
+                                WHERE id(n)=i.id
+                                RETURN 
+                                """
                 + ENTITY_NODE_RETURN
                 + """
                     ORDER BY i.score DESC
