@@ -28,6 +28,7 @@ from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
+    Edge,
     EntityEdge,
     EpisodicEdge,
     create_entity_edge_embeddings,
@@ -46,6 +47,7 @@ from graphiti_core.nodes import (
     EntityNode,
     EpisodeType,
     EpisodicNode,
+    Node,
     create_entity_node_embeddings,
 )
 from graphiti_core.search.search import SearchConfig, search
@@ -87,6 +89,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
+    build_dynamic_indexes,
     build_indices_and_constraints,
     retrieve_episodes,
 )
@@ -448,6 +451,7 @@ class Graphiti:
 
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
+            await build_dynamic_indexes(self.driver, group_id)
 
             previous_episodes = (
                 await self.retrieve_episodes(
@@ -1066,12 +1070,7 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        await semaphore_gather(
-            *[node.delete(self.driver) for node in nodes_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
-        await semaphore_gather(
-            *[edge.delete(self.driver) for edge in edges_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
+        await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+
+        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
         await episode.delete(self.driver)

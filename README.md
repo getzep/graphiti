@@ -105,7 +105,7 @@ Graphiti is specifically designed to address the challenges of dynamic and frequ
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 or higher (serves as the embeddings storage backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -148,6 +148,17 @@ pip install graphiti-core[falkordb]
 uv add graphiti-core[falkordb]
 ```
 
+### Installing with Amazon Neptune Support
+
+If you plan to use Amazon Neptune as your graph database backend, install with the Amazon Neptune extra:
+
+```bash
+pip install graphiti-core[neptune]
+
+# or with uv
+uv add graphiti-core[neptune]
+```
+
 ### You can also install optional LLM providers as extras:
 
 ```bash
@@ -165,6 +176,9 @@ pip install graphiti-core[anthropic,groq,google-genai]
 
 # Install with FalkorDB and LLM providers
 pip install graphiti-core[falkordb,anthropic,google-genai]
+
+# Install with Amazon Neptune
+pip install graphiti-core[neptune]
 ```
 
 ## Default to Low Concurrency; LLM Provider 429 Rate Limit Errors
@@ -184,7 +198,7 @@ If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT
 
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory. The quickstart demonstrates:
 
-1. Connecting to a Neo4j or FalkorDB database
+1. Connecting to a Neo4j, Amazon Neptune, or FalkorDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -262,6 +276,26 @@ driver = FalkorDriver(
     password="falkor_password",  # Optional
     database="my_custom_graph"  # Custom database name
 )
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
+#### Amazon Neptune
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+# Create a FalkorDB driver with custom database name
+driver = NeptuneDriver(
+    host=<NEPTUNE ENDPOINT>,
+    aoss_host=<Amazon OpenSearch Serverless Host>,
+    port=<PORT> # Optional, defaults to 8182,
+    aoss_port=<PORT> # Optional, defaults to 443
+)
+
+driver = NeptuneDriver(host=neptune_uri, aoss_host=aoss_host, port=neptune_port)
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -443,7 +477,7 @@ Ensure Ollama is running (`ollama serve`) and that you have pulled the models yo
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
 - [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
-- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/integrations/lang-graph-agent)
 
 ## Telemetry
 
@@ -458,7 +492,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB)
+  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect

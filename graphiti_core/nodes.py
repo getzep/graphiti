@@ -31,11 +31,13 @@ from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
+    COMMUNITY_NODE_RETURN_NEPTUNE,
     ENTITY_NODE_RETURN,
     EPISODIC_NODE_RETURN,
-    EPISODIC_NODE_SAVE,
+    EPISODIC_NODE_RETURN_NEPTUNE,
     get_community_node_save_query,
     get_entity_node_save_query,
+    get_episode_node_save_query,
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -89,23 +91,24 @@ class Node(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.FALKORDB:
-            for label in ['Entity', 'Episodic', 'Community']:
+        match driver.provider:
+            case GraphProvider.NEO4J:
                 await driver.execute_query(
-                    f"""
-                    MATCH (n:{label} {{uuid: $uuid}})
-                    DETACH DELETE n
-                    """,
-                    uuid=self.uuid,
-                )
-        else:
-            await driver.execute_query(
-                """
+                    """
                 MATCH (n:Entity|Episodic|Community {uuid: $uuid})
                 DETACH DELETE n
                 """,
-                uuid=self.uuid,
-            )
+                    uuid=self.uuid,
+                )
+            case _:  # FalkorDB and Neptune
+                for label in ['Entity', 'Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{uuid: $uuid}})
+                        DETACH DELETE n
+                        """,
+                        uuid=self.uuid,
+                    )
 
         logger.debug(f'Deleted Node: {self.uuid}')
 
@@ -119,26 +122,55 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str, batch_size: int = 100):
+        match driver.provider:
+            case GraphProvider.NEO4J:
+                async with driver.session() as session:
+                    await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+                        CALL {
+                            WITH n
+                            DETACH DELETE n
+                        } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        group_id=group_id,
+                        batch_size=batch_size,
+                    )
+
+            case _:  # FalkorDB and Neptune
+                for label in ['Entity', 'Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{group_id: $group_id}})
+                        DETACH DELETE n
+                        """,
+                        group_id=group_id,
+                    )
+
+    @classmethod
+    async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
         if driver.provider == GraphProvider.FALKORDB:
             for label in ['Entity', 'Episodic', 'Community']:
                 await driver.execute_query(
                     f"""
-                    MATCH (n:{label} {{group_id: $group_id}})
-                    DETACH DELETE n
-                    """,
-                    group_id=group_id,
+                       MATCH (n:{label})
+                       WHERE n.uuid IN $uuids
+                       DETACH DELETE n
+                       """,
+                    uuids=uuids,
                 )
         else:
             async with driver.session() as session:
                 await session.run(
                     """
-                    MATCH (n:Entity|Episodic|Community {group_id: $group_id})
+                    MATCH (n:Entity|Episodic|Community)
+                    WHERE n.uuid IN $uuids
                     CALL {
                         WITH n
                         DETACH DELETE n
                     } IN TRANSACTIONS OF $batch_size ROWS
                     """,
-                    group_id=group_id,
+                    uuids=uuids,
                     batch_size=batch_size,
                 )
 
@@ -162,11 +194,25 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'episode_content',
+                [
+                    {
+                        'uuid': self.uuid,
+                        'group_id': self.group_id,
+                        'source': self.source.value,
+                        'content': self.content,
+                        'source_description': self.source_description,
+                    }
+                ],
+            )
         result = await driver.execute_query(
-            EPISODIC_NODE_SAVE,
+            get_episode_node_save_query(driver.provider),
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
+            group_label='Episodic_' + self.group_id.replace('-', ''),
             source_description=self.source_description,
             content=self.content,
             entity_edges=self.entity_edges,
@@ -186,7 +232,11 @@ class EpisodicNode(Node):
             MATCH (e:Episodic {uuid: $uuid})
             RETURN
             """
-            + EPISODIC_NODE_RETURN,
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             uuid=uuid,
             routing_='r',
         )
@@ -206,7 +256,11 @@ class EpisodicNode(Node):
             WHERE e.uuid IN $uuids
             RETURN DISTINCT
             """
-            + EPISODIC_NODE_RETURN,
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             uuids=uuids,
             routing_='r',
         )
@@ -235,7 +289,11 @@ class EpisodicNode(Node):
             + """
             RETURN DISTINCT
             """
-            + EPISODIC_NODE_RETURN
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            )
             + """
             ORDER BY uuid DESC
             """
@@ -257,7 +315,11 @@ class EpisodicNode(Node):
             MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
             RETURN DISTINCT
             """
-            + EPISODIC_NODE_RETURN,
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            ),
             entity_node_uuid=entity_node_uuid,
             routing_='r',
         )
@@ -284,11 +346,18 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
-        records, _, _ = await driver.execute_query(
+        if driver.provider == GraphProvider.NEPTUNE:
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
-            MATCH (n:Entity {uuid: $uuid})
-            RETURN n.name_embedding AS name_embedding
-            """,
+        else:
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN n.name_embedding AS name_embedding
+            """
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=self.uuid,
             routing_='r',
         )
@@ -309,7 +378,10 @@ class EntityNode(Node):
         }
         entity_data.update(self.attributes or {})
 
-        labels = ':'.join(self.labels + ['Entity'])
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+
+        labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
 
         result = await driver.execute_query(
             get_entity_node_save_query(driver.provider, labels),
@@ -406,8 +478,13 @@ class CommunityNode(Node):
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'community_name',
+                [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
+            )
         result = await driver.execute_query(
-            get_community_node_save_query(driver.provider),
+            get_community_node_save_query(driver.provider),  # type: ignore
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
@@ -430,11 +507,19 @@ class CommunityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
-        records, _, _ = await driver.execute_query(
+        if driver.provider == GraphProvider.NEPTUNE:
+            query: LiteralString = """
+                MATCH (c:Community {uuid: $uuid})
+                RETURN [x IN split(c.name_embedding, ",") | toFloat(x)] as name_embedding
             """
+        else:
+            query: LiteralString = """
             MATCH (c:Community {uuid: $uuid})
             RETURN c.name_embedding AS name_embedding
-            """,
+            """
+
+        records, _, _ = await driver.execute_query(
+            query,
             uuid=self.uuid,
             routing_='r',
         )
@@ -451,7 +536,11 @@ class CommunityNode(Node):
             MATCH (n:Community {uuid: $uuid})
             RETURN
             """
-            + COMMUNITY_NODE_RETURN,
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            ),
             uuid=uuid,
             routing_='r',
         )
@@ -471,7 +560,11 @@ class CommunityNode(Node):
             WHERE n.uuid IN $uuids
             RETURN
             """
-            + COMMUNITY_NODE_RETURN,
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            ),
             uuids=uuids,
             routing_='r',
         )
@@ -500,7 +593,11 @@ class CommunityNode(Node):
             + """
             RETURN
             """
-            + COMMUNITY_NODE_RETURN
+            + (
+                COMMUNITY_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else COMMUNITY_NODE_RETURN
+            )
             + """
             ORDER BY n.uuid DESC
             """

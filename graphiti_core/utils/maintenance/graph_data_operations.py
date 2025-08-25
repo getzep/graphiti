@@ -19,10 +19,13 @@ from datetime import datetime
 
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import semaphore_gather
-from graphiti_core.models.nodes.node_db_queries import EPISODIC_NODE_RETURN
+from graphiti_core.models.nodes.node_db_queries import (
+    EPISODIC_NODE_RETURN,
+    EPISODIC_NODE_RETURN_NEPTUNE,
+)
 from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_from_record
 
 EPISODE_WINDOW_LEN = 3
@@ -31,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if driver.provider == GraphProvider.NEPTUNE:
+        return  # Neptune does not need indexes built
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -71,7 +76,7 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_group_ids(tx):
             await tx.run(
-                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
+                'MATCH (n) WHERE (n:Entity OR n:Episodic OR n:Community) AND n.group_id IN $group_ids DETACH DELETE n',
                 group_ids=group_ids,
             )
 
@@ -109,15 +114,19 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-        MATCH (e:Episodic)
-        WHERE e.valid_at <= $reference_time
-        """
+                MATCH (e:Episodic)
+                WHERE e.valid_at <= $reference_time
+                """
         + group_id_filter
         + source_filter
         + """
         RETURN
         """
-        + EPISODIC_NODE_RETURN
+        + (
+            EPISODIC_NODE_RETURN_NEPTUNE
+            if driver.provider == GraphProvider.NEPTUNE
+            else EPISODIC_NODE_RETURN
+        )
         + """
         ORDER BY e.valid_at DESC
         LIMIT $num_episodes
@@ -133,3 +142,46 @@ async def retrieve_episodes(
 
     episodes = [get_episodic_node_from_record(record) for record in result]
     return list(reversed(episodes))  # Return in chronological order
+
+
+async def build_dynamic_indexes(driver: GraphDriver, group_id: str):
+    # Make sure indices exist for this group_id in Neo4j
+    if driver.provider == GraphProvider.NEO4J:
+        await semaphore_gather(
+            driver.execute_query(
+                """CREATE FULLTEXT INDEX $episode_content IF NOT EXISTS
+FOR (e:"""
+                + 'Episodic_'
+                + group_id.replace('-', '')
+                + """) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
+                episode_content='episode_content_' + group_id.replace('-', ''),
+            ),
+            driver.execute_query(
+                """CREATE FULLTEXT INDEX $node_name_and_summary IF NOT EXISTS FOR (n:"""
+                + 'Entity_'
+                + group_id.replace('-', '')
+                + """) ON EACH [n.name, n.summary, n.group_id]""",
+                node_name_and_summary='node_name_and_summary_' + group_id.replace('-', ''),
+            ),
+            driver.execute_query(
+                """CREATE FULLTEXT INDEX $community_name IF NOT EXISTS
+                                                         FOR (n:"""
+                + 'Community_'
+                + group_id.replace('-', '')
+                + """) ON EACH [n.name, n.group_id]""",
+                community_name='Community_' + group_id.replace('-', ''),
+            ),
+            driver.execute_query(
+                """CREATE VECTOR INDEX $group_entity_vector IF NOT EXISTS
+                                                        FOR (n:"""
+                + 'Entity_'
+                + group_id.replace('-', '')
+                + """)
+                               ON n.embedding
+                               OPTIONS { indexConfig: {
+                                `vector.dimensions`: 1024,
+                                `vector.similarity_function`: 'cosine'
+                               }}""",
+                group_entity_vector='group_entity_vector_' + group_id.replace('-', ''),
+            ),
+        )

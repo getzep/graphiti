@@ -94,6 +94,7 @@ Only extract facts that:
 - involve two DISTINCT ENTITIES from the ENTITIES list,
 - are clearly stated or unambiguously implied in the CURRENT MESSAGE,
     and can be represented as edges in a knowledge graph.
+- Facts should include entity names rather than pronouns whenever possible.
 - The FACT TYPES provide a list of the most important types of facts, make sure to extract facts of these types
 - The FACT TYPES are not an exhaustive list, extract all facts from the message even if they do not fit into one
     of the FACT TYPES
