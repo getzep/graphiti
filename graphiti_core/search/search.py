@@ -21,6 +21,7 @@ from time import time
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
@@ -81,11 +82,20 @@ async def search(
 
     if query.strip() == '':
         return SearchResults()
-    query_vector = (
-        query_vector
-        if query_vector is not None
-        else await embedder.create(input_data=[query.replace('\n', ' ')])
-    )
+
+    if (
+        EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
+        or EdgeReranker.mmr == config.edge_config.reranker
+        or NodeSearchMethod in config.node_config.search_methods
+        or NodeReranker.mmr == config.node_config.reranker
+    ):
+        query_vector = (
+            query_vector
+            if query_vector is not None
+            else await embedder.create(input_data=[query.replace('\n', ' ')])
+        )
+    else:
+        query_vector = [0] * EMBEDDING_DIM
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids and group_ids != [''] else None
