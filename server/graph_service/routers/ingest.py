@@ -12,6 +12,9 @@ from graph_service.dto import AddEntityNodeRequest, AddEpisodesRequest, AddMessa
 from graph_service.zep_graphiti import ZepGraphitiDep
 
 
+# init our logger
+log = logging.getLogger("ingest")
+
 class AsyncWorker:
     def __init__(self):
         self.queue = asyncio.Queue()
@@ -20,10 +23,13 @@ class AsyncWorker:
     async def worker(self):
         while True:
             try:
-                logging.info(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
+                log.info(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
                 await job()
             except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f'Error in async worker: {e}')
                 break
 
     async def start(self):
@@ -42,10 +48,10 @@ async_worker = AsyncWorker()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logging.info(f'Starting async worker')
+    log.info(f'Starting async worker')
     await async_worker.start()
     yield
-    logging.info(f'Stopping async worker')
+    log.info(f'Stopping async worker')
     await async_worker.stop()
 
 
@@ -109,7 +115,7 @@ async def add_episodes(
         )
 
     for episode in request.episodes:
-        logging.info(f'Adding episode to queue: {episode.name}')
+        log.info(f'Adding episode to queue: {episode.name}')
         await async_worker.queue.put(partial(add_episode_task, episode))
 
     return Result(message=F'Episodes added to processing queue (size of remaining queue: {async_worker.queue.qsize()})', success=True)
