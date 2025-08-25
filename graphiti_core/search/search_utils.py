@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from collections import defaultdict
 from time import time
 from typing import Any
@@ -54,6 +55,7 @@ from graphiti_core.search.search_filters import (
 )
 
 logger = logging.getLogger(__name__)
+USE_HNSW = os.getenv('USE_HNSW', False)
 
 RELEVANT_SCHEMA_LIMIT = 10
 DEFAULT_MIN_SCORE = 0.6
@@ -178,11 +180,11 @@ async def edge_fulltext_search(
             # Match the edge ids and return the values
             query = (
                 """
-                UNWIND $ids as id
-                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                WHERE e.group_id IN $group_ids 
-                AND id(e)=id 
-                """
+                    UNWIND $ids as id
+                    MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                    WHERE e.group_id IN $group_ids 
+                    AND id(e)=id 
+                    """
                 + filter_query
                 + """
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
@@ -477,11 +479,11 @@ async def node_fulltext_search(
             # Match the edge ides and return the values
             query = (
                 """
-                UNWIND $ids as i
-                MATCH (n:Entity)
-                WHERE n.uuid=i.id
-                RETURN
-                """
+                    UNWIND $ids as i
+                    MATCH (n:Entity)
+                    WHERE n.uuid=i.id
+                    RETURN
+                    """
                 + ENTITY_NODE_RETURN
                 + """
                 ORDER BY i.score DESC
@@ -500,8 +502,13 @@ async def node_fulltext_search(
         else:
             return []
     else:
+        index_name = (
+            'node_name_and_summary'
+            if not USE_HNSW
+            else 'node_name_and_summary_' + group_ids[0].replace('-', '')
+        )
         query = (
-            get_nodes_query(driver.provider, 'node_name_and_summary', '$query')
+            get_nodes_query(driver.provider, index_name, '$query')
             + """
           YIELD node AS n, score
           WHERE n:Entity AND n.group_id IN $group_ids
@@ -585,11 +592,11 @@ async def node_similarity_search(
             # Match the edge ides and return the values
             query = (
                 """
-                    UNWIND $ids as i
-                    MATCH (n:Entity)
-                    WHERE id(n)=i.id
-                    RETURN 
-                    """
+                        UNWIND $ids as i
+                        MATCH (n:Entity)
+                        WHERE id(n)=i.id
+                        RETURN 
+                        """
                 + ENTITY_NODE_RETURN
                 + """
                     ORDER BY i.score DESC
@@ -607,6 +614,34 @@ async def node_similarity_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.NEO4J and USE_HNSW:
+        index_name = 'group_entity_vector_' + group_ids[0].replace('-', '')
+        query = (
+            f"""
+                    CALL db.index.vector.queryNodes('{index_name}', {limit}, $search_vector) YIELD node AS n, score
+                    """
+            + group_filter_query
+            + filter_query
+            + """
+                    AND score > $min_score
+                    RETURN
+                    """
+            + ENTITY_NODE_RETURN
+            + """
+                    ORDER BY score DESC
+                    LIMIT $limit
+                    """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            limit=limit,
+            min_score=min_score,
+            routing_='r',
+            **query_params,
+        )
+
     else:
         query = (
             RUNTIME_QUERY
@@ -754,8 +789,13 @@ async def episode_fulltext_search(
         else:
             return []
     else:
+        index_name = (
+            'episode_content'
+            if not USE_HNSW
+            else 'episode_content_' + group_ids[0].replace('-', '')
+        )
         query = (
-            get_nodes_query(driver.provider, 'episode_content', '$query')
+            get_nodes_query(driver.provider, index_name, '$query')
             + """
             YIELD node AS episode, score
             MATCH (e:Episodic)
