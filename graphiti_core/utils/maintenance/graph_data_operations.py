@@ -89,7 +89,7 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
-    with driver.session() as session:
+    async with driver.session() as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
