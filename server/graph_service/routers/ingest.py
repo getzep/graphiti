@@ -41,8 +41,10 @@ async_worker = AsyncWorker()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logging.info(f'Starting async worker')
     await async_worker.start()
     yield
+    logging.info(f'Stopping async worker')
     await async_worker.stop()
 
 
@@ -103,9 +105,10 @@ async def add_episodes(
         )
 
     for episode in request.episodes:
+        logging.info(f'Adding episode to queue: {episode.name}')
         await async_worker.queue.put(partial(add_episode_task, episode))
 
-    return Result(message='Episodes added to processing queue', success=True)
+    return Result(message=F'Episodes added to processing queue (size of remaining queue: {async_worker.queue.qsize()})', success=True)
 
 
 @router.delete('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)
