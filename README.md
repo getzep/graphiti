@@ -44,7 +44,7 @@ Use Graphiti to:
 <br />
 
 <p align="center">
-    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
+    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">
 </p>
 
 <br />
@@ -80,7 +80,7 @@ Traditional RAG approaches often rely on batch processing and static data summar
 - **Scalability:** Efficiently manages large datasets with parallel processing, suitable for enterprise environments.
 
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">
 </p>
 
 ## Graphiti vs. GraphRAG
@@ -105,7 +105,7 @@ Graphiti is specifically designed to address the challenges of dynamic and frequ
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch Serverless collection (serves as the full text search backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -146,6 +146,17 @@ pip install graphiti-core[falkordb]
 
 # or with uv
 uv add graphiti-core[falkordb]
+```
+
+### Installing with Kuzu Support
+
+If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
+
+```bash
+pip install graphiti-core[kuzu]
+
+# or with uv
+uv add graphiti-core[kuzu]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -198,7 +209,7 @@ If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT
 
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory. The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, or FalkorDB database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -276,6 +287,19 @@ driver = FalkorDriver(
     password="falkor_password",  # Optional
     database="my_custom_graph"  # Custom database name
 )
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
+#### Kuzu
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+# Create a Kuzu driver
+driver = KuzuDriver(db="/tmp/graphiti.kuzu")
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -492,7 +516,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB, Amazon Neptune Database or Neptune Analytics)
+  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
