@@ -30,6 +30,7 @@ from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
     CommunitySearchConfig,
+    CommunitySearchMethod,
     EdgeReranker,
     EdgeSearchConfig,
     EdgeSearchMethod,
@@ -88,6 +89,11 @@ async def search(
         or EdgeReranker.mmr == config.edge_config.reranker
         or NodeSearchMethod in config.node_config.search_methods
         or NodeReranker.mmr == config.node_config.reranker
+        or (
+            config.community_config
+            and CommunitySearchMethod.cosine_similarity in config.community_config.search_methods
+        )
+        or (config.community_config and CommunityReranker.mmr == config.community_config.reranker)
     ):
         search_vector = (
             query_vector
