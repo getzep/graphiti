@@ -25,14 +25,14 @@ except ImportError:
     HAS_AZURE_EMBEDDER = False
 
 try:
-    from graphiti_core.embedder import GeminiEmbedder
+    from graphiti_core.embedder.gemini_embedder import GeminiEmbedder
 
     HAS_GEMINI_EMBEDDER = True
 except ImportError:
     HAS_GEMINI_EMBEDDER = False
 
 try:
-    from graphiti_core.embedder import VoyageEmbedder
+    from graphiti_core.embedder.voyage_embedder import VoyageEmbedder
 
     HAS_VOYAGE_EMBEDDER = True
 except ImportError:
@@ -46,21 +46,21 @@ except ImportError:
     HAS_AZURE_LLM = False
 
 try:
-    from graphiti_core.llm_client import AnthropicClient
+    from graphiti_core.llm_client.anthropic_client import AnthropicClient
 
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
 
 try:
-    from graphiti_core.llm_client import GeminiClient
+    from graphiti_core.llm_client.gemini_client import GeminiClient
 
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
 
 try:
-    from graphiti_core.llm_client import GroqClient
+    from graphiti_core.llm_client.groq_client import GroqClient
 
     HAS_GROQ = True
 except ImportError:

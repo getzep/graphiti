@@ -97,6 +97,24 @@ database:
   provider: "neo4j"  # or "falkordb" (requires additional setup)
 ```
 
+### Using Ollama for Local LLM
+
+To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
+
+```yaml
+llm:
+  provider: "openai"
+  model: "llama3.2"  # or your preferred Ollama model
+  api_base: "http://localhost:11434/v1"
+  api_key: "ollama"  # dummy key required
+
+embedder:
+  provider: "sentence_transformers"  # recommended for local setup
+  model: "all-MiniLM-L6-v2"
+```
+
+Make sure Ollama is running locally with: `ollama serve`
+
 ### Environment Variables
 
 The `config.yaml` file supports environment variable expansion using `${VAR_NAME}` or `${VAR_NAME:default}` syntax. Key variables:
