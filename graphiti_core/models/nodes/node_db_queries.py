@@ -38,7 +38,7 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
         case _:  # Neo4j
             return """
                 MERGE (n:Episodic {uuid: $uuid})
-                SET n:$group_label
+                SET n:$($group_label)
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
                 entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
