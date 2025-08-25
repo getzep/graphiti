@@ -8,16 +8,17 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone
-from typing import Any, cast
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
-from config_manager import GraphitiConfig
+from config_schema import GraphitiConfig
 from dotenv import load_dotenv
 from entity_types import ENTITY_TYPES
+from factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from formatting import format_fact_result
-from graphiti_service import GraphitiService
-from llm_config import DEFAULT_LLM_MODEL, SMALL_LLM_MODEL
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel
 from queue_service import QueueService
 from response_types import (
     EpisodeSearchResponse,
@@ -34,7 +35,6 @@ from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_config_recipes import (
-    NODE_HYBRID_SEARCH_NODE_DISTANCE,
     NODE_HYBRID_SEARCH_RRF,
 )
 from graphiti_core.search.search_filters import SearchFilters
@@ -58,7 +58,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Create global config instance - will be properly initialized later
-config = GraphitiConfig()
+config: GraphitiConfig
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
@@ -98,8 +98,112 @@ mcp = FastMCP(
 )
 
 # Global services
-graphiti_service: GraphitiService | None = None
+graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
+
+# Global client for backward compatibility
+graphiti_client: Graphiti | None = None
+semaphore: asyncio.Semaphore
+
+
+class GraphitiService:
+    """Graphiti service using the unified configuration system."""
+
+    def __init__(self, config: GraphitiConfig, semaphore_limit: int = 10):
+        self.config = config
+        self.semaphore = asyncio.Semaphore(semaphore_limit)
+        self.client: Graphiti | None = None
+        self.entity_types = None
+
+    async def initialize(self) -> None:
+        """Initialize the Graphiti client with factory-created components."""
+        try:
+            # Create clients using factories
+            llm_client = None
+            embedder_client = None
+
+            # Only create LLM client if API key is available
+            if self.config.llm.providers.openai and self.config.llm.providers.openai.api_key:
+                llm_client = LLMClientFactory.create(self.config.llm)
+
+            # Only create embedder client if API key is available
+            if (
+                self.config.embedder.providers.openai
+                and self.config.embedder.providers.openai.api_key
+            ):
+                embedder_client = EmbedderFactory.create(self.config.embedder)
+
+            # Get database configuration
+            db_config = DatabaseDriverFactory.create_config(self.config.database)
+
+            # Build custom entity types if configured
+            custom_types = None
+            if self.config.graphiti.entity_types:
+                custom_types = []
+                for entity_type in self.config.graphiti.entity_types:
+                    # Create a dynamic Pydantic model for each entity type
+                    entity_model = type(
+                        entity_type.name,
+                        (BaseModel,),
+                        {
+                            '__annotations__': {'name': str},
+                            '__doc__': entity_type.description,
+                        },
+                    )
+                    custom_types.append(entity_model)
+            # Also support the existing ENTITY_TYPES if use_custom_entities is set
+            elif hasattr(self.config, 'use_custom_entities') and self.config.use_custom_entities:
+                custom_types = ENTITY_TYPES
+
+            # Store entity types for later use
+            self.entity_types = custom_types
+
+            # Initialize Graphiti client with database connection params
+            self.client = Graphiti(
+                uri=db_config['uri'],
+                user=db_config['user'],
+                password=db_config['password'],
+                llm_client=llm_client,
+                embedder=embedder_client,
+                custom_node_types=custom_types,
+                max_coroutines=self.semaphore_limit,
+            )
+
+            # Test connection
+            await self.client.driver.client.verify_connectivity()  # type: ignore
+
+            # Build indices
+            await self.client.build_indices_and_constraints()
+
+            logger.info('Successfully initialized Graphiti client')
+
+            # Log configuration details
+            if llm_client:
+                logger.info(
+                    f'Using LLM provider: {self.config.llm.provider} / {self.config.llm.model}'
+                )
+            else:
+                logger.info('No LLM client configured - entity extraction will be limited')
+
+            if embedder_client:
+                logger.info(f'Using Embedder provider: {self.config.embedder.provider}')
+            else:
+                logger.info('No Embedder client configured - search will be limited')
+
+            logger.info(f'Using database: {self.config.database.provider}')
+            logger.info(f'Using group_id: {self.config.graphiti.group_id}')
+
+        except Exception as e:
+            logger.error(f'Failed to initialize Graphiti client: {e}')
+            raise
+
+    async def get_client(self) -> Graphiti:
+        """Get the Graphiti client, initializing if necessary."""
+        if self.client is None:
+            await self.initialize()
+        if self.client is None:
+            raise RuntimeError('Failed to initialize Graphiti client')
+        return self.client
 
 
 @mcp.tool()
@@ -148,155 +252,108 @@ async def add_memory(
             source="json",
             source_description="CRM data"
         )
-
-        # Adding message-style content
-        add_memory(
-            name="Customer Conversation",
-            episode_body="user: What's your return policy?\nassistant: You can return items within 30 days.",
-            source="message",
-            source_description="chat transcript",
-            group_id="some_arbitrary_string"
-        )
-
-    Notes:
-        When using source='json':
-        - The JSON must be a properly escaped string, not a raw Python dictionary
-        - The JSON will be automatically processed to extract entities and relationships
-        - Complex nested structures are supported (arrays, nested objects, mixed data types), but keep nesting to a minimum
-        - Entities will be created from appropriate JSON properties
-        - Relationships between entities will be established based on the JSON structure
     """
-    global graphiti_service, queue_service, config
+    global graphiti_service, queue_service
 
-    if not graphiti_service or not graphiti_service.is_initialized():
-        return ErrorResponse(error='Graphiti service not initialized')
-
-    if not queue_service:
-        return ErrorResponse(error='Queue service not initialized')
+    if graphiti_service is None or queue_service is None:
+        return ErrorResponse(error='Services not initialized')
 
     try:
-        # Map string source to EpisodeType enum
-        source_type = EpisodeType.text
-        if source.lower() == 'message':
-            source_type = EpisodeType.message
-        elif source.lower() == 'json':
-            source_type = EpisodeType.json
-
         # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        effective_group_id = group_id or config.graphiti.group_id
 
-        # Cast group_id to str to satisfy type checker
-        # The Graphiti client expects a str for group_id, not Optional[str]
-        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
-
-        # Define the episode processing function
-        async def process_episode():
+        # Try to parse the source as an EpisodeType enum, with fallback to text
+        episode_type = EpisodeType.text  # Default
+        if source:
             try:
-                logger.info(f"Processing queued episode '{name}' for group_id: {group_id_str}")
-                # Use all entity types if use_custom_entities is enabled, otherwise use empty dict
-                entity_types = ENTITY_TYPES if config.use_custom_entities else {}
+                episode_type = EpisodeType[source.lower()]
+            except (KeyError, AttributeError):
+                # If the source doesn't match any enum value, use text as default
+                logger.warning(f"Unknown source type '{source}', using 'text' as default")
+                episode_type = EpisodeType.text
 
-                await graphiti_service.client.add_episode(
-                    name=name,
-                    episode_body=episode_body,
-                    source=source_type,
-                    source_description=source_description,
-                    group_id=group_id_str,  # Using the string version of group_id
-                    uuid=uuid,
-                    reference_time=datetime.now(timezone.utc),
-                    entity_types=entity_types,
-                )
-                logger.info(f"Episode '{name}' processed successfully")
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(
-                    f"Error processing episode '{name}' for group_id {group_id_str}: {error_msg}"
-                )
+        # Submit to queue service for async processing
+        await queue_service.add_episode(
+            group_id=effective_group_id,
+            name=name,
+            content=episode_body,
+            source_description=source_description,
+            episode_type=episode_type,
+            custom_types=graphiti_service.entity_types,
+            uuid=uuid,
+        )
 
-        # Add the episode processing function to the queue
-        queue_position = await queue_service.add_episode_task(group_id_str, process_episode)
-
-        # Return immediately with a success message
         return SuccessResponse(
-            message=f"Episode '{name}' queued for processing (position: {queue_position})"
+            message=f"Episode '{name}' queued for processing in group '{effective_group_id}'"
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error queuing episode task: {error_msg}')
-        return ErrorResponse(error=f'Error queuing episode task: {error_msg}')
+        logger.error(f'Error queuing episode: {error_msg}')
+        return ErrorResponse(error=f'Error queuing episode: {error_msg}')
 
 
 @mcp.tool()
-async def search_memory_nodes(
+async def search_nodes(
     query: str,
     group_ids: list[str] | None = None,
     max_nodes: int = 10,
-    center_node_uuid: str | None = None,
-    entity: str = '',  # cursor seems to break with None
+    entity_types: list[str] | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search the graph memory for relevant node summaries.
-    These contain a summary of all of a node's relationships with other nodes.
-
-    Note: entity is a single entity type to filter results (permitted: "Preference", "Procedure").
+    """Search for nodes in the graph memory.
 
     Args:
         query: The search query
         group_ids: Optional list of group IDs to filter results
         max_nodes: Maximum number of nodes to return (default: 10)
-        center_node_uuid: Optional UUID of a node to center the search around
-        entity: Optional single entity type to filter results (permitted: "Preference", "Procedure")
+        entity_types: Optional list of entity type names to filter by
     """
-    global graphiti_service, config
+    global graphiti_service
 
-    if not graphiti_service or not graphiti_service.is_initialized():
+    if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
+        client = await graphiti_service.get_client()
+
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+            group_ids
+            if group_ids is not None
+            else [config.graphiti.group_id]
+            if config.graphiti.group_id
+            else []
         )
 
-        # Configure the search
-        if center_node_uuid is not None:
-            search_config = NODE_HYBRID_SEARCH_NODE_DISTANCE.model_copy(deep=True)
-        else:
-            search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
-        search_config.limit = max_nodes
-
-        filters = SearchFilters()
-        if entity != '':
-            filters.node_labels = [entity]
-
-        client = graphiti_service.client
-
-        # Perform the search using the _search method
-        search_results = await client._search(
-            query=query,
-            config=search_config,
+        # Create search filters
+        search_filters = SearchFilters(
             group_ids=effective_group_ids,
-            center_node_uuid=center_node_uuid,
-            search_filter=filters,
+            node_labels=entity_types,
         )
 
-        if not search_results.nodes:
+        # Perform the search
+        nodes = await client.search_nodes(
+            query=query,
+            limit=max_nodes,
+            search_config=NODE_HYBRID_SEARCH_RRF,
+            search_filters=search_filters,
+        )
+
+        if not nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
-        # Format the node results
-        formatted_nodes: list[NodeResult] = [
-            {
-                'uuid': node.uuid,
-                'name': node.name,
-                'summary': node.summary if hasattr(node, 'summary') else '',
-                'labels': node.labels if hasattr(node, 'labels') else [],
-                'group_id': node.group_id,
-                'created_at': node.created_at.isoformat(),
-                'attributes': node.attributes if hasattr(node, 'attributes') else {},
-            }
-            for node in search_results.nodes
+        # Format the results
+        node_results = [
+            NodeResult(
+                uuid=node.uuid,
+                name=node.name,
+                type=node.type or 'Unknown',
+                created_at=node.created_at.isoformat() if node.created_at else None,
+                summary=node.summary,
+            )
+            for node in nodes
         ]
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=formatted_nodes)
+        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
@@ -318,26 +375,26 @@ async def search_memory_facts(
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
-    global graphiti_client
+    global graphiti_service
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
         # Validate max_facts parameter
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
+        client = await graphiti_service.get_client()
+
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids if group_ids is not None else [config.group_id] if config.group_id else []
+            group_ids
+            if group_ids is not None
+            else [config.graphiti.group_id]
+            if config.graphiti.group_id
+            else []
         )
-
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -364,17 +421,13 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     Args:
         uuid: UUID of the entity edge to delete
     """
-    global graphiti_client
+    global graphiti_service
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
+        client = await graphiti_service.get_client()
 
         # Get the entity edge by UUID
         entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
@@ -394,19 +447,15 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     Args:
         uuid: UUID of the episode to delete
     """
-    global graphiti_client
+    global graphiti_service
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
+        client = await graphiti_service.get_client()
 
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
-
-        # Get the episodic node by UUID - EpisodicNode is already imported at the top
+        # Get the episodic node by UUID
         episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
         # Delete the node using its delete method
         await episodic_node.delete(client.driver)
@@ -424,17 +473,13 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     Args:
         uuid: UUID of the entity edge to retrieve
     """
-    global graphiti_client
+    global graphiti_service
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
+        client = await graphiti_service.get_client()
 
         # Get the entity edge directly using the EntityEdge class method
         entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
@@ -449,184 +494,274 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 
 @mcp.tool()
-async def get_episodes(
-    group_id: str | None = None, last_n: int = 10
-) -> list[dict[str, Any]] | EpisodeSearchResponse | ErrorResponse:
-    """Get the most recent memory episodes for a specific group.
+async def search_episodes(
+    query: str | None = None,
+    group_ids: list[str] | None = None,
+    max_episodes: int = 10,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> EpisodeSearchResponse | ErrorResponse:
+    """Search for episodes in the graph memory.
 
     Args:
-        group_id: ID of the group to retrieve episodes from. If not provided, uses the default group_id.
-        last_n: Number of most recent episodes to retrieve (default: 10)
+        query: Optional search query for semantic search
+        group_ids: Optional list of group IDs to filter results
+        max_episodes: Maximum number of episodes to return (default: 10)
+        start_date: Optional start date (ISO format) to filter episodes
+        end_date: Optional end date (ISO format) to filter episodes
     """
-    global graphiti_client
+    global graphiti_service
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
+        client = await graphiti_service.get_client()
 
-        if not isinstance(effective_group_id, str):
-            return ErrorResponse(error='Group ID must be a string')
+        # Use the provided group_ids or fall back to the default from config if none provided
+        effective_group_ids = (
+            group_ids
+            if group_ids is not None
+            else [config.graphiti.group_id]
+            if config.graphiti.group_id
+            else []
+        )
 
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
+        # Convert date strings to datetime objects if provided
+        start_dt = datetime.fromisoformat(start_date) if start_date else None
+        end_dt = datetime.fromisoformat(end_date) if end_date else None
 
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
-
-        episodes = await client.retrieve_episodes(
-            group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
+        # Search for episodes
+        episodes = await client.search_episodes(
+            query=query,
+            group_ids=effective_group_ids,
+            limit=max_episodes,
+            start_date=start_dt,
+            end_date=end_dt,
         )
 
         if not episodes:
-            return EpisodeSearchResponse(
-                message=f'No episodes found for group {effective_group_id}', episodes=[]
-            )
+            return EpisodeSearchResponse(message='No episodes found', episodes=[])
 
-        # Use Pydantic's model_dump method for EpisodicNode serialization
-        formatted_episodes = [
-            # Use mode='json' to handle datetime serialization
-            episode.model_dump(mode='json')
-            for episode in episodes
-        ]
+        # Format the results
+        episode_results = []
+        for episode in episodes:
+            episode_dict = {
+                'uuid': episode.uuid,
+                'name': episode.name,
+                'content': episode.content,
+                'created_at': episode.created_at.isoformat() if episode.created_at else None,
+                'source': episode.source,
+                'source_description': episode.source_description,
+                'group_id': episode.group_id,
+            }
+            episode_results.append(episode_dict)
 
-        # Return the Python list directly - MCP will handle serialization
-        return formatted_episodes
+        return EpisodeSearchResponse(
+            message='Episodes retrieved successfully', episodes=episode_results
+        )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error getting episodes: {error_msg}')
-        return ErrorResponse(error=f'Error getting episodes: {error_msg}')
+        logger.error(f'Error searching episodes: {error_msg}')
+        return ErrorResponse(error=f'Error searching episodes: {error_msg}')
 
 
 @mcp.tool()
-async def clear_graph() -> SuccessResponse | ErrorResponse:
-    """Clear all data from the graph memory and rebuild indices."""
-    global graphiti_client
+async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | ErrorResponse:
+    """Clear all data from the graph for specified group IDs.
 
-    if graphiti_client is None:
-        return ErrorResponse(error='Graphiti client not initialized')
+    Args:
+        group_ids: Optional list of group IDs to clear. If not provided, clears the default group.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
+        client = await graphiti_service.get_client()
 
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
+        # Use the provided group_ids or fall back to the default from config if none provided
+        effective_group_ids = (
+            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+        )
 
-        # clear_data is already imported at the top
-        await clear_data(client.driver)
-        await client.build_indices_and_constraints()
-        return SuccessResponse(message='Graph cleared successfully and indices rebuilt')
+        if not effective_group_ids:
+            return ErrorResponse(error='No group IDs specified for clearing')
+
+        # Clear data for the specified group IDs
+        await clear_data(client.driver, group_ids=effective_group_ids)
+
+        return SuccessResponse(
+            message=f"Graph data cleared successfully for group IDs: {', '.join(effective_group_ids)}"
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error clearing graph: {error_msg}')
         return ErrorResponse(error=f'Error clearing graph: {error_msg}')
 
 
-@mcp.resource('http://graphiti/status')
+@mcp.tool()
 async def get_status() -> StatusResponse:
-    """Get the status of the Graphiti MCP server and Neo4j connection."""
-    global graphiti_client
+    """Get the status of the Graphiti MCP server and database connection."""
+    global graphiti_service
 
-    if graphiti_client is None:
-        return StatusResponse(status='error', message='Graphiti client not initialized')
+    if graphiti_service is None:
+        return StatusResponse(status='error', message='Graphiti service not initialized')
 
     try:
-        # We've already checked that graphiti_client is not None above
-        assert graphiti_client is not None
-
-        # Use cast to help the type checker understand that graphiti_client is not None
-        client = cast(Graphiti, graphiti_client)
+        client = await graphiti_service.get_client()
 
         # Test database connection
         await client.driver.client.verify_connectivity()  # type: ignore
 
+        provider_info = f'{config.database.provider} database'
         return StatusResponse(
-            status='ok', message='Graphiti MCP server is running and connected to Neo4j'
+            status='ok', message=f'Graphiti MCP server is running and connected to {provider_info}'
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error checking Neo4j connection: {error_msg}')
+        logger.error(f'Error checking database connection: {error_msg}')
         return StatusResponse(
             status='error',
-            message=f'Graphiti MCP server is running but Neo4j connection failed: {error_msg}',
+            message=f'Graphiti MCP server is running but database connection failed: {error_msg}',
         )
 
 
 async def initialize_server() -> MCPConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
-    global config
+    global config, graphiti_service, queue_service, graphiti_client, semaphore
 
     parser = argparse.ArgumentParser(
-        description='Run the Graphiti MCP server with optional LLM client'
+        description='Run the Graphiti MCP server with YAML configuration support'
     )
+
+    # Configuration file argument
     parser.add_argument(
-        '--group-id',
-        help='Namespace for the graph. This is an arbitrary string used to organize related data. '
-        'If not provided, a random UUID will be generated.',
+        '--config',
+        type=Path,
+        default=Path('config.yaml'),
+        help='Path to YAML configuration file (default: config.yaml)',
     )
+
+    # Transport arguments
     parser.add_argument(
         '--transport',
         choices=['sse', 'stdio'],
-        default='sse',
-        help='Transport to use for communication with the client. (default: sse)',
+        help='Transport to use for communication with the client',
     )
     parser.add_argument(
-        '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
+        '--host',
+        help='Host to bind the MCP server to',
     )
     parser.add_argument(
-        '--small-model',
-        help=f'Small model name to use with the LLM client. (default: {SMALL_LLM_MODEL})',
+        '--port',
+        type=int,
+        help='Port to bind the MCP server to',
+    )
+
+    # Provider selection arguments
+    parser.add_argument(
+        '--llm-provider',
+        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq'],
+        help='LLM provider to use',
     )
     parser.add_argument(
-        '--temperature',
-        type=float,
-        help='Temperature setting for the LLM (0.0-2.0). Lower values make output more deterministic. (default: 0.7)',
+        '--embedder-provider',
+        choices=['openai', 'azure_openai', 'gemini', 'voyage'],
+        help='Embedder provider to use',
     )
-    parser.add_argument('--destroy-graph', action='store_true', help='Destroy all Graphiti graphs')
+    parser.add_argument(
+        '--database-provider',
+        choices=['neo4j', 'falkordb'],
+        help='Database provider to use',
+    )
+
+    # LLM configuration arguments
+    parser.add_argument('--model', help='Model name to use with the LLM client')
+    parser.add_argument('--small-model', help='Small model name to use with the LLM client')
+    parser.add_argument(
+        '--temperature', type=float, help='Temperature setting for the LLM (0.0-2.0)'
+    )
+
+    # Embedder configuration arguments
+    parser.add_argument('--embedder-model', help='Model name to use with the embedder')
+
+    # Graphiti-specific arguments
+    parser.add_argument(
+        '--group-id',
+        help='Namespace for the graph. If not provided, uses config file or generates random UUID.',
+    )
+    parser.add_argument(
+        '--user-id',
+        help='User ID for tracking operations',
+    )
+    parser.add_argument(
+        '--destroy-graph',
+        action='store_true',
+        help='Destroy all Graphiti graphs on startup',
+    )
     parser.add_argument(
         '--use-custom-entities',
         action='store_true',
         help='Enable entity extraction using the predefined ENTITY_TYPES',
     )
-    parser.add_argument(
-        '--host',
-        default=os.environ.get('MCP_SERVER_HOST'),
-        help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
-    )
 
     args = parser.parse_args()
 
-    # Build configuration from CLI arguments and environment variables
-    config = GraphitiConfig.from_cli_and_env(args)
+    # Set config path in environment for the settings to pick up
+    if args.config:
+        os.environ['CONFIG_PATH'] = str(args.config)
 
-    # Log the group ID configuration
-    if args.group_id:
-        logger.info(f'Using provided group_id: {config.group_id}')
-    else:
-        logger.info(f'Generated random group_id: {config.group_id}')
+    # Load configuration with environment variables and YAML
+    config = GraphitiConfig()
 
-    # Log entity extraction configuration
-    if config.use_custom_entities:
-        logger.info('Entity extraction enabled using predefined ENTITY_TYPES')
-    else:
-        logger.info('Entity extraction disabled (no custom entities will be used)')
+    # Apply CLI overrides
+    config.apply_cli_overrides(args)
+
+    # Also apply legacy CLI args for backward compatibility
+    if hasattr(args, 'use_custom_entities'):
+        config.use_custom_entities = args.use_custom_entities
+    if hasattr(args, 'destroy_graph'):
+        config.destroy_graph = args.destroy_graph
+
+    # Log configuration details
+    logger.info('Using configuration:')
+    logger.info(f'  - LLM: {config.llm.provider} / {config.llm.model}')
+    logger.info(f'  - Embedder: {config.embedder.provider} / {config.embedder.model}')
+    logger.info(f'  - Database: {config.database.provider}')
+    logger.info(f'  - Group ID: {config.graphiti.group_id}')
+    logger.info(f'  - Transport: {config.server.transport}')
+
+    # Handle graph destruction if requested
+    if hasattr(config, 'destroy_graph') and config.destroy_graph:
+        logger.warning('Destroying all Graphiti graphs as requested...')
+        temp_service = GraphitiService(config, SEMAPHORE_LIMIT)
+        await temp_service.initialize()
+        client = await temp_service.get_client()
+        await clear_data(client.driver)
+        logger.info('All graphs destroyed')
 
     # Initialize services
-    global graphiti_service, queue_service
     graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
     queue_service = QueueService()
     await graphiti_service.initialize()
 
-    if args.host:
-        logger.info(f'Setting MCP server host to: {args.host}')
-        # Set MCP server host from CLI or env
-        mcp.settings.host = args.host
+    # Set global client for backward compatibility
+    graphiti_client = await graphiti_service.get_client()
+    semaphore = graphiti_service.semaphore
 
-    # Return MCP configuration
-    return MCPConfig.from_cli(args)
+    # Initialize queue service with the client
+    await queue_service.initialize(graphiti_client)
+
+    # Set MCP server settings
+    if config.server.host:
+        mcp.settings.host = config.server.host
+    if config.server.port:
+        mcp.settings.port = config.server.port
+
+    # Return MCP configuration for transport
+    return MCPConfig(transport=config.server.transport)
 
 
 async def run_mcp_server():
@@ -634,7 +769,7 @@ async def run_mcp_server():
     # Initialize the server
     mcp_config = await initialize_server()
 
-    # Run the server with stdio transport for MCP in the same event loop
+    # Run the server with configured transport
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
     if mcp_config.transport == 'stdio':
         await mcp.run_stdio_async()
@@ -650,6 +785,8 @@ def main():
     try:
         # Run everything in a single event loop
         asyncio.run(run_mcp_server())
+    except KeyboardInterrupt:
+        logger.info('Server shutting down...')
     except Exception as e:
         logger.error(f'Error initializing Graphiti MCP server: {str(e)}')
         raise

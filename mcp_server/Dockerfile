@@ -33,8 +33,9 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Copy application code
+# Copy application code and configuration
 COPY *.py ./
+COPY config.yaml ./
 
 # Change ownership to app user
 RUN chown -Rv app:app /app

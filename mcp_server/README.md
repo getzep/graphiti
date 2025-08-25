@@ -82,24 +82,32 @@ uv sync
 
 ## Configuration
 
-The server uses the following environment variables:
+The server can be configured using a `config.yaml` file, environment variables, or command-line arguments (in order of precedence).
+
+### Configuration File (config.yaml)
+
+The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq) and embedders. Edit `config.yaml` to configure:
+
+```yaml
+llm:
+  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
+  model: "gpt-4o"
+  
+database:
+  provider: "neo4j"  # or "falkordb" (requires additional setup)
+```
+
+### Environment Variables
+
+The `config.yaml` file supports environment variable expansion using `${VAR_NAME}` or `${VAR_NAME:default}` syntax. Key variables:
 
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
-- `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
-- `OPENAI_BASE_URL`: Optional base URL for OpenAI API
-- `MODEL_NAME`: OpenAI model name to use for LLM operations.
-- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
-- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
-- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
-- `AZURE_OPENAI_EMBEDDING_API_KEY`: Optional Azure OpenAI Embedding deployment key (if other than `OPENAI_API_KEY`)
-- `AZURE_OPENAI_EMBEDDING_ENDPOINT`: Optional Azure OpenAI Embedding endpoint URL
-- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
-- `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
-- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+- `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
+- `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
+- `GOOGLE_API_KEY`: Google API key (for Gemini models)
+- `GROQ_API_KEY`: Groq API key (for Groq models)
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
@@ -120,12 +128,15 @@ uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 
 Available arguments:
 
-- `--model`: Overrides the `MODEL_NAME` environment variable.
-- `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
-- `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
+- `--config`: Path to YAML configuration file (default: config.yaml)
+- `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
+- `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
+- `--database-provider`: Database provider to use (neo4j, falkordb)
+- `--model`: Model name to use with the LLM client
+- `--temperature`: Temperature setting for the LLM (0.0-2.0)
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
-- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
-- `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
+- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
+- `--destroy-graph`: If set, destroys all Graphiti graphs on startup
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
@@ -201,9 +212,26 @@ This will start both the Neo4j database and the Graphiti MCP server. The Docker 
 
 ## Integrating with MCP Clients
 
-### Configuration
+### VS Code / GitHub Copilot
 
-To use the Graphiti MCP server with an MCP-compatible client, configure it to connect to the server:
+VS Code with GitHub Copilot Chat extension supports MCP servers. Add to your VS Code settings (`.vscode/mcp.json` or global settings):
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "uri": "http://localhost:8000/sse",
+      "transport": {
+        "type": "sse"
+      }
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+To use the Graphiti MCP server with other MCP-compatible clients, configure it to connect to the server:
 
 > [!IMPORTANT]
 > You will need the Python package manager, `uv` installed. Please refer to the [`uv` install instructions](https://docs.astral.sh/uv/getting-started/installation/).
