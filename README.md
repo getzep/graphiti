@@ -477,7 +477,7 @@ Ensure Ollama is running (`ollama serve`) and that you have pulled the models yo
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
 - [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
-- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/integrations/lang-graph-agent)
 
 ## Telemetry
 
