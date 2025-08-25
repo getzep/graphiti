@@ -31,55 +31,54 @@ SCHEMA_QUERIES = """
     CREATE NODE TABLE IF NOT EXISTS Episodic (
         uuid STRING PRIMARY KEY,
         name STRING,
-        content STRING,
-        source STRING,
-        source_description STRING,
         group_id STRING,
         created_at TIMESTAMP,
+        source STRING,
+        source_description STRING,
+        content STRING,
         valid_at TIMESTAMP,
         entity_edges STRING[]
     );
     CREATE NODE TABLE IF NOT EXISTS Entity (
         uuid STRING PRIMARY KEY,
+        name STRING,
+        group_id STRING,
         labels STRING[],
-        name STRING,
+        created_at TIMESTAMP,
         name_embedding FLOAT[],
-        group_id STRING,
         summary STRING,
-        created_at TIMESTAMP,
-        attributes STRING
-    );
-    CREATE NODE TABLE IF NOT EXISTS RelatesToNode_ (
-        uuid STRING PRIMARY KEY,
-        group_id STRING,
-        name STRING,
-        fact STRING,
-        fact_embedding FLOAT[],
-        episodes STRING[],
-        created_at TIMESTAMP,
-        expired_at TIMESTAMP,
-        valid_at TIMESTAMP,
-        invalid_at TIMESTAMP,
         attributes STRING
     );
     CREATE NODE TABLE IF NOT EXISTS Community (
         uuid STRING PRIMARY KEY,
         name STRING,
-        name_embedding FLOAT[],
         group_id STRING,
-        summary STRING,
-        created_at TIMESTAMP
+        created_at TIMESTAMP,
+        name_embedding FLOAT[],
+        summary STRING
+    );
+    CREATE NODE TABLE IF NOT EXISTS RelatesToNode_ (
+        uuid STRING PRIMARY KEY,
+        group_id STRING,
+        created_at TIMESTAMP,
+        name STRING,
+        fact STRING,
+        fact_embedding FLOAT[],
+        episodes STRING[],
+        expired_at TIMESTAMP,
+        valid_at TIMESTAMP,
+        invalid_at TIMESTAMP,
+        attributes STRING
+    );
+    CREATE REL TABLE IF NOT EXISTS RELATES_TO(
+        FROM Entity TO RelatesToNode_,
+        FROM RelatesToNode_ TO Entity
     );
     CREATE REL TABLE IF NOT EXISTS MENTIONS(
         FROM Episodic TO Entity,
         uuid STRING PRIMARY KEY,
         group_id STRING,
-        created_at TIMESTAMP,
-        fact_embedding FLOAT[]
-    );
-    CREATE REL TABLE IF NOT EXISTS RELATES_TO(
-        FROM Entity TO RelatesToNode_,
-        FROM RelatesToNode_ TO Entity
+        created_at TIMESTAMP
     );
     CREATE REL TABLE IF NOT EXISTS HAS_MEMBER(
         FROM Community TO Entity,
@@ -134,7 +133,7 @@ class KuzuDriver(GraphDriver):
         return KuzuDriverSession(self)
 
     async def close(self):
-        # self.client.close()
+        # Do not explicity close the connection, instead rely on GC.
         pass
 
     def delete_all_indexes(self, database_: str):

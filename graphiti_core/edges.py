@@ -548,6 +548,7 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         attributes.pop('source_node_uuid', None)
         attributes.pop('target_node_uuid', None)
         attributes.pop('fact', None)
+        attributes.pop('fact_embedding', None)
         attributes.pop('name', None)
         attributes.pop('group_id', None)
         attributes.pop('episodes', None)

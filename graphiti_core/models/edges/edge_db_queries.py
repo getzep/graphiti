@@ -87,11 +87,11 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
                 MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
                 SET
                     e.group_id = $group_id,
+                    e.created_at = $created_at,
                     e.name = $name,
                     e.fact = $fact,
                     e.fact_embedding = $fact_embedding,
                     e.episodes = $episodes,
-                    e.created_at = $created_at,
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
@@ -140,11 +140,11 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
                 MERGE (source)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: $uuid})-[:RELATES_TO]->(target)
                 SET
                     e.group_id = $group_id,
+                    e.created_at = $created_at,
                     e.name = $name,
                     e.fact = $fact,
                     e.fact_embedding = $fact_embedding,
                     e.episodes = $episodes,
-                    e.created_at = $created_at,
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
@@ -164,6 +164,8 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
 
 
 def get_entity_edge_return_query(provider: GraphProvider) -> str:
+    # `fact_embedding` is not returned by default and must be manually loaded using `load_fact_embedding()`.
+
     if provider == GraphProvider.NEPTUNE:
         return """
         e.uuid AS uuid,
@@ -185,10 +187,10 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         n.uuid AS source_node_uuid,
         m.uuid AS target_node_uuid,
         e.group_id AS group_id,
+        e.created_at AS created_at,
         e.name AS name,
         e.fact AS fact,
         e.episodes AS episodes,
-        e.created_at AS created_at,
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,

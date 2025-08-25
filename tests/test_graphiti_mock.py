@@ -56,6 +56,10 @@ from graphiti_core.utils.maintenance.community_operations import (
 from graphiti_core.utils.maintenance.edge_operations import filter_existing_duplicate_of_edges
 from tests.helpers_test import (
     GraphProvider,
+    assert_entity_edge_equals,
+    assert_entity_node_equals,
+    assert_episodic_edge_equals,
+    assert_episodic_node_equals,
     get_edge_count,
     get_node_count,
     group_id,
@@ -130,7 +134,7 @@ async def test_add_bulk(
     now = datetime.now()
 
     # Create episodic nodes
-    episode_node = EpisodicNode(
+    episode_node_1 = EpisodicNode(
         name='test_episode',
         group_id=group_id,
         labels=[],
@@ -154,136 +158,164 @@ async def test_add_bulk(
     )
 
     # Create entity nodes
-    alice_node = EntityNode(
-        name='Alice',
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
         group_id=group_id,
         labels=['Entity', 'Person'],
         created_at=now,
-        summary='Alice summary',
+        summary='test_entity_1 summary',
         attributes={'age': 30, 'location': 'New York'},
     )
-    await alice_node.generate_name_embedding(mock_embedder)
+    await entity_node_1.generate_name_embedding(mock_embedder)
 
-    bob_node = EntityNode(
-        name='Bob',
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
         group_id=group_id,
         labels=['Entity', 'Person2'],
         created_at=now,
-        summary='Bob summary',
+        summary='test_entity_2 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
     )
-    await bob_node.generate_name_embedding(mock_embedder)
+    await entity_node_2.generate_name_embedding(mock_embedder)
 
-    # Create entity to entity edge
-    entity_edge = EntityEdge(
-        source_node_uuid=alice_node.uuid,
-        target_node_uuid=bob_node.uuid,
+    entity_node_3 = EntityNode(
+        name='test_entity_3',
+        group_id=group_id,
+        labels=['Entity', 'City', 'Location'],
+        created_at=now,
+        summary='test_entity_3 summary',
+        attributes={'age': 25, 'location': 'Los Angeles'},
+    )
+    await entity_node_3.generate_name_embedding(mock_embedder)
+
+    entity_node_4 = EntityNode(
+        name='test_entity_4',
+        group_id=group_id,
+        labels=['Entity'],
+        created_at=now,
+        summary='test_entity_4 summary',
+        attributes={'age': 25, 'location': 'Los Angeles'},
+    )
+    await entity_node_4.generate_name_embedding(mock_embedder)
+
+    # Create entity edges
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
         created_at=now,
         name='likes',
-        fact='Alice likes Bob',
+        fact='test_entity_1 relates to test_entity_2',
         episodes=[],
         expired_at=now,
         valid_at=now,
         invalid_at=now,
         group_id=group_id,
     )
-    await entity_edge.generate_embedding(mock_embedder)
+    await entity_edge_1.generate_embedding(mock_embedder)
+
+    entity_edge_2 = EntityEdge(
+        source_node_uuid=entity_node_3.uuid,
+        target_node_uuid=entity_node_4.uuid,
+        created_at=now,
+        name='relates_to',
+        fact='test_entity_3 relates to test_entity_4',
+        episodes=[],
+        expired_at=now,
+        valid_at=now,
+        invalid_at=now,
+        group_id=group_id,
+    )
+    await entity_edge_2.generate_embedding(mock_embedder)
 
     # Create episodic to entity edges
-    episodic_alice_edge = EpisodicEdge(
-        source_node_uuid=episode_node.uuid,
-        target_node_uuid=alice_node.uuid,
+    episodic_edge_1 = EpisodicEdge(
+        source_node_uuid=episode_node_1.uuid,
+        target_node_uuid=entity_node_1.uuid,
         created_at=now,
         group_id=group_id,
     )
-    episodic_bob_edge = EpisodicEdge(
-        source_node_uuid=episode_node.uuid,
-        target_node_uuid=bob_node.uuid,
+    episodic_edge_2 = EpisodicEdge(
+        source_node_uuid=episode_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
         created_at=now,
         group_id=group_id,
     )
-    episodic_2_alice_edge = EpisodicEdge(
+    episodic_edge_3 = EpisodicEdge(
         source_node_uuid=episode_node_2.uuid,
-        target_node_uuid=alice_node.uuid,
+        target_node_uuid=entity_node_3.uuid,
         created_at=now,
         group_id=group_id,
     )
-    episodic_2_bob_edge = EpisodicEdge(
+    episodic_edge_4 = EpisodicEdge(
         source_node_uuid=episode_node_2.uuid,
-        target_node_uuid=bob_node.uuid,
+        target_node_uuid=entity_node_4.uuid,
         created_at=now,
         group_id=group_id,
     )
 
     # Cross reference the ids
-    episode_node.entity_edges = [entity_edge.uuid]
-    episode_node_2.entity_edges = [entity_edge.uuid]
-    entity_edge.episodes = [episode_node.uuid, episode_node_2.uuid]
+    episode_node_1.entity_edges = [entity_edge_1.uuid]
+    episode_node_2.entity_edges = [entity_edge_2.uuid]
+    entity_edge_1.episodes = [episode_node_1.uuid, episode_node_2.uuid]
+    entity_edge_2.episodes = [episode_node_2.uuid]
 
     # Test add bulk
     await add_nodes_and_edges_bulk(
         graph_driver,
-        [episode_node, episode_node_2],
-        [episodic_alice_edge, episodic_bob_edge, episodic_2_alice_edge, episodic_2_bob_edge],
-        [alice_node, bob_node],
-        [entity_edge],
+        [episode_node_1, episode_node_2],
+        [episodic_edge_1, episodic_edge_2, episodic_edge_3, episodic_edge_4],
+        [entity_node_1, entity_node_2, entity_node_3, entity_node_4],
+        [entity_edge_1, entity_edge_2],
         mock_embedder,
     )
 
-    node_ids = [episode_node.uuid, episode_node_2.uuid, alice_node.uuid, bob_node.uuid]
-    edge_ids = [episodic_alice_edge.uuid, episodic_bob_edge.uuid, episodic_2_alice_edge.uuid, episodic_2_bob_edge.uuid, entity_edge.uuid]
+    node_ids = [episode_node_1.uuid, episode_node_2.uuid, entity_node_1.uuid, entity_node_2.uuid, entity_node_3.uuid, entity_node_4.uuid]
+    edge_ids = [episodic_edge_1.uuid, episodic_edge_2.uuid, episodic_edge_3.uuid, episodic_edge_4.uuid, entity_edge_1.uuid, entity_edge_2.uuid]
     node_count = await get_node_count(graph_driver, node_ids)
-    assert node_count == 4
+    assert node_count == len(node_ids)
     edge_count = await get_edge_count(graph_driver, edge_ids)
-    assert edge_count == 5
+    assert edge_count == len(edge_ids)
 
     # Test episodic nodes
-    retrieved_episode = await EpisodicNode.get_by_uuid(graph_driver, episode_node.uuid)
-    assert retrieved_episode.name == episode_node.name
-    assert retrieved_episode.group_id == episode_node.group_id
-    assert retrieved_episode.created_at == episode_node.created_at
-    assert retrieved_episode.source == episode_node.source
-    assert retrieved_episode.source_description == episode_node.source_description
-    assert retrieved_episode.content == episode_node.content
-    assert retrieved_episode.valid_at == episode_node.valid_at
-    assert set(retrieved_episode.entity_edges) == set(episode_node.entity_edges)
+    retrieved_episode = await EpisodicNode.get_by_uuid(graph_driver, episode_node_1.uuid)
+    await assert_episodic_node_equals(retrieved_episode, episode_node_1)
 
-    # Test episodic edges
-    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_alice_edge.uuid)
-    print(node_ids)
-    print(edge_ids)
-    assert retrieved_episode_edge.source_node_uuid == episodic_alice_edge.source_node_uuid
-    assert retrieved_episode_edge.target_node_uuid == episodic_alice_edge.target_node_uuid
-    assert retrieved_episode_edge.created_at == episodic_alice_edge.created_at
-    assert retrieved_episode_edge.group_id == episodic_alice_edge.group_id
-
-    # Test entity edges
-    retrieved_entity_edge = await EntityEdge.get_by_uuid(graph_driver, entity_edge.uuid)
-    assert retrieved_entity_edge.source_node_uuid == entity_edge.source_node_uuid
-    assert retrieved_entity_edge.target_node_uuid == entity_edge.target_node_uuid
-    assert retrieved_entity_edge.created_at == entity_edge.created_at
-    assert retrieved_entity_edge.group_id == entity_edge.group_id
+    retrieved_episode = await EpisodicNode.get_by_uuid(graph_driver, episode_node_2.uuid)
+    await assert_episodic_node_equals(retrieved_episode, episode_node_2)
 
     # Test entity nodes
-    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, alice_node.uuid)
-    await retrieved_entity_node.load_name_embedding(graph_driver)
-    assert retrieved_entity_node.name == alice_node.name
-    assert retrieved_entity_node.group_id == alice_node.group_id
-    assert set(retrieved_entity_node.labels) == set(alice_node.labels)
-    assert retrieved_entity_node.created_at == alice_node.created_at
-    assert np.allclose(retrieved_entity_node.name_embedding, alice_node.name_embedding)
-    assert retrieved_entity_node.summary == alice_node.summary
-    assert retrieved_entity_node.attributes == alice_node.attributes
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_1.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_1)
 
-    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, bob_node.uuid)
-    await retrieved_entity_node.load_name_embedding(graph_driver)
-    assert retrieved_entity_node.name == bob_node.name
-    assert retrieved_entity_node.group_id == bob_node.group_id
-    assert set(retrieved_entity_node.labels) == set(bob_node.labels)
-    assert retrieved_entity_node.created_at == bob_node.created_at
-    assert np.allclose(retrieved_entity_node.name_embedding, bob_node.name_embedding)
-    assert retrieved_entity_node.summary == bob_node.summary
-    assert retrieved_entity_node.attributes == bob_node.attributes
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_2.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_2)
+
+
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_3.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_3)
+
+    retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_4.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_4)
+
+    # Test episodic edges
+    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_edge_1.uuid)
+    await assert_episodic_edge_equals(retrieved_episode_edge, episodic_edge_1)
+
+    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_edge_2.uuid)
+    await assert_episodic_edge_equals(retrieved_episode_edge, episodic_edge_2)
+
+    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_edge_3.uuid)
+    await assert_episodic_edge_equals(retrieved_episode_edge, episodic_edge_3)
+
+    retrieved_episode_edge = await EpisodicEdge.get_by_uuid(graph_driver, episodic_edge_4.uuid)
+    await assert_episodic_edge_equals(retrieved_episode_edge, episodic_edge_4)
+
+    # Test entity edges
+    retrieved_entity_edge = await EntityEdge.get_by_uuid(graph_driver, entity_edge_1.uuid)
+    await assert_entity_edge_equals(graph_driver, retrieved_entity_edge, entity_edge_1)
+
+    retrieved_entity_edge = await EntityEdge.get_by_uuid(graph_driver, entity_edge_2.uuid)
+    await assert_entity_edge_equals(graph_driver, retrieved_entity_edge, entity_edge_2)
 
 @pytest.mark.asyncio
 async def test_remove_episode(
