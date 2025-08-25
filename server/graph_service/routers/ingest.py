@@ -1,4 +1,5 @@
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from functools import partial
 import logging
@@ -93,11 +94,14 @@ async def add_episodes(
     graphiti: ZepGraphitiDep,
 ):
     async def add_episode_task(episode: Episode):
+        # Convert episode_body dict to JSON string for the core add_episode method
+        episode_body_str = json.dumps(episode.episode_body, ensure_ascii=False)
+        
         await graphiti.add_episode(
             uuid=episode.uuid,
             group_id=request.group_id,
             name=episode.name,
-            episode_body=episode.episode_body,
+            episode_body=episode_body_str,
             reference_time=episode.reference_time,
             source=EpisodeType.from_str(episode.source),
             source_description=episode.source_description,

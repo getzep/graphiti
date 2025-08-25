@@ -1,8 +1,9 @@
+import json
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, Union, Any
 
 from graphiti_core.utils.datetime_utils import utc_now
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, BeforeValidator
 
 
 class Result(BaseModel):
@@ -31,7 +32,7 @@ class Message(BaseModel):
 class Episode(BaseModel):
     uuid: str | None = Field(default=None, description='The uuid of the episode (optional)')
     name: str = Field(..., description='The name of the episode')
-    episode_body: str = Field(..., description='The content of the episode')
+    episode_body: Annotated[dict[str, Any], BeforeValidator(lambda v: json.loads(v) if isinstance(v, str) else v), Field(description='The content of the episode - can be a JSON string or a dict object')]
     source_description: str = Field(..., description='The description of the source of the episode')
     reference_time: datetime = Field(default_factory=utc_now, description='The reference time of the episode')
     source: Literal['message', 'json', 'text'] = Field(default='text', description='The source type of the episode')
