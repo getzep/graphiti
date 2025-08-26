@@ -65,6 +65,7 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+norecursedirs = ["mcp_server"]
 
 [tool.ruff]
 line-length = 100
