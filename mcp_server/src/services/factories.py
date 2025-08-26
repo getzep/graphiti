@@ -254,9 +254,14 @@ class DatabaseDriverFactory:
 
         match provider:
             case 'neo4j':
-                if not config.providers.neo4j:
-                    raise ValueError('Neo4j provider configuration not found')
-                neo4j_config = config.providers.neo4j
+                # Use Neo4j config if provided, otherwise use defaults
+                if config.providers.neo4j:
+                    neo4j_config = config.providers.neo4j
+                else:
+                    # Create default Neo4j configuration
+                    from config.schema import Neo4jProviderConfig
+                    neo4j_config = Neo4jProviderConfig()
+                
                 return {
                     'uri': neo4j_config.uri,
                     'user': neo4j_config.username,
@@ -270,10 +275,15 @@ class DatabaseDriverFactory:
                     raise ValueError(
                         'FalkorDB driver not available in current graphiti-core version'
                     )
-                if not config.providers.falkordb:
-                    raise ValueError('FalkorDB provider configuration not found')
+                
+                # Use FalkorDB config if provided, otherwise use defaults
+                if config.providers.falkordb:
+                    falkor_config = config.providers.falkordb
+                else:
+                    # Create default FalkorDB configuration
+                    from config.schema import FalkorDBProviderConfig
+                    falkor_config = FalkorDBProviderConfig()
 
-                falkor_config = config.providers.falkordb
                 return {
                     'driver': 'falkordb',
                     'uri': falkor_config.uri,
