@@ -12,25 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from config_schema import GraphitiConfig
 from dotenv import load_dotenv
-from entity_types import ENTITY_TYPES
-from factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
-from formatting import format_fact_result
-from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel
-from queue_service import QueueService
-from response_types import (
-    EpisodeSearchResponse,
-    ErrorResponse,
-    FactSearchResponse,
-    NodeResult,
-    NodeSearchResponse,
-    StatusResponse,
-    SuccessResponse,
-)
-from server_config import MCPConfig
-
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodeType, EpisodicNode
@@ -39,6 +21,24 @@ from graphiti_core.search.search_config_recipes import (
 )
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
+from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel
+
+from config.schema import GraphitiConfig
+from config.server_config import MCPConfig
+from models.entity_types import ENTITY_TYPES
+from models.response_types import (
+    EpisodeSearchResponse,
+    ErrorResponse,
+    FactSearchResponse,
+    NodeResult,
+    NodeSearchResponse,
+    StatusResponse,
+    SuccessResponse,
+)
+from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.queue_service import QueueService
+from utils.formatting import format_fact_result
 
 load_dotenv()
 
@@ -593,7 +593,7 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
         await clear_data(client.driver, group_ids=effective_group_ids)
 
         return SuccessResponse(
-            message=f"Graph data cleared successfully for group IDs: {', '.join(effective_group_ids)}"
+            message=f'Graph data cleared successfully for group IDs: {", ".join(effective_group_ids)}'
         )
     except Exception as e:
         error_msg = str(e)

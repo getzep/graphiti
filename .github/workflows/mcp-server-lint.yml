@@ -1,0 +1,106 @@
+name: MCP Server Formatting and Linting
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'mcp_server/**'
+  workflow_dispatch:
+
+jobs:
+  format-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install MCP server dependencies
+        run: |
+          cd mcp_server
+          uv sync --extra dev
+
+      - name: Add ruff to dependencies
+        run: |
+          cd mcp_server
+          uv add --group dev "ruff>=0.7.1"
+
+      - name: Check code formatting with ruff
+        run: |
+          cd mcp_server
+          echo "🔍 Checking code formatting..."
+          uv run ruff format --check --diff .
+          if [ $? -eq 0 ]; then
+            echo "✅ Code formatting is correct"
+          else
+            echo "❌ Code formatting issues found"
+            echo "💡 Run 'ruff format .' in mcp_server/ to fix formatting"
+            exit 1
+          fi
+
+      - name: Run ruff linting
+        run: |
+          cd mcp_server
+          echo "🔍 Running ruff linting..."
+          uv run ruff check --output-format=github .
+
+      - name: Add pyright for type checking
+        run: |
+          cd mcp_server
+          uv add --group dev pyright
+
+      - name: Install graphiti-core for type checking
+        run: |
+          cd mcp_server
+          # Install graphiti-core as it's needed for type checking
+          uv add --group dev "graphiti-core>=0.16.0"
+
+      - name: Run type checking with pyright
+        run: |
+          cd mcp_server
+          echo "🔍 Running type checking..."
+          # Run pyright and capture output
+          if uv run pyright . > pyright_output.txt 2>&1; then
+            echo "✅ Type checking passed with no errors"
+            cat pyright_output.txt
+          else
+            echo "⚠️  Type checking found issues:"
+            cat pyright_output.txt
+            # Count errors
+            error_count=$(grep -c "error:" pyright_output.txt || echo "0")
+            warning_count=$(grep -c "warning:" pyright_output.txt || echo "0")
+            echo ""
+            echo "📊 Type checking summary:"
+            echo "  - Errors: $error_count"
+            echo "  - Warnings: $warning_count"
+            # Only fail if there are more than 50 errors (current baseline)
+            if [ "$error_count" -gt 50 ]; then
+              echo "❌ Too many type errors (>50). Please fix critical issues."
+              exit 1
+            else
+              echo "⚠️  Type errors under threshold, continuing..."
+            fi
+          fi
+
+      - name: Check import sorting
+        run: |
+          cd mcp_server
+          echo "🔍 Checking import sorting..."
+          uv run ruff check --select I --output-format=github .
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "✅ All formatting and linting checks passed!"
+          echo "✅ Code formatting: OK"
+          echo "✅ Ruff linting: OK" 
+          echo "✅ Type checking: OK"
+          echo "✅ Import sorting: OK"

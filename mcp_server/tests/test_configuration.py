@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 
 # Add the current directory to the path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from config_schema import GraphitiConfig
-from factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from config.schema import GraphitiConfig
+from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 
 
 def test_config_loading():
@@ -68,7 +68,7 @@ def test_llm_factory(config: GraphitiConfig):
     test_config = config.llm.model_copy()
     test_config.provider = 'gemini'
     if not test_config.providers.gemini:
-        from config_schema import GeminiProviderConfig
+        from config.schema import GeminiProviderConfig
 
         test_config.providers.gemini = GeminiProviderConfig(api_key='test-key')
     else:
@@ -114,10 +114,10 @@ async def test_database_factory(config: GraphitiConfig):
         try:
             db_config = DatabaseDriverFactory.create_config(config.database)
             print(f'✓ Created {config.database.provider} configuration successfully')
-            print(f"  - URI: {db_config['uri']}")
-            print(f"  - User: {db_config['user']}")
+            print(f'  - URI: {db_config["uri"]}')
+            print(f'  - User: {db_config["user"]}')
             print(
-                f"  - Password: {'*' * len(db_config['password']) if db_config['password'] else 'None'}"
+                f'  - Password: {"*" * len(db_config["password"]) if db_config["password"] else "None"}'
             )
 
             # Test actual connection would require initializing Graphiti

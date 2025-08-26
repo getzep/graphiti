@@ -2,10 +2,11 @@
 
 import argparse
 
-from embedder_config import GraphitiEmbedderConfig
-from llm_config import GraphitiLLMConfig
-from neo4j_config import Neo4jConfig
 from pydantic import BaseModel, Field
+
+from .embedder_config import GraphitiEmbedderConfig
+from .llm_config import GraphitiLLMConfig
+from .neo4j_config import Neo4jConfig
 
 
 class GraphitiConfig(BaseModel):
