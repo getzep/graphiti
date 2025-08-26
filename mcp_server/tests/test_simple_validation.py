@@ -13,10 +13,12 @@ import time
 def test_server_startup():
     """Test that the refactored server starts up successfully."""
     print('🚀 Testing Graphiti MCP Server Startup...')
-    
+
     # Skip server startup test in CI - we have comprehensive integration tests
     if os.environ.get('CI'):
-        print('   ⚠️  Skipping server startup test in CI (comprehensive integration tests handle this)')
+        print(
+            '   ⚠️  Skipping server startup test in CI (comprehensive integration tests handle this)'
+        )
         return True
 
     # Check if uv is available
@@ -29,7 +31,7 @@ def test_server_startup():
                 break
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
-    
+
     if not uv_cmd:
         print('   ⚠️  uv not found in PATH, skipping server startup test')
         return True
@@ -72,7 +74,7 @@ def test_server_startup():
 
             except Exception:
                 continue
-        
+
         if not success:
             print('   ⚠️  Timeout waiting for initialization or server startup failed')
 

@@ -272,7 +272,7 @@ class DatabaseDriverFactory:
                     )
                 if not config.providers.falkordb:
                     raise ValueError('FalkorDB provider configuration not found')
-                
+
                 falkor_config = config.providers.falkordb
                 return {
                     'driver': 'falkordb',
