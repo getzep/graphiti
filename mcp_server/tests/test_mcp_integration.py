@@ -25,7 +25,7 @@ class GraphitiMCPIntegrationTest:
         # Configure server parameters to run our refactored server
         server_params = StdioServerParameters(
             command='uv',
-            args=['run', 'graphiti_mcp_server.py', '--transport', 'stdio'],
+            args=['run', 'main.py', '--transport', 'stdio'],
             env={
                 'NEO4J_URI': 'bolt://localhost:7687',
                 'NEO4J_USER': 'neo4j',
