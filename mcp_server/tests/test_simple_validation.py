@@ -4,6 +4,7 @@ Simple validation test for the refactored Graphiti MCP Server.
 Tests basic functionality quickly without timeouts.
 """
 
+import os
 import subprocess
 import sys
 import time
@@ -13,14 +14,30 @@ def test_server_startup():
     """Test that the refactored server starts up successfully."""
     print('🚀 Testing Graphiti MCP Server Startup...')
 
+    # Check if uv is available
+    uv_cmd = None
+    for potential_uv in ['uv', '/Users/danielchalef/.local/bin/uv', '/root/.local/bin/uv']:
+        try:
+            result = subprocess.run([potential_uv, '--version'], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                uv_cmd = potential_uv
+                break
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    
+    if not uv_cmd:
+        print('   ⚠️  uv not found in PATH, skipping server startup test')
+        return True
+
     try:
         # Start the server and capture output
         process = subprocess.Popen(
-            ['uv', 'run', 'main.py', '--transport', 'stdio'],
+            [uv_cmd, 'run', 'main.py', '--transport', 'stdio'],
             env={
                 'NEO4J_URI': 'bolt://localhost:7687',
                 'NEO4J_USER': 'neo4j',
                 'NEO4J_PASSWORD': 'demodemo',
+                'PATH': os.environ.get('PATH', ''),
             },
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -29,6 +46,7 @@ def test_server_startup():
 
         # Wait for startup logs
         startup_output = ''
+        success = False
         for _ in range(50):  # Wait up to 5 seconds
             if process.poll() is not None:
                 break
@@ -49,9 +67,9 @@ def test_server_startup():
 
             except Exception:
                 continue
-        else:
-            print('   ⚠️  Timeout waiting for initialization')
-            success = False
+        
+        if not success:
+            print('   ⚠️  Timeout waiting for initialization or server startup failed')
 
         # Clean shutdown
         process.terminate()
@@ -81,11 +99,8 @@ def test_syntax_validation():
 
     files_to_test = [
         'src/graphiti_mcp_server.py',
-        'src/config/manager.py',
-        'src/config/llm_config.py',
-        'src/config/embedder_config.py',
-        'src/config/neo4j_config.py',
-        'src/config/server_config.py',
+        'src/config/schema.py',
+        'src/services/factories.py',
         'src/services/queue_service.py',
         'src/models/entity_types.py',
         'src/models/response_types.py',

@@ -272,8 +272,14 @@ class DatabaseDriverFactory:
                     )
                 if not config.providers.falkordb:
                     raise ValueError('FalkorDB provider configuration not found')
-                # FalkorDB support would need to be added to Graphiti core
-                raise NotImplementedError('FalkorDB support requires graphiti-core updates')
+                
+                falkor_config = config.providers.falkordb
+                return {
+                    'driver': 'falkordb',
+                    'uri': falkor_config.uri,
+                    'password': falkor_config.password,
+                    'database': falkor_config.database,
+                }
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
