@@ -87,10 +87,12 @@ async def search(
     if (
         config.edge_config
         and EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
-        or EdgeReranker.mmr == config.edge_config.reranker
+        or config.edge_config
+        and EdgeReranker.mmr == config.edge_config.reranker
         or config.node_config
         and NodeSearchMethod.cosine_similarity in config.node_config.search_methods
-        or NodeReranker.mmr == config.node_config.reranker
+        or config.node_config
+        and NodeReranker.mmr == config.node_config.reranker
         or (
             config.community_config
             and CommunitySearchMethod.cosine_similarity in config.community_config.search_methods
