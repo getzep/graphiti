@@ -206,7 +206,7 @@ class GraphitiConfig(BaseSettings):
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
-    
+
     # Additional server options
     use_custom_entities: bool = Field(default=False, description='Enable custom entity types')
     destroy_graph: bool = Field(default=False, description='Clear graph on startup')

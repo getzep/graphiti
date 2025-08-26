@@ -40,11 +40,11 @@ jobs:
           - 6379:6379
           - 3000:3000
         options: >-
-          --health-cmd "redis-cli -h localhost -p 6379 ping"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 8
-          --health-start-period 30s
+          --health-cmd "redis-cli -h localhost -p 6379 ping || exit 1"
+          --health-interval 20s
+          --health-timeout 15s
+          --health-retries 12
+          --health-start-period 60s
 
     steps:
       - name: Checkout repository
@@ -200,12 +200,26 @@ jobs:
       - name: Wait for FalkorDB to be ready
         run: |
           echo "🔄 Waiting for FalkorDB to be ready..."
-          max_attempts=30
+          
+          # Install redis-tools first if not available
+          if ! command -v redis-cli &> /dev/null; then
+            echo "📦 Installing redis-tools..."
+            sudo apt-get update && sudo apt-get install -y redis-tools
+          fi
+          
+          max_attempts=40
           attempt=1
           while [ $attempt -le $max_attempts ]; do
-            if redis-cli -h localhost -p 6379 ping >/dev/null 2>&1; then
+            if redis-cli -h localhost -p 6379 ping 2>/dev/null | grep -q PONG; then
               echo "✅ FalkorDB is ready!"
-              break
+              
+              # Verify GRAPH module is loaded
+              if redis-cli -h localhost -p 6379 MODULE LIST 2>/dev/null | grep -q graph; then
+                echo "✅ FalkorDB GRAPH module is loaded!"
+                break
+              else
+                echo "⏳ Waiting for GRAPH module to load..."
+              fi
             fi
             echo "⏳ Attempt $attempt/$max_attempts - FalkorDB not ready yet..."
             sleep 3
@@ -214,6 +228,9 @@ jobs:
           
           if [ $attempt -gt $max_attempts ]; then
             echo "❌ FalkorDB failed to start within timeout"
+            # Get container logs for debugging
+            docker ps -a
+            docker logs $(docker ps -q -f "ancestor=falkordb/falkordb:v4.12.4") 2>&1 | tail -50 || echo "Could not fetch logs"
             exit 1
           fi
 

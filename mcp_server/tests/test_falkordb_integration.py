@@ -9,7 +9,7 @@ import json
 import time
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
+from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
@@ -37,14 +37,14 @@ class GraphitiFalkorDBIntegrationTest:
 
         # Start the stdio client
         self.session = await stdio_client(server_params).__aenter__()
-        print(f'   📡 Started MCP client session with FalkorDB backend')
+        print('   📡 Started MCP client session with FalkorDB backend')
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Clean up the MCP client session."""
         if self.session:
             await self.session.close()
-            print(f'   🔌 Closed MCP client session')
+            print('   🔌 Closed MCP client session')
 
     async def call_mcp_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call an MCP tool via the stdio client."""
@@ -68,15 +68,15 @@ class GraphitiFalkorDBIntegrationTest:
         """Test the get_status tool to verify FalkorDB connectivity."""
         print('   🏥 Testing server status with FalkorDB...')
         result = await self.call_mcp_tool('get_status', {})
-        
+
         if 'error' in result:
             print(f'   ❌ Status check failed: {result["error"]}')
             return False
-            
+
         # Check if status indicates FalkorDB is working
         status_text = result.get('raw_response', result.get('content', ''))
         if 'running' in str(status_text).lower() or 'ready' in str(status_text).lower():
-            print(f'   ✅ Server status OK with FalkorDB')
+            print('   ✅ Server status OK with FalkorDB')
             return True
         else:
             print(f'   ⚠️  Status unclear: {status_text}')
@@ -85,54 +85,53 @@ class GraphitiFalkorDBIntegrationTest:
     async def test_add_episode(self) -> bool:
         """Test adding an episode to FalkorDB."""
         print('   📝 Testing episode addition to FalkorDB...')
-        
+
         episode_data = {
             'name': 'FalkorDB Test Episode',
             'episode_body': 'This is a test episode to verify FalkorDB integration works correctly.',
             'source': 'text',
-            'source_description': 'Integration test for FalkorDB backend'
+            'source_description': 'Integration test for FalkorDB backend',
         }
-        
+
         result = await self.call_mcp_tool('add_episode', episode_data)
-        
+
         if 'error' in result:
             print(f'   ❌ Add episode failed: {result["error"]}')
             return False
-            
-        print(f'   ✅ Episode added successfully to FalkorDB')
+
+        print('   ✅ Episode added successfully to FalkorDB')
         return True
 
     async def test_search_functionality(self) -> bool:
         """Test search functionality with FalkorDB."""
         print('   🔍 Testing search functionality with FalkorDB...')
-        
+
         # Give some time for episode processing
         await asyncio.sleep(2)
-        
+
         # Test node search
-        search_result = await self.call_mcp_tool('search_nodes', {
-            'query': 'FalkorDB test episode',
-            'limit': 5
-        })
-        
+        search_result = await self.call_mcp_tool(
+            'search_nodes', {'query': 'FalkorDB test episode', 'limit': 5}
+        )
+
         if 'error' in search_result:
             print(f'   ⚠️  Search returned error (may be expected): {search_result["error"]}')
             return True  # Don't fail on search errors in integration test
-            
-        print(f'   ✅ Search functionality working with FalkorDB')
+
+        print('   ✅ Search functionality working with FalkorDB')
         return True
 
     async def test_clear_graph(self) -> bool:
         """Test clearing the graph in FalkorDB."""
         print('   🧹 Testing graph clearing in FalkorDB...')
-        
+
         result = await self.call_mcp_tool('clear_graph', {})
-        
+
         if 'error' in result:
             print(f'   ❌ Clear graph failed: {result["error"]}')
             return False
-            
-        print(f'   ✅ Graph cleared successfully in FalkorDB')
+
+        print('   ✅ Graph cleared successfully in FalkorDB')
         return True
 
 
@@ -140,13 +139,13 @@ async def run_falkordb_integration_test() -> bool:
     """Run the complete FalkorDB integration test suite."""
     print('🧪 Starting FalkorDB Integration Test Suite')
     print('=' * 55)
-    
+
     test_results = []
-    
+
     try:
         async with GraphitiFalkorDBIntegrationTest() as test_client:
             print(f'   🎯 Using test group: {test_client.test_group_id}')
-            
+
             # Run test suite
             tests = [
                 ('Server Status', test_client.test_server_status),
@@ -154,7 +153,7 @@ async def run_falkordb_integration_test() -> bool:
                 ('Search Functionality', test_client.test_search_functionality),
                 ('Clear Graph', test_client.test_clear_graph),
             ]
-            
+
             for test_name, test_func in tests:
                 print(f'\n🔬 Running {test_name} Test...')
                 try:
@@ -167,25 +166,25 @@ async def run_falkordb_integration_test() -> bool:
                 except Exception as e:
                     print(f'   💥 {test_name}: ERROR - {e}')
                     test_results.append((test_name, False))
-            
+
     except Exception as e:
         print(f'💥 Test setup failed: {e}')
         return False
-    
+
     # Summary
     print('\n' + '=' * 55)
     print('📊 FalkorDB Integration Test Results:')
     print('-' * 30)
-    
+
     passed = sum(1 for _, result in test_results if result)
     total = len(test_results)
-    
+
     for test_name, result in test_results:
         status = '✅ PASS' if result else '❌ FAIL'
         print(f'   {test_name}: {status}')
-    
+
     print(f'\n🎯 Overall: {passed}/{total} tests passed')
-    
+
     if passed == total:
         print('🎉 All FalkorDB integration tests PASSED!')
         return True
