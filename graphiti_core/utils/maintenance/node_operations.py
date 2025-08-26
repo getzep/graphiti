@@ -275,7 +275,7 @@ async def resolve_extracted_nodes(
         duplicate_idx: int = resolution.duplicate_idx
 
         # Add bounds checking for extracted_nodes
-        if resolution_id >= len(extracted_nodes):
+        if resolution_id < 0 or resolution_id >= len(extracted_nodes):
             logger.warning(
                 f"Resolution ID {resolution_id} is out of range for extracted_nodes "
                 f"(max: {len(extracted_nodes) - 1}). Skipping this resolution."
