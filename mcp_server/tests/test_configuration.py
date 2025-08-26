@@ -70,9 +70,9 @@ def test_llm_factory(config: GraphitiConfig):
     if not test_config.providers.gemini:
         from config.schema import GeminiProviderConfig
 
-        test_config.providers.gemini = GeminiProviderConfig(api_key='test-key')
+        test_config.providers.gemini = GeminiProviderConfig(api_key='dummy_value_for_testing')
     else:
-        test_config.providers.gemini.api_key = 'test-key'
+        test_config.providers.gemini.api_key = 'dummy_value_for_testing'
 
     try:
         client = LLMClientFactory.create(test_config)
