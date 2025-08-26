@@ -1,0 +1,95 @@
+name: MCP Server Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'mcp_server/**'
+  workflow_dispatch:
+
+jobs:
+  test-mcp-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install MCP server dependencies
+        run: |
+          cd mcp_server
+          uv sync --extra dev
+
+      - name: Run configuration tests
+        run: |
+          cd mcp_server
+          uv run tests/test_configuration.py
+
+      - name: Run syntax validation tests
+        run: |
+          cd mcp_server
+          uv run tests/test_simple_validation.py
+
+      - name: Run unit tests (if pytest tests exist)
+        run: |
+          cd mcp_server
+          # Check if there are pytest-compatible test files
+          if find tests/ -name "test_*.py" -exec grep -l "def test_" {} \; | grep -q .; then
+            echo "Found pytest-compatible tests, running with pytest"
+            uv add --group dev pytest pytest-asyncio || true
+            uv run pytest tests/ -v --tb=short
+          else
+            echo "No pytest-compatible tests found, skipping pytest"
+          fi
+
+      - name: Test main.py wrapper
+        run: |
+          cd mcp_server
+          uv run main.py --help > /dev/null
+          echo "✅ main.py wrapper works correctly"
+
+      - name: Verify import structure
+        run: |
+          cd mcp_server
+          # Test that main modules can be imported from new structure
+          uv run python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          
+          # Test core imports
+          from config.schema import GraphitiConfig
+          from services.factories import LLMClientFactory, EmbedderFactory, DatabaseDriverFactory
+          from services.queue_service import QueueService
+          from models.entity_types import ENTITY_TYPES
+          from models.response_types import StatusResponse
+          from utils.formatting import format_fact_result
+          
+          print('✅ All core modules import successfully')
+          "
+
+      - name: Check for missing dependencies
+        run: |
+          cd mcp_server
+          echo "📋 Checking MCP server dependencies..."
+          uv run python -c "
+          try:
+              import mcp
+              print('✅ MCP library available')
+          except ImportError:
+              print('❌ MCP library missing')
+              exit(1)
+          
+          try:
+              import graphiti_core
+              print('✅ Graphiti Core available') 
+          except ImportError:
+              print('⚠️  Graphiti Core not available (may be expected in CI)')
+          "

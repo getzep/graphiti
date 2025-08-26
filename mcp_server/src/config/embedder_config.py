@@ -3,13 +3,13 @@
 import logging
 import os
 
-from openai import AsyncAzureOpenAI
-from pydantic import BaseModel
-from utils import create_azure_credential_token_provider
-
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+
+from utils import create_azure_credential_token_provider
 
 logger = logging.getLogger(__name__)
 

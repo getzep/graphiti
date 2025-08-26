@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server"
-version = "0.4.0"
+version = "0.5.0"
 description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
@@ -24,6 +24,39 @@ providers = [
 
 [dependency-groups]
 dev = [
+    "graphiti-core>=0.16.0",
     "httpx>=0.28.1",
     "mcp>=1.9.4",
+    "pyright>=1.1.404",
+    "ruff>=0.7.1",
 ]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true

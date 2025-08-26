@@ -1,6 +1,6 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
-from config_schema import (
+from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
@@ -65,7 +65,7 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
-from utils import create_azure_credential_token_provider
+from utils.utils import create_azure_credential_token_provider
 
 
 class LLMClientFactory:

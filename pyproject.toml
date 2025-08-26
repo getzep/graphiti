@@ -18,7 +18,8 @@ dependencies = [
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
-    "posthog>=3.0.0"
+    "posthog>=3.0.0",
+    "pyyaml>=6.0.2",
 ]
 
 [project.urls]

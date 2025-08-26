@@ -814,6 +814,7 @@ dependencies = [
     { name = "posthog" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tenacity" },
 ]
 
@@ -902,6 +903,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'dev'", specifier = ">=3.2.1" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },

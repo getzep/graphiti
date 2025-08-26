@@ -5,14 +5,14 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from openai import AsyncAzureOpenAI
-from pydantic import BaseModel
-from utils import create_azure_credential_token_provider
-
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
+from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+
+from utils import create_azure_credential_token_provider
 
 if TYPE_CHECKING:
     pass
