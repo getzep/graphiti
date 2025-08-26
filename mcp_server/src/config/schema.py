@@ -1,4 +1,4 @@
-"""Enhanced configuration with pydantic-settings and YAML support."""
+"""Configuration schemas with pydantic-settings and YAML support."""
 
 import os
 from pathlib import Path
@@ -206,6 +206,10 @@ class GraphitiConfig(BaseSettings):
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
+    
+    # Additional server options
+    use_custom_entities: bool = Field(default=False, description='Enable custom entity types')
+    destroy_graph: bool = Field(default=False, description='Clear graph on startup')
 
     model_config = SettingsConfigDict(
         env_prefix='',

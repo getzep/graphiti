@@ -24,8 +24,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
-from config.schema import GraphitiConfig
-from config.server_config import MCPConfig
+from config.schema import GraphitiConfig, ServerConfig
 from models.entity_types import ENTITY_TYPES
 from models.response_types import (
     EpisodeSearchResponse,
@@ -628,7 +627,7 @@ async def get_status() -> StatusResponse:
         )
 
 
-async def initialize_server() -> MCPConfig:
+async def initialize_server() -> ServerConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config, graphiti_service, queue_service, graphiti_client, semaphore
 
@@ -761,7 +760,7 @@ async def initialize_server() -> MCPConfig:
         mcp.settings.port = config.server.port
 
     # Return MCP configuration for transport
-    return MCPConfig(transport=config.server.transport)
+    return config.server
 
 
 async def run_mcp_server():
