@@ -35,15 +35,16 @@ jobs:
           --health-start-period 30s
 
       falkordb:
-        image: falkordb/falkordb:latest
+        image: falkordb/falkordb:v4.12.4
         ports:
           - 6379:6379
+          - 3000:3000
         options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 10s
+          --health-cmd "redis-cli -h localhost -p 6379 ping"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 8
+          --health-start-period 30s
 
     steps:
       - name: Checkout repository
@@ -199,15 +200,15 @@ jobs:
       - name: Wait for FalkorDB to be ready
         run: |
           echo "🔄 Waiting for FalkorDB to be ready..."
-          max_attempts=20
+          max_attempts=30
           attempt=1
           while [ $attempt -le $max_attempts ]; do
-            if redis-cli -p 6379 ping >/dev/null 2>&1; then
+            if redis-cli -h localhost -p 6379 ping >/dev/null 2>&1; then
               echo "✅ FalkorDB is ready!"
               break
             fi
             echo "⏳ Attempt $attempt/$max_attempts - FalkorDB not ready yet..."
-            sleep 2
+            sleep 3
             attempt=$((attempt + 1))
           done
           
@@ -221,12 +222,14 @@ jobs:
           cd mcp_server
           echo "🔍 Testing FalkorDB connection..."
           
-          # Install redis client for testing
+          # Install redis client for testing (FalkorDB uses Redis protocol)
           sudo apt-get update && sudo apt-get install -y redis-tools
           
-          # Test basic Redis/FalkorDB connectivity
-          if redis-cli -p 6379 ping | grep -q PONG; then
+          # Test FalkorDB connectivity via Redis protocol
+          if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
             echo "✅ FalkorDB connection successful"
+            # Test FalkorDB specific commands
+            redis-cli -h localhost -p 6379 GRAPH.QUERY "test_graph" "CREATE ()" >/dev/null 2>&1 || echo "   ⚠️  FalkorDB graph query test (expected to work once server fully starts)"
           else
             echo "❌ FalkorDB connection failed"
             exit 1
@@ -236,7 +239,7 @@ jobs:
           FALKORDB_PASSWORD: ""
           FALKORDB_DATABASE: default_db
 
-      - name: Run FalkorDB integration tests
+      - name: Run FalkorDB integration tests  
         run: |
           cd mcp_server
           echo "🧪 Running FalkorDB integration tests..."
@@ -283,11 +286,11 @@ jobs:
           echo "🚀 Testing server startup with FalkorDB..."
           
           # Start server in background with FalkorDB and test it can initialize
-          timeout 30 uv run main.py --transport stdio --database-provider falkordb --group-id ci-falkor-test &
+          timeout 45 uv run main.py --transport stdio --database-provider falkordb --group-id ci-falkor-test &
           server_pid=$!
           
-          # Give it time to start
-          sleep 10
+          # Give FalkorDB more time to fully initialize
+          sleep 15
           
           # Check if server is still running (didn't crash)
           if kill -0 $server_pid 2>/dev/null; then
