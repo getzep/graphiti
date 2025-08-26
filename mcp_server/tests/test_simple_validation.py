@@ -13,6 +13,11 @@ import time
 def test_server_startup():
     """Test that the refactored server starts up successfully."""
     print('🚀 Testing Graphiti MCP Server Startup...')
+    
+    # Skip server startup test in CI - we have comprehensive integration tests
+    if os.environ.get('CI'):
+        print('   ⚠️  Skipping server startup test in CI (comprehensive integration tests handle this)')
+        return True
 
     # Check if uv is available
     uv_cmd = None
