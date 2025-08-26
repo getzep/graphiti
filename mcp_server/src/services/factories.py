@@ -260,8 +260,9 @@ class DatabaseDriverFactory:
                 else:
                     # Create default Neo4j configuration
                     from config.schema import Neo4jProviderConfig
+
                     neo4j_config = Neo4jProviderConfig()
-                
+
                 return {
                     'uri': neo4j_config.uri,
                     'user': neo4j_config.username,
@@ -275,13 +276,14 @@ class DatabaseDriverFactory:
                     raise ValueError(
                         'FalkorDB driver not available in current graphiti-core version'
                     )
-                
+
                 # Use FalkorDB config if provided, otherwise use defaults
                 if config.providers.falkordb:
                     falkor_config = config.providers.falkordb
                 else:
                     # Create default FalkorDB configuration
                     from config.schema import FalkorDBProviderConfig
+
                     falkor_config = FalkorDBProviderConfig()
 
                 return {
