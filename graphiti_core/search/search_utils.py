@@ -605,9 +605,7 @@ async def node_fulltext_search(
             + (group_ids[0].replace('-', '') if group_ids is not None else '')
         )
         query = (
-            get_nodes_query(
-                index_name, '$query', limit=limit, provider=driver.provider
-            )
+            get_nodes_query(index_name, '$query', limit=limit, provider=driver.provider)
             + yield_query
             + filter_query
             + """
