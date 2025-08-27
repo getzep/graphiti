@@ -51,18 +51,6 @@ def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None
         else None
     )
 
-
-def get_default_group_id(db_type: str) -> str:
-    """
-    This function differentiates the default group id based on the database type.
-    For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
-    """
-    if db_type == 'falkordb':
-        return '_'
-    else:
-        return ''
-
-
 def lucene_sanitize(query: str) -> str:
     # Escape special characters from a query before passing into Lucene
     # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
@@ -120,7 +108,7 @@ async def semaphore_gather(
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
 
 
-def validate_group_id(group_id: str) -> bool:
+def validate_group_id(group_id: str | None) -> bool:
     """
     Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
 
@@ -147,7 +135,7 @@ def validate_group_id(group_id: str) -> bool:
 
 
 def validate_excluded_entity_types(
-    excluded_entity_types: list[str] | None, entity_types: dict[str, BaseModel] | None = None
+    excluded_entity_types: list[str] | None, entity_types: dict[str, type[BaseModel]] | None = None
 ) -> bool:
     """
     Validate that excluded entity types are valid type names.

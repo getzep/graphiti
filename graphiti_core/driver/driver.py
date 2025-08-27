@@ -18,9 +18,15 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class GraphProvider(Enum):
+    NEO4J = 'neo4j'
+    FALKORDB = 'falkordb'
 
 
 class GraphDriverSession(ABC):
@@ -46,11 +52,12 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(ABC):
-    provider: str
+    provider: GraphProvider
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
+    default_group_id: str = ''
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -77,3 +84,29 @@ class GraphDriver(ABC):
         cloned._database = database
 
         return cloned
+    
+    def sanitize(self, query: str) -> str:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def build_fulltext_query(self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128) -> str:
+        """
+        Build a fulltext query string appropriate for this graph provider.
+        
+        Args:
+            query: The search query text
+            group_ids: Optional list of group IDs to filter by
+            max_query_length: Maximum allowed query length
+            
+        Returns:
+            A formatted fulltext query string for this provider
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        raise NotImplementedError()
+
+    def clone(self, database: str) -> 'GraphDriver':
+        """Clone the driver with a different database or graph name."""
+        return self

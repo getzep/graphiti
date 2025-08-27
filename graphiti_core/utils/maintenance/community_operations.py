@@ -33,8 +33,9 @@ async def get_community_clusters(
     if group_ids is None:
         group_id_values, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN 
+        MATCH (n:Entity)
+        WHERE n.group_id IS NOT NULL
+        RETURN
             collect(DISTINCT n.group_id) AS group_ids
         """,
         )
@@ -122,9 +123,14 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     return clusters
 
 
-async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
+async def summarize_pair(
+    llm_client: LLMClient, summary_pair: tuple[str, str], ensure_ascii: bool = True
+) -> str:
     # Prepare context for LLM
-    context = {'node_summaries': [{'summary': summary} for summary in summary_pair]}
+    context = {
+        'node_summaries': [{'summary': summary} for summary in summary_pair],
+        'ensure_ascii': ensure_ascii,
+    }
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
@@ -135,8 +141,13 @@ async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -
     return pair_summary
 
 
-async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
-    context = {'summary': summary}
+async def generate_summary_description(
+    llm_client: LLMClient, summary: str, ensure_ascii: bool = True
+) -> str:
+    context = {
+        'summary': summary,
+        'ensure_ascii': ensure_ascii,
+    }
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),
@@ -149,7 +160,7 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode]
+    llm_client: LLMClient, community_cluster: list[EntityNode], ensure_ascii: bool = True
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -161,7 +172,9 @@ async def build_community(
         new_summaries: list[str] = list(
             await semaphore_gather(
                 *[
-                    summarize_pair(llm_client, (str(left_summary), str(right_summary)))
+                    summarize_pair(
+                        llm_client, (str(left_summary), str(right_summary)), ensure_ascii
+                    )
                     for left_summary, right_summary in zip(
                         summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
@@ -174,7 +187,7 @@ async def build_community(
         length = len(summaries)
 
     summary = summaries[0]
-    name = await generate_summary_description(llm_client, summary)
+    name = await generate_summary_description(llm_client, summary, ensure_ascii)
     now = utc_now()
     community_node = CommunityNode(
         name=name,
@@ -191,7 +204,10 @@ async def build_community(
 
 
 async def build_communities(
-    driver: GraphDriver, llm_client: LLMClient, group_ids: list[str] | None
+    driver: GraphDriver,
+    llm_client: LLMClient,
+    group_ids: list[str] | None,
+    ensure_ascii: bool = True,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -199,7 +215,7 @@ async def build_communities(
 
     async def limited_build_community(cluster):
         async with semaphore:
-            return await build_community(llm_client, cluster)
+            return await build_community(llm_client, cluster, ensure_ascii)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
         await semaphore_gather(
@@ -233,10 +249,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
@@ -250,10 +266,10 @@ async def determine_entity_community(
         """
     MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     RETURN
-        c.uuid As uuid, 
+        c.uuid AS uuid,
         c.name AS name,
         c.group_id AS group_id,
-        c.created_at AS created_at, 
+        c.created_at AS created_at,
         c.summary AS summary
     """,
         entity_uuid=entity.uuid,
@@ -285,23 +301,33 @@ async def determine_entity_community(
 
 
 async def update_community(
-    driver: GraphDriver, llm_client: LLMClient, embedder: EmbedderClient, entity: EntityNode
-):
+    driver: GraphDriver,
+    llm_client: LLMClient,
+    embedder: EmbedderClient,
+    entity: EntityNode,
+    ensure_ascii: bool = True,
+) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community, is_new = await determine_entity_community(driver, entity)
 
     if community is None:
-        return
+        return [], []
 
-    new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
-    new_name = await generate_summary_description(llm_client, new_summary)
+    new_summary = await summarize_pair(
+        llm_client, (entity.summary, community.summary), ensure_ascii
+    )
+    new_name = await generate_summary_description(llm_client, new_summary, ensure_ascii)
 
     community.summary = new_summary
     community.name = new_name
 
+    community_edges = []
     if is_new:
         community_edge = (build_community_edges([entity], community, utc_now()))[0]
         await community_edge.save(driver)
+        community_edges.append(community_edge)
 
     await community.generate_name_embedding(embedder)
 
     await community.save(driver)
+
+    return [community], community_edges
