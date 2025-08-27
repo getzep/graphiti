@@ -291,7 +291,9 @@ class EpisodicNode(Node):
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
-            group_label='Episodic_' + self.group_id.replace('-', ''),
+            group_label='Episodic_' + self.group_id.replace('-', '')
+            if driver.provider == GraphProvider.NEO4J
+            else None,
             source_description=self.source_description,
             content=self.content,
             entity_edges=self.entity_edges,
