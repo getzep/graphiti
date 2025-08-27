@@ -104,7 +104,7 @@ class QueueService:
         content: str,
         source_description: str,
         episode_type: Any,
-        custom_types: Any,
+        entity_types: Any,
         uuid: str,
     ) -> int:
         """Add an episode for processing.
@@ -115,7 +115,7 @@ class QueueService:
             content: Episode content
             source_description: Description of the episode source
             episode_type: Type of the episode
-            custom_types: Custom entity types
+            entity_types: Entity types for extraction
             uuid: Episode UUID
 
         Returns:
@@ -137,7 +137,7 @@ class QueueService:
                     episode_type=episode_type,
                     group_id=group_id,
                     reference_time=None,  # Let graphiti handle timing
-                    custom_types=custom_types,
+                    entity_types=entity_types,
                     uuid=uuid,
                 )
 

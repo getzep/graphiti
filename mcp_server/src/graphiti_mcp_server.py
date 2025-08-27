@@ -165,7 +165,6 @@ class GraphitiService:
                 password=db_config['password'],
                 llm_client=llm_client,
                 embedder=embedder_client,
-                custom_node_types=custom_types,
                 max_coroutines=self.semaphore_limit,
             )
 
@@ -279,7 +278,7 @@ async def add_memory(
             content=episode_body,
             source_description=source_description,
             episode_type=episode_type,
-            custom_types=graphiti_service.entity_types,
+            entity_types=graphiti_service.entity_types,
             uuid=uuid,
         )
 
