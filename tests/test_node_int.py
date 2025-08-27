@@ -45,7 +45,7 @@ def sample_entity_node():
         uuid=str(uuid4()),
         name='Test Entity',
         group_id=group_id,
-        labels=['Entity', 'Person'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person'],
         created_at=created_at,
         name_embedding=[0.5] * 1024,
         summary='Entity Summary',
