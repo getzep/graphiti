@@ -110,6 +110,7 @@ class GraphitiService:
 
     def __init__(self, config: GraphitiConfig, semaphore_limit: int = 10):
         self.config = config
+        self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
         self.entity_types = None
