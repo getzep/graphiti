@@ -89,6 +89,7 @@ from graphiti_core.utils.maintenance.edge_operations import (
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
+    build_dynamic_indexes,
     build_indices_and_constraints,
     retrieve_episodes,
 )
@@ -450,6 +451,7 @@ class Graphiti:
 
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
+            await build_dynamic_indexes(self.driver, group_id)
 
             previous_episodes = (
                 await self.retrieve_episodes(

@@ -119,8 +119,10 @@ async def add_nodes_and_edges_bulk_tx(
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
+        episode['group_label'] = 'Episodic_' + episode['group_id'].replace('-', '')
 
     nodes = []
+
     for node in entity_nodes:
         if node.name_embedding is None:
             await node.generate_name_embedding(embedder)
@@ -140,6 +142,9 @@ async def add_nodes_and_edges_bulk_tx(
             entity_data['attributes'] = json.dumps(attributes)
         else:
             entity_data.update(node.attributes or {})
+            entity_data['labels'] = list(
+                set(node.labels + ['Entity', 'Entity_' + node.group_id.replace('-', '')])
+            )
 
         nodes.append(entity_data)
 

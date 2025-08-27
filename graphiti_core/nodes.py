@@ -291,6 +291,7 @@ class EpisodicNode(Node):
             uuid=self.uuid,
             name=self.name,
             group_id=self.group_id,
+            group_label='Episodic_' + self.group_id.replace('-', ''),
             source_description=self.source_description,
             content=self.content,
             entity_edges=self.entity_edges,
@@ -464,7 +465,7 @@ class EntityNode(Node):
             )
         else:
             entity_data.update(self.attributes or {})
-            labels = ':'.join(self.labels + ['Entity'])
+            labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
 
             if driver.provider == GraphProvider.NEPTUNE:
                 driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
