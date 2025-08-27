@@ -29,6 +29,8 @@ dev = [
     "httpx>=0.28.1",
     "mcp>=1.9.4",
     "pyright>=1.1.404",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
     "ruff>=0.7.1",
 ]
 

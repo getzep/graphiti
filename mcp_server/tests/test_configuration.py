@@ -41,7 +41,8 @@ def test_config_loading():
     del os.environ['LLM__PROVIDER']
     del os.environ['LLM__MODEL']
 
-    return config
+    assert config is not None
+    assert config2 is not None
 
 
 def test_llm_factory(config: GraphitiConfig):
