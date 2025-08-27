@@ -159,7 +159,7 @@ async def test_add_bulk(graph_driver, mock_llm_client, mock_embedder, mock_cross
     entity_node_1 = EntityNode(
         name='test_entity_1',
         group_id=group_id,
-        labels=['Entity', 'Person'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person'],
         created_at=now,
         summary='test_entity_1 summary',
         attributes={'age': 30, 'location': 'New York'},
@@ -169,7 +169,7 @@ async def test_add_bulk(graph_driver, mock_llm_client, mock_embedder, mock_cross
     entity_node_2 = EntityNode(
         name='test_entity_2',
         group_id=group_id,
-        labels=['Entity', 'Person2'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person2'],
         created_at=now,
         summary='test_entity_2 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
@@ -179,7 +179,7 @@ async def test_add_bulk(graph_driver, mock_llm_client, mock_embedder, mock_cross
     entity_node_3 = EntityNode(
         name='test_entity_3',
         group_id=group_id,
-        labels=['Entity', 'City', 'Location'],
+        labels=['Entity', 'City', 'Entity_graphiti_test_group', 'Location'],
         created_at=now,
         summary='test_entity_3 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
@@ -189,7 +189,7 @@ async def test_add_bulk(graph_driver, mock_llm_client, mock_embedder, mock_cross
     entity_node_4 = EntityNode(
         name='test_entity_4',
         group_id=group_id,
-        labels=['Entity'],
+        labels=['Entity', 'Entity_graphiti_test_group'],
         created_at=now,
         summary='test_entity_4 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
