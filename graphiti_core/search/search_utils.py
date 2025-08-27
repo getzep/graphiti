@@ -720,13 +720,12 @@ async def node_similarity_search(
             f"""
                     CALL db.index.vector.queryNodes('{index_name}', {limit}, $search_vector) YIELD node AS n, score
                     """
-            + group_filter_query
             + filter_query
             + """
                     AND score > $min_score
                     RETURN
                     """
-            + ENTITY_NODE_RETURN
+            + get_entity_node_return_query(driver.provider)
             + """
                     ORDER BY score DESC
                     LIMIT $limit
@@ -739,7 +738,7 @@ async def node_similarity_search(
             limit=limit,
             min_score=min_score,
             routing_='r',
-            **query_params,
+            **filter_params,
         )
 
     else:
