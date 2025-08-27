@@ -58,7 +58,7 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
 class ServerConfig(BaseModel):
     """Server configuration."""
 
-    transport: str = Field(default='stdio', description='Transport type: stdio or sse')
+    transport: str = Field(default='sse', description='Transport type: sse (default) or stdio')
     host: str = Field(default='0.0.0.0', description='Server host')
     port: int = Field(default=8000, description='Server port')
 

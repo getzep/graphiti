@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Integration test for the refactored Graphiti MCP Server.
-Tests all major MCP tools and handles episode processing latency.
+HTTP/SSE Integration test for the refactored Graphiti MCP Server.
+Tests server functionality when running in SSE (Server-Sent Events) mode over HTTP.
+Note: This test requires the server to be running with --transport sse.
 """
 
 import asyncio

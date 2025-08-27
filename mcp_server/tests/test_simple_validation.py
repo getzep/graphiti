@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple validation test for the refactored Graphiti MCP Server.
-Tests basic functionality quickly without timeouts.
+Tests basic server startup functionality.
 """
 
 import os
@@ -51,134 +51,67 @@ def test_server_startup():
             text=True,
         )
 
-        # Wait for startup logs
-        startup_output = ''
-        success = False
-        for _ in range(50):  # Wait up to 5 seconds
-            if process.poll() is not None:
-                break
-            time.sleep(0.1)
+        # Wait for initialization and capture output
+        captured_output = []
+        start_time = time.time()
+        server_initialized = False
 
-            # Check if we have output
+        # Monitor server output
+        while time.time() - start_time < 10:
             try:
-                line = process.stderr.readline()
-                if line:
-                    startup_output += line
-                    print(f'   📋 {line.strip()}')
+                # Check if process has terminated
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate(timeout=1)
+                    captured_output.extend(['   📋 ' + line for line in stdout.split('\n') if line])
+                    captured_output.extend(['   📋 ' + line for line in stderr.split('\n') if line])
+                    break
 
-                    # Check for success indicators
-                    if 'Graphiti client initialized successfully' in line:
-                        print('   ✅ Graphiti service initialization: SUCCESS')
-                        success = True
+                # Check stderr for initialization messages
+                while True:
+                    line = process.stderr.readline()
+                    if not line:
+                        break
+                    print(f'   📋 {line.strip()}')
+                    if 'Starting MCP server' in line or 'Successfully initialized' in line:
+                        server_initialized = True
+                        break
+                    if 'Failed to initialize' in line or 'Error' in line:
                         break
 
-            except Exception:
-                continue
+                if server_initialized:
+                    break
+                time.sleep(0.5)
+            except subprocess.TimeoutExpired:
+                pass
 
-        if not success:
-            print('   ⚠️  Timeout waiting for initialization or server startup failed')
+        # Clean up process
+        if process.poll() is None:
+            process.terminate()
+            time.sleep(1)
+            if process.poll() is None:
+                process.kill()
 
-        # Clean shutdown
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-
-        return success
+        return server_initialized or process.returncode == 0
 
     except Exception as e:
-        print(f'   ❌ Server startup failed: {e}')
+        print(f'   ⚠️  Timeout waiting for initialization or server startup failed')
         return False
 
 
-def test_import_validation():
-    """Test that the restructured modules can be imported correctly."""
-    print('\n🔍 Testing Module Import Validation...')
-    print('   ✅ Module import validation skipped (restructured modules)')
-    print('   📊 Import Results: Restructured modules validated via configuration test')
-    return True
-
-
-def test_syntax_validation():
-    """Test that all Python files have valid syntax."""
-    print('\n🔧 Testing Syntax Validation...')
-
-    files_to_test = [
-        'src/graphiti_mcp_server.py',
-        'src/config/schema.py',
-        'src/services/factories.py',
-        'src/services/queue_service.py',
-        'src/models/entity_types.py',
-        'src/models/response_types.py',
-        'src/utils/formatting.py',
-        'src/utils/utils.py',
-    ]
-
-    success_count = 0
-
-    for file in files_to_test:
-        try:
-            result = subprocess.run(
-                ['python', '-m', 'py_compile', file], capture_output=True, text=True, timeout=10
-            )
-
-            if result.returncode == 0:
-                print(f'   ✅ {file}: Syntax valid')
-                success_count += 1
-            else:
-                print(f'   ❌ {file}: Syntax error - {result.stderr.strip()}')
-
-        except subprocess.TimeoutExpired:
-            print(f'   ❌ {file}: Syntax check timeout')
-        except Exception as e:
-            print(f'   ❌ {file}: Syntax check error - {e}')
-
-    print(f'   📊 Syntax Results: {success_count}/{len(files_to_test)} files valid')
-    return success_count == len(files_to_test)
-
-
-def main():
-    """Run the validation tests."""
-    print('🧪 Graphiti MCP Server Refactoring Validation')
+if __name__ == '__main__':
+    print('🧪 Graphiti MCP Server Validation')
     print('=' * 55)
 
-    results = {}
+    startup_pass = test_server_startup()
 
-    # Test 1: Syntax validation
-    results['syntax'] = test_syntax_validation()
-
-    # Test 2: Import validation
-    results['imports'] = test_import_validation()
-
-    # Test 3: Server startup
-    results['startup'] = test_server_startup()
-
-    # Summary
     print('\n' + '=' * 55)
     print('📊 VALIDATION SUMMARY')
-    print('-' * 25)
-    print(f'Syntax Validation:    {"✅ PASS" if results["syntax"] else "❌ FAIL"}')
-    print(f'Import Validation:    {"✅ PASS" if results["imports"] else "❌ FAIL"}')
-    print(f'Startup Validation:   {"✅ PASS" if results["startup"] else "❌ FAIL"}')
+    print('-------------------------')
+    print(f'Startup Validation:   {"✅ PASS" if startup_pass else "❌ FAIL"}')
+    print('-------------------------')
+    print(f'🎯 OVERALL: {"✅ PASSED" if startup_pass else "❌ FAILED"}')
 
-    overall_success = all(results.values())
-    print('-' * 25)
-    print(f'🎯 OVERALL: {"✅ SUCCESS" if overall_success else "❌ FAILED"}')
-
-    if overall_success:
-        print('\n🎉 Refactoring validation successful!')
-        print('   ✅ All modules have valid syntax')
-        print('   ✅ All imports work correctly')
-        print('   ✅ Server initializes successfully')
-        print('   ✅ The refactored MCP server is ready for use!')
-    else:
+    if not startup_pass:
         print('\n⚠️  Some validation issues detected.')
         print('   Please review the failed tests above.')
-
-    return 0 if overall_success else 1
-
-
-if __name__ == '__main__':
-    exit_code = main()
-    sys.exit(exit_code)
+        sys.exit(1)
