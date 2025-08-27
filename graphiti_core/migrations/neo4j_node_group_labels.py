@@ -78,6 +78,7 @@ async def main():
         password=neo4j_password,
     )
     await neo4j_node_label_migration(driver)
+    await driver.close()
 
 
 if __name__ == '__main__':
