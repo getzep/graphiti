@@ -20,6 +20,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from graphiti_core.driver.driver import GraphProvider
+
 
 class ComparisonOperator(Enum):
     equals = '='
@@ -54,16 +56,21 @@ class SearchFilters(BaseModel):
 
 def node_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[str, dict[str, Any]]:
-    filter_query: str = ''
+    provider: GraphProvider,
+) -> tuple[list[str], dict[str, Any]]:
+    filter_queries: list[str] = []
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
-        node_labels = '|'.join(filters.node_labels)
-        node_label_filter = ' AND n:' + node_labels
-        filter_query += node_label_filter
+        if provider == GraphProvider.KUZU:
+            node_label_filter = 'list_has_all(n.labels, $labels)'
+            filter_params['labels'] = filters.node_labels
+        else:
+            node_labels = '|'.join(filters.node_labels)
+            node_label_filter = 'n:' + node_labels
+        filter_queries.append(node_label_filter)
 
-    return filter_query, filter_params
+    return filter_queries, filter_params
 
 
 def date_filter_query_constructor(
@@ -81,23 +88,29 @@ def date_filter_query_constructor(
 
 def edge_search_filter_query_constructor(
     filters: SearchFilters,
-) -> tuple[str, dict[str, Any]]:
-    filter_query: str = ''
+    provider: GraphProvider,
+) -> tuple[list[str], dict[str, Any]]:
+    filter_queries: list[str] = []
     filter_params: dict[str, Any] = {}
 
     if filters.edge_types is not None:
         edge_types = filters.edge_types
-        edge_types_filter = '\nAND e.name in $edge_types'
-        filter_query += edge_types_filter
+        filter_queries.append('e.name in $edge_types')
         filter_params['edge_types'] = edge_types
 
     if filters.node_labels is not None:
-        node_labels = '|'.join(filters.node_labels)
-        node_label_filter = '\nAND n:' + node_labels + ' AND m:' + node_labels
-        filter_query += node_label_filter
+        if provider == GraphProvider.KUZU:
+            node_label_filter = (
+                'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
+            )
+            filter_params['labels'] = filters.node_labels
+        else:
+            node_labels = '|'.join(filters.node_labels)
+            node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
+        filter_queries.append(node_label_filter)
 
     if filters.valid_at is not None:
-        valid_at_filter = '\nAND ('
+        valid_at_filter = '('
         for i, or_list in enumerate(filters.valid_at):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
@@ -125,10 +138,10 @@ def edge_search_filter_query_constructor(
             else:
                 valid_at_filter += ' OR '
 
-        filter_query += valid_at_filter
+        filter_queries.append(valid_at_filter)
 
     if filters.invalid_at is not None:
-        invalid_at_filter = ' AND ('
+        invalid_at_filter = '('
         for i, or_list in enumerate(filters.invalid_at):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
@@ -156,10 +169,10 @@ def edge_search_filter_query_constructor(
             else:
                 invalid_at_filter += ' OR '
 
-        filter_query += invalid_at_filter
+        filter_queries.append(invalid_at_filter)
 
     if filters.created_at is not None:
-        created_at_filter = ' AND ('
+        created_at_filter = '('
         for i, or_list in enumerate(filters.created_at):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
@@ -187,10 +200,10 @@ def edge_search_filter_query_constructor(
             else:
                 created_at_filter += ' OR '
 
-        filter_query += created_at_filter
+        filter_queries.append(created_at_filter)
 
     if filters.expired_at is not None:
-        expired_at_filter = ' AND ('
+        expired_at_filter = '('
         for i, or_list in enumerate(filters.expired_at):
             for j, date_filter in enumerate(or_list):
                 if date_filter.comparison_operator not in [
@@ -218,6 +231,6 @@ def edge_search_filter_query_constructor(
             else:
                 expired_at_filter += ' OR '
 
-        filter_query += expired_at_filter
+        filter_queries.append(expired_at_filter)
 
-    return filter_query, filter_params
+    return filter_queries, filter_params

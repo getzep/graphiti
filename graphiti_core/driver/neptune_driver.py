@@ -271,6 +271,8 @@ class NeptuneDriver(GraphDriver):
 
 
 class NeptuneDriverSession(GraphDriverSession):
+    provider = GraphProvider.NEPTUNE
+
     def __init__(self, driver: NeptuneDriver):  # type: ignore[reportUnknownArgumentType]
         self.driver = driver
 
