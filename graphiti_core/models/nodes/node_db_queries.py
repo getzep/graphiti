@@ -40,6 +40,7 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                     n.content = $content,
                     n.valid_at = $valid_at,
                     n.entity_edges = $entity_edges
+                    n.group_label = $group_label,
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.FALKORDB:
