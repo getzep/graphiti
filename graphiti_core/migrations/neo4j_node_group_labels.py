@@ -80,4 +80,5 @@ async def main():
     await neo4j_node_label_migration(driver)
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())
