@@ -263,10 +263,17 @@ class DatabaseDriverFactory:
 
                     neo4j_config = Neo4jProviderConfig()
 
+                # Check for environment variable overrides (for CI/CD compatibility)
+                import os
+
+                uri = os.environ.get('NEO4J_URI', neo4j_config.uri)
+                username = os.environ.get('NEO4J_USER', neo4j_config.username)
+                password = os.environ.get('NEO4J_PASSWORD', neo4j_config.password)
+
                 return {
-                    'uri': neo4j_config.uri,
-                    'user': neo4j_config.username,
-                    'password': neo4j_config.password,
+                    'uri': uri,
+                    'user': username,
+                    'password': password,
                     # Note: database and use_parallel_runtime would need to be passed
                     # to the driver after initialization if supported
                 }
@@ -286,10 +293,16 @@ class DatabaseDriverFactory:
 
                     falkor_config = FalkorDBProviderConfig()
 
+                # Check for environment variable overrides (for CI/CD compatibility)
+                import os
+
+                uri = os.environ.get('FALKORDB_URI', falkor_config.uri)
+                password = os.environ.get('FALKORDB_PASSWORD', falkor_config.password)
+
                 return {
                     'driver': 'falkordb',
-                    'uri': falkor_config.uri,
-                    'password': falkor_config.password,
+                    'uri': uri,
+                    'password': password,
                     'database': falkor_config.database,
                 }
 
