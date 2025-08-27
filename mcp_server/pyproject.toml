@@ -11,3 +11,8 @@ dependencies = [
     "azure-identity>=1.21.0",
     "graphiti-core",
 ]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
