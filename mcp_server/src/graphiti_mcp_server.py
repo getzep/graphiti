@@ -646,8 +646,8 @@ async def initialize_server() -> ServerConfig:
     # Transport arguments
     parser.add_argument(
         '--transport',
-        choices=['sse', 'stdio'],
-        help='Transport to use for communication with the client',
+        choices=['sse', 'stdio', 'http'],
+        help='Transport to use: sse (Server-Sent Events), stdio (standard I/O), or http (streamable HTTP)',
     )
     parser.add_argument(
         '--host',
@@ -777,6 +777,15 @@ async def run_mcp_server():
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
         await mcp.run_sse_async()
+    elif mcp_config.transport == 'http':
+        logger.info(
+            f'Running MCP server with streamable HTTP transport on {mcp.settings.host}:{mcp.settings.port}'
+        )
+        await mcp.run_streamable_http_async()
+    else:
+        raise ValueError(
+            f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
+        )
 
 
 def main():

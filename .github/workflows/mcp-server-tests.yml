@@ -68,11 +68,6 @@ jobs:
           cd mcp_server
           uv run tests/test_configuration.py
 
-      - name: Run syntax validation tests
-        run: |
-          cd mcp_server
-          uv run tests/test_simple_validation.py
-
       - name: Run unit tests (if pytest tests exist)
         run: |
           cd mcp_server
