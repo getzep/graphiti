@@ -171,9 +171,9 @@ async def add_episodes_bulk(
     await graphiti.add_episode_bulk(
         bulk_episodes=raw_episodes,
         group_id=request.group_id,
-        edge_type_map=edge_type_map,
+        entity_types=entity_types,
         edge_types=edge_types,
-        entity_types=entity_types
+        edge_type_map=edge_type_map
     )
     
     return Result(message=f'Successfully processed {len(raw_episodes)} episodes in bulk', success=True)
