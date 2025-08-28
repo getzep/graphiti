@@ -337,6 +337,13 @@ as such this feature is off by default.
 
 Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different endpoints for LLM and embedding services, and separate deployments for default and small models.
 
+> [!IMPORTANT]
+> **Azure OpenAI v1 API Opt-in Required for Structured Outputs**
+> 
+> Graphiti uses structured outputs via the `client.beta.chat.completions.parse()` method, which requires Azure OpenAI deployments to opt into the v1 API. Without this opt-in, you'll encounter 404 Resource not found errors during episode ingestion.
+> 
+> To enable v1 API support in your Azure OpenAI deployment, follow Microsoft's guide: [Azure OpenAI API version lifecycle](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=key#api-evolution).
+
 ```python
 from openai import AsyncAzureOpenAI
 from graphiti_core import Graphiti
