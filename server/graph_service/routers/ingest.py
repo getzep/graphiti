@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
+from graphiti_core.utils.bulk_utils import RawEpisode  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
 from graph_service.dto import AddEntityNodeRequest, AddEpisodesRequest, AddMessagesRequest, Episode, Message, Result
@@ -24,14 +25,14 @@ class AsyncWorker:
     async def worker(self):
         while True:
             try:
-                log.info(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
+                log.info(f'Got a job: (size of remaining queue: {self.get_queue_size()})')
                 job = await self.queue.get()
                 await job()
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 log.error(f'Error in async worker: {e}')
-                break
+                pass
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())
@@ -42,6 +43,24 @@ class AsyncWorker:
             await self.task
         while not self.queue.empty():
             self.queue.get_nowait()
+
+    def get_status(self) -> str:
+        """Get the current status of the async worker."""
+        if self.task is None:
+            return "not_started"
+        elif self.task.done():
+            if self.task.cancelled():
+                return "cancelled"
+            elif self.task.exception():
+                return "error"
+            else:
+                return "stopped"
+        else:
+            return "running"
+
+    def get_queue_size(self) -> int:
+        """Get the current queue size."""
+        return self.queue.qsize()
 
 
 async_worker = AsyncWorker()
@@ -104,14 +123,12 @@ async def add_episodes(
     graphiti: ZepGraphitiDep,
 ):
     async def add_episode_task(episode: Episode):
-        # Convert episode_body dict to JSON string for the core add_episode method
-        episode_body_str = json.dumps(episode.episode_body, ensure_ascii=False)
-        
+        # episode_body is already normalized to a string by the Episode model validator
         await graphiti.add_episode(
             uuid=episode.uuid,
             group_id=request.group_id,
             name=episode.name,
-            episode_body=episode_body_str,
+            episode_body=episode.episode_body,
             reference_time=episode.reference_time,
             source=EpisodeType.from_str(episode.source),
             source_description=episode.source_description,
@@ -125,7 +142,41 @@ async def add_episodes(
         log.info(f'Adding episode to queue: {episode.name}')
         await async_worker.queue.put(partial(add_episode_task, episode))
 
-    return Result(message=F'Episodes added to processing queue (size of remaining queue: {async_worker.queue.qsize()})', success=True)
+    return Result(message=F'Episodes added to processing queue (size of remaining queue: {async_worker.get_queue_size()})', success=True)
+
+
+@router.post('/episodes_bulk', status_code=status.HTTP_202_ACCEPTED)
+async def add_episodes_bulk(
+    request: AddEpisodesRequest,
+    graphiti: ZepGraphitiDep,
+):
+    # Convert Episode objects to RawEpisode objects for bulk processing
+    raw_episodes: list[RawEpisode] = []
+    
+    for episode in request.episodes:
+        # episode_body is already normalized to a string by the Episode model validator
+        raw_episode = RawEpisode(
+            uuid=episode.uuid,
+            name=episode.name,
+            content=episode.episode_body,
+            source_description=episode.source_description,
+            reference_time=episode.reference_time,
+            source=EpisodeType.from_str(episode.source),
+        )
+        raw_episodes.append(raw_episode)
+    
+    log.info(f'Processing {len(raw_episodes)} episodes in bulk for group {request.group_id}')
+    
+    # Use the bulk method directly (not queued) since it's already optimized for batch processing
+    await graphiti.add_episode_bulk(
+        bulk_episodes=raw_episodes,
+        group_id=request.group_id,
+        edge_type_map=edge_type_map,
+        edge_types=edge_types,
+        entity_types=entity_types
+    )
+    
+    return Result(message=f'Successfully processed {len(raw_episodes)} episodes in bulk', success=True)
 
 
 @router.delete('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)
