@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -32,10 +33,10 @@ from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
-    ENTITY_NODE_RETURN,
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_RETURN_NEPTUNE,
     get_community_node_save_query,
+    get_entity_node_return_query,
     get_entity_node_save_query,
     get_episode_node_save_query,
 )
@@ -95,12 +96,37 @@ class Node(BaseModel, ABC):
             case GraphProvider.NEO4J:
                 await driver.execute_query(
                     """
-                MATCH (n:Entity|Episodic|Community {uuid: $uuid})
-                DETACH DELETE n
-                """,
+                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                    DETACH DELETE n
+                    """,
                     uuid=self.uuid,
                 )
-            case _:  # FalkorDB and Neptune
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{uuid: $uuid}})
+                        DETACH DELETE n
+                        """,
+                        uuid=self.uuid,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {uuid: $uuid})-[:RELATES_TO]->(e:RelatesToNode_)
+                    DETACH DELETE e
+                    """,
+                    uuid=self.uuid,
+                )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {uuid: $uuid})
+                    DETACH DELETE n
+                    """,
+                    uuid=self.uuid,
+                )
+            case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -136,8 +162,32 @@ class Node(BaseModel, ABC):
                         group_id=group_id,
                         batch_size=batch_size,
                     )
-
-            case _:  # FalkorDB and Neptune
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label} {{group_id: $group_id}})
+                        DETACH DELETE n
+                        """,
+                        group_id=group_id,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]->(e:RelatesToNode_)
+                    DETACH DELETE e
+                    """,
+                    group_id=group_id,
+                )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity {group_id: $group_id})
+                    DETACH DELETE n
+                    """,
+                    group_id=group_id,
+                )
+            case _:  # FalkorDB, Neptune
                 for label in ['Entity', 'Episodic', 'Community']:
                     await driver.execute_query(
                         f"""
@@ -149,30 +199,59 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
-        if driver.provider == GraphProvider.FALKORDB:
-            for label in ['Entity', 'Episodic', 'Community']:
-                await driver.execute_query(
-                    f"""
-                       MATCH (n:{label})
-                       WHERE n.uuid IN $uuids
-                       DETACH DELETE n
-                       """,
-                    uuids=uuids,
-                )
-        else:
-            async with driver.session() as session:
-                await session.run(
-                    """
-                    MATCH (n:Entity|Episodic|Community)
-                    WHERE n.uuid IN $uuids
-                    CALL {
-                        WITH n
+        match driver.provider:
+            case GraphProvider.FALKORDB:
+                for label in ['Entity', 'Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label})
+                        WHERE n.uuid IN $uuids
                         DETACH DELETE n
-                    } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        uuids=uuids,
+                    )
+            case GraphProvider.KUZU:
+                for label in ['Episodic', 'Community']:
+                    await driver.execute_query(
+                        f"""
+                        MATCH (n:{label})
+                        WHERE n.uuid IN $uuids
+                        DETACH DELETE n
+                        """,
+                        uuids=uuids,
+                    )
+                # Entity edges are actually nodes in Kuzu, so simple `DETACH DELETE` will not work.
+                # Explicitly delete the "edge" nodes first, then the entity node.
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_)
+                    WHERE n.uuid IN $uuids
+                    DETACH DELETE e
                     """,
                     uuids=uuids,
-                    batch_size=batch_size,
                 )
+                await driver.execute_query(
+                    """
+                    MATCH (n:Entity)
+                    WHERE n.uuid IN $uuids
+                    DETACH DELETE n
+                    """,
+                    uuids=uuids,
+                )
+            case _:  # Neo4J, Neptune
+                async with driver.session() as session:
+                    await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community)
+                        WHERE n.uuid IN $uuids
+                        CALL {
+                            WITH n
+                            DETACH DELETE n
+                        } IN TRANSACTIONS OF $batch_size ROWS
+                        """,
+                        uuids=uuids,
+                        batch_size=batch_size,
+                    )
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -376,17 +455,25 @@ class EntityNode(Node):
             'summary': self.summary,
             'created_at': self.created_at,
         }
-        entity_data.update(self.attributes or {})
 
-        if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+        if driver.provider == GraphProvider.KUZU:
+            entity_data['attributes'] = json.dumps(self.attributes)
+            entity_data['labels'] = list(set(self.labels + ['Entity']))
+            result = await driver.execute_query(
+                get_entity_node_save_query(driver.provider, labels=''),
+                **entity_data,
+            )
+        else:
+            entity_data.update(self.attributes or {})
+            labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
 
-        labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
+            if driver.provider == GraphProvider.NEPTUNE:
+                driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
-        result = await driver.execute_query(
-            get_entity_node_save_query(driver.provider, labels),
-            entity_data=entity_data,
-        )
+            result = await driver.execute_query(
+                get_entity_node_save_query(driver.provider, labels),
+                entity_data=entity_data,
+            )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
@@ -399,12 +486,12 @@ class EntityNode(Node):
             MATCH (n:Entity {uuid: $uuid})
             RETURN
             """
-            + ENTITY_NODE_RETURN,
+            + get_entity_node_return_query(driver.provider),
             uuid=uuid,
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
@@ -419,12 +506,12 @@ class EntityNode(Node):
             WHERE n.uuid IN $uuids
             RETURN
             """
-            + ENTITY_NODE_RETURN,
+            + get_entity_node_return_query(driver.provider),
             uuids=uuids,
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         return nodes
 
@@ -456,7 +543,7 @@ class EntityNode(Node):
             + """
             RETURN
             """
-            + ENTITY_NODE_RETURN
+            + get_entity_node_return_query(driver.provider)
             + with_embeddings_query
             + """
             ORDER BY n.uuid DESC
@@ -468,7 +555,7 @@ class EntityNode(Node):
             routing_='r',
         )
 
-        nodes = [get_entity_node_from_record(record) for record in records]
+        nodes = [get_entity_node_from_record(record, driver.provider) for record in records]
 
         return nodes
 
@@ -533,7 +620,7 @@ class CommunityNode(Node):
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community {uuid: $uuid})
+            MATCH (c:Community {uuid: $uuid})
             RETURN
             """
             + (
@@ -556,8 +643,8 @@ class CommunityNode(Node):
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)
-            WHERE n.uuid IN $uuids
+            MATCH (c:Community)
+            WHERE c.uuid IN $uuids
             RETURN
             """
             + (
@@ -581,13 +668,13 @@ class CommunityNode(Node):
         limit: int | None = None,
         uuid_cursor: str | None = None,
     ):
-        cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
+        cursor_query: LiteralString = 'AND c.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
         records, _, _ = await driver.execute_query(
             """
-            MATCH (n:Community)
-            WHERE n.group_id IN $group_ids
+            MATCH (c:Community)
+            WHERE c.group_id IN $group_ids
             """
             + cursor_query
             + """
@@ -599,7 +686,7 @@ class CommunityNode(Node):
                 else COMMUNITY_NODE_RETURN
             )
             + """
-            ORDER BY n.uuid DESC
+            ORDER BY c.uuid DESC
             """
             + limit_query,
             group_ids=group_ids,
@@ -636,7 +723,19 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     )
 
 
-def get_entity_node_from_record(record: Any) -> EntityNode:
+def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
+    if provider == GraphProvider.KUZU:
+        attributes = json.loads(record['attributes']) if record['attributes'] else {}
+    else:
+        attributes = record['attributes']
+        attributes.pop('uuid', None)
+        attributes.pop('name', None)
+        attributes.pop('group_id', None)
+        attributes.pop('name_embedding', None)
+        attributes.pop('summary', None)
+        attributes.pop('created_at', None)
+        attributes.pop('labels', None)
+
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
@@ -645,15 +744,8 @@ def get_entity_node_from_record(record: Any) -> EntityNode:
         labels=record['labels'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
-        attributes=record['attributes'],
+        attributes=attributes,
     )
-
-    entity_node.attributes.pop('uuid', None)
-    entity_node.attributes.pop('name', None)
-    entity_node.attributes.pop('group_id', None)
-    entity_node.attributes.pop('name_embedding', None)
-    entity_node.attributes.pop('summary', None)
-    entity_node.attributes.pop('created_at', None)
 
     return entity_node
 

@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
     if driver.provider == GraphProvider.NEPTUNE:
-        return  # Neptune does not need indexes built
+        await driver.create_aoss_indices()  # pyright: ignore[reportAttributeAccessIssue]
+        return
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -52,9 +53,28 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
                 for name in index_names
             ]
         )
+
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
     fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
+
+    if driver.provider == GraphProvider.KUZU:
+        # Skip creating fulltext indices if they already exist. Need to do this manually
+        # until Kuzu supports `IF NOT EXISTS` for indices.
+        result, _, _ = await driver.execute_query('CALL SHOW_INDEXES() RETURN *;')
+        if len(result) > 0:
+            fulltext_indices = []
+
+        # Only load the `fts` extension if it's not already loaded, otherwise throw an error.
+        result, _, _ = await driver.execute_query('CALL SHOW_LOADED_EXTENSIONS() RETURN *;')
+        if len(result) == 0:
+            fulltext_indices.insert(
+                0,
+                """
+                INSTALL fts;
+                LOAD fts;
+                """,
+            )
 
     index_queries: list[LiteralString] = range_indices + fulltext_indices
 
@@ -75,10 +95,19 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            await tx.run(
-                'MATCH (n) WHERE (n:Entity OR n:Episodic OR n:Community) AND n.group_id IN $group_ids DETACH DELETE n',
-                group_ids=group_ids,
-            )
+            labels = ['Entity', 'Episodic', 'Community']
+            if driver.provider == GraphProvider.KUZU:
+                labels.append('RelatesToNode_')
+
+            for label in labels:
+                await tx.run(
+                    f"""
+                    MATCH (n:{label})
+                    WHERE n.group_id IN $group_ids
+                    DETACH DELETE n
+                    """,
+                    group_ids=group_ids,
+                )
 
         if group_ids is None:
             await session.execute_write(delete_all)
@@ -107,18 +136,23 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    group_id_filter: LiteralString = (
-        '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
-    )
-    source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
+
+    query_params: dict = {}
+    query_filter = ''
+    if group_ids and len(group_ids) > 0:
+        query_filter += '\nAND e.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
+
+    if source is not None:
+        query_filter += '\nAND e.source = $source'
+        query_params['source'] = source.name
 
     query: LiteralString = (
         """
-                MATCH (e:Episodic)
-                WHERE e.valid_at <= $reference_time
-                """
-        + group_id_filter
-        + source_filter
+        MATCH (e:Episodic)
+        WHERE e.valid_at <= $reference_time
+        """
+        + query_filter
         + """
         RETURN
         """
@@ -135,9 +169,8 @@ async def retrieve_episodes(
     result, _, _ = await driver.execute_query(
         query,
         reference_time=reference_time,
-        source=source.name if source is not None else None,
         num_episodes=last_n,
-        group_ids=group_ids,
+        **query_params,
     )
 
     episodes = [get_episodic_node_from_record(record) for record in result]

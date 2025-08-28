@@ -27,10 +27,13 @@ logger = logging.getLogger(__name__)
 class GraphProvider(Enum):
     NEO4J = 'neo4j'
     FALKORDB = 'falkordb'
+    KUZU = 'kuzu'
     NEPTUNE = 'neptune'
 
 
 class GraphDriverSession(ABC):
+    provider: GraphProvider
+
     async def __aenter__(self):
         return self
 
