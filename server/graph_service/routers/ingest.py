@@ -10,6 +10,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 
 from graph_service.dto import AddEntityNodeRequest, AddEpisodesRequest, AddMessagesRequest, Episode, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
+from graph_service.models import entity_types, edge_types, edge_type_map
 
 
 # init our logger
@@ -72,6 +73,9 @@ async def add_messages(
             reference_time=m.timestamp,
             source=EpisodeType.message,
             source_description=m.source_description,
+            edge_type_map=edge_type_map,
+            edge_types=edge_types,
+            entity_types=entity_types
         )
 
     for m in request.messages:
@@ -112,6 +116,9 @@ async def add_episodes(
             source=EpisodeType.from_str(episode.source),
             source_description=episode.source_description,
             update_communities=episode.update_communities,
+            edge_type_map=edge_type_map,
+            edge_types=edge_types,
+            entity_types=entity_types
         )
 
     for episode in request.episodes:
