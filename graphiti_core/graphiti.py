@@ -623,6 +623,7 @@ class Graphiti:
         try:
             start = time()
             now = utc_now()
+            logger.info(f'Starting add_episode_bulk with {len(bulk_episodes)} episodes')
 
             # if group_id is None, use the default group id by the provider
             group_id = group_id or get_default_group_id(self.driver.provider)
@@ -664,6 +665,7 @@ class Graphiti:
                 entity_edges=[],
                 embedder=self.embedder,
             )
+            logger.info(f'Added nodes and edges for {len(episodes)} episodes')
 
             # Get previous episode context for each episode
             episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
@@ -677,7 +679,7 @@ class Graphiti:
                 entity_types=entity_types,
                 excluded_entity_types=excluded_entity_types,
             )
-
+            logger.info(f'Extracted nodes and edges, starting deduplication for {len(episodes)} episodes')
             # Dedupe extracted nodes in memory
             nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
                 self.clients, extracted_nodes_bulk, episode_context, entity_types
@@ -723,6 +725,7 @@ class Graphiti:
                 episode_mentions.sort(key=lambda x: x.valid_at, reverse=True)
 
                 extract_attributes_params.append((node, episode_mentions))
+
 
             new_hydrated_nodes: list[list[EntityNode]] = await semaphore_gather(
                 *[
@@ -837,6 +840,8 @@ class Graphiti:
 
             # Resolved pointers for episodic edges
             resolved_episodic_edges = resolve_edge_pointers(episodic_edges, uuid_map)
+
+            logger.info(f'Saving {len(resolved_edges + invalidated_edges)} edges for {len(episodes)} episodes')
 
             # save data to KG
             await add_nodes_and_edges_bulk(

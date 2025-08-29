@@ -1,0 +1,43 @@
+version: 1
+disable_existing_loggers: False
+formatters:
+  default:
+    "()": uvicorn.logging.ColourizedFormatter
+    format: '{asctime} [{name:<16}] {levelprefix} | {message}'
+    use_colors: true,
+    style: "{"
+  access:
+    "()": uvicorn.logging.ColourizedFormatter
+    format: '{asctime} [{name:<16}] {levelprefix} | {client_addr} - \"{request_line}\" {status_code}'
+    use_colors: true,
+    style: "{"
+handlers:
+  default:
+    formatter: default
+    class: logging.StreamHandler
+    stream: ext://sys.stderr
+  access:
+    formatter: access
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+loggers:
+  uvicorn.error:
+    level: INFO
+    # handlers:
+    #   - default
+    # propagate: no
+  uvicorn.access:
+    level: INFO
+    # handlers:
+    #   - access
+    # propagate: no
+  httpx:
+    level: WARNING
+    handlers:
+      - default
+    propagate: no
+root:
+  level: INFO
+  handlers:
+    - default
+  propagate: no
