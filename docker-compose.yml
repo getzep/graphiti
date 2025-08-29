@@ -19,11 +19,7 @@ services:
       neo4j:
         condition: service_healthy
     environment:
-      - API_KEY=${API_KEY}
-      - API_VERSION="2025-03-01-preview"
-      - LLM_ENDPOINT=${LLM_ENDPOINT}
-      - EMBEDDING_ENDPOINT=${EMBEDDING_ENDPOINT}
-      - EMBEDDING_MODEL="text-embedding-3-large"
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NEO4J_URI=bolt://neo4j:${NEO4J_PORT:-7687}
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
