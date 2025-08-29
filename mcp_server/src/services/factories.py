@@ -1,5 +1,7 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+from openai import AsyncAzureOpenAI
+
 from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
@@ -8,17 +10,18 @@ from config.schema import (
 
 # Try to import FalkorDriver if available
 try:
-    from graphiti_core.driver import FalkorDriver  # noqa: F401
+    from graphiti_core.driver.falkordb_driver import FalkorDriver  # noqa: F401
 
     HAS_FALKOR = True
 except ImportError:
     HAS_FALKOR = False
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
 try:
-    from graphiti_core.embedder import AzureOpenAIEmbedderClient
+    from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 
     HAS_AZURE_EMBEDDER = True
 except ImportError:
@@ -32,14 +35,14 @@ except ImportError:
     HAS_GEMINI_EMBEDDER = False
 
 try:
-    from graphiti_core.embedder.voyage import VoyageEmbedder
+    from graphiti_core.embedder.voyage import VoyageAIEmbedder
 
     HAS_VOYAGE_EMBEDDER = True
 except ImportError:
     HAS_VOYAGE_EMBEDDER = False
 
 try:
-    from graphiti_core.llm_client import AzureOpenAILLMClient
+    from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 
     HAS_AZURE_LLM = True
 except ImportError:
@@ -108,14 +111,29 @@ class LLMClientFactory:
                 else:
                     api_key = azure_config.api_key
 
-                return AzureOpenAILLMClient(
+                # Create the Azure OpenAI client first
+                azure_client = AsyncAzureOpenAI(
                     api_key=api_key,
-                    api_url=azure_config.api_url,
+                    azure_endpoint=azure_config.api_url,
                     api_version=azure_config.api_version,
                     azure_deployment=azure_config.deployment_name,
                     azure_ad_token_provider=azure_ad_token_provider,
+                )
+
+                # Then create the LLMConfig
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=azure_config.api_url,
                     model=config.model,
                     temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+
+                return AzureOpenAILLMClient(
+                    azure_client=azure_client,
+                    config=llm_config,
                     max_tokens=config.max_tokens,
                 )
 
@@ -126,37 +144,40 @@ class LLMClientFactory:
                     )
                 if not config.providers.anthropic:
                     raise ValueError('Anthropic provider configuration not found')
-                return AnthropicClient(
+                llm_config = GraphitiLLMConfig(
                     api_key=config.providers.anthropic.api_key,
                     model=config.model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+                return AnthropicClient(config=llm_config)
 
             case 'gemini':
                 if not HAS_GEMINI:
                     raise ValueError('Gemini client not available in current graphiti-core version')
                 if not config.providers.gemini:
                     raise ValueError('Gemini provider configuration not found')
-                return GeminiClient(
+                llm_config = GraphitiLLMConfig(
                     api_key=config.providers.gemini.api_key,
                     model=config.model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+                return GeminiClient(config=llm_config)
 
             case 'groq':
                 if not HAS_GROQ:
                     raise ValueError('Groq client not available in current graphiti-core version')
                 if not config.providers.groq:
                     raise ValueError('Groq provider configuration not found')
-                return GroqClient(
+                llm_config = GraphitiLLMConfig(
                     api_key=config.providers.groq.api_key,
-                    api_url=config.providers.groq.api_url,
+                    base_url=config.providers.groq.api_url,
                     model=config.model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+                return GroqClient(config=llm_config)
 
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
@@ -201,14 +222,18 @@ class EmbedderFactory:
                 else:
                     api_key = azure_config.api_key
 
-                return AzureOpenAIEmbedderClient(
+                # Create the Azure OpenAI client first
+                azure_client = AsyncAzureOpenAI(
                     api_key=api_key,
-                    api_url=azure_config.api_url,
+                    azure_endpoint=azure_config.api_url,
                     api_version=azure_config.api_version,
                     azure_deployment=azure_config.deployment_name,
                     azure_ad_token_provider=azure_ad_token_provider,
-                    model=config.model,
-                    dimensions=config.dimensions,
+                )
+
+                return AzureOpenAIEmbedderClient(
+                    azure_client=azure_client,
+                    model=config.model or 'text-embedding-3-small',
                 )
 
             case 'gemini':
@@ -218,11 +243,14 @@ class EmbedderFactory:
                     )
                 if not config.providers.gemini:
                     raise ValueError('Gemini provider configuration not found')
-                return GeminiEmbedder(
+                from graphiti_core.embedder.gemini import GeminiEmbedderConfig
+
+                gemini_config = GeminiEmbedderConfig(
                     api_key=config.providers.gemini.api_key,
-                    model=config.model,
-                    dimensions=config.dimensions,
+                    embedding_model=config.model or 'models/text-embedding-004',
+                    embedding_dim=config.dimensions or 768,
                 )
+                return GeminiEmbedder(config=gemini_config)
 
             case 'voyage':
                 if not HAS_VOYAGE_EMBEDDER:
@@ -231,10 +259,14 @@ class EmbedderFactory:
                     )
                 if not config.providers.voyage:
                     raise ValueError('Voyage provider configuration not found')
-                return VoyageEmbedder(
+                from graphiti_core.embedder.voyage import VoyageAIEmbedderConfig
+
+                voyage_config = VoyageAIEmbedderConfig(
                     api_key=config.providers.voyage.api_key,
-                    model=config.providers.voyage.model,
+                    embedding_model=config.model or 'voyage-3',
+                    embedding_dim=config.dimensions or 1024,
                 )
+                return VoyageAIEmbedder(config=voyage_config)
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')

@@ -105,7 +105,7 @@ class QueueService:
         source_description: str,
         episode_type: Any,
         entity_types: Any,
-        uuid: str,
+        uuid: str | None,
     ) -> int:
         """Add an episode for processing.
 

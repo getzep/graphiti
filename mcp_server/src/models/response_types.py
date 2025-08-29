@@ -14,11 +14,9 @@ class SuccessResponse(TypedDict):
 class NodeResult(TypedDict):
     uuid: str
     name: str
-    summary: str
-    labels: list[str]
-    group_id: str
-    created_at: str
-    attributes: dict[str, Any]
+    type: str
+    created_at: str | None
+    summary: str | None
 
 
 class NodeSearchResponse(TypedDict):

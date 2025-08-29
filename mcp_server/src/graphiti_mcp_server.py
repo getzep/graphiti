@@ -8,7 +8,6 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -16,9 +15,6 @@ from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodeType, EpisodicNode
-from graphiti_core.search.search_config_recipes import (
-    NODE_HYBRID_SEARCH_RRF,
-)
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
@@ -279,7 +275,7 @@ async def add_memory(
             source_description=source_description,
             episode_type=episode_type,
             entity_types=graphiti_service.entity_types,
-            uuid=uuid,
+            uuid=uuid or None,  # Ensure None is passed if uuid is None
         )
 
         return SuccessResponse(
@@ -325,17 +321,21 @@ async def search_nodes(
 
         # Create search filters
         search_filters = SearchFilters(
-            group_ids=effective_group_ids,
             node_labels=entity_types,
         )
 
-        # Perform the search
-        nodes = await client.search_nodes(
+        # Use the search_ method with node search config
+        from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
+
+        results = await client.search_(
             query=query,
-            limit=max_nodes,
-            search_config=NODE_HYBRID_SEARCH_RRF,
-            search_filters=search_filters,
+            config=NODE_HYBRID_SEARCH_RRF,
+            group_ids=effective_group_ids,
+            search_filter=search_filters,
         )
+
+        # Extract nodes from results
+        nodes = results.nodes[:max_nodes] if results.nodes else []
 
         if not nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
@@ -493,21 +493,15 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 
 @mcp.tool()
-async def search_episodes(
-    query: str | None = None,
+async def get_episodes(
     group_ids: list[str] | None = None,
     max_episodes: int = 10,
-    start_date: str | None = None,
-    end_date: str | None = None,
 ) -> EpisodeSearchResponse | ErrorResponse:
-    """Search for episodes in the graph memory.
+    """Get episodes from the graph memory.
 
     Args:
-        query: Optional search query for semantic search
         group_ids: Optional list of group IDs to filter results
         max_episodes: Maximum number of episodes to return (default: 10)
-        start_date: Optional start date (ISO format) to filter episodes
-        end_date: Optional end date (ISO format) to filter episodes
     """
     global graphiti_service
 
@@ -526,18 +520,17 @@ async def search_episodes(
             else []
         )
 
-        # Convert date strings to datetime objects if provided
-        start_dt = datetime.fromisoformat(start_date) if start_date else None
-        end_dt = datetime.fromisoformat(end_date) if end_date else None
+        # Get episodes from the driver directly
+        from graphiti_core.nodes import EpisodicNode
 
-        # Search for episodes
-        episodes = await client.search_episodes(
-            query=query,
-            group_ids=effective_group_ids,
-            limit=max_episodes,
-            start_date=start_dt,
-            end_date=end_dt,
-        )
+        if effective_group_ids:
+            episodes = await EpisodicNode.get_by_group_ids(
+                client.driver, effective_group_ids, limit=max_episodes
+            )
+        else:
+            # If no group IDs, we need to use a different approach
+            # For now, return empty list when no group IDs specified
+            episodes = []
 
         if not episodes:
             return EpisodeSearchResponse(message='No episodes found', episodes=[])
@@ -550,7 +543,9 @@ async def search_episodes(
                 'name': episode.name,
                 'content': episode.content,
                 'created_at': episode.created_at.isoformat() if episode.created_at else None,
-                'source': episode.source,
+                'source': episode.source.value
+                if hasattr(episode.source, 'value')
+                else str(episode.source),
                 'source_description': episode.source_description,
                 'group_id': episode.group_id,
             }
@@ -561,8 +556,8 @@ async def search_episodes(
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error searching episodes: {error_msg}')
-        return ErrorResponse(error=f'Error searching episodes: {error_msg}')
+        logger.error(f'Error getting episodes: {error_msg}')
+        return ErrorResponse(error=f'Error getting episodes: {error_msg}')
 
 
 @mcp.tool()
