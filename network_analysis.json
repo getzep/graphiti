@@ -1,0 +1,87 @@
+{
+  "timestamp": "2025-08-29T17:31:23.082593",
+  "url": "https://dinkal-poc-teams.yazge.aktekbilisim.com/",
+  "hostname": "dinkal-poc-teams.yazge.aktekbilisim.com",
+  "dns_details": {
+    "A_records": [
+      "128.127.169.30"
+    ],
+    "AAAA_records": [],
+    "CNAME_records": [],
+    "NS_records": []
+  },
+  "dns_propagation": {
+    "Google": {
+      "success": true,
+      "ips": [
+        "128.127.169.30"
+      ],
+      "server": "8.8.8.8"
+    },
+    "Cloudflare": {
+      "success": true,
+      "ips": [
+        "128.127.169.30"
+      ],
+      "server": "1.1.1.1"
+    },
+    "OpenDNS": {
+      "success": true,
+      "ips": [
+        "128.127.169.30"
+      ],
+      "server": "208.67.222.222"
+    },
+    "Local": {
+      "success": true,
+      "ips": [
+        "128.127.169.30"
+      ],
+      "server": null
+    }
+  },
+  "tcp_443": {
+    "success": true,
+    "port": 443,
+    "connect_time_ms": 42.92,
+    "error_code": null
+  },
+  "tcp_80": {
+    "success": true,
+    "port": 80,
+    "connect_time_ms": 44.01,
+    "error_code": null
+  },
+  "ssl_certificate": {
+    "success": true,
+    "certificate_info": {
+      "verify_result": "1"
+    },
+    "output": "Connecting to 128.127.169.30\ndepth=2 C=US, O=Internet Security Research Group, CN=ISRG Root X1\nverify return:1\ndepth=1 C=US, O=Let's Encrypt, CN=R10\nverify return:1\ndepth=0 CN=dinkal-poc-teams.yazge.aktekbilisim.com\nverify return:1\nDONE\n"
+  },
+  "http_headers": {
+    "success": true,
+    "status_code": 404,
+    "all_headers": {
+      "Content-Length": "56",
+      "Content-Type": "application/json",
+      "Date": "Fri, 29 Aug 2025 14:31:34 GMT",
+      "Server": "restify"
+    },
+    "traefik_headers": {},
+    "server": "Unknown",
+    "content_type": "Unknown"
+  },
+  "network_route": {
+    "success": true,
+    "hops": [
+      "10 172.16.60.86 (172.16.60.86) 30.828 ms 28.689 ms",
+      "11 172.16.60.149 (172.16.60.149) 33.594 ms 36.318 ms 33.968 ms",
+      "12 172.16.198.7 (172.16.198.7) 29.898 ms",
+      "13 10.40.169.124 (10.40.169.124) 32.957 ms 28.170 ms",
+      "14 * * 00-gayrettepe-sr14s-t2-1---34-acibadem-sr14s-t2-1.statik.turktelekom.com.tr (81.212.31.60) 3783.156 ms",
+      "15 00-gayrettepe-guvenlik-t3-1---00-gayrettepe-sr14s-t2-1.statik.turktelekom.com.tr (81.212.221.115) 33.085 ms 30.180 ms 29.947 ms"
+    ],
+    "full_output": " 1  172.20.10.1 (172.20.10.1)  3.894 ms  3.432 ms  3.129 ms\n 2  * * *\n 3  172.19.5.33 (172.19.5.33)  36.656 ms  38.704 ms  52.201 ms\n 4  172.16.62.193 (172.16.62.193)  68.099 ms  29.153 ms  35.997 ms\n 5  172.16.51.58 (172.16.51.58)  36.023 ms  40.765 ms  30.455 ms\n 6  * * 172.16.51.60 (172.16.51.60)  33.277 ms\n 7  172.16.217.140 (172.16.217.140)  29.864 ms\n    172.16.217.147 (172.16.217.147)  37.607 ms\n    172.16.217.143 (172.16.217.143)  32.071 ms\n 8  * * *\n 9  172.16.51.67 (172.16.51.67)  53.254 ms  27.060 ms  34.429 ms\n10  172.16.60.86 (172.16.60.86)  30.828 ms  28.689 ms\n    172.16.60.134 (172.16.60.134)  34.061 ms\n11  172.16.60.149 (172.16.60.149)  33.594 ms  36.318 ms  33.968 ms\n12  172.16.198.7 (172.16.198.7)  29.898 ms\n    172.16.198.3 (172.16.198.3)  39.786 ms\n    172.16.198.7 (172.16.198.7)  31.134 ms\n13  10.40.169.124 (10.40.169.124)  32.957 ms  28.170 ms\n    10.40.141.65 (10.40.141.65)  31.932 ms\n14  * * 00-gayrettepe-sr14s-t2-1---34-acibadem-sr14s-t2-1.statik.turktelekom.com.tr (81.212.31.60)  3783.156 ms\n15  00-gayrettepe-guvenlik-t3-1---00-gayrettepe-sr14s-t2-1.statik.turktelekom.com.tr (81.212.221.115)  33.085 ms  30.180 ms  29.947 ms\n"
+  }
+}

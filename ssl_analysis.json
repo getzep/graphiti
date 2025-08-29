@@ -1,0 +1,17 @@
+{
+  "domain": "dinkal-poc-teams.yazge.aktekbilisim.com",
+  "analysis_timestamp": "2025-08-29T17:51:38.724894",
+  "results": {
+    "certificate": {
+      "subject": "CN=dinkal-poc-teams.yazge.aktekbilisim.com",
+      "issuer": "C=US, O=Let's Encrypt, CN=R10",
+      "not_before": "Aug  6 10:37:37 2025 GMT",
+      "not_after": "Nov  4 10:37:36 2025 GMT",
+      "signature_algorithm": "sha256WithRSAEncryption",
+      "san_domains": [
+        "dinkal-poc-teams.yazge.aktekbilisim.com"
+      ]
+    },
+    "ca_type": "letsencrypt"
+  }
+}

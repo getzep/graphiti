@@ -1,0 +1,281 @@
+{
+  "url": "https://dinkal-poc-teams.yazge.aktekbilisim.com/",
+  "test_interval": 1,
+  "results": [
+    {
+      "timestamp": "2025-08-29T17:36:25.693261",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 192.26,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:25 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:26.846529",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 149.08,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:26 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:27.989968",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 138.3
+    },
+    {
+      "timestamp": "2025-08-29T17:36:29.181515",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 186.38
+    },
+    {
+      "timestamp": "2025-08-29T17:36:30.354219",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 168.08,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:30 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:31.540096",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 184.29,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:31 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:32.707963",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 163.99
+    },
+    {
+      "timestamp": "2025-08-29T17:36:33.926161",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 212.9,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:33 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:35.135366",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 207.23
+    },
+    {
+      "timestamp": "2025-08-29T17:36:36.388292",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 247.45
+    },
+    {
+      "timestamp": "2025-08-29T17:36:37.540817",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 151.26
+    },
+    {
+      "timestamp": "2025-08-29T17:36:38.734451",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 188.35,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:38 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:39.925303",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 185.37,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:39 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:41.080237",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 151.51
+    },
+    {
+      "timestamp": "2025-08-29T17:36:42.244997",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 160.82
+    },
+    {
+      "timestamp": "2025-08-29T17:36:43.416170",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 166.06,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:43 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:44.585321",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 163.88
+    },
+    {
+      "timestamp": "2025-08-29T17:36:45.801629",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 213.14,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:45 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:46.975111",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 173.09,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:47 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:48.141790",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 161.51
+    },
+    {
+      "timestamp": "2025-08-29T17:36:49.310213",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 166.07,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:49 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:50.464461",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 149.09
+    },
+    {
+      "timestamp": "2025-08-29T17:36:51.617672",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 149.94
+    },
+    {
+      "timestamp": "2025-08-29T17:36:52.797900",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 175.06
+    },
+    {
+      "timestamp": "2025-08-29T17:36:53.991370",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 188.31,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:54 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:55.170510",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 173.98,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:55 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:56.393609",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 219.8,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:56 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:57.556631",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 157.88,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:57 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:36:58.734661",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 172.84
+    },
+    {
+      "timestamp": "2025-08-29T17:36:59.931538",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 194.15,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:36:59 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:37:01.092880",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 159.16
+    },
+    {
+      "timestamp": "2025-08-29T17:37:02.246373",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 148.17,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:37:02 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:37:03.455373",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 205.09,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:37:03 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:37:04.613180",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 154.47
+    },
+    {
+      "timestamp": "2025-08-29T17:37:05.772972",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 156.03
+    },
+    {
+      "timestamp": "2025-08-29T17:37:06.980119",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 201.84
+    },
+    {
+      "timestamp": "2025-08-29T17:37:08.178946",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 195.18
+    },
+    {
+      "timestamp": "2025-08-29T17:37:09.343586",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 163.37
+    },
+    {
+      "timestamp": "2025-08-29T17:37:10.510823",
+      "success": false,
+      "error": "Connection failed",
+      "response_time_ms": 161.74
+    },
+    {
+      "timestamp": "2025-08-29T17:37:11.707573",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 190.96,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:37:11 GMT\nserver: restify\n\n"
+    },
+    {
+      "timestamp": "2025-08-29T17:37:12.896737",
+      "success": true,
+      "status_code": "404",
+      "response_time_ms": 186.45,
+      "full_response": "HTTP/2 404 \ndate: Fri, 29 Aug 2025 14:37:12 GMT\nserver: restify\n\n"
+    }
+  ],
+  "stats": {
+    "total_tests": 41,
+    "successful": 20,
+    "failed": 21,
+    "success_rate": 48.8,
+    "recent_success_rate": 40.0,
+    "avg_response_time_ms": 183.17
+  },
+  "generated_at": "2025-08-29T17:37:13.989477"
+}
