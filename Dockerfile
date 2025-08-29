@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.9
-FROM python:3.12-slim as builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Set up the server application
 WORKDIR /app
-COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
+COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./server/log_conf.yaml ./
 COPY ./server/graph_service ./graph_service
 
 # Install server dependencies and application
@@ -84,4 +84,4 @@ ENV PORT=8000
 EXPOSE $PORT
 
 # Use uv run for execution
-CMD ["uv", "run", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "log_conf.yaml"]
