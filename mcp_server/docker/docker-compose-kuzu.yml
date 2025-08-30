@@ -8,9 +8,9 @@ services:
       - path: .env
         required: false # Makes the file optional. Default value is 'true'
     environment:
-      # Database configuration for KuzuDB
-      - KUZU_DB=${KUZU_DB:-:memory:}
-      - KUZU_MAX_CONCURRENT_QUERIES=${KUZU_MAX_CONCURRENT_QUERIES:-1}
+      # Database configuration for KuzuDB - using persistent storage
+      - KUZU_DB=${KUZU_DB:-/data/graphiti.kuzu}
+      - KUZU_MAX_CONCURRENT_QUERIES=${KUZU_MAX_CONCURRENT_QUERIES:-10}
       # LLM provider configurations
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -29,14 +29,14 @@ services:
       - CONFIG_PATH=/app/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:
-      - ./config.yaml:/app/config/config.yaml:ro
-      # Optional: If you want to persist KuzuDB data, uncomment the following line
-      # and change KUZU_DB to /data/kuzu.db
-      # - kuzu_data:/data
+      - ../config/config-docker-kuzu.yaml:/app/config/config.yaml:ro
+      # Persistent KuzuDB data storage
+      - kuzu_data:/data
     ports:
       - "8000:8000" # Expose the MCP server via HTTP for SSE transport
     command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
 
-# Optional: Volume for persistent KuzuDB storage
-# volumes:
-#   kuzu_data:
+# Volume for persistent KuzuDB storage
+volumes:
+  kuzu_data:
+    driver: local
