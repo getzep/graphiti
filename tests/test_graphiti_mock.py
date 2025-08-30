@@ -116,9 +116,7 @@ def mock_cross_encoder_client():
 
 
 @pytest.mark.asyncio
-async def test_add_bulk(
-    graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
-):
+async def test_add_bulk(graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as test fails on FalkorDB')
 
@@ -143,7 +141,7 @@ async def test_add_bulk(
         source_description='conversation message',
         content='Alice likes Bob',
         valid_at=now,
-        entity_edges=[], # Filled in later
+        entity_edges=[],  # Filled in later
     )
     episode_node_2 = EpisodicNode(
         name='test_episode_2',
@@ -154,14 +152,14 @@ async def test_add_bulk(
         source_description='conversation message',
         content='Bob adores Alice',
         valid_at=now,
-        entity_edges=[], # Filled in later
+        entity_edges=[],  # Filled in later
     )
 
     # Create entity nodes
     entity_node_1 = EntityNode(
         name='test_entity_1',
         group_id=group_id,
-        labels=['Entity', 'Person'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person'],
         created_at=now,
         summary='test_entity_1 summary',
         attributes={'age': 30, 'location': 'New York'},
@@ -171,7 +169,7 @@ async def test_add_bulk(
     entity_node_2 = EntityNode(
         name='test_entity_2',
         group_id=group_id,
-        labels=['Entity', 'Person2'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person2'],
         created_at=now,
         summary='test_entity_2 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
@@ -181,7 +179,7 @@ async def test_add_bulk(
     entity_node_3 = EntityNode(
         name='test_entity_3',
         group_id=group_id,
-        labels=['Entity', 'City', 'Location'],
+        labels=['Entity', 'City', 'Entity_graphiti_test_group', 'Location'],
         created_at=now,
         summary='test_entity_3 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
@@ -191,7 +189,7 @@ async def test_add_bulk(
     entity_node_4 = EntityNode(
         name='test_entity_4',
         group_id=group_id,
-        labels=['Entity'],
+        labels=['Entity', 'Entity_graphiti_test_group'],
         created_at=now,
         summary='test_entity_4 summary',
         attributes={'age': 25, 'location': 'Los Angeles'},
@@ -269,8 +267,22 @@ async def test_add_bulk(
         mock_embedder,
     )
 
-    node_ids = [episode_node_1.uuid, episode_node_2.uuid, entity_node_1.uuid, entity_node_2.uuid, entity_node_3.uuid, entity_node_4.uuid]
-    edge_ids = [episodic_edge_1.uuid, episodic_edge_2.uuid, episodic_edge_3.uuid, episodic_edge_4.uuid, entity_edge_1.uuid, entity_edge_2.uuid]
+    node_ids = [
+        episode_node_1.uuid,
+        episode_node_2.uuid,
+        entity_node_1.uuid,
+        entity_node_2.uuid,
+        entity_node_3.uuid,
+        entity_node_4.uuid,
+    ]
+    edge_ids = [
+        episodic_edge_1.uuid,
+        episodic_edge_2.uuid,
+        episodic_edge_3.uuid,
+        episodic_edge_4.uuid,
+        entity_edge_1.uuid,
+        entity_edge_2.uuid,
+    ]
     node_count = await get_node_count(graph_driver, node_ids)
     assert node_count == len(node_ids)
     edge_count = await get_edge_count(graph_driver, edge_ids)
@@ -289,7 +301,6 @@ async def test_add_bulk(
 
     retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_2.uuid)
     await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_2)
-
 
     retrieved_entity_node = await EntityNode.get_by_uuid(graph_driver, entity_node_3.uuid)
     await assert_entity_node_equals(graph_driver, retrieved_entity_node, entity_node_3)
@@ -317,6 +328,7 @@ async def test_add_bulk(
     retrieved_entity_edge = await EntityEdge.get_by_uuid(graph_driver, entity_edge_2.uuid)
     await assert_entity_edge_equals(graph_driver, retrieved_entity_edge, entity_edge_2)
 
+
 @pytest.mark.asyncio
 async def test_remove_episode(
     graph_driver, mock_llm_client, mock_embedder, mock_cross_encoder_client
@@ -342,7 +354,7 @@ async def test_remove_episode(
         source_description='conversation message',
         content='Alice likes Bob',
         valid_at=now,
-        entity_edges=[], # Filled in later
+        entity_edges=[],  # Filled in later
     )
 
     # Create entity nodes

@@ -45,7 +45,7 @@ def sample_entity_node():
         uuid=str(uuid4()),
         name='Test Entity',
         group_id=group_id,
-        labels=['Entity', 'Person'],
+        labels=['Entity', 'Entity_graphiti_test_group', 'Person'],
         created_at=created_at,
         name_embedding=[0.5] * 1024,
         summary='Entity Summary',
@@ -103,7 +103,9 @@ async def test_entity_node(sample_entity_node, graph_driver):
     await assert_entity_node_equals(graph_driver, retrieved[0], sample_entity_node)
 
     # Get node by group ids
-    retrieved = await EntityNode.get_by_group_ids(graph_driver, [group_id], limit=2, with_embeddings=True)
+    retrieved = await EntityNode.get_by_group_ids(
+        graph_driver, [group_id], limit=2, with_embeddings=True
+    )
     assert len(retrieved) == 1
     await assert_entity_node_equals(graph_driver, retrieved[0], sample_entity_node)
 
