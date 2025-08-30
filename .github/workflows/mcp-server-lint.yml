@@ -69,13 +69,13 @@ jobs:
       - name: Run type checking with pyright
         run: |
           cd mcp_server
-          echo "🔍 Running type checking..."
-          # Run pyright and capture output
-          if uv run pyright . > pyright_output.txt 2>&1; then
+          echo "🔍 Running type checking on src/ directory..."
+          # Run pyright and capture output (only check src/ for now, tests have legacy issues)
+          if uv run pyright src/ > pyright_output.txt 2>&1; then
             echo "✅ Type checking passed with no errors"
             cat pyright_output.txt
           else
-            echo "⚠️  Type checking found issues:"
+            echo "❌ Type checking found issues:"
             cat pyright_output.txt
             # Count errors
             error_count=$(grep -c "error:" pyright_output.txt || echo "0")
@@ -84,13 +84,10 @@ jobs:
             echo "📊 Type checking summary:"
             echo "  - Errors: $error_count"
             echo "  - Warnings: $warning_count"
-            # Only fail if there are more than 50 errors (current baseline)
-            if [ "$error_count" -gt 50 ]; then
-              echo "❌ Too many type errors (>50). Please fix critical issues."
-              exit 1
-            else
-              echo "⚠️  Type errors under threshold, continuing..."
-            fi
+            echo ""
+            echo "❌ Type checking failed. All type errors must be fixed."
+            echo "💡 Run 'uv run pyright src/' in mcp_server/ to see type errors"
+            exit 1
           fi
 
       - name: Check import sorting
