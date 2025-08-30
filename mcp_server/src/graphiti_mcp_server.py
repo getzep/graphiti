@@ -154,18 +154,53 @@ class GraphitiService:
             # Store entity types for later use
             self.entity_types = custom_types
 
-            # Initialize Graphiti client with database connection params
-            self.client = Graphiti(
-                uri=db_config['uri'],
-                user=db_config['user'],
-                password=db_config['password'],
-                llm_client=llm_client,
-                embedder=embedder_client,
-                max_coroutines=self.semaphore_limit,
-            )
+            # Initialize Graphiti client with appropriate driver
+            if self.config.database.provider.lower() == 'kuzu':
+                # For KuzuDB, create a KuzuDriver instance directly
+                from graphiti_core.driver.kuzu_driver import KuzuDriver
 
-            # Test connection
-            await self.client.driver.client.verify_connectivity()  # type: ignore
+                kuzu_driver = KuzuDriver(
+                    db=db_config['db'],
+                    max_concurrent_queries=db_config['max_concurrent_queries'],
+                )
+
+                self.client = Graphiti(
+                    graph_driver=kuzu_driver,
+                    llm_client=llm_client,
+                    embedder=embedder_client,
+                    max_coroutines=self.semaphore_limit,
+                )
+            elif self.config.database.provider.lower() == 'falkordb':
+                # For FalkorDB, create a FalkorDriver instance directly
+                from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+                falkor_driver = FalkorDriver(
+                    host=db_config['host'],
+                    port=db_config['port'],
+                    password=db_config['password'],
+                    database=db_config['database'],
+                )
+
+                self.client = Graphiti(
+                    graph_driver=falkor_driver,
+                    llm_client=llm_client,
+                    embedder=embedder_client,
+                    max_coroutines=self.semaphore_limit,
+                )
+            else:
+                # For Neo4j (default), use the original approach
+                self.client = Graphiti(
+                    uri=db_config['uri'],
+                    user=db_config['user'],
+                    password=db_config['password'],
+                    llm_client=llm_client,
+                    embedder=embedder_client,
+                    max_coroutines=self.semaphore_limit,
+                )
+
+            # Test connection (Neo4j and FalkorDB have verify_connectivity, KuzuDB doesn't need it)
+            if self.config.database.provider.lower() != 'kuzu':
+                await self.client.driver.client.verify_connectivity()  # type: ignore
 
             # Build indices
             await self.client.build_indices_and_constraints()
@@ -345,7 +380,7 @@ async def search_nodes(
             NodeResult(
                 uuid=node.uuid,
                 name=node.name,
-                type=node.type or 'Unknown',
+                type=node.labels[0] if node.labels else 'Unknown',
                 created_at=node.created_at.isoformat() if node.created_at else None,
                 summary=node.summary,
             )
@@ -667,7 +702,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
+        choices=['neo4j', 'falkordb', 'kuzu'],
         help='Database provider to use',
     )
 

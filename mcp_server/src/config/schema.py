@@ -171,17 +171,25 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class KuzuProviderConfig(BaseModel):
+    """KuzuDB provider configuration."""
+
+    db: str = ':memory:'
+    max_concurrent_queries: int = 1
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    kuzu: KuzuProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):
     """Database configuration."""
 
-    provider: str = Field(default='neo4j', description='Database provider')
+    provider: str = Field(default='kuzu', description='Database provider')
     providers: DatabaseProvidersConfig = Field(default_factory=DatabaseProvidersConfig)
 
 
