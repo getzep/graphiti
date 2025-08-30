@@ -1,4 +1,19 @@
 services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379" # Redis/FalkorDB port
+    environment:
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   graphiti-mcp:
     image: zepai/knowledge-graph-mcp:latest
     build:
@@ -7,10 +22,14 @@ services:
     env_file:
       - path: .env
         required: false # Makes the file optional. Default value is 'true'
+    depends_on:
+      falkordb:
+        condition: service_healthy
     environment:
-      # Database configuration for KuzuDB - using persistent storage
-      - KUZU_DB=${KUZU_DB:-/data/graphiti.kuzu}
-      - KUZU_MAX_CONCURRENT_QUERIES=${KUZU_MAX_CONCURRENT_QUERIES:-10}
+      # Database configuration
+      - FALKORDB_URI=${FALKORDB_URI:-redis://falkordb:6379}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
       # LLM provider configurations
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -29,14 +48,11 @@ services:
       - CONFIG_PATH=/app/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:
-      - ../config/config-docker-kuzu.yaml:/app/config/config.yaml:ro
-      # Persistent KuzuDB data storage
-      - kuzu_data:/data
+      - ../config/config-docker-falkordb.yaml:/app/config/config.yaml:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP for SSE transport
     command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
 
-# Volume for persistent KuzuDB storage
 volumes:
-  kuzu_data:
+  falkordb_data:
     driver: local

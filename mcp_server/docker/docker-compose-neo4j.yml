@@ -1,4 +1,24 @@
 services:
+  neo4j:
+    image: neo4j:5.26.0
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-demodemo}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   graphiti-mcp:
     image: zepai/knowledge-graph-mcp:latest
     build:
@@ -7,10 +27,15 @@ services:
     env_file:
       - path: .env
         required: false # Makes the file optional. Default value is 'true'
+    depends_on:
+      neo4j:
+        condition: service_healthy
     environment:
-      # Database configuration for KuzuDB - using persistent storage
-      - KUZU_DB=${KUZU_DB:-/data/graphiti.kuzu}
-      - KUZU_MAX_CONCURRENT_QUERIES=${KUZU_MAX_CONCURRENT_QUERIES:-10}
+      # Database configuration
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-demodemo}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
       # LLM provider configurations
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -29,14 +54,11 @@ services:
       - CONFIG_PATH=/app/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:
-      - ../config/config-docker-kuzu.yaml:/app/config/config.yaml:ro
-      # Persistent KuzuDB data storage
-      - kuzu_data:/data
+      - ../config/config-docker-neo4j.yaml:/app/config/config.yaml:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP for SSE transport
     command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
 
-# Volume for persistent KuzuDB storage
 volumes:
-  kuzu_data:
-    driver: local
+  neo4j_data:
+  neo4j_logs:
