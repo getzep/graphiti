@@ -97,3 +97,8 @@ docstring-code-format = true
 include = ["graphiti_core"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.404",
+]
