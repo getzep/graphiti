@@ -111,6 +111,9 @@ class LLMClientFactory:
                     raise ValueError('Azure OpenAI provider configuration not found')
                 azure_config = config.providers.azure_openai
 
+                if not azure_config.api_url:
+                    raise ValueError('Azure OpenAI API URL is required')
+
                 # Handle Azure AD authentication if enabled
                 api_key: str | None = None
                 azure_ad_token_provider = None
@@ -208,8 +211,7 @@ class EmbedderFactory:
 
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=config.providers.openai.api_key,
-                    model=config.model,
-                    dimensions=config.dimensions,
+                    embedding_model=config.model,
                 )
                 return OpenAIEmbedder(config=embedder_config)
 
@@ -221,6 +223,9 @@ class EmbedderFactory:
                 if not config.providers.azure_openai:
                     raise ValueError('Azure OpenAI provider configuration not found')
                 azure_config = config.providers.azure_openai
+
+                if not azure_config.api_url:
+                    raise ValueError('Azure OpenAI API URL is required')
 
                 # Handle Azure AD authentication if enabled
                 api_key: str | None = None

@@ -671,6 +671,9 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
 
+[package.metadata.requires-dev]
+dev = [{ name = "pyright", specifier = ">=1.1.404" }]
+
 [[package]]
 name = "groq"
 version = "0.31.0"
