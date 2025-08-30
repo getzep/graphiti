@@ -17,6 +17,8 @@ limitations under the License.
 import logging
 from typing import TYPE_CHECKING, Any
 
+from .driver_db_queries import DROP_INDEXES_QUERY
+
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
     from falkordb.asyncio import FalkorDB
@@ -154,9 +156,7 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.close()
 
     async def delete_all_indexes(self) -> None:
-        await self.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        await self.execute_query(DROP_INDEXES_QUERY)
 
     def clone(self, database: str) -> 'GraphDriver':
         """
