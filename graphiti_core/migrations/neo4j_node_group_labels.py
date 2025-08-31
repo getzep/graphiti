@@ -59,7 +59,7 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id: str, batch_size
 
 
 def pop_last_n_group_ids(csv_file: str = 'group_ids.csv', count: int = 10):
-    with open(csv_file, 'r') as file:
+    with open(csv_file) as file:
         reader = csv.reader(file)
         group_ids = [row[0] for row in reader]
 
