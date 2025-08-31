@@ -303,7 +303,7 @@ class EpisodicNode(Node):
             episode_args['group_label'] = ('Episodic_' + self.group_id.replace('-', ''),)
 
         result = await driver.execute_query(
-            get_episode_node_save_query(driver.provider), episode_args
+            get_episode_node_save_query(driver.provider), **episode_args
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')

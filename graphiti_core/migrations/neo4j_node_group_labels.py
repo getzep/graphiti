@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import os
 
 from graphiti_core.driver.driver import GraphDriver
@@ -57,14 +58,41 @@ async def neo4j_node_group_labels(driver: GraphDriver, group_id: str, batch_size
         )
 
 
-async def neo4j_node_label_migration(driver: GraphDriver):
+def pop_last_n_group_ids(csv_file: str = 'group_ids.csv', count: int = 10):
+    with open(csv_file, 'r') as file:
+        reader = csv.reader(file)
+        group_ids = [row[0] for row in reader]
+
+    total_count = len(group_ids)
+    popped = group_ids[-count:]
+    remaining = group_ids[:-count]
+
+    with open(csv_file, 'w', newline='') as file:
+        writer = csv.writer(file)
+        for gid in remaining:
+            writer.writerow([gid])
+
+    return popped, total_count
+
+
+async def get_group_ids(driver: GraphDriver):
     query = """MATCH (n:Episodic)
                 RETURN DISTINCT n.group_id AS group_id"""
 
     results, _, _ = await driver.execute_query(query)
-    for result in results:
-        group_id = result['group_id']
-        await neo4j_node_group_labels(driver, group_id)
+    group_ids = [result['group_id'] for result in results]
+
+    with open('group_ids.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        for gid in group_ids:
+            writer.writerow([gid])
+
+
+async def neo4j_node_label_migration(driver: GraphDriver, batch_size: int = 10):
+    group_ids, total = pop_last_n_group_ids(csv_file='group_ids.csv', count=batch_size)
+    while len(group_ids) > 0:
+        await asyncio.gather(*[neo4j_node_group_labels(driver, group_id) for group_id in group_ids])
+        group_ids, _ = pop_last_n_group_ids(csv_file='group_ids.csv', count=batch_size)
 
 
 async def main():
@@ -77,6 +105,7 @@ async def main():
         user=neo4j_user,
         password=neo4j_password,
     )
+    await get_group_ids(driver)
     await neo4j_node_label_migration(driver)
     await driver.close()
 
