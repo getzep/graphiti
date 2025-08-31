@@ -300,7 +300,7 @@ class EpisodicNode(Node):
         }
 
         if driver.provider == GraphProvider.NEO4J:
-            episode_args['group_label'] = ('Episodic_' + self.group_id.replace('-', ''),)
+            episode_args['group_label'] = 'Episodic_' + self.group_id.replace('-', '')
 
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
