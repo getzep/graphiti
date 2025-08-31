@@ -286,18 +286,24 @@ class EpisodicNode(Node):
                     }
                 ],
             )
+
+        episode_args = {
+            'uuid': self.uuid,
+            'name': self.name,
+            'group_id': self.group_id,
+            'source_description': self.source_description,
+            'content': self.content,
+            'entity_edges': self.entity_edges,
+            'created_at': self.created_at,
+            'valid_at': self.valid_at,
+            'source': self.source.value,
+        }
+
+        if driver.provider == GraphProvider.NEO4J:
+            episode_args['group_label'] = 'Episodic_' + self.group_id.replace('-', '')
+
         result = await driver.execute_query(
-            get_episode_node_save_query(driver.provider),
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            group_label='Episodic_' + self.group_id.replace('-', ''),
-            source_description=self.source_description,
-            content=self.content,
-            entity_edges=self.entity_edges,
-            created_at=self.created_at,
-            valid_at=self.valid_at,
-            source=self.source.value,
+            get_episode_node_save_query(driver.provider), **episode_args
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
