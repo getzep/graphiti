@@ -325,12 +325,20 @@ async def node_search(
     search_tasks = []
     if NodeSearchMethod.bm25 in config.search_methods:
         search_tasks.append(
-            node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
+            node_fulltext_search(
+                driver, query, search_filter, group_ids, 2 * limit, config.use_local_indexes
+            )
         )
     if NodeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(
             node_similarity_search(
-                driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
+                driver,
+                query_vector,
+                search_filter,
+                group_ids,
+                2 * limit,
+                config.sim_min_score,
+                config.use_local_indexes,
             )
         )
     if NodeSearchMethod.bfs in config.search_methods:
@@ -426,7 +434,9 @@ async def episode_search(
     search_results: list[list[EpisodicNode]] = list(
         await semaphore_gather(
             *[
-                episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
+                episode_fulltext_search(
+                    driver, query, search_filter, group_ids, 2 * limit, config.use_local_indexes
+                ),
             ]
         )
     )

@@ -742,12 +742,17 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         attributes.pop('created_at', None)
         attributes.pop('labels', None)
 
+    labels = record.get('labels', [])
+    group_id = record.get('group_id')
+    if 'Entity_' + group_id.replace('-', '') in labels:
+        labels.remove('Entity_' + group_id.replace('-', ''))
+
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         name_embedding=record.get('name_embedding'),
-        group_id=record['group_id'],
-        labels=record['labels'],
+        group_id=group_id,
+        labels=labels,
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
         attributes=attributes,

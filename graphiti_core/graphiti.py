@@ -627,6 +627,7 @@ class Graphiti:
             # if group_id is None, use the default group id by the provider
             group_id = group_id or get_default_group_id(self.driver.provider)
             validate_group_id(group_id)
+            await build_dynamic_indexes(self.driver, group_id)
 
             # Create default edge type map
             edge_type_map_default = (
@@ -1007,6 +1008,8 @@ class Graphiti:
             await target_node.generate_name_embedding(self.embedder)
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
+
+        await build_dynamic_indexes(self.driver, source_node.group_id)
 
         nodes, uuid_map, _ = await resolve_extracted_nodes(
             self.clients,
