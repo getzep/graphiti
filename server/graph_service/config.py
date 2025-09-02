@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_base_url: str | None = Field(None)
     model_name: str | None = Field(None)
+    small_model_name: str | None = Field(None)
     embedding_model_name: str | None = Field(None)
     neo4j_uri: str
     neo4j_user: str
@@ -20,7 +21,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings():
-    return Settings()  # type: ignore[call-arg]
+    print(f'Loading settings from .env file')
+    settings = Settings()  # type: ignore[call-arg]
+    print(f'Settings: {settings}')
+    return settings
 
 
 ZepEnvDep = Annotated[Settings, Depends(get_settings)]
