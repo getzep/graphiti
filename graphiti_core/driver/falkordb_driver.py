@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -32,12 +31,15 @@ else:
             'Install it with: pip install graphiti-core[falkordb]'
         ) from None
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
 
 class FalkorDriverSession(GraphDriverSession):
+    provider = GraphProvider.FALKORDB
+
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -71,7 +73,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 
 class FalkorDriver(GraphDriver):
-    provider: str = 'falkordb'
+    provider = GraphProvider.FALKORDB
 
     def __init__(
         self,
@@ -90,12 +92,13 @@ class FalkorDriver(GraphDriver):
         The default parameters assume a local (on-premises) FalkorDB instance.
         """
         super().__init__()
+
+        self._database = database
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
-            self._database = database
 
         self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
 
@@ -106,8 +109,7 @@ class FalkorDriver(GraphDriver):
         return self.client.select_graph(graph_name)
 
     async def execute_query(self, cypher_query_, **kwargs: Any):
-        graph_name = kwargs.pop('database_', self._database)
-        graph = self._get_graph(graph_name)
+        graph = self._get_graph(self._database)
 
         # Convert datetime objects to ISO strings (FalkorDB does not support datetime objects directly)
         params = convert_datetimes_to_strings(dict(kwargs))
@@ -119,7 +121,7 @@ class FalkorDriver(GraphDriver):
                 # check if index already exists
                 logger.info(f'Index already exists: {e}')
                 return None
-            logger.error(f'Error executing FalkorDB query: {e}')
+            logger.error(f'Error executing FalkorDB query: {e}\n{cypher_query_}\n{params}')
             raise
 
         # Convert the result header to a list of strings
@@ -151,22 +153,16 @@ class FalkorDriver(GraphDriver):
         elif hasattr(self.client.connection, 'close'):
             await self.client.connection.close()
 
-    async def delete_all_indexes(self, database_: str | None = None) -> None:
-        database = database_ or self._database
+    async def delete_all_indexes(self) -> None:
         await self.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
-            database_=database,
         )
 
+    def clone(self, database: str) -> 'GraphDriver':
+        """
+        Returns a shallow copy of this driver with a different default database.
+        Reuses the same connection (e.g. FalkorDB, Neo4j).
+        """
+        cloned = FalkorDriver(falkor_db=self.client, database=database)
 
-def convert_datetimes_to_strings(obj):
-    if isinstance(obj, dict):
-        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetimes_to_strings(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_datetimes_to_strings(item) for item in obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    else:
-        return obj
+        return cloned

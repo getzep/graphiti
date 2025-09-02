@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
+
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
 
@@ -48,7 +50,7 @@ class TestFalkorDriver:
             driver = FalkorDriver(
                 host='test-host', port='1234', username='test-user', password='test-pass'
             )
-            assert driver.provider == 'falkordb'
+            assert driver.provider == GraphProvider.FALKORDB
             mock_falkor_db.assert_called_once_with(
                 host='test-host', port='1234', username='test-user', password='test-pass'
             )
@@ -59,14 +61,14 @@ class TestFalkorDriver:
         with patch('graphiti_core.driver.falkordb_driver.FalkorDB') as mock_falkor_db_class:
             mock_falkor_db = MagicMock()
             driver = FalkorDriver(falkor_db=mock_falkor_db)
-            assert driver.provider == 'falkordb'
+            assert driver.provider == GraphProvider.FALKORDB
             assert driver.client is mock_falkor_db
             mock_falkor_db_class.assert_not_called()
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_provider(self):
         """Test driver provider identification."""
-        assert self.driver.provider == 'falkordb'
+        assert self.driver.provider == GraphProvider.FALKORDB
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_get_graph_with_name(self):
@@ -101,11 +103,8 @@ class TestFalkorDriver:
         mock_graph.query = AsyncMock(return_value=mock_result)
         self.mock_client.select_graph.return_value = mock_graph
 
-        result = await self.driver.execute_query(
-            'MATCH (n) RETURN n', param1='value1', database_='test_db'
-        )
+        result = await self.driver.execute_query('MATCH (n) RETURN n', param1='value1')
 
-        self.mock_client.select_graph.assert_called_once_with('test_db')
         mock_graph.query.assert_called_once_with('MATCH (n) RETURN n', {'param1': 'value1'})
 
         result_set, header, summary = result
@@ -167,11 +166,10 @@ class TestFalkorDriver:
         mock_graph = MagicMock()
         self.mock_client.select_graph.return_value = mock_graph
 
-        session = self.driver.session('test_db')
+        session = self.driver.session()
 
         assert isinstance(session, FalkorDriverSession)
         assert session.graph is mock_graph
-        self.mock_client.select_graph.assert_called_once_with('test_db')
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_session_creation_with_none_uses_default_database(self):
@@ -179,10 +177,9 @@ class TestFalkorDriver:
         mock_graph = MagicMock()
         self.mock_client.select_graph.return_value = mock_graph
 
-        session = self.driver.session(None)
+        session = self.driver.session()
 
         assert isinstance(session, FalkorDriverSession)
-        self.mock_client.select_graph.assert_called_once_with('default_db')
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
@@ -212,11 +209,9 @@ class TestFalkorDriver:
     async def test_delete_all_indexes(self):
         """Test delete_all_indexes method."""
         with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
-            await self.driver.delete_all_indexes('test_db')
+            await self.driver.delete_all_indexes()
 
-            mock_execute.assert_called_once_with(
-                'CALL db.indexes() YIELD name DROP INDEX name', database_='test_db'
-            )
+            mock_execute.assert_called_once_with('CALL db.indexes() YIELD name DROP INDEX name')
 
 
 class TestFalkorDriverSession:

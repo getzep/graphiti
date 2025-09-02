@@ -14,15 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
+class GraphProvider(Enum):
+    NEO4J = 'neo4j'
+    FALKORDB = 'falkordb'
+    KUZU = 'kuzu'
+    NEPTUNE = 'neptune'
+
+
 class GraphDriverSession(ABC):
+    provider: GraphProvider
+
     async def __aenter__(self):
         return self
 
@@ -45,10 +56,11 @@ class GraphDriverSession(ABC):
 
 
 class GraphDriver(ABC):
-    provider: str
+    provider: GraphProvider
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
+    _database: str
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -63,5 +75,15 @@ class GraphDriver(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete_all_indexes(self, database_: str | None = None) -> Coroutine:
+    def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
+
+    def with_database(self, database: str) -> 'GraphDriver':
+        """
+        Returns a shallow copy of this driver with a different default database.
+        Reuses the same connection (e.g. FalkorDB, Neo4j).
+        """
+        cloned = copy.copy(self)
+        cloned._database = database
+
+        return cloned

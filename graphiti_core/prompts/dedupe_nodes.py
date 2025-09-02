@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+from .prompt_helpers import to_prompt_json
 
 
 class NodeDuplicate(BaseModel):
@@ -34,7 +34,7 @@ class NodeDuplicate(BaseModel):
     )
     duplicates: list[int] = Field(
         ...,
-        description='idx of all duplicate entities.',
+        description='idx of all entities that are a duplicate of the entity with the above id.',
     )
 
 
@@ -64,20 +64,20 @@ def node(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         <PREVIOUS MESSAGES>
-        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+        {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
         {context['episode_content']}
         </CURRENT MESSAGE>
         <NEW ENTITY>
-        {json.dumps(context['extracted_node'], indent=2)}
+        {to_prompt_json(context['extracted_node'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </NEW ENTITY>
         <ENTITY TYPE DESCRIPTION>
-        {json.dumps(context['entity_type_description'], indent=2)}
+        {to_prompt_json(context['entity_type_description'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </ENTITY TYPE DESCRIPTION>
 
         <EXISTING ENTITIES>
-        {json.dumps(context['existing_nodes'], indent=2)}
+        {to_prompt_json(context['existing_nodes'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </EXISTING ENTITIES>
         
         Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
@@ -108,13 +108,13 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates'
-            'of existing entities.',
+            ' of existing entities.',
         ),
         Message(
             role='user',
             content=f"""
         <PREVIOUS MESSAGES>
-        {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+        {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
         {context['episode_content']}
@@ -139,11 +139,11 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         }}
         
         <ENTITIES>
-        {json.dumps(context['extracted_nodes'], indent=2)}
+        {to_prompt_json(context['extracted_nodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </ENTITIES>
         
         <EXISTING ENTITIES>
-        {json.dumps(context['existing_nodes'], indent=2)}
+        {to_prompt_json(context['existing_nodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </EXISTING ENTITIES>
 
         For each of the above ENTITIES, determine if the entity is a duplicate of any of the EXISTING ENTITIES.
@@ -180,7 +180,7 @@ def node_list(context: dict[str, Any]) -> list[Message]:
         Given the following context, deduplicate a list of nodes:
 
         Nodes:
-        {json.dumps(context['nodes'], indent=2)}
+        {to_prompt_json(context['nodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 
         Task:
         1. Group nodes together such that all duplicate nodes are in the same list of uuids

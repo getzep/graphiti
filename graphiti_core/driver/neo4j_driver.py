@@ -21,13 +21,13 @@ from typing import Any
 from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
 
 
 class Neo4jDriver(GraphDriver):
-    provider: str = 'neo4j'
+    provider = GraphProvider.NEO4J
 
     def __init__(self, uri: str, user: str | None, password: str | None, database: str = 'neo4j'):
         super().__init__()
@@ -45,7 +45,11 @@ class Neo4jDriver(GraphDriver):
             params = {}
         params.setdefault('database_', self._database)
 
-        result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        try:
+            result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        except Exception as e:
+            logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
+            raise
 
         return result
 
@@ -56,9 +60,7 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(self, database_: str | None = None) -> Coroutine[Any, Any, EagerResult]:
-        database = database_ or self._database
+    def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
-            database_=database,
         )

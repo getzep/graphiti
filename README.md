@@ -44,7 +44,7 @@ Use Graphiti to:
 <br />
 
 <p align="center">
-    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
+    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">
 </p>
 
 <br />
@@ -54,9 +54,9 @@ nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Kno
 extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
 while handling changing relationships and maintaining historical context.
 
-## Graphiti and Zep Memory
+## Graphiti and Zep's Context Engineering Platform.
 
-Graphiti powers the core of [Zep's memory layer](https://www.getzep.com) for AI Agents.
+Graphiti powers the core of [Zep](https://www.getzep.com), a turn-key context engineering platform for AI Agents. Zep offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
 
 Using Graphiti, we've demonstrated Zep is
 the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
@@ -80,7 +80,7 @@ Traditional RAG approaches often rely on batch processing and static data summar
 - **Scalability:** Efficiently manages large datasets with parallel processing, suitable for enterprise environments.
 
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">
 </p>
 
 ## Graphiti vs. GraphRAG
@@ -105,7 +105,7 @@ Graphiti is specifically designed to address the challenges of dynamic and frequ
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 or higher (serves as the embeddings storage backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -148,6 +148,28 @@ pip install graphiti-core[falkordb]
 uv add graphiti-core[falkordb]
 ```
 
+### Installing with Kuzu Support
+
+If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
+
+```bash
+pip install graphiti-core[kuzu]
+
+# or with uv
+uv add graphiti-core[kuzu]
+```
+
+### Installing with Amazon Neptune Support
+
+If you plan to use Amazon Neptune as your graph database backend, install with the Amazon Neptune extra:
+
+```bash
+pip install graphiti-core[neptune]
+
+# or with uv
+uv add graphiti-core[neptune]
+```
+
 ### You can also install optional LLM providers as extras:
 
 ```bash
@@ -165,7 +187,18 @@ pip install graphiti-core[anthropic,groq,google-genai]
 
 # Install with FalkorDB and LLM providers
 pip install graphiti-core[falkordb,anthropic,google-genai]
+
+# Install with Amazon Neptune
+pip install graphiti-core[neptune]
 ```
+
+## Default to Low Concurrency; LLM Provider 429 Rate Limit Errors
+
+Graphiti's ingestion pipelines are designed for high concurrency. By default, concurrency is set low to avoid LLM Provider 429 Rate Limit Errors. If you find Graphiti slow, please increase concurrency as described below.
+
+Concurrency controlled by the `SEMAPHORE_LIMIT` environment variable. By default, `SEMAPHORE_LIMIT` is set to `10` concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try lowering this value.
+
+If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion performance.
 
 ## Quick Start
 
@@ -176,7 +209,7 @@ pip install graphiti-core[falkordb,anthropic,google-genai]
 
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory. The quickstart demonstrates:
 
-1. Connecting to a Neo4j or FalkorDB database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -259,6 +292,39 @@ driver = FalkorDriver(
 graphiti = Graphiti(graph_driver=driver)
 ```
 
+#### Kuzu
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+# Create a Kuzu driver
+driver = KuzuDriver(db="/tmp/graphiti.kuzu")
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
+#### Amazon Neptune
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+# Create a FalkorDB driver with custom database name
+driver = NeptuneDriver(
+    host=<NEPTUNE ENDPOINT>,
+    aoss_host=<Amazon OpenSearch Serverless Host>,
+    port=<PORT> # Optional, defaults to 8182,
+    aoss_port=<PORT> # Optional, defaults to 443
+)
+
+driver = NeptuneDriver(host=neptune_uri, aoss_host=aoss_host, port=neptune_port)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
 
 ### Performance Configuration
 
@@ -270,6 +336,13 @@ as such this feature is off by default.
 ## Using Graphiti with Azure OpenAI
 
 Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different endpoints for LLM and embedding services, and separate deployments for default and small models.
+
+> [!IMPORTANT]
+> **Azure OpenAI v1 API Opt-in Required for Structured Outputs**
+> 
+> Graphiti uses structured outputs via the `client.beta.chat.completions.parse()` method, which requires Azure OpenAI deployments to opt into the v1 API. Without this opt-in, you'll encounter 404 Resource not found errors during episode ingestion.
+> 
+> To enable v1 API support in your Azure OpenAI deployment, follow Microsoft's guide: [Azure OpenAI API version lifecycle](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=key#api-evolution).
 
 ```python
 from openai import AsyncAzureOpenAI
@@ -309,7 +382,7 @@ graphiti = Graphiti(
     "neo4j",
     "password",
     llm_client=OpenAIClient(
-        llm_config=azure_llm_config,
+        config=azure_llm_config,
         client=llm_client_azure
     ),
     embedder=OpenAIEmbedder(
@@ -319,7 +392,7 @@ graphiti = Graphiti(
         client=embedding_client_azure
     ),
     cross_encoder=OpenAIRerankerClient(
-        llm_config=LLMConfig(
+        config=LLMConfig(
             model=azure_llm_config.small_model  # Use small model for reranking
         ),
         client=llm_client_azure
@@ -389,25 +462,27 @@ The Gemini reranker uses the `gemini-2.5-flash-lite-preview-06-17` model by defa
 Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal for privacy-focused applications or when you want to avoid API costs.
 
 Install the models:
+```bash
 ollama pull deepseek-r1:7b # LLM
 ollama pull nomic-embed-text # embeddings
+```
 
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
 # Configure Ollama LLM client
 llm_config = LLMConfig(
-    api_key="abc",  # Ollama doesn't require a real API key
+    api_key="ollama",  # Ollama doesn't require a real API key, but some placeholder is needed
     model="deepseek-r1:7b",
     small_model="deepseek-r1:7b",
-    base_url="http://localhost:11434/v1", # Ollama provides this port
+    base_url="http://localhost:11434/v1",  # Ollama's OpenAI-compatible endpoint
 )
 
-llm_client = OpenAIClient(config=llm_config)
+llm_client = OpenAIGenericClient(config=llm_config)
 
 # Initialize Graphiti with Ollama clients
 graphiti = Graphiti(
@@ -417,7 +492,7 @@ graphiti = Graphiti(
     llm_client=llm_client,
     embedder=OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
-            api_key="abc",
+            api_key="ollama",  # Placeholder API key
             embedding_model="nomic-embed-text",
             embedding_dim=768,
             base_url="http://localhost:11434/v1",
@@ -435,7 +510,7 @@ Ensure Ollama is running (`ollama serve`) and that you have pulled the models yo
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
 - [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
-- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/integrations/lang-graph-agent)
 
 ## Telemetry
 
@@ -450,7 +525,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
   - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB)
+  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect

@@ -65,13 +65,23 @@ class Person(BaseModel):
     occupation: str | None = Field(..., description="The person's work occupation")
 
 
+class City(BaseModel):
+    """A city"""
+
+    country: str | None = Field(..., description='The country the city is in')
+
+
 class IsPresidentOf(BaseModel):
     """Relationship between a person and the entity they are a president of"""
 
 
 async def main(use_bulk: bool = False):
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+    client = Graphiti(
+        neo4j_uri,
+        neo4j_user,
+        neo4j_password,
+    )
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
@@ -92,7 +102,7 @@ async def main(use_bulk: bool = False):
         await client.add_episode_bulk(
             raw_episodes,
             group_id=group_id,
-            entity_types={'Person': Person},
+            entity_types={'Person': Person, 'City': City},
             edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
             edge_type_map={('Person', 'Entity'): ['IS_PRESIDENT_OF']},
         )
@@ -109,7 +119,7 @@ async def main(use_bulk: bool = False):
                 reference_time=message.actual_timestamp,
                 source_description='Podcast Transcript',
                 group_id=group_id,
-                entity_types={'Person': Person},
+                entity_types={'Person': Person, 'City': City},
                 edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
                 edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
                 previous_episode_uuids=episode_uuids,

@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+from .prompt_helpers import to_prompt_json
 
 
 class ExtractedEntity(BaseModel):
@@ -52,6 +52,13 @@ class EntityClassification(BaseModel):
     )
 
 
+class EntitySummary(BaseModel):
+    summary: str = Field(
+        ...,
+        description='Summary containing the important information about the entity. Under 250 words',
+    )
+
+
 class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion
@@ -59,6 +66,7 @@ class Prompt(Protocol):
     reflexion: PromptVersion
     classify_nodes: PromptVersion
     extract_attributes: PromptVersion
+    extract_summary: PromptVersion
 
 
 class Versions(TypedDict):
@@ -68,6 +76,7 @@ class Versions(TypedDict):
     reflexion: PromptFunction
     classify_nodes: PromptFunction
     extract_attributes: PromptFunction
+    extract_summary: PromptFunction
 
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
@@ -75,23 +84,23 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversation."""
 
     user_prompt = f"""
+<ENTITY TYPES>
+{context['entity_types']}
+</ENTITY TYPES>
+
 <PREVIOUS MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
 {context['episode_content']}
 </CURRENT MESSAGE>
 
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
-
 Instructions:
 
 You are given a conversation context and a CURRENT MESSAGE. Your task is to extract **entity nodes** mentioned **explicitly or implicitly** in the CURRENT MESSAGE.
 Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the 
-reference entities.
+reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don't extract pronouns like you, me, he/she/they, we/us as entities.
 
 1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
    - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
@@ -124,15 +133,16 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify relevant entities from JSON files"""
 
     user_prompt = f"""
+<ENTITY TYPES>
+{context['entity_types']}
+</ENTITY TYPES>
+
 <SOURCE DESCRIPTION>:
 {context['source_description']}
 </SOURCE DESCRIPTION>
 <JSON>
 {context['episode_content']}
 </JSON>
-<ENTITY TYPES>
-{context['entity_types']}
-</ENTITY TYPES>
 
 {context['custom_prompt']}
 
@@ -155,12 +165,13 @@ def extract_text(context: dict[str, Any]) -> list[Message]:
     Your primary task is to extract and classify the speaker and other significant entities mentioned in the provided text."""
 
     user_prompt = f"""
-<TEXT>
-{context['episode_content']}
-</TEXT>
 <ENTITY TYPES>
 {context['entity_types']}
 </ENTITY TYPES>
+
+<TEXT>
+{context['episode_content']}
+</TEXT>
 
 Given the above text, extract entities from the TEXT that are explicitly or implicitly mentioned.
 For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
@@ -185,7 +196,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -209,7 +220,7 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
     <PREVIOUS MESSAGES>
-    {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+    {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
     </PREVIOUS MESSAGES>
     <CURRENT MESSAGE>
     {context['episode_content']}
@@ -247,8 +258,8 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGES>
-        {json.dumps(context['previous_episodes'], indent=2)}
-        {json.dumps(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </MESSAGES>
 
         Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
@@ -257,9 +268,39 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
+        
+        <ENTITY>
+        {context['node']}
+        </ENTITY>
+        """,
+        ),
+    ]
+
+
+def extract_summary(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts entity summaries from the provided text.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+
+        <MESSAGES>
+        {to_prompt_json(context['previous_episodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        </MESSAGES>
+
+        Given the above MESSAGES and the following ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary.
+        
+        Guidelines:
+        1. Do not hallucinate entity summary information if they cannot be found in the current context.
+        2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
             Summaries must be no longer than 250 words.
-        
+
         <ENTITY>
         {context['node']}
         </ENTITY>
@@ -273,6 +314,7 @@ versions: Versions = {
     'extract_json': extract_json,
     'extract_text': extract_text,
     'reflexion': reflexion,
+    'extract_summary': extract_summary,
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
 }
