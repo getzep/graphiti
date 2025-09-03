@@ -149,9 +149,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-        MATCH (e:Episodic)
-        WHERE e.valid_at <= $reference_time
-        """
+            MATCH (e:Episodic)
+            WHERE e.valid_at <= $reference_time
+            """
         + query_filter
         + """
         RETURN
@@ -180,41 +180,39 @@ async def retrieve_episodes(
 async def build_dynamic_indexes(driver: GraphDriver, group_id: str):
     # Make sure indices exist for this group_id in Neo4j
     if driver.provider == GraphProvider.NEO4J:
-        await semaphore_gather(
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $episode_content IF NOT EXISTS
-FOR (e:"""
-                + 'Episodic_'
-                + group_id.replace('-', '')
-                + """) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-                episode_content='episode_content_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $node_name_and_summary IF NOT EXISTS FOR (n:"""
-                + 'Entity_'
-                + group_id.replace('-', '')
-                + """) ON EACH [n.name, n.summary, n.group_id]""",
-                node_name_and_summary='node_name_and_summary_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $community_name IF NOT EXISTS
-                                                         FOR (n:"""
-                + 'Community_'
-                + group_id.replace('-', '')
-                + """) ON EACH [n.name, n.group_id]""",
-                community_name='Community_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE VECTOR INDEX $group_entity_vector IF NOT EXISTS
-                                                        FOR (n:"""
-                + 'Entity_'
-                + group_id.replace('-', '')
-                + """)
+        await driver.execute_query(
+            """CREATE FULLTEXT INDEX $episode_content IF NOT EXISTS 
+            FOR (e:"""
+            + 'Episodic_'
+            + group_id.replace('-', '')
+            + """) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
+            episode_content='episode_content_' + group_id.replace('-', ''),
+        )
+        await driver.execute_query(
+            """CREATE FULLTEXT INDEX $node_name_and_summary IF NOT EXISTS FOR (n:"""
+            + 'Entity_'
+            + group_id.replace('-', '')
+            + """) ON EACH [n.name, n.summary, n.group_id]""",
+            node_name_and_summary='node_name_and_summary_' + group_id.replace('-', ''),
+        )
+        await driver.execute_query(
+            """CREATE FULLTEXT INDEX $community_name IF NOT EXISTS
+                                                     FOR (n:"""
+            + 'Community_'
+            + group_id.replace('-', '')
+            + """) ON EACH [n.name, n.group_id]""",
+            community_name='Community_' + group_id.replace('-', ''),
+        )
+        await driver.execute_query(
+            """CREATE VECTOR INDEX $group_entity_vector IF NOT EXISTS
+                                                    FOR (n:"""
+            + 'Entity_'
+            + group_id.replace('-', '')
+            + """)
                                ON n.embedding
                                OPTIONS { indexConfig: {
                                 `vector.dimensions`: 1024,
                                 `vector.similarity_function`: 'cosine'
                                }}""",
-                group_entity_vector='group_entity_vector_' + group_id.replace('-', ''),
-            ),
+            group_entity_vector='group_entity_vector_' + group_id.replace('-', ''),
         )

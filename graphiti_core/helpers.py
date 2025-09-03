@@ -38,10 +38,6 @@ SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
 DEFAULT_PAGE_LIMIT = 20
 
-RUNTIME_QUERY: LiteralString = (
-    'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
-)
-
 
 def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
     if isinstance(input_date, neo4j_time.DateTime):
