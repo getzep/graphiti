@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 from neo4j import time as neo4j_time
 from numpy._typing import NDArray
 from pydantic import BaseModel
-from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
