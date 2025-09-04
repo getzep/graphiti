@@ -271,10 +271,8 @@ must be set.
 
 ### Database Configuration
 
-Database names are configured directly in the driver constructors:
-
-- **Neo4j**: Database name defaults to `neo4j` (hardcoded in Neo4jDriver)
-- **FalkorDB**: Database name defaults to `default_db` (hardcoded in FalkorDriver)
+- **Neo4j**: Database name defaults to `neo4j`. Custom database names require Neo4j Enterprise Edition and can be configured via `NEO4J_DATABASE` environment variable or driver constructor
+- **FalkorDB**: Database name defaults to `default_db` (configured in driver constructor)
 
 As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it
 to the Graphiti constructor using the `graph_driver` parameter.

@@ -455,6 +455,7 @@ class Neo4jConfig(BaseModel):
     uri: str = 'bolt://localhost:7687'
     user: str = 'neo4j'
     password: str = 'password'
+    database: str = 'neo4j'
 
     @classmethod
     def from_env(cls) -> 'Neo4jConfig':
@@ -463,6 +464,7 @@ class Neo4jConfig(BaseModel):
             uri=os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
             user=os.environ.get('NEO4J_USER', 'neo4j'),
             password=os.environ.get('NEO4J_PASSWORD', 'password'),
+            database=os.environ.get('NEO4J_DATABASE', 'neo4j'),
         )
 
 
@@ -594,6 +596,7 @@ async def initialize_graphiti():
             uri=config.neo4j.uri,
             user=config.neo4j.user,
             password=config.neo4j.password,
+            database=config.neo4j.database,
             llm_client=llm_client,
             embedder=embedder_client,
             max_coroutines=SEMAPHORE_LIMIT,

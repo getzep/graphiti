@@ -120,6 +120,7 @@ class Graphiti:
         uri: str | None = None,
         user: str | None = None,
         password: str | None = None,
+        database: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
         cross_encoder: CrossEncoderClient | None = None,
@@ -142,6 +143,10 @@ class Graphiti:
             The username for authenticating with the Neo4j database.
         password : str
             The password for authenticating with the Neo4j database.
+        database : str | None, optional
+            The Neo4j database name to connect to. Defaults to 'neo4j'.
+            Only used when connecting directly to Neo4j (i.e., when graph_driver is None).
+            For other database backends, configure the database name in the driver constructor.
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
@@ -188,7 +193,7 @@ class Graphiti:
         else:
             if uri is None:
                 raise ValueError('uri must be provided when graph_driver is None')
-            self.driver = Neo4jDriver(uri, user, password)
+            self.driver = Neo4jDriver(uri, user, password, database or 'neo4j')
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
