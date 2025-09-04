@@ -98,6 +98,15 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
+        case GraphProvider.MEMGRAPH:
+            return """
+                MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                SET e = $edge_data
+                WITH e e.fact_embedding = $edge_data.fact_embedding
+                RETURN e.uuid AS uuid
+            """
         case _:  # Neo4j
             return """
                 MATCH (source:Entity {uuid: $edge_data.source_uuid})
@@ -150,6 +159,16 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
                     e.invalid_at = $invalid_at,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
+            """
+        case GraphProvider.MEMGRAPH:
+            return """
+                UNWIND $entity_edges AS edge
+                MATCH (source:Entity {uuid: edge.source_node_uuid})
+                MATCH (target:Entity {uuid: edge.target_node_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                SET e = edge
+                WITH e, edge e.fact_embedding = edge.fact_embedding
+                RETURN edge.uuid AS uuid
             """
         case _:
             return """
@@ -240,7 +259,7 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
                     e.created_at = $created_at
                 RETURN e.uuid AS uuid
             """
-        case _:  # Neo4j
+        case _:  # Neo4j and Memgraph
             return """
                 MATCH (community:Community {uuid: $community_uuid})
                 MATCH (node:Entity | Community {uuid: $entity_uuid})

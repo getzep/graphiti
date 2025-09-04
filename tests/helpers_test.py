@@ -55,6 +55,14 @@ if os.getenv('DISABLE_KUZU') is None:
     except ImportError:
         raise
 
+if os.getenv('DISABLE_MEMGRAPH') is None:
+    try:
+        from graphiti_core.driver.memgraph_driver import MemgraphDriver
+
+        drivers.append(GraphProvider.MEMGRAPH)
+    except ImportError:
+        raise
+
 # Disable Neptune for now
 os.environ['DISABLE_NEPTUNE'] = 'True'
 if os.getenv('DISABLE_NEPTUNE') is None:
@@ -73,6 +81,10 @@ FALKORDB_HOST = os.getenv('FALKORDB_HOST', 'localhost')
 FALKORDB_PORT = os.getenv('FALKORDB_PORT', '6379')
 FALKORDB_USER = os.getenv('FALKORDB_USER', None)
 FALKORDB_PASSWORD = os.getenv('FALKORDB_PASSWORD', None)
+
+MEMGRAPH_URI = os.getenv('MEMGRAPH_URI', 'bolt://localhost:7687')
+MEMGRAPH_USER = os.getenv('MEMGRAPH_USER', '')
+MEMGRAPH_PASSWORD = os.getenv('MEMGRAPH_PASSWORD', '')
 
 NEPTUNE_HOST = os.getenv('NEPTUNE_HOST', 'localhost')
 NEPTUNE_PORT = os.getenv('NEPTUNE_PORT', 8182)
@@ -103,6 +115,12 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             db=KUZU_DB,
         )
         return driver
+    elif provider == GraphProvider.MEMGRAPH:
+        return MemgraphDriver(
+            uri=MEMGRAPH_URI,
+            user=MEMGRAPH_USER,
+            password=MEMGRAPH_PASSWORD,
+        )
     elif provider == GraphProvider.NEPTUNE:
         return NeptuneDriver(
             host=NEPTUNE_HOST,

@@ -49,7 +49,7 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                 entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
             """
-        case _:  # Neo4j
+        case _:  # Neo4j and Memgraph
             return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n:$($group_label)
@@ -92,7 +92,7 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
             """
-        case _:  # Neo4j
+        case _:  # Neo4j and Memgraph
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
@@ -162,6 +162,14 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
                 SET n.name_embedding = join([x IN coalesce($entity_data.name_embedding, []) | toString(x) ], ",")
                 RETURN n.uuid AS uuid
             """
+        case GraphProvider.MEMGRAPH:
+            return """
+                MERGE (n:Entity {{uuid: $entity_data.uuid}})
+                SET n:{labels}
+                SET n = $entity_data
+                WITH n SET n.name_embedding = $entity_data.name_embedding
+                RETURN n.uuid AS uuid
+            """
         case _:
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
@@ -223,6 +231,15 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                     n.attributes = $attributes
                 RETURN n.uuid AS uuid
             """
+        case GraphProvider.MEMGRAPH:
+            return """
+                UNWIND $nodes AS node
+                MERGE (n:Entity {uuid: node.uuid})
+                SET n:$(node.labels)
+                SET n = node
+                WITH n, node SET n.name_embedding = node.name_embedding
+                RETURN n.uuid AS uuid
+            """
         case _:  # Neo4j
             return """
                 UNWIND $nodes AS node
@@ -282,6 +299,13 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                     n.created_at = $created_at,
                     n.name_embedding = $name_embedding,
                     n.summary = $summary
+                RETURN n.uuid AS uuid
+            """
+        case GraphProvider.MEMGRAPH:
+            return """
+                MERGE (n:Community {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
+                WITH n SET n.name_embedding = $name_embedding
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
