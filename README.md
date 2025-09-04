@@ -271,7 +271,7 @@ must be set.
 
 ### Database Configuration
 
-- **Neo4j**: Database name defaults to `neo4j`. Can be customized via `NEO4J_DATABASE` environment variable
+- **Neo4j**: Database name defaults to `neo4j`. Custom database names require Neo4j Enterprise Edition and can be configured via `NEO4J_DATABASE` environment variable or driver constructor
 - **FalkorDB**: Database name defaults to `default_db` (configured in driver constructor)
 
 As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it
