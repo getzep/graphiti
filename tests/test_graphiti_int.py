@@ -23,7 +23,7 @@ from graphiti_core.graphiti import Graphiti
 from graphiti_core.search.search_filters import ComparisonOperator, DateFilter, SearchFilters
 from graphiti_core.search.search_helpers import search_results_to_context_string
 from graphiti_core.utils.datetime_utils import utc_now
-from tests.helpers_test import GraphProvider
+from tests.helpers_test import NEO4J_PASSWORD, NEO4J_URI, NEO4J_USER, GraphProvider
 
 pytestmark = pytest.mark.integration
 pytest_plugins = ('pytest_asyncio',)
@@ -76,5 +76,30 @@ async def test_graphiti_init(graph_driver):
 
     pretty_results = search_results_to_context_string(results)
     logger.info(pretty_results)
+
+    await graphiti.close()
+
+
+@pytest.mark.asyncio
+async def test_graphiti_neo4j_database_parameter(graph_driver):
+    """Test that Graphiti constructor accepts database parameter for Neo4j connections."""
+    # Only test this for Neo4j since database parameter is Neo4j-specific
+    if graph_driver.provider != GraphProvider.NEO4J:
+        pytest.skip('Database parameter only supported for Neo4j')
+
+    # Test direct Neo4j connection with explicit database parameter
+    graphiti = Graphiti(
+        uri=NEO4J_URI,
+        user=NEO4J_USER,
+        password=NEO4J_PASSWORD,
+        database='neo4j',  # Explicitly set database parameter
+    )
+
+    # Verify it initializes without error
+    await graphiti.build_indices_and_constraints()
+
+    # Basic functionality test
+    assert graphiti.driver is not None
+    assert graphiti.driver.provider == GraphProvider.NEO4J
 
     await graphiti.close()
