@@ -143,6 +143,10 @@ class Graphiti:
             The username for authenticating with the Neo4j database.
         password : str
             The password for authenticating with the Neo4j database.
+        database : str | None, optional
+            The Neo4j database name to connect to. Defaults to 'neo4j'.
+            Only used when connecting directly to Neo4j (i.e., when graph_driver is None).
+            For other database backends, configure the database name in the driver constructor.
         llm_client : LLMClient | None, optional
             An instance of LLMClient for natural language processing tasks.
             If not provided, a default OpenAIClient will be initialized.
