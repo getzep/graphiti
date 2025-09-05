@@ -194,6 +194,11 @@ async def add_nodes_and_edges_bulk_tx(
         )
         await tx.run(get_entity_edge_save_bulk_query(driver.provider), entity_edges=edges)
 
+        if driver.aoss_client:
+            driver.save_to_aoss('episode_content', episodes)
+            driver.save_to_aoss('node_name_and_summary', nodes)
+            driver.save_to_aoss('edge_name_and_summary', edges)
+
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,

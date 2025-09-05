@@ -273,7 +273,7 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.NEPTUNE:
+        if driver.aoss_client:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'episode_content',
                 [
@@ -470,7 +470,7 @@ class EntityNode(Node):
             entity_data.update(self.attributes or {})
             labels = ':'.join(self.labels + ['Entity'])
 
-            if driver.provider == GraphProvider.NEPTUNE:
+            if driver.aoss_client:
                 driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(

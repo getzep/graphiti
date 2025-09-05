@@ -46,12 +46,25 @@ aoss_indices = [
                     'name': {'type': 'text'},
                     'summary': {'type': 'text'},
                     'group_id': {'type': 'text'},
+                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'name_embedding': {
+                        'type': 'dense_vector',
+                        'dims': 1024,
+                        'index': True,
+                        'similarity': 'cosine',
+                    },
                 }
             }
         },
         'query': {
             'query': {'multi_match': {'query': '', 'fields': ['name', 'summary', 'group_id']}},
             'size': DEFAULT_SIZE,
+            'knn': {
+                'field': 'name_embedding',
+                'query_vector': [],
+                'k': DEFAULT_SIZE,
+                'num_candidates': 100,
+            },
         },
     },
     {
@@ -80,6 +93,8 @@ aoss_indices = [
                     'source': {'type': 'text'},
                     'source_description': {'type': 'text'},
                     'group_id': {'type': 'text'},
+                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'valid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
                 }
             }
         },
@@ -102,12 +117,28 @@ aoss_indices = [
                     'name': {'type': 'text'},
                     'fact': {'type': 'text'},
                     'group_id': {'type': 'text'},
+                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'valid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'expired_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'invalid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'fact_embedding': {
+                        'type': 'dense_vector',
+                        'dims': 1024,
+                        'index': True,
+                        'similarity': 'cosine',
+                    },
                 }
             }
         },
         'query': {
             'query': {'multi_match': {'query': '', 'fields': ['name', 'fact', 'group_id']}},
             'size': DEFAULT_SIZE,
+            'knn': {
+                'field': 'fact_embedding',
+                'query_vector': [],  # supply vector at runtime
+                'k': DEFAULT_SIZE,
+                'num_candidates': 100,
+            },
         },
     },
 ]

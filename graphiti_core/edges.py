@@ -298,7 +298,7 @@ class EntityEdge(Edge):
         else:
             edge_data.update(self.attributes or {})
 
-            if driver.provider == GraphProvider.NEPTUNE:
+            if driver.aoss_client:
                 driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
