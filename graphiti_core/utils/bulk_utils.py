@@ -143,9 +143,6 @@ async def add_nodes_and_edges_bulk_tx(
             entity_data['attributes'] = json.dumps(attributes)
         else:
             entity_data.update(node.attributes or {})
-            entity_data['labels'] = list(
-                set(node.labels + ['Entity', 'Entity_' + node.group_id.replace('-', '')])
-            )
 
         nodes.append(entity_data)
 
