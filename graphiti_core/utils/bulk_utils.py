@@ -119,8 +119,6 @@ async def add_nodes_and_edges_bulk_tx(
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
-        if driver.provider == GraphProvider.NEO4J:
-            episode['group_label'] = 'Episodic_' + episode['group_id'].replace('-', '')
 
     nodes = []
 
