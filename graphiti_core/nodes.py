@@ -299,9 +299,6 @@ class EpisodicNode(Node):
             'source': self.source.value,
         }
 
-        if driver.provider == GraphProvider.NEO4J:
-            episode_args['group_label'] = 'Episodic_' + self.group_id.replace('-', '')
-
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
         )
@@ -471,7 +468,7 @@ class EntityNode(Node):
             )
         else:
             entity_data.update(self.attributes or {})
-            labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
+            labels = ':'.join(self.labels + ['Entity'])
 
             if driver.provider == GraphProvider.NEPTUNE:
                 driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue

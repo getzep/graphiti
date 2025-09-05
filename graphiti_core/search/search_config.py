@@ -24,7 +24,6 @@ from graphiti_core.search.search_utils import (
     DEFAULT_MIN_SCORE,
     DEFAULT_MMR_LAMBDA,
     MAX_SEARCH_DEPTH,
-    USE_HNSW,
 )
 
 DEFAULT_SEARCH_LIMIT = 10
@@ -92,7 +91,6 @@ class NodeSearchConfig(BaseModel):
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
     bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
-    use_local_indexes: bool = Field(default=USE_HNSW)
 
 
 class EpisodeSearchConfig(BaseModel):
@@ -101,7 +99,6 @@ class EpisodeSearchConfig(BaseModel):
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
     bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
-    use_local_indexes: bool = Field(default=USE_HNSW)
 
 
 class CommunitySearchConfig(BaseModel):
@@ -110,7 +107,6 @@ class CommunitySearchConfig(BaseModel):
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
     bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
-    use_local_indexes: bool = Field(default=USE_HNSW)
 
 
 class SearchConfig(BaseModel):
