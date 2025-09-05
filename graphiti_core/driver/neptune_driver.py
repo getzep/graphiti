@@ -24,86 +24,9 @@ import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider, aoss_indices
 
 logger = logging.getLogger(__name__)
-DEFAULT_SIZE = 10
-
-aoss_indices = [
-    {
-        'index_name': 'node_name_and_summary',
-        'body': {
-            'mappings': {
-                'properties': {
-                    'uuid': {'type': 'keyword'},
-                    'name': {'type': 'text'},
-                    'summary': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                }
-            }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'summary', 'group_id']}},
-            'size': DEFAULT_SIZE,
-        },
-    },
-    {
-        'index_name': 'community_name',
-        'body': {
-            'mappings': {
-                'properties': {
-                    'uuid': {'type': 'keyword'},
-                    'name': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                }
-            }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'group_id']}},
-            'size': DEFAULT_SIZE,
-        },
-    },
-    {
-        'index_name': 'episode_content',
-        'body': {
-            'mappings': {
-                'properties': {
-                    'uuid': {'type': 'keyword'},
-                    'content': {'type': 'text'},
-                    'source': {'type': 'text'},
-                    'source_description': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                }
-            }
-        },
-        'query': {
-            'query': {
-                'multi_match': {
-                    'query': '',
-                    'fields': ['content', 'source', 'source_description', 'group_id'],
-                }
-            },
-            'size': DEFAULT_SIZE,
-        },
-    },
-    {
-        'index_name': 'edge_name_and_fact',
-        'body': {
-            'mappings': {
-                'properties': {
-                    'uuid': {'type': 'keyword'},
-                    'name': {'type': 'text'},
-                    'fact': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                }
-            }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'fact', 'group_id']}},
-            'size': DEFAULT_SIZE,
-        },
-    },
-]
 
 
 class NeptuneDriver(GraphDriver):
@@ -222,52 +145,6 @@ class NeptuneDriver(GraphDriver):
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
         return self.delete_all_indexes_impl()
-
-    async def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
-        # No matter what happens above, always return True
-        return self.delete_aoss_indices()
-
-    async def create_aoss_indices(self):
-        for index in aoss_indices:
-            index_name = index['index_name']
-            client = self.aoss_client
-            if not client.indices.exists(index=index_name):
-                client.indices.create(index=index_name, body=index['body'])
-        # Sleep for 1 minute to let the index creation complete
-        await asyncio.sleep(60)
-
-    async def delete_aoss_indices(self):
-        for index in aoss_indices:
-            index_name = index['index_name']
-            client = self.aoss_client
-            if client.indices.exists(index=index_name):
-                client.indices.delete(index=index_name)
-
-    def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
-        for index in aoss_indices:
-            if name.lower() == index['index_name']:
-                index['query']['query']['multi_match']['query'] = query_text
-                query = {'size': limit, 'query': index['query']}
-                resp = self.aoss_client.search(body=query['query'], index=index['index_name'])
-                return resp
-        return {}
-
-    def save_to_aoss(self, name: str, data: list[dict]) -> int:
-        for index in aoss_indices:
-            if name.lower() == index['index_name']:
-                to_index = []
-                for d in data:
-                    item = {'_index': name}
-                    for p in index['body']['mappings']['properties']:
-                        item[p] = d[p]
-                    to_index.append(item)
-                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                if failed > 0:
-                    return success
-                else:
-                    return 0
-
-        return 0
 
 
 class NeptuneDriverSession(GraphDriverSession):
