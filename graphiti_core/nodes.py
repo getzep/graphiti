@@ -287,7 +287,7 @@ class EpisodicNode(Node):
 
         if driver.aoss_client:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'episode_content',
+                'episodes',
                 [episode_args],
             )
 
@@ -432,6 +432,7 @@ class EntityNode(Node):
                     'size': 1,
                 },
                 index='entities',
+                routing=self.group_id,
             )
 
             if resp['hits']['hits']:
@@ -478,7 +479,7 @@ class EntityNode(Node):
             labels = ':'.join(self.labels + ['Entity'])
 
             if driver.aoss_client:
-                driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+                driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels),
@@ -577,7 +578,7 @@ class CommunityNode(Node):
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'community_name',
+                'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(

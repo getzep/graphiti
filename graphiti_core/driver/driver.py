@@ -231,19 +231,24 @@ class GraphDriver(ABC):
                 return resp
         return {}
 
+    from opensearchpy import helpers
+
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
         for index in aoss_indices:
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {'_index': name}
+                    item = {
+                        '_index': name,
+                        '_routing': d.get('group_id'),  # shard routing
+                    }
                     for p in index['body']['mappings']['properties']:
-                        item[p] = d[p]
+                        if p in d:  # protect against missing fields
+                            item[p] = d[p]
                     to_index.append(item)
+
                 success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                if failed > 0:
-                    return success
-                else:
-                    return 0
+
+                return success if failed == 0 else success
 
         return 0

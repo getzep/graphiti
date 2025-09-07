@@ -262,6 +262,7 @@ class EntityEdge(Edge):
                     'size': 1,
                 },
                 index='entity_edges',
+                routing=self.group_id,
             )
 
             if resp['hits']['hits']:
@@ -313,7 +314,7 @@ class EntityEdge(Edge):
             edge_data.update(self.attributes or {})
 
             if driver.aoss_client:
-                driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
+                driver.save_to_aoss('entity_edges', [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
