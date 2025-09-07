@@ -273,20 +273,6 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        if driver.aoss_client:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'episode_content',
-                [
-                    {
-                        'uuid': self.uuid,
-                        'group_id': self.group_id,
-                        'source': self.source.value,
-                        'content': self.content,
-                        'source_description': self.source_description,
-                    }
-                ],
-            )
-
         episode_args = {
             'uuid': self.uuid,
             'name': self.name,
@@ -298,6 +284,12 @@ class EpisodicNode(Node):
             'valid_at': self.valid_at,
             'source': self.source.value,
         }
+
+        if driver.aoss_client:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'episode_content',
+                [episode_args],
+            )
 
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
@@ -433,6 +425,21 @@ class EntityNode(Node):
                 MATCH (n:Entity {uuid: $uuid})
                 RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
+        elif driver.aoss_client:
+            resp = driver.aoss_client.search(
+                body={
+                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
+                    'size': 1,
+                },
+                index='entities',
+            )
+
+            if resp['hits']['hits']:
+                self.name_embedding = resp['hits']['hits'][0]['_source']['name_embedding']
+                return
+            else:
+                raise NodeNotFoundError(self.uuid)
+
         else:
             query: LiteralString = """
                 MATCH (n:Entity {uuid: $uuid})

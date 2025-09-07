@@ -38,7 +38,7 @@ class GraphProvider(Enum):
 
 aoss_indices = [
     {
-        'index_name': 'node_name_and_summary',
+        'index_name': 'entities',
         'body': {
             'mappings': {
                 'properties': {
@@ -68,7 +68,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'community_name',
+        'index_name': 'communities',
         'body': {
             'mappings': {
                 'properties': {
@@ -84,7 +84,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'episode_content',
+        'index_name': 'episodes',
         'body': {
             'mappings': {
                 'properties': {
@@ -109,7 +109,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'edge_name_and_fact',
+        'index_name': 'entity_edges',
         'body': {
             'mappings': {
                 'properties': {

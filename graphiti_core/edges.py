@@ -255,6 +255,20 @@ class EntityEdge(Edge):
                 MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
+        elif driver.aoss_client:
+            resp = driver.aoss_client.search(
+                body={
+                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
+                    'size': 1,
+                },
+                index='entity_edges',
+            )
+
+            if resp['hits']['hits']:
+                self.fact_embedding = resp['hits']['hits'][0]['_source']['fact_embedding']
+                return
+            else:
+                raise EdgeNotFoundError(self.uuid)
 
         if driver.provider == GraphProvider.KUZU:
             query = """
