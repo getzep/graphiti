@@ -92,7 +92,7 @@ SCHEMA_QUERIES = """
 
 class KuzuDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.KUZU
-    aoss_client: None
+    aoss_client: None = None
 
     def __init__(
         self,

@@ -232,6 +232,10 @@ class NeptuneDriver(GraphDriver):
         for index in neptune_aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
+            if not client:
+                raise ValueError(
+                    'You must provide an AOSS endpoint to create an OpenSearch driver.'
+                )
             if not client.indices.exists(index=index_name):
                 client.indices.create(index=index_name, body=index['body'])
 

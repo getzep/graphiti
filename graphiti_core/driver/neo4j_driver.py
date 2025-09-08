@@ -22,6 +22,7 @@ from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +99,14 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
+    def delete_all_indexes(self) -> Coroutine:
         if self.aoss_client:
-            return self.delete_aoss_indices()
+            return semaphore_gather(
+                self.client.execute_query(
+                    'CALL db.indexes() YIELD name DROP INDEX name',
+                ),
+                self.delete_aoss_indices(),
+            )
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )

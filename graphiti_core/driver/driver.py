@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 try:
     from opensearchpy import OpenSearch, helpers
@@ -31,6 +31,9 @@ except ImportError:
     OpenSearch = None
     helpers = None
     _HAS_OPENSEARCH = False
+
+if TYPE_CHECKING:
+    from opensearchpy import OpenSearch, helpers
 
 logger = logging.getLogger(__name__)
 
