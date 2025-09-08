@@ -572,7 +572,6 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    ##### EXPERIMENTAL #####
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
@@ -581,7 +580,7 @@ class Graphiti:
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
-    ):
+    ) -> AddEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -848,6 +847,15 @@ class Graphiti:
 
             end = time()
             logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
+
+            return AddEpisodeResults(
+                episode=episodes,
+                episodic_edges=resolved_episodic_edges,
+                nodes=final_hydrated_nodes,
+                edges=resolved_edges + invalidated_edges,
+                communities=[],
+                community_edges=[],
+            )
 
         except Exception as e:
             raise e
