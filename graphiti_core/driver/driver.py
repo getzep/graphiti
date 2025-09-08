@@ -23,6 +23,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from graphiti_core.embedder.client import EMBEDDING_DIM
+
 try:
     from opensearchpy import OpenSearch, helpers
 
@@ -59,8 +61,8 @@ aoss_indices = [
                     'group_id': {'type': 'text'},
                     'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
                     'name_embedding': {
-                        'type': 'dense_vector',
-                        'dims': 1024,
+                        'type': 'knn_vector',
+                        'dims': EMBEDDING_DIM,
                         'index': True,
                         'similarity': 'cosine',
                         'method': {
@@ -116,13 +118,13 @@ aoss_indices = [
                     'expired_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
                     'invalid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
                     'fact_embedding': {
-                        'type': 'dense_vector',
-                        'dims': 1024,
+                        'type': 'knn_vector',
+                        'dims': EMBEDDING_DIM,
                         'index': True,
                         'similarity': 'cosine',
                         'method': {
                             'engine': 'faiss',
-                            'space_type': 'cosinesimil',
+                            'space_type': 'innerproduct',
                             'name': 'hnsw',
                             'parameters': {'ef_construction': 128, 'm': 16},
                         },
@@ -236,7 +238,7 @@ class GraphDriver(ABC):
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
-        if not client:
+        if not client or not helpers:
             logger.warning('No OpenSearch client found')
             return 0
 

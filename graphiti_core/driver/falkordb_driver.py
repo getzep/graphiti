@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 class FalkorDriverSession(GraphDriverSession):
     provider = GraphProvider.FALKORDB
-    aoss_client: None = None
 
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
@@ -75,6 +74,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
+    aoss_client: None = None
 
     def __init__(
         self,
