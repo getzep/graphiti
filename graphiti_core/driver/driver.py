@@ -52,19 +52,15 @@ aoss_indices = [
                         'dims': 1024,
                         'index': True,
                         'similarity': 'cosine',
+                        'method': {
+                            'engine': 'faiss',
+                            'space_type': 'cosinesimil',
+                            'name': 'hnsw',
+                            'parameters': {'ef_construction': 128, 'm': 16},
+                        },
                     },
                 }
             }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'summary', 'group_id']}},
-            'size': DEFAULT_SIZE,
-            'knn': {
-                'field': 'name_embedding',
-                'query_vector': [],
-                'k': DEFAULT_SIZE,
-                'num_candidates': 100,
-            },
         },
     },
     {
@@ -77,10 +73,6 @@ aoss_indices = [
                     'group_id': {'type': 'text'},
                 }
             }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'group_id']}},
-            'size': DEFAULT_SIZE,
         },
     },
     {
@@ -97,15 +89,6 @@ aoss_indices = [
                     'valid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
                 }
             }
-        },
-        'query': {
-            'query': {
-                'multi_match': {
-                    'query': '',
-                    'fields': ['content', 'source', 'source_description', 'group_id'],
-                }
-            },
-            'size': DEFAULT_SIZE,
         },
     },
     {
@@ -126,19 +109,15 @@ aoss_indices = [
                         'dims': 1024,
                         'index': True,
                         'similarity': 'cosine',
+                        'method': {
+                            'engine': 'faiss',
+                            'space_type': 'cosinesimil',
+                            'name': 'hnsw',
+                            'parameters': {'ef_construction': 128, 'm': 16},
+                        },
                     },
                 }
             }
-        },
-        'query': {
-            'query': {'multi_match': {'query': '', 'fields': ['name', 'fact', 'group_id']}},
-            'size': DEFAULT_SIZE,
-            'knn': {
-                'field': 'fact_embedding',
-                'query_vector': [],  # supply vector at runtime
-                'k': DEFAULT_SIZE,
-                'num_candidates': 100,
-            },
         },
     },
 ]
