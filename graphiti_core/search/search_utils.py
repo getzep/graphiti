@@ -562,6 +562,8 @@ async def node_fulltext_search(
     yield_query = 'YIELD node AS n, score'
     if driver.provider == GraphProvider.KUZU:
         yield_query = 'WITH node AS n, score'
+    elif driver.provider == GraphProvider.MEMGRAPH:
+        yield_query = ' WITH node AS n, 1.0 AS score'  # Memgraph: continue from YIELD node
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('node_name_and_summary', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
@@ -968,6 +970,8 @@ async def community_fulltext_search(
     yield_query = 'YIELD node AS c, score'
     if driver.provider == GraphProvider.KUZU:
         yield_query = 'WITH node AS c, score'
+    elif driver.provider == GraphProvider.MEMGRAPH:
+        yield_query = ' WITH node AS c, 1.0 AS score'  # Memgraph: continue from YIELD node
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('community_name', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue
