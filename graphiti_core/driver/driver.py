@@ -124,7 +124,7 @@ aoss_indices = [
                         'similarity': 'cosine',
                         'method': {
                             'engine': 'faiss',
-                            'space_type': 'innerproduct',
+                            'space_type': 'cosinesimil',
                             'name': 'hnsw',
                             'parameters': {'ef_construction': 128, 'm': 16},
                         },
