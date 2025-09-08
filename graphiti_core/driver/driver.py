@@ -195,6 +195,9 @@ class GraphDriver(ABC):
 
     async def create_aoss_indices(self):
         client = self.aoss_client
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return
 
         for index in aoss_indices:
             alias_name = index['index_name']
@@ -220,10 +223,20 @@ class GraphDriver(ABC):
         for index in aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
+
+            if not client:
+                logger.warning('No OpenSearch client found')
+                return
+
             if client.indices.exists(index=index_name):
                 client.indices.delete(index=index_name)
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        client = self.aoss_client
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return 0
+
         for index in aoss_indices:
             if name.lower() == index['index_name']:
                 to_index = []
@@ -237,7 +250,7 @@ class GraphDriver(ABC):
                             item[p] = d[p]
                     to_index.append(item)
 
-                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                success, failed = helpers.bulk(client, to_index, stats_only=True)
 
                 return success if failed == 0 else success
 
