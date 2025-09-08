@@ -58,7 +58,7 @@ class Neo4jDriver(GraphDriver):
         self._database = database
 
         self.aoss_client = None
-        if aoss_host and aoss_port:
+        if aoss_host and aoss_port and boto3 is not None:
             try:
                 session = boto3.Session()
                 self.aoss_client = OpenSearch(

@@ -23,7 +23,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from opensearchpy import OpenSearch, helpers
+try:
+    from opensearchpy import OpenSearch, helpers
+
+    _HAS_OPENSEARCH = True
+except ImportError:
+    OpenSearch = None
+    helpers = None
+    _HAS_OPENSEARCH = False
 
 logger = logging.getLogger(__name__)
 
@@ -215,9 +222,6 @@ class GraphDriver(ABC):
             client = self.aoss_client
             if client.indices.exists(index=index_name):
                 client.indices.delete(index=index_name)
-
-    def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
-        pass
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
         for index in aoss_indices:
