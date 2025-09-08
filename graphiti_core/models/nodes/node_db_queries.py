@@ -170,7 +170,8 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 SET n:{labels}
-                SET n = $entity_data"""
+                SET n = $entity_data
+                """
                 + save_embedding_query
                 + """
                 RETURN n.uuid AS uuid
@@ -239,10 +240,11 @@ def get_entity_node_save_bulk_query(
             )
             return (
                 """
-                UNWIND $nodes AS node
-                MERGE (n:Entity {uuid: node.uuid})
-                SET n:$(node.labels)
-                SET n = node"""
+                    UNWIND $nodes AS node
+                    MERGE (n:Entity {uuid: node.uuid})
+                    SET n:$(node.labels)
+                    SET n = node
+                    """
                 + save_embedding_query
                 + """
                 RETURN n.uuid AS uuid

@@ -107,10 +107,11 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
             return (
                 (
                     """
-                MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                MATCH (target:Entity {uuid: $edge_data.target_uuid})
-                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
-                SET e = $edge_data"""
+                        MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                        MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                        MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                        SET e = $edge_data
+                        """
                     + save_embedding_query
                 )
                 + """
@@ -169,11 +170,12 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
             )
             return (
                 """
-                UNWIND $entity_edges AS edge
-                MATCH (source:Entity {uuid: edge.source_node_uuid})
-                MATCH (target:Entity {uuid: edge.target_node_uuid})
-                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
-                SET e = edge"""
+                    UNWIND $entity_edges AS edge
+                    MATCH (source:Entity {uuid: edge.source_node_uuid})
+                    MATCH (target:Entity {uuid: edge.target_node_uuid})
+                    MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                    SET e = edge
+                    """
                 + save_embedding_query
                 + """
                 RETURN edge.uuid AS uuid
