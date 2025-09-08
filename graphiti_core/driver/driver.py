@@ -19,6 +19,7 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -186,12 +187,26 @@ class GraphDriver(ABC):
         return self.delete_aoss_indices()
 
     async def create_aoss_indices(self):
+        client = self.aoss_client
+
         for index in aoss_indices:
-            index_name = index['index_name']
-            client = self.aoss_client
-            if not client.indices.exists(index=index_name):
-                client.indices.create(index=index_name, body=index['body'])
-        # Sleep for 1 minute to let the index creation complete
+            alias_name = index['index_name']
+
+            # If alias already exists, skip (idempotent behavior)
+            if client.indices.exists_alias(name=alias_name):
+                continue
+
+            # Build a physical index name with timestamp
+            ts_suffix = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+            physical_index_name = f'{alias_name}_{ts_suffix}'
+
+            # Create the index
+            client.indices.create(index=physical_index_name, body=index['body'])
+
+            # Point alias to it
+            client.indices.put_alias(index=physical_index_name, name=alias_name)
+
+        # Allow some time for index creation
         await asyncio.sleep(60)
 
     async def delete_aoss_indices(self):
