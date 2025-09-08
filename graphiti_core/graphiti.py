@@ -1066,7 +1066,7 @@ class Graphiti:
         await create_entity_node_embeddings(self.embedder, nodes)
 
         await add_nodes_and_edges_bulk(self.driver, [], [], nodes, edges, self.embedder)
-        return AddTripletResults(episode=None, edges=edges, nodes=nodes)
+        return AddTripletResults(edges=edges, nodes=nodes)
 
     async def remove_episode(self, episode_uuid: str):
         # Find the episode to be deleted
