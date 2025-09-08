@@ -18,14 +18,24 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-import boto3
 from neo4j import AsyncGraphDatabase, EagerResult
-from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
+
+try:
+    import boto3
+    from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
+
+    _HAS_OPENSEARCH = True
+except ImportError:
+    boto3 = None
+    OpenSearch = None
+    Urllib3AWSV4SignerAuth = None
+    Urllib3HttpConnection = None
+    _HAS_OPENSEARCH = False
 
 
 class Neo4jDriver(GraphDriver):
@@ -49,17 +59,21 @@ class Neo4jDriver(GraphDriver):
 
         self.aoss_client = None
         if aoss_host and aoss_port:
-            session = boto3.Session()
-            self.aoss_client = OpenSearch(
-                hosts=[{'host': aoss_host, 'port': aoss_port}],
-                http_auth=Urllib3AWSV4SignerAuth(
-                    session.get_credentials(), session.region_name, 'aoss'
-                ),
-                use_ssl=True,
-                verify_certs=True,
-                connection_class=Urllib3HttpConnection,
-                pool_maxsize=20,
-            )
+            try:
+                session = boto3.Session()
+                self.aoss_client = OpenSearch(
+                    hosts=[{'host': aoss_host, 'port': aoss_port}],
+                    http_auth=Urllib3AWSV4SignerAuth(
+                        session.get_credentials(), session.region_name, 'aoss'
+                    ),
+                    use_ssl=True,
+                    verify_certs=True,
+                    connection_class=Urllib3HttpConnection,
+                    pool_maxsize=20,
+                )
+            except Exception as e:
+                logger.warning(f'Failed to initialize OpenSearch client: {e}')
+                self.aoss_client = None
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         # Check if database_ is provided in kwargs.
@@ -86,7 +100,7 @@ class Neo4jDriver(GraphDriver):
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
         if self.aoss_client:
-            self.delete_all_indexes_impl()
+            return self.delete_aoss_indices()
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )

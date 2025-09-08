@@ -237,7 +237,7 @@ def edge_search_filter_query_constructor(
 
 
 def build_aoss_node_filters(group_ids: list[str], search_filters: SearchFilters) -> list[dict]:
-    filters = [{'term': {'group_id': group_ids}}]
+    filters = [{'terms': {'group_id': group_ids}}]
 
     if search_filters.node_labels:
         filters.append({'terms': {'node_labels': search_filters.node_labels}})
@@ -246,7 +246,7 @@ def build_aoss_node_filters(group_ids: list[str], search_filters: SearchFilters)
 
 
 def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters) -> list[dict]:
-    filters = [{'term': {'group_id': group_ids}}]
+    filters = [{'terms': {'group_id': group_ids}}]
 
     if search_filters.edge_types:
         filters.append({'terms': {'edge_types': search_filters.edge_types}})

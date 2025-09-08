@@ -217,15 +217,7 @@ class GraphDriver(ABC):
                 client.indices.delete(index=index_name)
 
     def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
-        for index in aoss_indices:
-            if name.lower() == index['index_name']:
-                index['query']['query']['multi_match']['query'] = query_text
-                query = {'size': limit, 'query': index['query']}
-                resp = self.aoss_client.search(body=query['query'], index=index['index_name'])
-                return resp
-        return {}
-
-    from opensearchpy import helpers
+        pass
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
         for index in aoss_indices:

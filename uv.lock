@@ -783,7 +783,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.21.0"
+version = "0.21.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -835,6 +835,10 @@ groq = [
 kuzu = [
     { name = "kuzu" },
 ]
+neo4j-opensearch = [
+    { name = "boto3" },
+    { name = "opensearch-py" },
+]
 neptune = [
     { name = "boto3" },
     { name = "langchain-aws" },
@@ -851,6 +855,7 @@ voyageai = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.49.0" },
+    { name = "boto3", marker = "extra == 'neo4j-opensearch'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
@@ -872,6 +877,7 @@ requires-dist = [
     { name = "neo4j", specifier = ">=5.26.0" },
     { name = "numpy", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.91.0" },
+    { name = "opensearch-py", marker = "extra == 'neo4j-opensearch'", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neptune'", specifier = ">=3.0.0" },
     { name = "posthog", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
@@ -888,7 +894,7 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "sentence-transformers", "neptune", "dev"]
+provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "dev"]
 
 [[package]]
 name = "groq"

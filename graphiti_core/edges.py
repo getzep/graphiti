@@ -307,7 +307,7 @@ class EntityEdge(Edge):
         if driver.provider == GraphProvider.KUZU:
             edge_data['attributes'] = json.dumps(self.attributes)
             result = await driver.execute_query(
-                get_entity_edge_save_query(driver.provider),
+                get_entity_edge_save_query(driver.provider, has_aoss=bool(driver.aoss_client)),
                 **edge_data,
             )
         else:

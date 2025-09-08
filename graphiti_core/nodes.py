@@ -482,7 +482,7 @@ class EntityNode(Node):
                 driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels),
+                get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),
                 entity_data=entity_data,
             )
 
