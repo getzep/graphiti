@@ -16,14 +16,12 @@ limitations under the License.
 
 # Running tests: pytest -xvs tests/llm_client/test_ollama_client.py
 
-import os
 
 import pytest
 from pydantic import BaseModel, Field
 
 from graphiti_core.llm_client.ollama_client import OllamaClient
 from graphiti_core.prompts.models import Message
-
 
 # Skip tests if no Ollama API/key or local server available
 # pytestmark = pytest.mark.skipif(
