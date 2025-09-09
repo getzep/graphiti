@@ -259,7 +259,7 @@ def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters)
             for and_group in ranges:
                 and_filters = []
                 for df in and_group:  # df is a DateFilter
-                    range_query = {'range': {field: {df.op: df.value}}}
+                    range_query = {'range': {field: {df.comparison_operator.value: df.date}}}
                     and_filters.append(range_query)
                 should_clauses.append({'bool': {'filter': and_filters}})
             filters.append({'bool': {'should': should_clauses, 'minimum_should_match': 1}})

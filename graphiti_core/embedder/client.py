@@ -20,7 +20,7 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
-EMBEDDING_DIM = os.getenv('EMBEDDING_DIM', 1024)
+EMBEDDING_DIM = int(os.getenv('EMBEDDING_DIM', 1024))
 
 
 class EmbedderConfig(BaseModel):
