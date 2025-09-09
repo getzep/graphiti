@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from graphiti_core.embedder.client import EMBEDDING_DIM
 
