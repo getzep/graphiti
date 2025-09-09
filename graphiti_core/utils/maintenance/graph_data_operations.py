@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
-    if driver.provider == GraphProvider.NEPTUNE:
+    if driver.aoss_client:
         await driver.create_aoss_indices()  # pyright: ignore[reportAttributeAccessIssue]
         return
     if delete_existing:
@@ -56,7 +56,9 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
+    # Don't create fulltext indices if OpenSearch is being used
+    if not driver.aoss_client:
+        fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     if driver.provider == GraphProvider.KUZU:
         # Skip creating fulltext indices if they already exist. Need to do this manually
@@ -149,9 +151,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                MATCH (e:Episodic)
-                WHERE e.valid_at <= $reference_time
-                """
+                    MATCH (e:Episodic)
+                    WHERE e.valid_at <= $reference_time
+                    """
         + query_filter
         + """
         RETURN

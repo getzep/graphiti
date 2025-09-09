@@ -273,20 +273,6 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'episode_content',
-                [
-                    {
-                        'uuid': self.uuid,
-                        'group_id': self.group_id,
-                        'source': self.source.value,
-                        'content': self.content,
-                        'source_description': self.source_description,
-                    }
-                ],
-            )
-
         episode_args = {
             'uuid': self.uuid,
             'name': self.name,
@@ -298,6 +284,12 @@ class EpisodicNode(Node):
             'valid_at': self.valid_at,
             'source': self.source.value,
         }
+
+        if driver.aoss_client:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'episodes',
+                [episode_args],
+            )
 
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
@@ -433,6 +425,22 @@ class EntityNode(Node):
                 MATCH (n:Entity {uuid: $uuid})
                 RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
+        elif driver.aoss_client:
+            resp = driver.aoss_client.search(
+                body={
+                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
+                    'size': 1,
+                },
+                index='entities',
+                routing=self.group_id,
+            )
+
+            if resp['hits']['hits']:
+                self.name_embedding = resp['hits']['hits'][0]['_source']['name_embedding']
+                return
+            else:
+                raise NodeNotFoundError(self.uuid)
+
         else:
             query: LiteralString = """
                 MATCH (n:Entity {uuid: $uuid})
@@ -470,11 +478,11 @@ class EntityNode(Node):
             entity_data.update(self.attributes or {})
             labels = ':'.join(self.labels + ['Entity'])
 
-            if driver.provider == GraphProvider.NEPTUNE:
-                driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+            if driver.aoss_client:
+                driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels),
+                get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),
                 entity_data=entity_data,
             )
 
@@ -570,7 +578,7 @@ class CommunityNode(Node):
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'community_name',
+                'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(

@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
-EMBEDDING_DIM = 1024
+EMBEDDING_DIM = int(os.getenv('EMBEDDING_DIM', 1024))
 
 
 class EmbedderConfig(BaseModel):

@@ -255,6 +255,21 @@ class EntityEdge(Edge):
                 MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
+        elif driver.aoss_client:
+            resp = driver.aoss_client.search(
+                body={
+                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
+                    'size': 1,
+                },
+                index='entity_edges',
+                routing=self.group_id,
+            )
+
+            if resp['hits']['hits']:
+                self.fact_embedding = resp['hits']['hits'][0]['_source']['fact_embedding']
+                return
+            else:
+                raise EdgeNotFoundError(self.uuid)
 
         if driver.provider == GraphProvider.KUZU:
             query = """
@@ -292,14 +307,14 @@ class EntityEdge(Edge):
         if driver.provider == GraphProvider.KUZU:
             edge_data['attributes'] = json.dumps(self.attributes)
             result = await driver.execute_query(
-                get_entity_edge_save_query(driver.provider),
+                get_entity_edge_save_query(driver.provider, has_aoss=bool(driver.aoss_client)),
                 **edge_data,
             )
         else:
             edge_data.update(self.attributes or {})
 
-            if driver.provider == GraphProvider.NEPTUNE:
-                driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
+            if driver.aoss_client:
+                driver.save_to_aoss('entity_edges', [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
