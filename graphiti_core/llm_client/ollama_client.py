@@ -60,9 +60,10 @@ class OllamaClient(LLMClient):
         if client is None:
             # AsyncClient accepts host and other httpx args; pass api_key/base_url when available
             try:
-                self.client = AsyncClient(api_key=config.api_key, host=config.base_url)
-            except TypeError:
-                # Fallback if AsyncClient signature differs
+                host = config.base_url.rstrip('/v1') if config.base_url else None
+                self.client = AsyncClient(host=host)
+            except TypeError as e:
+                logger.warning(f"Error creating AsyncClient: {e}")
                 self.client = AsyncClient()
         else:
             self.client = client
@@ -108,11 +109,13 @@ class OllamaClient(LLMClient):
             content: str | None = None
             if isinstance(response, dict) and 'message' in response and isinstance(response['message'], dict):
                 content = response['message'].get('content')
-            elif hasattr(response, 'message') and getattr(response, 'message') is not None:
-                msg = getattr(response, 'message')
+            else:
+                # Some clients return objects with a .message attribute instead of dicts
+                msg = getattr(response, 'message', None)
+
                 if isinstance(msg, dict):
                     content = msg.get('content')
-                else:
+                elif msg is not None:
                     content = getattr(msg, 'content', None)
 
             if content is None:

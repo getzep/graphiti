@@ -19,11 +19,9 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import ollama
     from ollama import AsyncClient
 else:
     try:
-        import ollama
         from ollama import AsyncClient
     except ImportError:
         raise ImportError(
@@ -37,14 +35,13 @@ from .client import EmbedderClient, EmbedderConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_EMBEDDING_MODEL = 'bge-m3:567m'
 DEFAULT_BATCH_SIZE = 100
 
 class OllamaEmbedderConfig(EmbedderConfig):
     embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL)
     api_key: str | None = None
-    base_url: str = Field(default=DEFAULT_BASE_URL)
+    base_url: str | None = None
 
 
 class OllamaEmbedder(EmbedderClient):
@@ -65,8 +62,10 @@ class OllamaEmbedder(EmbedderClient):
         if client is None:
             # AsyncClient doesn't necessarily accept api_key; pass host via headers if needed
             try:
-                self.client = AsyncClient(api_key=config.api_key, host=config.base_url)
-            except TypeError:
+                host = config.base_url.rstrip('/v1') if config.base_url else None
+                self.client = AsyncClient(host=host)
+            except TypeError as e:
+                logger.warning(f"Error creating AsyncClient: {e}")
                 self.client = AsyncClient()
         else:
             self.client = client
@@ -93,25 +92,24 @@ class OllamaEmbedder(EmbedderClient):
         # Extract embedding and coerce to list[float]
         values: list[float] | None = None
 
-        if hasattr(result, 'embedding'):
-            cand = getattr(result, 'embedding')
-            if isinstance(cand, (list, tuple)):
-                values = list(cand)  # type: ignore
+        if hasattr(result, 'embeddings'):
+            emb = result.embeddings
+            if isinstance(emb, list) and len(emb) > 0:
+                values = emb[0] if isinstance(emb[0], list | tuple) else emb # type: ignore
         elif isinstance(result, dict):
-            if 'embedding' in result and isinstance(result['embedding'], (list, tuple)):
+            if 'embedding' in result and isinstance(result['embedding'], list | tuple):
                 values = list(result['embedding'])  # type: ignore
             elif 'embeddings' in result and isinstance(result['embeddings'], list) and len(result['embeddings']) > 0:
                 first = result['embeddings'][0]
-                if isinstance(first, dict) and 'embedding' in first and isinstance(first['embedding'], (list, tuple)):
+                if isinstance(first, dict) and 'embedding' in first and isinstance(first['embedding'], list | tuple):
                     values = list(first['embedding'])
-                elif isinstance(first, (list, tuple)):
+                elif isinstance(first, list | tuple):
                     values = list(first)
 
         # If result itself is a list (some clients return list for single input)
-        if values is None and isinstance(result, (list, tuple)):
+        if values is None and isinstance(result, list | tuple):
             # assume it's already the embedding vector
             values = list(result)  # type: ignore
-
         if not values:
             raise ValueError('No embeddings returned from Ollama API in create()')
 
@@ -131,9 +129,9 @@ class OllamaEmbedder(EmbedderClient):
                 # result may be dict with 'embeddings' list or single 'embedding'
                 if isinstance(result, dict) and 'embeddings' in result:
                     for emb in result['embeddings']:
-                        if isinstance(emb, dict) and 'embedding' in emb and isinstance(emb['embedding'], (list, tuple)):
+                        if isinstance(emb, dict) and 'embedding' in emb and isinstance(emb['embedding'], list | tuple):
                             all_embeddings.append(list(emb['embedding']))
-                        elif isinstance(emb, (list, tuple)):
+                        elif isinstance(emb, list | tuple):
                             all_embeddings.append(list(emb))
                         else:
                             # unexpected shape
@@ -158,13 +156,19 @@ class OllamaEmbedder(EmbedderClient):
                     try:
                         single = await self.client.embed(model=self.config.embedding_model or DEFAULT_EMBEDDING_MODEL, input=item)
                         emb = None
-                        if isinstance(single, dict) and 'embedding' in single:
+                        if hasattr(result, 'embeddings'):
+                            _emb = result.embeddings
+                            if isinstance(_emb, list) and len(_emb) > 0:
+                                emb = _emb[0] if isinstance(_emb[0], list | tuple) else _emb # type: ignore
+                        elif isinstance(single, dict) and 'embedding' in single:
                             emb = single['embedding']
-                        elif isinstance(single, (list, tuple)):
+                        elif isinstance(single, dict) and 'embeddings' in single:
+                            emb = single['embeddings']
+                        elif isinstance(single, list | tuple):
                             emb = single[0] if single else None # type: ignore
                         if not emb:
                             raise ValueError('No embeddings returned from Ollama API')
-                        all_embeddings.append(emb)
+                        all_embeddings.append(emb) # type: ignore
                     except Exception as individual_error:
                         logger.error(f'Failed to embed individual item: {individual_error}')
                         raise individual_error
