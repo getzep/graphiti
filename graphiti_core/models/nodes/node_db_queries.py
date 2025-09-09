@@ -49,7 +49,18 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                 entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
             """
-        case _:  # Neo4j and Memgraph
+        case GraphProvider.MEMGRAPH:
+            return """
+                MERGE (n:Episodic {uuid: $uuid})
+                SET n = {
+                uuid: $uuid, name: $name, group_id: $group_id,
+                source_description: $source_description, source: $source,
+                content: $content, entity_edges: $entity_edges,
+                created_at: $created_at, valid_at: $valid_at
+                }
+                RETURN n.uuid AS uuid
+            """
+        case _:  # Neo4j
             return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n:$($group_label)
@@ -96,23 +107,11 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                FOREACH (_ IN CASE WHEN episode.group_label IS NOT NULL THEN [1] ELSE [] END |
-                SET n:`${episode.group_label}`
-                )
-                SET n = {
-                uuid: episode.uuid,
-                name: episode.name,
-                group_id: episode.group_id,
-                source_description: episode.source_description,
-                source: episode.source,
-                content: episode.content,
-                entity_edges: episode.entity_edges,
-                created_at: episode.created_at,
-                valid_at: episode.valid_at
-                }
-                RETURN n.uuid AS uuid;
+                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
+                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
+                RETURN n.uuid AS uuid
             """
-        case _:  # Neo4j 
+        case _:  # Neo4j
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
@@ -183,7 +182,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.MEMGRAPH:
-            return """
+            return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 SET n:{labels}
                 SET n = $entity_data
@@ -255,13 +254,10 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
             return """
                 UNWIND $nodes AS node
                 MERGE (n:Entity {uuid: node.uuid})
-                FOREACH (label IN CASE WHEN node.labels IS NOT NULL THEN node.labels ELSE [] END |
-                SET n:`${label}`
-                )
                 SET n = node
                 WITH n, node
                 SET n.name_embedding = node.name_embedding
-                RETURN n.uuid AS uuid;
+                RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
             return """

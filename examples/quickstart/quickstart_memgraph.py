@@ -48,7 +48,9 @@ load_dotenv()
 # Memgraph connection parameters
 # Make sure Memgraph is running (default port 7687, same as Neo4j)
 memgraph_uri = os.environ.get('MEMGRAPH_URI', 'bolt://localhost:7687')
-memgraph_user = os.environ.get('MEMGRAPH_USER', '')  # Memgraph often doesn't require auth by default
+memgraph_user = os.environ.get(
+    'MEMGRAPH_USER', ''
+)  # Memgraph often doesn't require auth by default
 memgraph_password = os.environ.get('MEMGRAPH_PASSWORD', '')
 
 if not memgraph_uri:
@@ -66,7 +68,7 @@ async def main():
 
     # Initialize Memgraph driver
     memgraph_driver = MemgraphDriver(memgraph_uri, memgraph_user, memgraph_password)
-    
+
     # Initialize Graphiti with Memgraph connection
     graphiti = Graphiti(graph_driver=memgraph_driver)
 

@@ -154,7 +154,7 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
         return f'array_cosine_similarity({vec1}, {vec2})'
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'cosineSimilarity({vec1}, {vec2})'
+        return f'vector_search.cosine_similarity({vec1}, {vec2})'
 
     return f'vector.similarity.cosine({vec1}, {vec2})'
 

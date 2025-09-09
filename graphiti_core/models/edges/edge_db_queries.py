@@ -104,7 +104,7 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
                 MATCH (target:Entity {uuid: $edge_data.target_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                 SET e = $edge_data
-                WITH e e.fact_embedding = $edge_data.fact_embedding
+                SET e.fact_embedding = $edge_data.fact_embedding
                 RETURN e.uuid AS uuid
             """
         case _:  # Neo4j

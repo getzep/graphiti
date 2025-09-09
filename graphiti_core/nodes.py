@@ -299,7 +299,7 @@ class EpisodicNode(Node):
             'source': self.source.value,
         }
 
-        if driver.provider == GraphProvider.NEO4J:
+        if driver.provider in (GraphProvider.NEO4J, GraphProvider.MEMGRAPH):
             episode_args['group_label'] = 'Episodic_' + self.group_id.replace('-', '')
 
         result = await driver.execute_query(
