@@ -271,6 +271,8 @@ class Graphiti:
             return 'gemini'
         elif 'groq' in class_name:
             return 'groq'
+        elif 'ollama' in class_name:
+            return 'ollama'
         # Database providers
         elif 'neo4j' in class_name:
             return 'neo4j'

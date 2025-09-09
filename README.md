@@ -196,6 +196,9 @@ pip install graphiti-core[groq]
 # Install with Google Gemini support
 pip install graphiti-core[google-genai]
 
+# Install with Ollama support
+pip install graphiti-core[ollama]
+
 # Install with multiple providers
 pip install graphiti-core[anthropic,groq,google-genai]
 
