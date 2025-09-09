@@ -34,9 +34,6 @@ except ImportError:
     helpers = None
     _HAS_OPENSEARCH = False
 
-if TYPE_CHECKING:
-    from opensearchpy import OpenSearch, helpers
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
@@ -166,7 +163,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    aoss_client: OpenSearch | None
+    aoss_client: OpenSearch | None  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:

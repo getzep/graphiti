@@ -62,16 +62,16 @@ class Neo4jDriver(GraphDriver):
         if aoss_host and aoss_port and boto3 is not None:
             try:
                 session = boto3.Session()
-                self.aoss_client = OpenSearch(
+                self.aoss_client = OpenSearch(  # type: ignore
                     hosts=[{'host': aoss_host, 'port': aoss_port}],
-                    http_auth=Urllib3AWSV4SignerAuth(
+                    http_auth=Urllib3AWSV4SignerAuth(  # type: ignore
                         session.get_credentials(), session.region_name, 'aoss'
                     ),
                     use_ssl=True,
                     verify_certs=True,
                     connection_class=Urllib3HttpConnection,
                     pool_maxsize=20,
-                )
+                )  # type: ignore
             except Exception as e:
                 logger.warning(f'Failed to initialize OpenSearch client: {e}')
                 self.aoss_client = None

@@ -246,7 +246,7 @@ def build_aoss_node_filters(group_ids: list[str], search_filters: SearchFilters)
 
 
 def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters) -> list[dict]:
-    filters = [{'terms': {'group_id': group_ids}}]
+    filters: list[dict] = [{'terms': {'group_id': group_ids}}]
 
     if search_filters.edge_types:
         filters.append({'terms': {'edge_types': search_filters.edge_types}})
