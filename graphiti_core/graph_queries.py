@@ -140,7 +140,7 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'CALL text_search.search("{name}", {query}) YIELD node'
+        return f'CALL text_search.search_all("{name}", {query})'
 
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
@@ -154,7 +154,7 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
         return f'array_cosine_similarity({vec1}, {vec2})'
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'CALL vector_search.cosine_similarity({vec1}, {vec2}) YIELD similarity RETURN similarity AS score'
+        return f'cosineSimilarity({vec1}, {vec2})'
 
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
@@ -169,6 +169,6 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'CALL text_search.search_edges("{name}", $query) YIELD node'
+        return f'CALL text_search.search_all_edges("{name}", $query)'
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'

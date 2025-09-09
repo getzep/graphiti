@@ -191,6 +191,7 @@ async def add_nodes_and_edges_bulk_tx(
         for edge in episodic_edges:
             await tx.run(episodic_edge_query, **edge.model_dump())
     else:
+        print(episodes)
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(get_entity_node_save_bulk_query(driver.provider, nodes), nodes=nodes)
         await tx.run(

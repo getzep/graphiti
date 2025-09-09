@@ -18,7 +18,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-from neo4j import GraphDatabase
+from neo4j import AsyncGraphDatabase
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
@@ -31,7 +31,7 @@ class MemgraphDriver(GraphDriver):
 
     def __init__(self, uri: str, user: str | None, password: str | None, database: str = 'memgraph'):
         super().__init__()
-        self.client = GraphDatabase.driver(
+        self.client = AsyncGraphDatabase.driver(
             uri=uri,
             auth=(user or '', password or ''),
         )
@@ -57,15 +57,11 @@ class MemgraphDriver(GraphDriver):
             database = kwargs.pop('database_', self._database)
             kwargs.pop('parameters_', None)  # Remove if present
         
-        with self.client.session(database=database) as session:
+        async with self.client.session(database=database) as session:
             try:
-                # Debug: Print the query and parameters
-                print(f"DEBUG - Memgraph Query: {cypher_query_}")
-                print(f"DEBUG - Memgraph Params: {params}")
-                
-                result = session.run(cypher_query_, params)
-                records = list(result)
-                summary = result.consume()
+                result = await session.run(cypher_query_, params)
+                records = [record async for record in result]
+                summary = await result.consume()
                 keys = result.keys()    
                 return (records, summary, keys)
             except Exception as e:
@@ -77,7 +73,7 @@ class MemgraphDriver(GraphDriver):
         return self.client.session(database=_database)  # type: ignore
 
     async def close(self) -> None:
-        return self.client.close()
+        return await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
         # TODO: Implement index deletion for Memgraph

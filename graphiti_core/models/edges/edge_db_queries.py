@@ -167,8 +167,8 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
                 MATCH (target:Entity {uuid: edge.target_node_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
                 SET e = edge
-                WITH e, edge e.fact_embedding = edge.fact_embedding
-                RETURN edge.uuid AS uuid
+                SET e.fact_embedding = edge.fact_embedding
+                RETURN edge.uuid AS uuid;
             """
         case _:
             return """
