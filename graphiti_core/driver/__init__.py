@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from neo4j import Neo4jDriver
+from .neo4j_driver import Neo4jDriver
+from .memgraph_driver import MemgraphDriver
 
-__all__ = ['Neo4jDriver']
+__all__ = ['Neo4jDriver', 'MemgraphDriver']
