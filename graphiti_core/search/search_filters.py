@@ -54,6 +54,16 @@ class SearchFilters(BaseModel):
     expired_at: list[list[DateFilter]] | None = Field(default=None)
 
 
+def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
+    mapping = {
+        ComparisonOperator.greater_than: 'gt',
+        ComparisonOperator.less_than: 'lt',
+        ComparisonOperator.greater_than_equal: 'gte',
+        ComparisonOperator.less_than_equal: 'lte',
+    }
+    return mapping.get(op, op.value)
+
+
 def node_search_filter_query_constructor(
     filters: SearchFilters,
     provider: GraphProvider,
@@ -259,7 +269,11 @@ def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters)
             for and_group in ranges:
                 and_filters = []
                 for df in and_group:  # df is a DateFilter
-                    range_query = {'range': {field: {df.comparison_operator.value: df.date}}}
+                    range_query = {
+                        'range': {
+                            field: {cypher_to_opensearch_operator(df.comparison_operator): df.date}
+                        }
+                    }
                     and_filters.append(range_query)
                 should_clauses.append({'bool': {'filter': and_filters}})
             filters.append({'bool': {'should': should_clauses, 'minimum_should_match': 1}})
