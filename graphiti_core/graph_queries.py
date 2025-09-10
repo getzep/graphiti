@@ -140,7 +140,7 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'CALL text_search.search_all("{name}", {query})'
+        return f'CALL text_search.search_all("{name}", {query}, {limit})'
 
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
@@ -169,6 +169,6 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     if provider == GraphProvider.MEMGRAPH:
-        return f'CALL text_search.search_all_edges("{name}", $query)'
+        return f'CALL text_search.search_all_edges("{name}", $query, {limit})'
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
