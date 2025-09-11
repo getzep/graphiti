@@ -36,8 +36,10 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
+from graphiti_core.search.search import search
+from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 
 logger = logging.getLogger(__name__)
@@ -258,12 +260,44 @@ async def resolve_extracted_edges(
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    search_results = await semaphore_gather(
-        get_relevant_edges(driver, extracted_edges, SearchFilters()),
-        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
+    valid_uuids_list: list[list[str]] = await semaphore_gather(
+        *[
+            EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
+            for edge in extracted_edges
+        ]
     )
 
-    related_edges_lists, edge_invalidation_candidates = search_results
+    related_edges_results: list[SearchResults] = await semaphore_gather(
+        *[
+            search(
+                clients,
+                extracted_edge.fact,
+                group_ids=[extracted_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(uuids=valid_uuids),
+            )
+            for extracted_edge, valid_uuids in zip(extracted_edges, valid_uuids_list)
+        ]
+    )
+
+    related_edges_lists: list[list[EntityEdge]] = [result.edges for result in related_edges_results]
+
+    edge_invalidation_candidate_results: list[SearchResults] = await semaphore_gather(
+        *[
+            search(
+                clients,
+                extracted_edge.fact,
+                group_ids=[extracted_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(),
+            )
+            for extracted_edge in extracted_edges
+        ]
+    )
+
+    edge_invalidation_candidates: list[list[EntityEdge]] = [
+        result.edges for result in edge_invalidation_candidate_results
+    ]
 
     logger.debug(
         f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
