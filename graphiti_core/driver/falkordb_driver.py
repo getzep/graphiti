@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -159,6 +160,28 @@ class FalkorDriver(GraphDriver):
             'CALL db.indexes() YIELD name DROP INDEX name',
         )
 
+    async def health_check(self) -> None:
+        """Check FalkorDB connectivity by running a simple query."""
+        try:
+            await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
+            return None
+        except Exception as e:
+            print(f"FalkorDB health check failed: {e}")
+            raise
+
+    @staticmethod
+    def convert_datetimes_to_strings(obj):
+        if isinstance(obj, dict):
+            return {k: FalkorDriver.convert_datetimes_to_strings(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [FalkorDriver.convert_datetimes_to_strings(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(FalkorDriver.convert_datetimes_to_strings(item) for item in obj)
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        else:
+            return obj
+    
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
