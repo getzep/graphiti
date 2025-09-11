@@ -63,8 +63,8 @@ class Neo4jDriver(GraphDriver):
             try:
                 session = boto3.Session()
                 self.aoss_client = OpenSearch(  # type: ignore
-                    hosts=[{'host': aoss_host, 'port': aoss_port}],
-                    http_auth=Urllib3AWSV4SignerAuth(  # type: ignore
+                    hosts=[{'host': aoss_host, 'port': aoss_port, 'scheme': 'https'}],
+                    http_auth=Urllib3AWSV4SignerAuth(
                         session.get_credentials(), session.region_name, 'aoss'
                     ),
                     use_ssl=True,

@@ -77,6 +77,11 @@ class Edge(BaseModel, ABC):
                 uuid=self.uuid,
             )
 
+            if driver.aoss_client:
+                await driver.aoss_client.delete(
+                    index='entity_edges', id=self.uuid, routing=self.group_id
+                )
+
         logger.debug(f'Deleted Edge: {self.uuid}')
 
     @classmethod
@@ -107,6 +112,12 @@ class Edge(BaseModel, ABC):
                 """,
                 uuids=uuids,
             )
+
+            if driver.aoss_client:
+                await driver.aoss_client.delete_by_query(
+                    index='entity_edges',
+                    body={'query': {'terms': {'uuid': uuids}}},
+                )
 
         logger.debug(f'Deleted Edges: {uuids}')
 
@@ -350,6 +361,35 @@ class EntityEdge(Edge):
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
+
+    @classmethod
+    async def get_between_nodes(
+        cls, driver: GraphDriver, source_node_uuid: str, target_node_uuid: str
+    ):
+        match_query = """
+            MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+        """
+        if driver.provider == GraphProvider.KUZU:
+            match_query = """
+                MATCH (n:Entity {uuid: $source_node_uuid})
+                      -[:RELATES_TO]->(e:RelatesToNode_)
+                      -[:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+            """
+
+        records, _, _ = await driver.execute_query(
+            match_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider),
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
+            routing_='r',
+        )
+
+        edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+
+        return edges
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):

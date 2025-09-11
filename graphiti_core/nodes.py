@@ -94,13 +94,35 @@ class Node(BaseModel, ABC):
     async def delete(self, driver: GraphDriver):
         match driver.provider:
             case GraphProvider.NEO4J:
-                await driver.execute_query(
+                result = await driver.execute_query(
                     """
-                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})-[r]-()
+                    WITH collect(r.uuid) AS edge_uuids, n
                     DETACH DELETE n
+                    RETURN edge_uuids
                     """,
                     uuid=self.uuid,
                 )
+
+                edge_uuids: list[str] = []
+                if result and result[0].get('edge_uuids'):
+                    edge_uuids = result[0]['edge_uuids']
+
+                if driver.aoss_client:
+                    # Delete the node from OpenSearch indices
+                    for index in ('episodes', 'entities', 'communities'):
+                        await driver.aoss_client.delete(
+                            index=index, id=self.uuid, routing=self.group_id
+                        )
+
+                    # Bulk delete the detached edges
+                    if edge_uuids:
+                        actions = []
+                        for eid in edge_uuids:
+                            actions.append({'delete': {'_index': 'entity_edges', '_id': eid}})
+
+                        await driver.aoss_client.bulk(body=actions)
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -162,6 +184,32 @@ class Node(BaseModel, ABC):
                         group_id=group_id,
                         batch_size=batch_size,
                     )
+
+                if driver.aoss_client:
+                    await driver.aoss_client.delete_by_query(
+                        index='episodes',
+                        body={'query': {'term': {'group_id': group_id}}},
+                        routing=group_id,
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index='entities',
+                        body={'query': {'term': {'group_id': group_id}}},
+                        routing=group_id,
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index='communities',
+                        body={'query': {'term': {'group_id': group_id}}},
+                        routing=group_id,
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index='entity_edges',
+                        body={'query': {'term': {'group_id': group_id}}},
+                        routing=group_id,
+                    )
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -240,6 +288,23 @@ class Node(BaseModel, ABC):
                 )
             case _:  # Neo4J, Neptune
                 async with driver.session() as session:
+                    # Collect all edge UUIDs before deleting nodes
+                    result = await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community)
+                        WHERE n.uuid IN $uuids
+                        MATCH (n)-[r]-()
+                        RETURN collect(r.uuid) AS edgeUuids
+                        """,
+                        uuids=uuids,
+                    )
+
+                    record = await result.single()
+                    edge_uuids: list[str] = (
+                        record['edgeUuids'] if record and record['edgeUuids'] else []
+                    )
+
+                    # Now delete the nodes in batches
                     await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community)
@@ -252,6 +317,19 @@ class Node(BaseModel, ABC):
                         uuids=uuids,
                         batch_size=batch_size,
                     )
+
+                if driver.aoss_client:
+                    for index in ('episodes', 'entities', 'communities'):
+                        await driver.aoss_client.delete_by_query(
+                            index=index,
+                            body={'query': {'terms': {'uuid': uuids}}},
+                        )
+
+                    if edge_uuids:
+                        actions = [
+                            {'delete': {'_index': 'entity_edges', '_id': eid}} for eid in edge_uuids
+                        ]
+                        await driver.aoss_client.bulk(body=actions)
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...

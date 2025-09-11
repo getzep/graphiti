@@ -48,7 +48,7 @@ class GraphProvider(Enum):
 
 aoss_indices = [
     {
-        'index_name': 'entities',
+        'index_name': 'entities_test',
         'body': {
             'mappings': {
                 'properties': {
@@ -74,7 +74,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'communities',
+        'index_name': 'communities_test',
         'body': {
             'mappings': {
                 'properties': {
@@ -102,7 +102,7 @@ aoss_indices = [
         },
     },
     {
-        'index_name': 'entity_edges',
+        'index_name': 'entity_edges_test',
         'body': {
             'mappings': {
                 'properties': {
@@ -232,6 +232,31 @@ class GraphDriver(ABC):
 
             if client.indices.exists(index=index_name):
                 client.indices.delete(index=index_name)
+
+    async def clear_aoss_indices(self):
+        client = self.aoss_client
+
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return
+
+        for index in aoss_indices:
+            index_name = index['index_name']
+
+            if client.indices.exists(index=index_name):
+                try:
+                    # Delete all documents but keep the index
+                    response = client.delete_by_query(
+                        index=index_name,
+                        body={'query': {'match_all': {}}},
+                        refresh=True,
+                        conflicts='proceed',
+                    )
+                    logger.info(f"Cleared index '{index_name}': {response}")
+                except Exception as e:
+                    logger.error(f"Error clearing index '{index_name}': {e}")
+            else:
+                logger.warning(f"Index '{index_name}' does not exist")
 
     def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
