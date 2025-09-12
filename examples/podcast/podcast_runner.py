@@ -81,7 +81,13 @@ class IsPresidentOf(BaseModel):
 async def main(use_bulk: bool = False):
     setup_logging()
     graph_driver = Neo4jDriver(
-        neo4j_uri, neo4j_user, neo4j_password, aoss_host=aoss_host, aoss_port=aoss_port
+        neo4j_uri,
+        neo4j_user,
+        neo4j_password,
+        aoss_host=aoss_host,
+        aoss_port=aoss_port,
+        region='us-west-2',
+        service='es',
     )
     # client = Graphiti(
     #     neo4j_uri,
