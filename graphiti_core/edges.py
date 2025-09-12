@@ -25,7 +25,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import ENTITY_EDGE_INDEX_NAME, GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
@@ -79,7 +79,7 @@ class Edge(BaseModel, ABC):
 
             if driver.aoss_client:
                 await driver.aoss_client.delete(
-                    index='entity_edges', id=self.uuid, routing=self.group_id
+                    index=ENTITY_EDGE_INDEX_NAME, id=self.uuid, routing=self.group_id
                 )
 
         logger.debug(f'Deleted Edge: {self.uuid}')
@@ -115,7 +115,7 @@ class Edge(BaseModel, ABC):
 
             if driver.aoss_client:
                 await driver.aoss_client.delete_by_query(
-                    index='entity_edges',
+                    index=ENTITY_EDGE_INDEX_NAME,
                     body={'query': {'terms': {'uuid': uuids}}},
                 )
 
@@ -272,7 +272,7 @@ class EntityEdge(Edge):
                     'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
                     'size': 1,
                 },
-                index='entity_edges',
+                index=ENTITY_EDGE_INDEX_NAME,
                 routing=self.group_id,
             )
 
@@ -325,7 +325,7 @@ class EntityEdge(Edge):
             edge_data.update(self.attributes or {})
 
             if driver.aoss_client:
-                driver.save_to_aoss('entity_edges', [edge_data])  # pyright: ignore reportAttributeAccessIssue
+                driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),

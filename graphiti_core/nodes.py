@@ -26,7 +26,14 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import (
+    COMMUNITY_INDEX_NAME,
+    ENTITY_EDGE_INDEX_NAME,
+    ENTTITY_INDEX_NAME,
+    EPISODE_INDEX_NAME,
+    GraphDriver,
+    GraphProvider,
+)
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
@@ -110,7 +117,7 @@ class Node(BaseModel, ABC):
 
                 if driver.aoss_client:
                     # Delete the node from OpenSearch indices
-                    for index in ('episodes', 'entities', 'communities'):
+                    for index in (EPISODE_INDEX_NAME, ENTTITY_INDEX_NAME, COMMUNITY_INDEX_NAME):
                         await driver.aoss_client.delete(
                             index=index, id=self.uuid, routing=self.group_id
                         )
@@ -119,7 +126,9 @@ class Node(BaseModel, ABC):
                     if edge_uuids:
                         actions = []
                         for eid in edge_uuids:
-                            actions.append({'delete': {'_index': 'entity_edges', '_id': eid}})
+                            actions.append(
+                                {'delete': {'_index': ENTITY_EDGE_INDEX_NAME, '_id': eid}}
+                            )
 
                         await driver.aoss_client.bulk(body=actions)
 
@@ -187,25 +196,25 @@ class Node(BaseModel, ABC):
 
                 if driver.aoss_client:
                     await driver.aoss_client.delete_by_query(
-                        index='episodes',
+                        index=EPISODE_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
                         routing=group_id,
                     )
 
                     await driver.aoss_client.delete_by_query(
-                        index='entities',
+                        index=ENTTITY_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
                         routing=group_id,
                     )
 
                     await driver.aoss_client.delete_by_query(
-                        index='communities',
+                        index=COMMUNITY_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
                         routing=group_id,
                     )
 
                     await driver.aoss_client.delete_by_query(
-                        index='entity_edges',
+                        index=ENTITY_EDGE_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
                         routing=group_id,
                     )
@@ -319,7 +328,7 @@ class Node(BaseModel, ABC):
                     )
 
                 if driver.aoss_client:
-                    for index in ('episodes', 'entities', 'communities'):
+                    for index in (EPISODE_INDEX_NAME, ENTTITY_INDEX_NAME, COMMUNITY_INDEX_NAME):
                         await driver.aoss_client.delete_by_query(
                             index=index,
                             body={'query': {'terms': {'uuid': uuids}}},
@@ -327,7 +336,8 @@ class Node(BaseModel, ABC):
 
                     if edge_uuids:
                         actions = [
-                            {'delete': {'_index': 'entity_edges', '_id': eid}} for eid in edge_uuids
+                            {'delete': {'_index': ENTITY_EDGE_INDEX_NAME, '_id': eid}}
+                            for eid in edge_uuids
                         ]
                         await driver.aoss_client.bulk(body=actions)
 
@@ -509,7 +519,7 @@ class EntityNode(Node):
                     'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
                     'size': 1,
                 },
-                index='entities',
+                index=ENTTITY_INDEX_NAME,
                 routing=self.group_id,
             )
 
@@ -557,7 +567,7 @@ class EntityNode(Node):
             labels = ':'.join(self.labels + ['Entity'])
 
             if driver.aoss_client:
-                driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+                driver.save_to_aoss(ENTTITY_INDEX_NAME, [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),

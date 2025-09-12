@@ -56,8 +56,9 @@ class Neo4jDriver(GraphDriver):
         database: str = 'neo4j',
         aoss_host: str | None = None,
         aoss_port: int | None = None,
-        region: str | None = None,
-        service: str | None = None,
+        aws_profile_name: str | None = None,
+        aws_region: str | None = None,
+        aws_service: str | None = None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -69,9 +70,9 @@ class Neo4jDriver(GraphDriver):
         self.aoss_client = None
         if aoss_host and aoss_port and boto3 is not None:
             try:
-                region = region
-                service = service
-                credentials = boto3.Session(profile_name='zep-development').get_credentials()
+                region = aws_region
+                service = aws_service
+                credentials = boto3.Session(profile_name=aws_profile_name).get_credentials()
                 auth = AWSV4SignerAuth(credentials, region, service)
 
                 self.aoss_client = OpenSearch(
