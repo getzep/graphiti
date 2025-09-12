@@ -95,6 +95,8 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
+            if driver.aoss_client:
+                await driver.clear_aoss_indices()
 
         async def delete_group_ids(tx):
             labels = ['Entity', 'Episodic', 'Community']
@@ -151,9 +153,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                    MATCH (e:Episodic)
-                    WHERE e.valid_at <= $reference_time
-                    """
+                        MATCH (e:Episodic)
+                        WHERE e.valid_at <= $reference_time
+                        """
         + query_filter
         + """
         RETURN

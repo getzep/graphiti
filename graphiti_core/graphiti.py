@@ -60,9 +60,7 @@ from graphiti_core.search.search_config_recipes import (
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
-    get_edge_invalidation_candidates,
     get_mentioned_nodes,
-    get_relevant_edges,
 )
 from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
@@ -1037,10 +1035,28 @@ class Graphiti:
 
         updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
 
-        related_edges = (await get_relevant_edges(self.driver, [updated_edge], SearchFilters()))[0]
+        valid_edges = await EntityEdge.get_between_nodes(
+            self.driver, edge.source_node_uuid, edge.target_node_uuid
+        )
+
+        related_edges = (
+            await search(
+                self.clients,
+                updated_edge.fact,
+                group_ids=[updated_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
+            )
+        ).edges
         existing_edges = (
-            await get_edge_invalidation_candidates(self.driver, [updated_edge], SearchFilters())
-        )[0]
+            await search(
+                self.clients,
+                updated_edge.fact,
+                group_ids=[updated_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(),
+            )
+        ).edges
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,

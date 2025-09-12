@@ -52,6 +52,7 @@ class SearchFilters(BaseModel):
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
+    edge_uuids: list[str] | None = Field(default=None)
 
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
@@ -107,6 +108,10 @@ def edge_search_filter_query_constructor(
         edge_types = filters.edge_types
         filter_queries.append('e.name in $edge_types')
         filter_params['edge_types'] = edge_types
+
+    if filters.edge_uuids is not None:
+        filter_queries.append('e.uuid in $edge_uuids')
+        filter_params['edge_uuids'] = filters.edge_uuids
 
     if filters.node_labels is not None:
         if provider == GraphProvider.KUZU:
@@ -260,6 +265,9 @@ def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters)
 
     if search_filters.edge_types:
         filters.append({'terms': {'edge_types': search_filters.edge_types}})
+
+    if search_filters.edge_uuids:
+        filters.append({'terms': {'uuid': search_filters.edge_uuids}})
 
     for field in ['valid_at', 'invalid_at', 'created_at', 'expired_at']:
         ranges = getattr(search_filters, field)
