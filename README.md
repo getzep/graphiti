@@ -187,6 +187,9 @@ uv add graphiti-core[neptune]
 ### You can also install optional LLM providers as extras:
 
 ```bash
+# Install with VS Code models support (no external API keys required)
+pip install graphiti-core[vscodemodels]
+
 # Install with Anthropic support
 pip install graphiti-core[anthropic]
 
@@ -197,10 +200,10 @@ pip install graphiti-core[groq]
 pip install graphiti-core[google-genai]
 
 # Install with multiple providers
-pip install graphiti-core[anthropic,groq,google-genai]
+pip install graphiti-core[vscodemodels,anthropic,groq,google-genai]
 
 # Install with FalkorDB and LLM providers
-pip install graphiti-core[falkordb,anthropic,google-genai]
+pip install graphiti-core[falkordb,vscodemodels,google-genai]
 
 # Install with Amazon Neptune
 pip install graphiti-core[neptune]
@@ -222,8 +225,8 @@ performance.
 
 > [!IMPORTANT]
 > Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
-> environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
+> environment, or use VS Code models by installing `graphiti-core[vscodemodels]` for no external API key requirements.
+> Support for Anthropic, Groq, and Google Gemini LLM inferences is also available. Other LLM providers may be supported via OpenAI
 > compatible APIs.
 
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory.
@@ -268,6 +271,24 @@ Please see the [server README](./server/README.md) for more information.
 In addition to the Neo4j and OpenAi-compatible credentials, Graphiti also has a few optional environment variables.
 If you are using one of our supported models, such as Anthropic or Voyage models, the necessary environment variables
 must be set.
+
+### VS Code Models Configuration
+
+When using VS Code models, no external API keys are required. However, you can configure the behavior using these optional environment variables:
+
+```bash
+# Enable VS Code models (automatically detected when available)
+USE_VSCODE_MODELS=true
+
+# Optional: Override default model names (uses VS Code's available models)
+VSCODE_LLM_MODEL="gpt-4o-mini"
+VSCODE_EMBEDDING_MODEL="embedding-001"
+
+# Optional: Configure embedding dimensions (default: 1024)
+VSCODE_EMBEDDING_DIM=1024
+```
+
+The VS Code integration automatically detects when VS Code is available and provides intelligent fallbacks when it's not, ensuring your application works consistently across different environments.
 
 ### Database Configuration
 
@@ -352,6 +373,89 @@ driver = NeptuneDriver(host=neptune_uri, aoss_host=aoss_host, port=neptune_port)
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
 ```
+
+## Using Graphiti with VS Code Models
+
+Graphiti supports VS Code's built-in language models and embeddings for LLM inference, embedding generation, and cross-encoding. This integration provides a seamless experience when working within VS Code, utilizing the editor's native AI capabilities without requiring external API keys.
+
+Install Graphiti with VS Code models support:
+
+```bash
+uv add "graphiti-core[vscodemodels]"
+
+# or
+
+pip install "graphiti-core[vscodemodels]"
+```
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.vscode_client import VSCodeClient
+from graphiti_core.embedder.vscode_embedder import VSCodeEmbedder
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.embedder.client import EmbedderConfig
+
+# Initialize Graphiti with VS Code clients
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=VSCodeClient(
+        config=LLMConfig(
+            model="gpt-4o-mini",  # VS Code model name
+            small_model="gpt-4o-mini"
+        )
+    ),
+    embedder=VSCodeEmbedder(
+        config=EmbedderConfig(
+            embedding_model="embedding-001",  # VS Code embedding model
+            embedding_dim=1024  # 1024-dimensional vectors
+        )
+    )
+)
+
+# Now you can use Graphiti with VS Code's native models
+```
+
+### VS Code Configuration
+
+The VS Code integration automatically detects available models in your VS Code environment. Make sure you have:
+
+1. **Language Models**: Any compatible VS Code language model extension (GitHub Copilot, Azure OpenAI, etc.)
+2. **Embedding Models**: Compatible embedding model extensions or fallback to semantic chunking
+
+**Environment Variables for VS Code:**
+```bash
+# Optional: Specify preferred models
+VSCODE_LLM_MODEL=gpt-4o
+VSCODE_EMBEDDING_MODEL=text-embedding-ada-002
+VSCODE_EMBEDDING_DIM=1536
+
+# For development/testing
+USE_VSCODE_MODELS=true
+```
+
+The VS Code integration provides:
+- **Native VS Code LLM support** with intelligent fallbacks for consistent responses
+- **1024-dimensional embeddings** with semantic clustering for consistent similarity preservation
+- **No external API keys required** - uses VS Code's built-in AI capabilities
+- **Seamless editor integration** - works directly within your VS Code environment
+
+> [!NOTE]
+> The VS Code models integration automatically detects VS Code availability and provides intelligent fallbacks when VS Code is not available, ensuring your application works across different environments.
+
+### Troubleshooting VS Code Integration
+
+**Common Issues:**
+
+1. **Models not detected**: Ensure you have VS Code language model extensions installed and active
+2. **Embedding dimension mismatch**: Configure `VSCODE_EMBEDDING_DIM` to match your model's output dimension
+3. **Authentication errors**: Make sure your VS Code extensions are properly authenticated
+
+**Compatibility:**
+- Works with GitHub Copilot, Azure OpenAI, and other VS Code AI extensions
+- Requires VS Code with language model API support
+- Falls back gracefully to semantic chunking when embeddings are unavailable
 
 ## Using Graphiti with Azure OpenAI
 
