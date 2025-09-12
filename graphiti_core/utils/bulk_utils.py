@@ -25,7 +25,7 @@ from typing_extensions import Any
 
 from graphiti_core.driver.driver import (
     ENTITY_EDGE_INDEX_NAME,
-    ENTTITY_INDEX_NAME,
+    ENTITY_INDEX_NAME,
     EPISODE_INDEX_NAME,
     GraphDriver,
     GraphDriverSession,
@@ -211,7 +211,7 @@ async def add_nodes_and_edges_bulk_tx(
 
         if driver.aoss_client:
             driver.save_to_aoss(EPISODE_INDEX_NAME, episodes)
-            driver.save_to_aoss(ENTTITY_INDEX_NAME, nodes)
+            driver.save_to_aoss(ENTITY_INDEX_NAME, nodes)
             driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, edges)
 
 

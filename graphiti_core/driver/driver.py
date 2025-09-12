@@ -54,7 +54,7 @@ class GraphProvider(Enum):
 
 aoss_indices = [
     {
-        'index_name': ENTTITY_INDEX_NAME,
+        'index_name': ENTITY_INDEX_NAME,
         'body': {
             'settings': {'index': {'knn': True}},
             'mappings': {
