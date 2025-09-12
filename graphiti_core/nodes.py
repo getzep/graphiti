@@ -111,9 +111,7 @@ class Node(BaseModel, ABC):
                     uuid=self.uuid,
                 )
 
-                edge_uuids: list[str] = []
-                if records and records.get('edge_uuids'):
-                    edge_uuids = records['edge_uuids']
+                edge_uuids: list[str] = records[0].get('edge_uuids', []) if records else []
 
                 if driver.aoss_client:
                     # Delete the node from OpenSearch indices
@@ -303,14 +301,14 @@ class Node(BaseModel, ABC):
                         MATCH (n:Entity|Episodic|Community)
                         WHERE n.uuid IN $uuids
                         MATCH (n)-[r]-()
-                        RETURN collect(r.uuid) AS edgeUuids
+                        RETURN collect(r.uuid) AS edge_uuids
                         """,
                         uuids=uuids,
                     )
 
                     record = await result.single()
                     edge_uuids: list[str] = (
-                        record['edgeUuids'] if record and record['edgeUuids'] else []
+                        record['edge_uuids'] if record and record['edge_uuids'] else []
                     )
 
                     # Now delete the nodes in batches
