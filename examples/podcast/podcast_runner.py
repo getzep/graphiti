@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
-from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -35,8 +34,6 @@ load_dotenv()
 neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
 neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
 neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
-aoss_host = os.environ.get('AOSS_HOST') or None
-aoss_port = os.environ.get('AOSS_PORT') or None
 
 
 def setup_logging():

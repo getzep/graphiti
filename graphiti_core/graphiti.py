@@ -1035,7 +1035,7 @@ class Graphiti:
 
         updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
 
-        valid_uuids = await EntityEdge.get_between_nodes(
+        valid_edges = await EntityEdge.get_between_nodes(
             self.driver, edge.source_node_uuid, edge.target_node_uuid
         )
 
@@ -1045,7 +1045,7 @@ class Graphiti:
                 updated_edge.fact,
                 group_ids=[updated_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(uuids=valid_uuids),
+                search_filter=SearchFilters(uuids=[edge.uuid for edge in valid_edges]),
             )
         ).edges
         existing_edges = (

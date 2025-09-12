@@ -276,7 +276,7 @@ async def resolve_extracted_edges(
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(uuids=valid_uuids),
             )
-            for extracted_edge, valid_uuids in zip(extracted_edges, valid_uuids_list)
+            for extracted_edge, valid_uuids in zip(extracted_edges, valid_uuids_list, strict=True)
         ]
     )
 

@@ -73,7 +73,7 @@ class Neo4jDriver(GraphDriver):
                 region = aws_region
                 service = aws_service
                 credentials = boto3.Session(profile_name=aws_profile_name).get_credentials()
-                auth = AWSV4SignerAuth(credentials, region, service)
+                auth = AWSV4SignerAuth(credentials, region or '', service or '')
 
                 self.aoss_client = OpenSearch(
                     hosts=[{'host': aoss_host, 'port': aoss_port}],

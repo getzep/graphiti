@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import copy
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from datetime import datetime
@@ -38,10 +39,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
 
-EPISODE_INDEX_NAME = 'episodes-test'
-ENTTITY_INDEX_NAME = 'entities_test'
-COMMUNITY_INDEX_NAME = 'communities-test'
-ENTITY_EDGE_INDEX_NAME = 'entity_edges_test'
+ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX', 'entities')
+EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX', 'episodes')
+COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'communities')
+ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges')
 
 
 class GraphProvider(Enum):
