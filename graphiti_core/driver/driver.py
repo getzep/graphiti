@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
 
-ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX', 'entities')
-EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX', 'episodes')
+ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX_NAME', 'entities')
+EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX_NAME', 'episodes')
 COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'communities')
 ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges')
 
@@ -279,7 +279,7 @@ class GraphDriver(ABC):
             else:
                 logger.warning(f"Index '{index_name}' does not exist")
 
-    def save_to_aoss(self, name: str, data: list[dict]) -> int:
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
         if not client or not helpers:
             logger.warning('No OpenSearch client found')

@@ -1045,7 +1045,7 @@ class Graphiti:
                 updated_edge.fact,
                 group_ids=[updated_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(uuids=[edge.uuid for edge in valid_edges]),
+                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
             )
         ).edges
         existing_edges = (

@@ -210,9 +210,9 @@ async def add_nodes_and_edges_bulk_tx(
         )
 
         if driver.aoss_client:
-            driver.save_to_aoss(EPISODE_INDEX_NAME, episodes)
-            driver.save_to_aoss(ENTITY_INDEX_NAME, nodes)
-            driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, edges)
+            await driver.save_to_aoss(EPISODE_INDEX_NAME, episodes)
+            await driver.save_to_aoss(ENTITY_INDEX_NAME, nodes)
+            await driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, edges)
 
 
 async def extract_nodes_and_edges_bulk(

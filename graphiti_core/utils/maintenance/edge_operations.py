@@ -274,7 +274,7 @@ async def resolve_extracted_edges(
                 extracted_edge.fact,
                 group_ids=[extracted_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(uuids=valid_uuids),
+                search_filter=SearchFilters(edge_uuids=valid_uuids),
             )
             for extracted_edge, valid_uuids in zip(extracted_edges, valid_uuids_list, strict=True)
         ]

@@ -101,7 +101,7 @@ class Node(BaseModel, ABC):
     async def delete(self, driver: GraphDriver):
         match driver.provider:
             case GraphProvider.NEO4J:
-                result = await driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
                     MATCH (n:Entity|Episodic|Community {uuid: $uuid})-[r]-()
                     WITH collect(r.uuid) AS edge_uuids, n
@@ -112,8 +112,8 @@ class Node(BaseModel, ABC):
                 )
 
                 edge_uuids: list[str] = []
-                if result and result[0].get('edge_uuids'):
-                    edge_uuids = result[0]['edge_uuids']
+                if records and records.get('edge_uuids'):
+                    edge_uuids = records['edge_uuids']
 
                 if driver.aoss_client:
                     # Delete the node from OpenSearch indices
@@ -374,7 +374,7 @@ class EpisodicNode(Node):
         }
 
         if driver.aoss_client:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'episodes',
                 [episode_args],
             )
@@ -567,7 +567,7 @@ class EntityNode(Node):
             labels = ':'.join(self.labels + ['Entity'])
 
             if driver.aoss_client:
-                driver.save_to_aoss(ENTITY_INDEX_NAME, [entity_data])  # pyright: ignore reportAttributeAccessIssue
+                await driver.save_to_aoss(ENTITY_INDEX_NAME, [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),
@@ -665,7 +665,7 @@ class CommunityNode(Node):
 
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
