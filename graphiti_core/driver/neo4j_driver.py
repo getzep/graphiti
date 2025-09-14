@@ -28,7 +28,13 @@ logger = logging.getLogger(__name__)
 
 try:
     import boto3
-    from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
+    from opensearchpy import (
+        AIOHttpConnection,
+        AsyncOpenSearch,
+        AWSV4SignerAuth,
+        Urllib3AWSV4SignerAuth,
+        Urllib3HttpConnection,
+    )
 
     _HAS_OPENSEARCH = True
 except ImportError:
@@ -50,6 +56,9 @@ class Neo4jDriver(GraphDriver):
         database: str = 'neo4j',
         aoss_host: str | None = None,
         aoss_port: int | None = None,
+        aws_profile_name: str | None = None,
+        aws_region: str | None = None,
+        aws_service: str | None = None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -61,15 +70,17 @@ class Neo4jDriver(GraphDriver):
         self.aoss_client = None
         if aoss_host and aoss_port and boto3 is not None:
             try:
-                session = boto3.Session()
-                self.aoss_client = OpenSearch(  # type: ignore
+                region = aws_region
+                service = aws_service
+                credentials = boto3.Session(profile_name=aws_profile_name).get_credentials()
+                auth = AWSV4SignerAuth(credentials, region or '', service or '')
+
+                self.aoss_client = AsyncOpenSearch(
                     hosts=[{'host': aoss_host, 'port': aoss_port}],
-                    http_auth=Urllib3AWSV4SignerAuth(  # type: ignore
-                        session.get_credentials(), session.region_name, 'aoss'
-                    ),
+                    auth=auth,
                     use_ssl=True,
                     verify_certs=True,
-                    connection_class=Urllib3HttpConnection,
+                    connection_class=AIOHttpConnection,
                     pool_maxsize=20,
                 )  # type: ignore
             except Exception as e:

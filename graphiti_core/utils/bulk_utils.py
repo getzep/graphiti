@@ -23,7 +23,14 @@ import numpy as np
 from pydantic import BaseModel, Field
 from typing_extensions import Any
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.driver import (
+    ENTITY_EDGE_INDEX_NAME,
+    ENTITY_INDEX_NAME,
+    EPISODE_INDEX_NAME,
+    GraphDriver,
+    GraphDriverSession,
+    GraphProvider,
+)
 from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
@@ -203,9 +210,9 @@ async def add_nodes_and_edges_bulk_tx(
         )
 
         if driver.aoss_client:
-            driver.save_to_aoss('episodes', episodes)
-            driver.save_to_aoss('entities', nodes)
-            driver.save_to_aoss('entity_edges', edges)
+            await driver.save_to_aoss(EPISODE_INDEX_NAME, episodes)
+            await driver.save_to_aoss(ENTITY_INDEX_NAME, nodes)
+            await driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, edges)
 
 
 async def extract_nodes_and_edges_bulk(

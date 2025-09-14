@@ -17,16 +17,19 @@ limitations under the License.
 import asyncio
 import copy
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from dotenv import load_dotenv
+
 from graphiti_core.embedder.client import EMBEDDING_DIM
 
 try:
-    from opensearchpy import OpenSearch, helpers
+    from opensearchpy import AsyncOpenSearch, helpers
 
     _HAS_OPENSEARCH = True
 except ImportError:
@@ -38,6 +41,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
 
+load_dotenv()
+
+ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX_NAME', 'entities')
+EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX_NAME', 'episodes')
+COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'communities')
+ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges')
+
 
 class GraphProvider(Enum):
     NEO4J = 'neo4j'
@@ -48,20 +58,19 @@ class GraphProvider(Enum):
 
 aoss_indices = [
     {
-        'index_name': 'entities',
+        'index_name': ENTITY_INDEX_NAME,
         'body': {
+            'settings': {'index': {'knn': True}},
             'mappings': {
                 'properties': {
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'summary': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'group_id': {'type': 'keyword'},
+                    'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'name_embedding': {
                         'type': 'knn_vector',
-                        'dims': EMBEDDING_DIM,
-                        'index': True,
-                        'similarity': 'cosine',
+                        'dimension': EMBEDDING_DIM,
                         'method': {
                             'engine': 'faiss',
                             'space_type': 'cosinesimil',
@@ -70,23 +79,23 @@ aoss_indices = [
                         },
                     },
                 }
-            }
+            },
         },
     },
     {
-        'index_name': 'communities',
+        'index_name': COMMUNITY_INDEX_NAME,
         'body': {
             'mappings': {
                 'properties': {
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'keyword'},
                 }
             }
         },
     },
     {
-        'index_name': 'episodes',
+        'index_name': EPISODE_INDEX_NAME,
         'body': {
             'mappings': {
                 'properties': {
@@ -94,31 +103,30 @@ aoss_indices = [
                     'content': {'type': 'text'},
                     'source': {'type': 'text'},
                     'source_description': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
-                    'valid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'group_id': {'type': 'keyword'},
+                    'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
+                    'valid_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                 }
             }
         },
     },
     {
-        'index_name': 'entity_edges',
+        'index_name': ENTITY_EDGE_INDEX_NAME,
         'body': {
+            'settings': {'index': {'knn': True}},
             'mappings': {
                 'properties': {
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'fact': {'type': 'text'},
-                    'group_id': {'type': 'text'},
-                    'created_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
-                    'valid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
-                    'expired_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
-                    'invalid_at': {'type': 'date', 'format': "yyyy-MM-dd'T'HH:mm:ss.SSSZ"},
+                    'group_id': {'type': 'keyword'},
+                    'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
+                    'valid_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
+                    'expired_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
+                    'invalid_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'fact_embedding': {
                         'type': 'knn_vector',
-                        'dims': EMBEDDING_DIM,
-                        'index': True,
-                        'similarity': 'cosine',
+                        'dimension': EMBEDDING_DIM,
                         'method': {
                             'engine': 'faiss',
                             'space_type': 'cosinesimil',
@@ -127,7 +135,7 @@ aoss_indices = [
                         },
                     },
                 }
-            }
+            },
         },
     },
 ]
@@ -163,7 +171,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    aoss_client: OpenSearch | None  # type: ignore
+    aoss_client: AsyncOpenSearch | None  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -205,7 +213,7 @@ class GraphDriver(ABC):
             alias_name = index['index_name']
 
             # If alias already exists, skip (idempotent behavior)
-            if client.indices.exists_alias(name=alias_name):
+            if await client.indices.exists_alias(name=alias_name):
                 continue
 
             # Build a physical index name with timestamp
@@ -213,27 +221,67 @@ class GraphDriver(ABC):
             physical_index_name = f'{alias_name}_{ts_suffix}'
 
             # Create the index
-            client.indices.create(index=physical_index_name, body=index['body'])
+            await client.indices.create(index=physical_index_name, body=index['body'])
 
             # Point alias to it
-            client.indices.put_alias(index=physical_index_name, name=alias_name)
+            await client.indices.put_alias(index=physical_index_name, name=alias_name)
 
         # Allow some time for index creation
-        await asyncio.sleep(60)
+        await asyncio.sleep(1)
 
     async def delete_aoss_indices(self):
+        client = self.aoss_client
+
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return
+
+        for entry in aoss_indices:
+            alias_name = entry['index_name']
+
+            try:
+                # Resolve alias → indices
+                alias_info = await client.indices.get_alias(name=alias_name)
+                indices = list(alias_info.keys())
+
+                if not indices:
+                    logger.info(f"No indices found for alias '{alias_name}'")
+                    continue
+
+                for index in indices:
+                    if await client.indices.exists(index=index):
+                        await client.indices.delete(index=index)
+                        logger.info(f"Deleted index '{index}' (alias: {alias_name})")
+                    else:
+                        logger.warning(f"Index '{index}' not found for alias '{alias_name}'")
+
+            except Exception as e:
+                logger.error(f"Error deleting indices for alias '{alias_name}': {e}")
+
+    async def clear_aoss_indices(self):
+        client = self.aoss_client
+
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return
+
         for index in aoss_indices:
             index_name = index['index_name']
-            client = self.aoss_client
 
-            if not client:
-                logger.warning('No OpenSearch client found')
-                return
+            if await client.indices.exists(index=index_name):
+                try:
+                    # Delete all documents but keep the index
+                    response = await client.delete_by_query(
+                        index=index_name,
+                        body={'query': {'match_all': {}}},
+                    )
+                    logger.info(f"Cleared index '{index_name}': {response}")
+                except Exception as e:
+                    logger.error(f"Error clearing index '{index_name}': {e}")
+            else:
+                logger.warning(f"Index '{index_name}' does not exist")
 
-            if client.indices.exists(index=index_name):
-                client.indices.delete(index=index_name)
-
-    def save_to_aoss(self, name: str, data: list[dict]) -> int:
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
         if not client or not helpers:
             logger.warning('No OpenSearch client found')
@@ -243,16 +291,22 @@ class GraphDriver(ABC):
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {
-                        '_index': name,
-                        '_routing': d.get('group_id'),  # shard routing
-                    }
+                    doc = {}
                     for p in index['body']['mappings']['properties']:
                         if p in d:  # protect against missing fields
-                            item[p] = d[p]
+                            doc[p] = d[p]
+
+                    item = {
+                        '_index': name,
+                        '_id': d['uuid'],
+                        '_routing': d.get('group_id'),
+                        '_source': doc,
+                    }
                     to_index.append(item)
 
-                success, failed = helpers.bulk(client, to_index, stats_only=True)
+                success, failed = await helpers.async_bulk(
+                    client, to_index, stats_only=True, request_timeout=60
+                )
 
                 return success if failed == 0 else success
 

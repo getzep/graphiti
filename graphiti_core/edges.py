@@ -25,7 +25,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import ENTITY_EDGE_INDEX_NAME, GraphDriver, GraphProvider
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError
 from graphiti_core.helpers import parse_db_date
@@ -77,6 +77,13 @@ class Edge(BaseModel, ABC):
                 uuid=self.uuid,
             )
 
+            if driver.aoss_client:
+                await driver.aoss_client.delete(
+                    index=ENTITY_EDGE_INDEX_NAME,
+                    id=self.uuid,
+                    params={'routing': self.group_id},
+                )
+
         logger.debug(f'Deleted Edge: {self.uuid}')
 
     @classmethod
@@ -107,6 +114,12 @@ class Edge(BaseModel, ABC):
                 """,
                 uuids=uuids,
             )
+
+            if driver.aoss_client:
+                await driver.aoss_client.delete_by_query(
+                    index=ENTITY_EDGE_INDEX_NAME,
+                    body={'query': {'terms': {'uuid': uuids}}},
+                )
 
         logger.debug(f'Deleted Edges: {uuids}')
 
@@ -256,13 +269,13 @@ class EntityEdge(Edge):
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
         elif driver.aoss_client:
-            resp = driver.aoss_client.search(
+            resp = await driver.aoss_client.search(
                 body={
                     'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
                     'size': 1,
                 },
-                index='entity_edges',
-                routing=self.group_id,
+                index=ENTITY_EDGE_INDEX_NAME,
+                params={'routing': self.group_id},
             )
 
             if resp['hits']['hits']:
@@ -314,7 +327,7 @@ class EntityEdge(Edge):
             edge_data.update(self.attributes or {})
 
             if driver.aoss_client:
-                driver.save_to_aoss('entity_edges', [edge_data])  # pyright: ignore reportAttributeAccessIssue
+                await driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, [edge_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
@@ -350,6 +363,35 @@ class EntityEdge(Edge):
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
+
+    @classmethod
+    async def get_between_nodes(
+        cls, driver: GraphDriver, source_node_uuid: str, target_node_uuid: str
+    ):
+        match_query = """
+            MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+        """
+        if driver.provider == GraphProvider.KUZU:
+            match_query = """
+                MATCH (n:Entity {uuid: $source_node_uuid})
+                      -[:RELATES_TO]->(e:RelatesToNode_)
+                      -[:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+            """
+
+        records, _, _ = await driver.execute_query(
+            match_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider),
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
+            routing_='r',
+        )
+
+        edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+
+        return edges
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):

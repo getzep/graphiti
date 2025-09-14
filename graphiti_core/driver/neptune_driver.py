@@ -237,12 +237,12 @@ class NeptuneDriver(GraphDriver):
                     'You must provide an AOSS endpoint to create an OpenSearch driver.'
                 )
             if not client.indices.exists(index=index_name):
-                client.indices.create(index=index_name, body=index['body'])
+                await client.indices.create(index=index_name, body=index['body'])
 
             alias_name = index.get('alias_name', index_name)
 
             if not client.indices.exists_alias(name=alias_name, index=index_name):
-                client.indices.put_alias(index=index_name, name=alias_name)
+                await client.indices.put_alias(index=index_name, name=alias_name)
 
         # Sleep for 1 minute to let the index creation complete
         await asyncio.sleep(60)
