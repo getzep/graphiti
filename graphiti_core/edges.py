@@ -267,7 +267,7 @@ class EntityEdge(Edge):
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
         elif driver.aoss_client:
-            resp = driver.aoss_client.search(
+            resp = await driver.aoss_client.search(
                 body={
                     'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
                     'size': 1,

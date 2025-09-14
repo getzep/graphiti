@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from xml.dom.minidom import Entity
 
 from pydantic import BaseModel
 from typing_extensions import LiteralString
@@ -260,7 +261,7 @@ async def resolve_extracted_edges(
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    valid_uuids_list: list[list[str]] = await semaphore_gather(
+    valid_edges_list: list[list[EntityEdge]] = await semaphore_gather(
         *[
             EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
             for edge in extracted_edges
@@ -274,9 +275,9 @@ async def resolve_extracted_edges(
                 extracted_edge.fact,
                 group_ids=[extracted_edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
-                search_filter=SearchFilters(edge_uuids=valid_uuids),
+                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
             )
-            for extracted_edge, valid_uuids in zip(extracted_edges, valid_uuids_list, strict=True)
+            for extracted_edge, valid_edges in zip(extracted_edges, valid_edges_list, strict=True)
         ]
     )
 

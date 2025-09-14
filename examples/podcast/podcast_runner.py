@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -34,6 +35,8 @@ load_dotenv()
 neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
 neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
 neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+aoss_host = os.environ.get('AOSS_HOST') or None
+aoss_port = os.environ.get('AOSS_PORT') or None
 
 
 def setup_logging():
@@ -77,12 +80,25 @@ class IsPresidentOf(BaseModel):
 
 async def main(use_bulk: bool = False):
     setup_logging()
-    client = Graphiti(
+    graph_driver = Neo4jDriver(
         neo4j_uri,
         neo4j_user,
         neo4j_password,
+        aoss_host=aoss_host,
+        aoss_port=int(aoss_port),
+        aws_profile_name='zep-development',
+        aws_region='us-west-2',
+        aws_service='es',
     )
+    # client = Graphiti(
+    #     neo4j_uri,
+    #     neo4j_user,
+    #     neo4j_password,
+    # )
+    client = Graphiti(graph_driver=graph_driver)
     await clear_data(client.driver)
+    await client.driver.delete_aoss_indices()
+    await client.driver.create_aoss_indices()
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
     group_id = str(uuid4())

@@ -24,10 +24,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from dotenv import load_dotenv
+
 from graphiti_core.embedder.client import EMBEDDING_DIM
 
 try:
-    from opensearchpy import OpenSearch, helpers
+    from opensearchpy import AsyncOpenSearch, helpers
 
     _HAS_OPENSEARCH = True
 except ImportError:
@@ -38,6 +40,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
+
+load_dotenv()
 
 ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX_NAME', 'entities')
 EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX_NAME', 'episodes')
@@ -62,7 +66,7 @@ aoss_indices = [
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'summary': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'keyword'},
                     'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'name_embedding': {
                         'type': 'knn_vector',
@@ -85,7 +89,7 @@ aoss_indices = [
                 'properties': {
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'keyword'},
                 }
             }
         },
@@ -99,7 +103,7 @@ aoss_indices = [
                     'content': {'type': 'text'},
                     'source': {'type': 'text'},
                     'source_description': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'keyword'},
                     'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'valid_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                 }
@@ -115,7 +119,7 @@ aoss_indices = [
                     'uuid': {'type': 'keyword'},
                     'name': {'type': 'text'},
                     'fact': {'type': 'text'},
-                    'group_id': {'type': 'text'},
+                    'group_id': {'type': 'keyword'},
                     'created_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'valid_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
                     'expired_at': {'type': 'date', 'format': 'strict_date_optional_time_nanos'},
@@ -167,7 +171,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    aoss_client: OpenSearch | None  # type: ignore
+    aoss_client: AsyncOpenSearch | None  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -209,7 +213,7 @@ class GraphDriver(ABC):
             alias_name = index['index_name']
 
             # If alias already exists, skip (idempotent behavior)
-            if client.indices.exists_alias(name=alias_name):
+            if await client.indices.exists_alias(name=alias_name):
                 continue
 
             # Build a physical index name with timestamp
@@ -217,10 +221,10 @@ class GraphDriver(ABC):
             physical_index_name = f'{alias_name}_{ts_suffix}'
 
             # Create the index
-            client.indices.create(index=physical_index_name, body=index['body'])
+            await client.indices.create(index=physical_index_name, body=index['body'])
 
             # Point alias to it
-            client.indices.put_alias(index=physical_index_name, name=alias_name)
+            await client.indices.put_alias(index=physical_index_name, name=alias_name)
 
         # Allow some time for index creation
         await asyncio.sleep(1)
@@ -237,7 +241,7 @@ class GraphDriver(ABC):
 
             try:
                 # Resolve alias → indices
-                alias_info = client.indices.get_alias(name=alias_name)
+                alias_info = await client.indices.get_alias(name=alias_name)
                 indices = list(alias_info.keys())
 
                 if not indices:
@@ -245,8 +249,8 @@ class GraphDriver(ABC):
                     continue
 
                 for index in indices:
-                    if client.indices.exists(index=index):
-                        client.indices.delete(index=index)
+                    if await client.indices.exists(index=index):
+                        await client.indices.delete(index=index)
                         logger.info(f"Deleted index '{index}' (alias: {alias_name})")
                     else:
                         logger.warning(f"Index '{index}' not found for alias '{alias_name}'")
@@ -264,14 +268,16 @@ class GraphDriver(ABC):
         for index in aoss_indices:
             index_name = index['index_name']
 
-            if client.indices.exists(index=index_name):
+            if await client.indices.exists(index=index_name):
                 try:
                     # Delete all documents but keep the index
-                    response = client.delete_by_query(
+                    response = await client.delete_by_query(
                         index=index_name,
                         body={'query': {'match_all': {}}},
                         refresh=True,
                         conflicts='proceed',
+                        wait_for_completion=True,
+                        slices='auto',  # improves coverage/concurrency
                     )
                     logger.info(f"Cleared index '{index_name}': {response}")
                 except Exception as e:
@@ -281,7 +287,7 @@ class GraphDriver(ABC):
 
     async def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
-        if not client or not helpers:
+        if not client:
             logger.warning('No OpenSearch client found')
             return 0
 
@@ -289,16 +295,20 @@ class GraphDriver(ABC):
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {
-                        '_index': name,
-                        '_routing': d.get('group_id'),  # shard routing
-                    }
+                    doc = {}
                     for p in index['body']['mappings']['properties']:
                         if p in d:  # protect against missing fields
-                            item[p] = d[p]
+                            doc[p] = d[p]
+
+                    item = {
+                        '_index': name,
+                        '_id': d['uuid'],
+                        '_routing': d.get('group_id'),
+                        '_source': doc,
+                    }
                     to_index.append(item)
 
-                success, failed = helpers.bulk(
+                success, failed = await helpers.async_bulk(
                     client, to_index, stats_only=True, request_timeout=60
                 )
 

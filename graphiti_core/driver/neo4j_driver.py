@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 try:
     import boto3
     from opensearchpy import (
+        AIOHttpConnection,
+        AsyncOpenSearch,
         AWSV4SignerAuth,
-        OpenSearch,
         RequestsHttpConnection,
         Urllib3AWSV4SignerAuth,
         Urllib3HttpConnection,
@@ -75,12 +76,12 @@ class Neo4jDriver(GraphDriver):
                 credentials = boto3.Session(profile_name=aws_profile_name).get_credentials()
                 auth = AWSV4SignerAuth(credentials, region or '', service or '')
 
-                self.aoss_client = OpenSearch(
+                self.aoss_client = AsyncOpenSearch(
                     hosts=[{'host': aoss_host, 'port': aoss_port}],
-                    http_auth=auth,
+                    auth=auth,
                     use_ssl=True,
                     verify_certs=True,
-                    connection_class=RequestsHttpConnection,
+                    connection_class=AIOHttpConnection,
                     pool_maxsize=20,
                 )  # type: ignore
             except Exception as e:
