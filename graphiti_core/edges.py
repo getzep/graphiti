@@ -79,7 +79,9 @@ class Edge(BaseModel, ABC):
 
             if driver.aoss_client:
                 await driver.aoss_client.delete(
-                    index=ENTITY_EDGE_INDEX_NAME, id=self.uuid, routing=self.group_id
+                    index=ENTITY_EDGE_INDEX_NAME,
+                    id=self.uuid,
+                    params={'routing': self.group_id},
                 )
 
         logger.debug(f'Deleted Edge: {self.uuid}')
@@ -273,7 +275,7 @@ class EntityEdge(Edge):
                     'size': 1,
                 },
                 index=ENTITY_EDGE_INDEX_NAME,
-                routing=self.group_id,
+                params={'routing': self.group_id},
             )
 
             if resp['hits']['hits']:

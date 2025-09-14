@@ -119,7 +119,9 @@ class Node(BaseModel, ABC):
                     # Delete the node from OpenSearch indices
                     for index in (EPISODE_INDEX_NAME, ENTITY_INDEX_NAME, COMMUNITY_INDEX_NAME):
                         await driver.aoss_client.delete(
-                            index=index, id=self.uuid, routing=self.group_id
+                            index=index,
+                            id=self.uuid,
+                            params={'routing': self.group_id},
                         )
 
                     # Bulk delete the detached edges
@@ -198,25 +200,25 @@ class Node(BaseModel, ABC):
                     await driver.aoss_client.delete_by_query(
                         index=EPISODE_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
-                        routing=group_id,
+                        params={'routing': group_id},
                     )
 
                     await driver.aoss_client.delete_by_query(
                         index=ENTITY_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
-                        routing=group_id,
+                        params={'routing': group_id},
                     )
 
                     await driver.aoss_client.delete_by_query(
                         index=COMMUNITY_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
-                        routing=group_id,
+                        params={'routing': group_id},
                     )
 
                     await driver.aoss_client.delete_by_query(
                         index=ENTITY_EDGE_INDEX_NAME,
                         body={'query': {'term': {'group_id': group_id}}},
-                        routing=group_id,
+                        params={'routing': group_id},
                     )
 
             case GraphProvider.KUZU:
@@ -520,7 +522,7 @@ class EntityNode(Node):
                     'size': 1,
                 },
                 index=ENTITY_INDEX_NAME,
-                routing=self.group_id,
+                params={'routing': self.group_id},
             )
 
             if resp['hits']['hits']:
