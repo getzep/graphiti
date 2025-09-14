@@ -274,10 +274,7 @@ class GraphDriver(ABC):
                     response = await client.delete_by_query(
                         index=index_name,
                         body={'query': {'match_all': {}}},
-                        refresh=True,
-                        conflicts='proceed',
-                        wait_for_completion=True,
-                        slices='auto',  # improves coverage/concurrency
+                        slices='auto',
                     )
                     logger.info(f"Cleared index '{index_name}': {response}")
                 except Exception as e:
@@ -287,7 +284,7 @@ class GraphDriver(ABC):
 
     async def save_to_aoss(self, name: str, data: list[dict]) -> int:
         client = self.aoss_client
-        if not client:
+        if not client or not helpers:
             logger.warning('No OpenSearch client found')
             return 0
 

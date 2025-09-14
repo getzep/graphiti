@@ -103,8 +103,9 @@ class Node(BaseModel, ABC):
             case GraphProvider.NEO4J:
                 records, _, _ = await driver.execute_query(
                     """
-                    MATCH (n {uuid: $uuid})-[r]-()
+                    MATCH (n {uuid: $uuid})
                     WHERE n:Entity OR n:Episodic OR n:Community
+                    OPTIONAL MATCH (n)-[r]-()
                     WITH collect(r.uuid) AS edge_uuids, n
                     DETACH DELETE n
                     RETURN edge_uuids

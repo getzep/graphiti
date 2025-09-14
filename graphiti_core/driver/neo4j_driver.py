@@ -32,7 +32,6 @@ try:
         AIOHttpConnection,
         AsyncOpenSearch,
         AWSV4SignerAuth,
-        RequestsHttpConnection,
         Urllib3AWSV4SignerAuth,
         Urllib3HttpConnection,
     )

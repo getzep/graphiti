@@ -17,7 +17,6 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
-from xml.dom.minidom import Entity
 
 from pydantic import BaseModel
 from typing_extensions import LiteralString
