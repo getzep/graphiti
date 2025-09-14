@@ -274,7 +274,6 @@ class GraphDriver(ABC):
                     response = await client.delete_by_query(
                         index=index_name,
                         body={'query': {'match_all': {}}},
-                        slices='auto',
                     )
                     logger.info(f"Cleared index '{index_name}': {response}")
                 except Exception as e:
