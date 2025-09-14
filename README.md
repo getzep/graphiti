@@ -239,6 +239,22 @@ The quickstart demonstrates:
 The example is fully documented with clear explanations of each functionality and includes a comprehensive README with
 setup instructions and next steps.
 
+### Running with Docker Compose
+
+You can use Docker Compose to quickly start the required services:
+
+- **Neo4j Docker:**
+  ```sh
+  docker compose up
+  ```
+  This will start the Neo4j Docker service and related components.
+
+- **FalkorDB Docker:**
+  ```sh
+  docker compose --profile falkordb up
+  ```
+  This will start the FalkorDB Docker service and related components.
+
 ## MCP Server
 
 The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
