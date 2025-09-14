@@ -622,9 +622,8 @@ async def initialize_graphiti():
             raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
         # Validate FalkorDB configuration
-        if config.database_type == 'falkordb':
-            if not config.falkordb.host or not config.falkordb.port:
-                raise ValueError('FALKORDB_HOST and FALKORDB_PORT must be set for FalkorDB')
+        if config.database_type == 'falkordb' and (not config.falkordb.host or not config.falkordb.port):
+            raise ValueError('FALKORDB_HOST and FALKORDB_PORT must be set for FalkorDB')
 
         embedder_client = config.embedder.create_client()
 
