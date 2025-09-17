@@ -174,6 +174,11 @@ def mock_embedder():
 
 
 def test_lucene_sanitize():
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+    
+    # Create a driver instance to test the sanitize method
+    driver = Neo4jDriver(uri="bolt://localhost:7687", user="neo4j", password="password")
+    
     # Call the function with test data
     queries = [
         (
@@ -184,7 +189,7 @@ def test_lucene_sanitize():
     ]
 
     for query, assert_result in queries:
-        result = lucene_sanitize(query)
+        result = driver.sanitize(query)
         assert assert_result == result
 
 

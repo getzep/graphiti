@@ -245,18 +245,4 @@ class FalkorDriver(GraphDriver):
         full_query = group_filter + ' (' + sanitized_query + ')'
 
         return full_query
-
-
-
-def convert_datetimes_to_strings(obj):
-    if isinstance(obj, dict):
-        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetimes_to_strings(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_datetimes_to_strings(item) for item in obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    else:
-        return obj
     

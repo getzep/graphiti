@@ -102,7 +102,7 @@ def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver)
 
     group_ids_filter += ' AND ' if group_ids_filter else ''
 
-    lucene_query = lucene_sanitize(query)
+    lucene_query = driver.sanitize(query)
     # If the lucene query is too long return no query
     if len(lucene_query.split(' ')) + len(group_ids or '') >= MAX_QUERY_LENGTH:
         return ''
