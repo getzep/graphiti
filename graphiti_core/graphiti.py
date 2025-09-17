@@ -456,12 +456,12 @@ class Graphiti:
             start = time()
             now = utc_now()
 
-            # if group_id is None, use the default group id by the provider
-            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_entity_types(entity_types)
 
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
 
             previous_episodes = (
                 await self.retrieve_episodes(
