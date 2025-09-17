@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+from .prompt_helpers import to_prompt_json
 
 
 class ExtractedEntity(BaseModel):
@@ -89,7 +89,7 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 </ENTITY TYPES>
 
 <PREVIOUS MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
@@ -100,7 +100,7 @@ Instructions:
 
 You are given a conversation context and a CURRENT MESSAGE. Your task is to extract **entity nodes** mentioned **explicitly or implicitly** in the CURRENT MESSAGE.
 Pronoun references such as he/she/they or this/that/those should be disambiguated to the names of the 
-reference entities.
+reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don't extract pronouns like you, me, he/she/they, we/us as entities.
 
 1. **Speaker Extraction**: Always extract the speaker (the part before the colon `:` in each dialogue line) as the first entity node.
    - If the speaker is mentioned again in the message, treat both mentions as a **single entity**.
@@ -196,7 +196,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -220,7 +220,7 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
     <PREVIOUS MESSAGES>
-    {json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+    {to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
     </PREVIOUS MESSAGES>
     <CURRENT MESSAGE>
     {context['episode_content']}
@@ -258,8 +258,8 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGES>
-        {json.dumps(context['previous_episodes'], indent=2)}
-        {json.dumps(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </MESSAGES>
 
         Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
@@ -288,8 +288,8 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGES>
-        {json.dumps(context['previous_episodes'], indent=2)}
-        {json.dumps(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
         </MESSAGES>
 
         Given the above MESSAGES and the following ENTITY, update the summary that combines relevant information about the entity

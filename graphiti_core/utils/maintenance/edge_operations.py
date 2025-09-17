@@ -21,7 +21,7 @@ from time import time
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import (
     CommunityEdge,
     EntityEdge,
@@ -36,8 +36,10 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
 from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
+from graphiti_core.search.search import search
+from graphiti_core.search.search_config import SearchResults
+from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_edge_invalidation_candidates, get_relevant_edges
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 
 logger = logging.getLogger(__name__)
@@ -151,6 +153,7 @@ async def extract_edges(
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
         'custom_prompt': '',
+        'ensure_ascii': clients.ensure_ascii,
     }
 
     facts_missed = True
@@ -257,12 +260,44 @@ async def resolve_extracted_edges(
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    search_results = await semaphore_gather(
-        get_relevant_edges(driver, extracted_edges, SearchFilters()),
-        get_edge_invalidation_candidates(driver, extracted_edges, SearchFilters(), 0.2),
+    valid_edges_list: list[list[EntityEdge]] = await semaphore_gather(
+        *[
+            EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
+            for edge in extracted_edges
+        ]
     )
 
-    related_edges_lists, edge_invalidation_candidates = search_results
+    related_edges_results: list[SearchResults] = await semaphore_gather(
+        *[
+            search(
+                clients,
+                extracted_edge.fact,
+                group_ids=[extracted_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
+            )
+            for extracted_edge, valid_edges in zip(extracted_edges, valid_edges_list, strict=True)
+        ]
+    )
+
+    related_edges_lists: list[list[EntityEdge]] = [result.edges for result in related_edges_results]
+
+    edge_invalidation_candidate_results: list[SearchResults] = await semaphore_gather(
+        *[
+            search(
+                clients,
+                extracted_edge.fact,
+                group_ids=[extracted_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(),
+            )
+            for extracted_edge in extracted_edges
+        ]
+    )
+
+    edge_invalidation_candidates: list[list[EntityEdge]] = [
+        result.edges for result in edge_invalidation_candidate_results
+    ]
 
     logger.debug(
         f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
@@ -311,6 +346,7 @@ async def resolve_extracted_edges(
                     existing_edges,
                     episode,
                     extracted_edge_types,
+                    clients.ensure_ascii,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
                     extracted_edges,
@@ -382,6 +418,7 @@ async def resolve_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
     edge_types: dict[str, type[BaseModel]] | None = None,
+    ensure_ascii: bool = True,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, [], []
@@ -415,6 +452,7 @@ async def resolve_extracted_edge(
         'new_edge': extracted_edge.fact,
         'edge_invalidation_candidates': invalidation_edge_candidates_context,
         'edge_types': edge_types_context,
+        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
@@ -449,6 +487,7 @@ async def resolve_extracted_edge(
             'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
+            'ensure_ascii': ensure_ascii,
         }
 
         edge_model = edge_types.get(fact_type)
@@ -499,23 +538,57 @@ async def resolve_extracted_edge(
 async def filter_existing_duplicate_of_edges(
     driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
 ) -> list[tuple[EntityNode, EntityNode]]:
-    query: LiteralString = """
-        UNWIND $duplicate_node_uuids AS duplicate_tuple
-        MATCH (n:Entity {uuid: duplicate_tuple[0]})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple[1]})
-        RETURN DISTINCT
-            n.uuid AS source_uuid,
-            m.uuid AS target_uuid
-    """
+    if not duplicates_node_tuples:
+        return []
 
     duplicate_nodes_map = {
         (source.uuid, target.uuid): (source, target) for source, target in duplicates_node_tuples
     }
 
-    records, _, _ = await driver.execute_query(
-        query,
-        duplicate_node_uuids=list(duplicate_nodes_map.keys()),
-        routing_='r',
-    )
+    if driver.provider == GraphProvider.NEPTUNE:
+        query: LiteralString = """
+            UNWIND $duplicate_node_uuids AS duplicate_tuple
+            MATCH (n:Entity {uuid: duplicate_tuple.source})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple.target})
+            RETURN DISTINCT
+                n.uuid AS source_uuid,
+                m.uuid AS target_uuid
+        """
+
+        duplicate_nodes = [
+            {'source': source.uuid, 'target': target.uuid}
+            for source, target in duplicates_node_tuples
+        ]
+
+        records, _, _ = await driver.execute_query(
+            query,
+            duplicate_node_uuids=duplicate_nodes,
+            routing_='r',
+        )
+    else:
+        if driver.provider == GraphProvider.KUZU:
+            query = """
+                UNWIND $duplicate_node_uuids AS duplicate
+                MATCH (n:Entity {uuid: duplicate.src})-[:RELATES_TO]->(e:RelatesToNode_ {name: 'IS_DUPLICATE_OF'})-[:RELATES_TO]->(m:Entity {uuid: duplicate.dst})
+                RETURN DISTINCT
+                    n.uuid AS source_uuid,
+                    m.uuid AS target_uuid
+            """
+            duplicate_node_uuids = [{'src': src, 'dst': dst} for src, dst in duplicate_nodes_map]
+        else:
+            query: LiteralString = """
+                UNWIND $duplicate_node_uuids AS duplicate_tuple
+                MATCH (n:Entity {uuid: duplicate_tuple[0]})-[r:RELATES_TO {name: 'IS_DUPLICATE_OF'}]->(m:Entity {uuid: duplicate_tuple[1]})
+                RETURN DISTINCT
+                    n.uuid AS source_uuid,
+                    m.uuid AS target_uuid
+            """
+            duplicate_node_uuids = list(duplicate_nodes_map.keys())
+
+        records, _, _ = await driver.execute_query(
+            query,
+            duplicate_node_uuids=duplicate_node_uuids,
+            routing_='r',
+        )
 
     # Remove duplicates that already have the IS_DUPLICATE_OF edge
     for record in records:

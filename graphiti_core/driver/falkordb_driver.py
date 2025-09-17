@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -33,6 +32,7 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,8 @@ STOPWORDS = [
 ]
 
 class FalkorDriverSession(GraphDriverSession):
+    provider = GraphProvider.FALKORDB
+
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -77,6 +79,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
+    aoss_client: None = None
 
     def __init__(
         self,

@@ -21,6 +21,7 @@ from time import time
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder.client import EMBEDDING_DIM
 from graphiti_core.errors import SearchRerankerError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
@@ -29,6 +30,7 @@ from graphiti_core.search.search_config import (
     DEFAULT_SEARCH_LIMIT,
     CommunityReranker,
     CommunitySearchConfig,
+    CommunitySearchMethod,
     EdgeReranker,
     EdgeSearchConfig,
     EdgeSearchMethod,
@@ -81,11 +83,29 @@ async def search(
 
     if query.strip() == '':
         return SearchResults()
-    query_vector = (
-        query_vector
-        if query_vector is not None
-        else await embedder.create(input_data=[query.replace('\n', ' ')])
-    )
+
+    if (
+        config.edge_config
+        and EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
+        or config.edge_config
+        and EdgeReranker.mmr == config.edge_config.reranker
+        or config.node_config
+        and NodeSearchMethod.cosine_similarity in config.node_config.search_methods
+        or config.node_config
+        and NodeReranker.mmr == config.node_config.reranker
+        or (
+            config.community_config
+            and CommunitySearchMethod.cosine_similarity in config.community_config.search_methods
+        )
+        or (config.community_config and CommunityReranker.mmr == config.community_config.reranker)
+    ):
+        search_vector = (
+            query_vector
+            if query_vector is not None
+            else await embedder.create(input_data=[query.replace('\n', ' ')])
+        )
+    else:
+        search_vector = [0.0] * EMBEDDING_DIM
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids and group_ids != [''] else None
@@ -99,7 +119,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.edge_config,
             search_filter,
@@ -112,7 +132,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.node_config,
             search_filter,
@@ -125,7 +145,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.episode_config,
             search_filter,
@@ -136,7 +156,7 @@ async def search(
             driver,
             cross_encoder,
             query,
-            query_vector,
+            search_vector,
             group_ids,
             config.community_config,
             config.limit,
@@ -177,31 +197,42 @@ async def edge_search(
 ) -> tuple[list[EntityEdge], list[float]]:
     if config is None:
         return [], []
-    search_results: list[list[EntityEdge]] = list(
-        await semaphore_gather(
-            *[
-                edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                edge_similarity_search(
-                    driver,
-                    query_vector,
-                    None,
-                    None,
-                    search_filter,
-                    group_ids,
-                    2 * limit,
-                    config.sim_min_score,
-                ),
-                edge_bfs_search(
-                    driver,
-                    bfs_origin_node_uuids,
-                    config.bfs_max_depth,
-                    search_filter,
-                    group_ids,
-                    2 * limit,
-                ),
-            ]
+
+    # Build search tasks based on configured search methods
+    search_tasks = []
+    if EdgeSearchMethod.bm25 in config.search_methods:
+        search_tasks.append(
+            edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
         )
-    )
+    if EdgeSearchMethod.cosine_similarity in config.search_methods:
+        search_tasks.append(
+            edge_similarity_search(
+                driver,
+                query_vector,
+                None,
+                None,
+                search_filter,
+                group_ids,
+                2 * limit,
+                config.sim_min_score,
+            )
+        )
+    if EdgeSearchMethod.bfs in config.search_methods:
+        search_tasks.append(
+            edge_bfs_search(
+                driver,
+                bfs_origin_node_uuids,
+                config.bfs_max_depth,
+                search_filter,
+                group_ids,
+                2 * limit,
+            )
+        )
+
+    # Execute only the configured search methods
+    search_results: list[list[EntityEdge]] = []
+    if search_tasks:
+        search_results = list(await semaphore_gather(*search_tasks))
 
     if EdgeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         source_node_uuids = [edge.source_node_uuid for result in search_results for edge in result]
@@ -289,24 +320,40 @@ async def node_search(
 ) -> tuple[list[EntityNode], list[float]]:
     if config is None:
         return [], []
-    search_results: list[list[EntityNode]] = list(
-        await semaphore_gather(
-            *[
-                node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
-                node_similarity_search(
-                    driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
-                ),
-                node_bfs_search(
-                    driver,
-                    bfs_origin_node_uuids,
-                    search_filter,
-                    config.bfs_max_depth,
-                    group_ids,
-                    2 * limit,
-                ),
-            ]
+
+    # Build search tasks based on configured search methods
+    search_tasks = []
+    if NodeSearchMethod.bm25 in config.search_methods:
+        search_tasks.append(
+            node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
         )
-    )
+    if NodeSearchMethod.cosine_similarity in config.search_methods:
+        search_tasks.append(
+            node_similarity_search(
+                driver,
+                query_vector,
+                search_filter,
+                group_ids,
+                2 * limit,
+                config.sim_min_score,
+            )
+        )
+    if NodeSearchMethod.bfs in config.search_methods:
+        search_tasks.append(
+            node_bfs_search(
+                driver,
+                bfs_origin_node_uuids,
+                search_filter,
+                config.bfs_max_depth,
+                group_ids,
+                2 * limit,
+            )
+        )
+
+    # Execute only the configured search methods
+    search_results: list[list[EntityNode]] = []
+    if search_tasks:
+        search_results = list(await semaphore_gather(*search_tasks))
 
     if NodeSearchMethod.bfs in config.search_methods and bfs_origin_node_uuids is None:
         origin_node_uuids = [node.uuid for result in search_results for node in result]
