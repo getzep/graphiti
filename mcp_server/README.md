@@ -101,6 +101,8 @@ The server uses the following environment variables:
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
 - `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `GRAPHITI_MIN_SIMILARITY_SCORE`: Minimum similarity score for semantic search (default: `0.6`, range: 0.0-1.0). Higher values filter more aggressively.
+- `GRAPHITI_RERANKER_MIN_SCORE`: Minimum score after RRF fusion (default: `0.0`). Typically left at 0.0 as RRF is rank-based.
 
 You can set these variables in a `.env` file in the project directory.
 

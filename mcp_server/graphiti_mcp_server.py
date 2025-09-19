@@ -864,6 +864,17 @@ async def search_memory_nodes(
             search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
         search_config.limit = max_nodes
 
+        # Apply configurable similarity thresholds from environment
+        # sim_min_score filters during initial semantic search (recommended to tune for your domain)
+        sim_min_score = float(os.getenv('GRAPHITI_MIN_SIMILARITY_SCORE', '0.6'))
+        # reranker_min_score filters after RRF fusion (recommended to keep at 0.0 per industry consensus,
+        # as RRF is rank-based and doesn't require score thresholds)
+        reranker_min_score = float(os.getenv('GRAPHITI_RERANKER_MIN_SCORE', '0.0'))
+
+        if search_config.node_config:
+            search_config.node_config.sim_min_score = sim_min_score
+        search_config.reranker_min_score = reranker_min_score
+
         filters = SearchFilters()
         if entity != '':
             filters.node_labels = [entity]
