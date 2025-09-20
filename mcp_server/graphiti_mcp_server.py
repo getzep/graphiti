@@ -1209,6 +1209,12 @@ async def initialize_server() -> MCPConfig:
 
     args = parser.parse_args()
 
+    host = getattr(args, 'host', os.environ.get('MCP_SERVER_HOST', '0.0.0.0'))
+    transport = getattr(args, 'transport', 'sse')
+    port_arg = getattr(args, 'port', None)
+    default_port = port_arg if port_arg is not None else 8080
+    port = int(os.environ.get('PORT', default_port))
+
     # Build configuration from CLI arguments and environment variables
     config = GraphitiConfig.from_cli_and_env(args)
 
@@ -1227,15 +1233,17 @@ async def initialize_server() -> MCPConfig:
     # Initialize Graphiti
     await initialize_graphiti()
 
-    if args.host:
-        logger.info(f'Setting MCP server host to: {args.host}')
+    if host:
+        logger.info(f'Setting MCP server host to: {host}')
         # Set MCP server host from CLI or env
-        mcp.settings.host = args.host
-    
-    if args.port:
-        logger.info(f'Setting MCP server port to: {args.port}')
+        mcp.settings.host = host
+
+    if port:
+        logger.info(f'Setting MCP server port to: {port}')
         # Set MCP server port from CLI or env
-        mcp.settings.port = args.port
+        mcp.settings.port = port
+
+    print(f'Graphiti MCP Server listening on {host}:{port} (transport={transport})')
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)
