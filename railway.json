@@ -4,7 +4,7 @@
     "buildCommand": "cd mcp_server && uv sync"
   },
   "deploy": {
-    "startCommand": "cd mcp_server && uv run graphiti_mcp_server.py --transport sse",
+    "startCommand": "cd mcp_server && uv run graphiti_mcp_server.py --transport sse --host 0.0.0.0",
     "restartPolicyType": "on_failure",
     "restartPolicyMaxRetries": 10
   }
