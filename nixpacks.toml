@@ -1,7 +1,0 @@
-# Force Railway to use Dockerfile instead of auto-detection
-[variables]
-NIXPACKS_NO_CACHE = 'true'
-
-# Explicitly disable nixpacks to force Docker usage  
-[phases.build]
-cmds = ["echo 'Using Dockerfile - nixpacks disabled'"]
