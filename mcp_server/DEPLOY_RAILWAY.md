@@ -39,7 +39,7 @@ PORT=8080 bash start.sh
 You should see the log line:
 
 ```
-Graphiti MCP Server listening on 0.0.0.0:8080 (transport=sse)
+Graphiti MCP Server listening on 0.0.0.0:8080 (transport=http)
 ```
 
 ## Remote validation with MCP Inspector
@@ -48,8 +48,8 @@ After deploying to Railway, validate the endpoint with [MCP Inspector](https://g
 
 ```bash
 npx @modelcontextprotocol/inspector \
-  --transport sse \
-  --url https://<railway-app>.railway.app/sse \
+  --transport http \
+  --url https://<railway-app>.railway.app/mcp \
   --headers "Authorization: Bearer <KEY-if-configured>"
 ```
 

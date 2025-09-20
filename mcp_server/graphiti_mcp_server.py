@@ -512,7 +512,7 @@ class GraphitiConfig(BaseModel):
 class MCPConfig(BaseModel):
     """Configuration for MCP server."""
 
-    transport: str = 'sse'  # Default to SSE transport
+    transport: str = 'http'  # Default to HTTP transport
 
     @classmethod
     def from_cli(cls, args: argparse.Namespace) -> 'MCPConfig':
@@ -1173,9 +1173,9 @@ async def initialize_server() -> MCPConfig:
     )
     parser.add_argument(
         '--transport',
-        choices=['sse', 'stdio'],
-        default='sse',
-        help='Transport to use for communication with the client. (default: sse)',
+        choices=['http', 'sse', 'stdio'],
+        default='http',
+        help='Transport to use for communication with the client. (default: http)',
     )
     parser.add_argument(
         '--model', help=f'Model name to use with the LLM client. (default: {DEFAULT_LLM_MODEL})'
@@ -1258,6 +1258,11 @@ async def run_mcp_server():
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
     if mcp_config.transport == 'stdio':
         await mcp.run_stdio_async()
+    elif mcp_config.transport == 'http':
+        logger.info(
+            f'Running MCP server with HTTP transport on {mcp.settings.host}:{mcp.settings.port}'
+        )
+        await mcp.run_http_async()
     elif mcp_config.transport == 'sse':
         logger.info(
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'

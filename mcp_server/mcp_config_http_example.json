@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "graphiti": {
+            "transport": "http",
+            "url": "http://localhost:8000/mcp"
+        }
+    }
+}
