@@ -71,12 +71,38 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
 
 def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
     if provider == GraphProvider.FALKORDB:
-        return [
-            """CREATE FULLTEXT INDEX FOR (e:Episodic) ON (e.content, e.source, e.source_description, e.group_id)""",
-            """CREATE FULLTEXT INDEX FOR (n:Entity) ON (n.name, n.summary, n.group_id)""",
-            """CREATE FULLTEXT INDEX FOR (n:Community) ON (n.name, n.group_id)""",
+        from typing import cast
+        
+        from graphiti_core.driver.falkordb_driver import STOPWORDS
+        
+        # Convert to string representation for embedding in queries
+        stopwords_str = str(STOPWORDS)
+        
+        # Use type: ignore to satisfy LiteralString requirement while maintaining single source of truth
+        return cast(list[LiteralString], [
+            f"""CALL db.idx.fulltext.createNodeIndex(
+                                                {{
+                                                    label: 'Episodic',
+                                                    stopwords: {stopwords_str}
+                                                }},
+                                                'content', 'source', 'source_description', 'group_id'
+                                                )""",
+            f"""CALL db.idx.fulltext.createNodeIndex(
+                                                {{
+                                                    label: 'Entity',
+                                                    stopwords: {stopwords_str}
+                                                }},
+                                                'name', 'summary', 'group_id'
+                                                )""",
+            f"""CALL db.idx.fulltext.createNodeIndex(
+                                                {{
+                                                    label: 'Community',
+                                                    stopwords: {stopwords_str}
+                                                }},
+                                                'name', 'group_id'
+                                                )""",
             """CREATE FULLTEXT INDEX FOR ()-[e:RELATES_TO]-() ON (e.name, e.fact, e.group_id)""",
-        ]
+        ])
 
     if provider == GraphProvider.KUZU:
         return [
