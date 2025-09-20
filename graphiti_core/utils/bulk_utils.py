@@ -195,18 +195,18 @@ async def add_nodes_and_edges_bulk_tx(
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(
-            get_entity_node_save_bulk_query(driver.provider, nodes),
+            get_entity_node_save_bulk_query(
+                driver.provider, nodes, has_aoss=bool(driver.aoss_client)
+            ),
             nodes=nodes,
-            has_aoss=bool(driver.aoss_client),
         )
         await tx.run(
             get_episodic_edge_save_bulk_query(driver.provider),
             episodic_edges=[edge.model_dump() for edge in episodic_edges],
         )
         await tx.run(
-            get_entity_edge_save_bulk_query(driver.provider),
+            get_entity_edge_save_bulk_query(driver.provider, has_aoss=bool(driver.aoss_client)),
             entity_edges=edges,
-            has_aoss=bool(driver.aoss_client),
         )
 
         if driver.aoss_client:
