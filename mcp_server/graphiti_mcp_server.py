@@ -1197,8 +1197,14 @@ async def initialize_server() -> MCPConfig:
     )
     parser.add_argument(
         '--host',
-        default=os.environ.get('MCP_SERVER_HOST'),
-        help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable)',
+        default=os.environ.get('MCP_SERVER_HOST', '0.0.0.0'),
+        help='Host to bind the MCP server to (default: MCP_SERVER_HOST environment variable or 0.0.0.0)',
+    )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=int(os.environ.get('PORT', '8000')),
+        help='Port to bind the MCP server to (default: PORT environment variable or 8000)',
     )
 
     args = parser.parse_args()
@@ -1225,6 +1231,11 @@ async def initialize_server() -> MCPConfig:
         logger.info(f'Setting MCP server host to: {args.host}')
         # Set MCP server host from CLI or env
         mcp.settings.host = args.host
+    
+    if args.port:
+        logger.info(f'Setting MCP server port to: {args.port}')
+        # Set MCP server port from CLI or env
+        mcp.settings.port = args.port
 
     # Return MCP configuration
     return MCPConfig.from_cli(args)

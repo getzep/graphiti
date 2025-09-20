@@ -1,87 +1,60 @@
-# syntax=docker/dockerfile:1.9
-FROM python:3.12-slim as builder
+# Railway-optimized Dockerfile for Graphiti MCP Server
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies for building
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
     gcc \
-    curl \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv using the installer script
 ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
-ENV PATH="/root/.local/bin:$PATH"
 
-# Configure uv for optimal Docker usage
+# Add uv to PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Configure uv for optimal Docker usage without cache mounts
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never
-
-# Copy and build main graphiti-core project
-COPY ./pyproject.toml ./README.md ./
-COPY ./graphiti_core ./graphiti_core
-
-# Build graphiti-core wheel
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv build
-
-# Install the built wheel to make it available for server
-RUN --mount=type=cache,target=/root/.cache/uv \
-    pip install dist/*.whl
-
-# Runtime stage - build the server here
-FROM python:3.12-slim
-
-# Install uv using the installer script
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# Configure uv for runtime
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never
+    UV_PYTHON_DOWNLOADS=never \
+    MCP_SERVER_HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
 
 # Create non-root user
 RUN groupadd -r app && useradd -r -d /app -g app app
 
-# Copy graphiti-core wheel from builder
-COPY --from=builder /app/dist/*.whl /tmp/
+# First, copy and install the core graphiti library
+COPY ./pyproject.toml ./README.md ./
+COPY ./graphiti_core ./graphiti_core
 
-# Install graphiti-core wheel first
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system /tmp/*.whl
+# Build and install graphiti-core (no cache mount for Railway compatibility)
+RUN uv build && \
+    pip install dist/*.whl
 
-# Set up the server application
-WORKDIR /app
-COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
-COPY ./server/graph_service ./graph_service
+# Now set up the MCP server
+COPY ./mcp_server/pyproject.toml ./mcp_server/uv.lock ./mcp_server/
+COPY ./mcp_server/graphiti_mcp_server.py ./
 
-# Install server dependencies and application
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+# Install MCP server dependencies (no cache mount for Railway compatibility)
+RUN uv sync --frozen --no-dev
 
 # Change ownership to app user
 RUN chown -R app:app /app
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
-
 # Switch to non-root user
 USER app
 
-# Set port
+# Set environment variables for Railway
 ENV PORT=8000
+ENV MCP_SERVER_HOST=0.0.0.0
+
+# Expose port (Railway will override with PORT env var)
 EXPOSE $PORT
 
-# Use uv run for execution
-CMD ["uv", "run", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the MCP server with SSE transport
+# Railway will set PORT environment variable, host and port are configured via env vars
+CMD ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse"]
