@@ -1,10 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "buildCommand": "cd mcp_server && uv sync"
+    "buildCommand": "uv sync --directory mcp_server"
   },
   "deploy": {
-    "startCommand": "cd mcp_server && python graphiti_mcp_server.py --transport sse --host 0.0.0.0 --port 8080",
+    "startCommand": "PYTHONPATH=/app/mcp_server python /app/mcp_server/graphiti_mcp_server.py --transport sse --host 0.0.0.0 --port 8080",
     "restartPolicyType": "on_failure",
     "restartPolicyMaxRetries": 10
   }
