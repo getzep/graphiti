@@ -37,10 +37,41 @@ from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 logger = logging.getLogger(__name__)
 
 STOPWORDS = [
-    'a', 'is', 'the', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for',
-    'if', 'in', 'into', 'it', 'no', 'not', 'of', 'on', 'or', 'such', 'that', 'their',
-    'then', 'there', 'these', 'they', 'this', 'to', 'was', 'will', 'with'
+    'a',
+    'is',
+    'the',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'but',
+    'by',
+    'for',
+    'if',
+    'in',
+    'into',
+    'it',
+    'no',
+    'not',
+    'of',
+    'on',
+    'or',
+    'such',
+    'that',
+    'their',
+    'then',
+    'there',
+    'these',
+    'they',
+    'this',
+    'to',
+    'was',
+    'will',
+    'with',
 ]
+
 
 class FalkorDriverSession(GraphDriverSession):
     provider = GraphProvider.FALKORDB
@@ -173,7 +204,6 @@ class FalkorDriver(GraphDriver):
 
         return cloned
 
-
     def sanitize(self, query: str) -> str:
         """
         Replace FalkorDB special characters with whitespace.
@@ -216,7 +246,9 @@ class FalkorDriver(GraphDriver):
         sanitized = ' '.join(sanitized.split())
         return sanitized
 
-    def build_fulltext_query(self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128) -> str:
+    def build_fulltext_query(
+        self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
+    ) -> str:
         """
         Build a fulltext query string for FalkorDB using RedisSearch syntax.
         FalkorDB uses RedisSearch-like syntax where:
@@ -230,7 +262,7 @@ class FalkorDriver(GraphDriver):
             group_filter = ''
         else:
             group_values = '|'.join(group_ids)
-            group_filter = f"(@group_id:{group_values})"
+            group_filter = f'(@group_id:{group_values})'
 
         sanitized_query = self.sanitize(query)
 
