@@ -36,6 +36,11 @@ from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
+STOPWORDS = [
+    'a', 'is', 'the', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for',
+    'if', 'in', 'into', 'it', 'no', 'not', 'of', 'on', 'or', 'such', 'that', 'their',
+    'then', 'there', 'these', 'they', 'this', 'to', 'was', 'will', 'with'
+]
 
 class FalkorDriverSession(GraphDriverSession):
     provider = GraphProvider.FALKORDB
@@ -167,3 +172,77 @@ class FalkorDriver(GraphDriver):
         cloned = FalkorDriver(falkor_db=self.client, database=database)
 
         return cloned
+
+
+    def sanitize(self, query: str) -> str:
+        """
+        Replace FalkorDB special characters with whitespace.
+        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~
+        """
+        # FalkorDB separator characters that break text into tokens
+        separator_map = str.maketrans(
+            {
+                ',': ' ',
+                '.': ' ',
+                '<': ' ',
+                '>': ' ',
+                '{': ' ',
+                '}': ' ',
+                '[': ' ',
+                ']': ' ',
+                '"': ' ',
+                "'": ' ',
+                ':': ' ',
+                ';': ' ',
+                '!': ' ',
+                '@': ' ',
+                '#': ' ',
+                '$': ' ',
+                '%': ' ',
+                '^': ' ',
+                '&': ' ',
+                '*': ' ',
+                '(': ' ',
+                ')': ' ',
+                '-': ' ',
+                '+': ' ',
+                '=': ' ',
+                '~': ' ',
+                '?': ' ',
+            }
+        )
+        sanitized = query.translate(separator_map)
+        # Clean up multiple spaces
+        sanitized = ' '.join(sanitized.split())
+        return sanitized
+
+    def build_fulltext_query(self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128) -> str:
+        """
+        Build a fulltext query string for FalkorDB using RedisSearch syntax.
+        FalkorDB uses RedisSearch-like syntax where:
+        - Field queries use @ prefix: @field:value
+        - Multiple values for same field: (@field:value1|value2)
+        - Text search doesn't need @ prefix for content fields
+        - AND is implicit with space: (@group_id:value) (text)
+        - OR uses pipe within parentheses: (@group_id:value1|value2)
+        """
+        if group_ids is None or len(group_ids) == 0:
+            group_filter = ''
+        else:
+            group_values = '|'.join(group_ids)
+            group_filter = f"(@group_id:{group_values})"
+
+        sanitized_query = self.sanitize(query)
+
+        # Remove stopwords from the sanitized query
+        query_words = sanitized_query.split()
+        filtered_words = [word for word in query_words if word.lower() not in STOPWORDS]
+        sanitized_query = ' | '.join(filtered_words)
+
+        # If the query is too long return no query
+        if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+            return ''
+
+        full_query = group_filter + ' (' + sanitized_query + ')'
+
+        return full_query
