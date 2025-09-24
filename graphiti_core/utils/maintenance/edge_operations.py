@@ -65,32 +65,6 @@ def build_episodic_edges(
     return episodic_edges
 
 
-def build_duplicate_of_edges(
-    episode: EpisodicNode,
-    created_at: datetime,
-    duplicate_nodes: list[tuple[EntityNode, EntityNode]],
-) -> list[EntityEdge]:
-    is_duplicate_of_edges: list[EntityEdge] = []
-    for source_node, target_node in duplicate_nodes:
-        if source_node.uuid == target_node.uuid:
-            continue
-
-        is_duplicate_of_edges.append(
-            EntityEdge(
-                source_node_uuid=source_node.uuid,
-                target_node_uuid=target_node.uuid,
-                name='IS_DUPLICATE_OF',
-                group_id=episode.group_id,
-                fact=f'{source_node.name} is a duplicate of {target_node.name}',
-                episodes=[episode.uuid],
-                created_at=created_at,
-                valid_at=created_at,
-            )
-        )
-
-    return is_duplicate_of_edges
-
-
 def build_community_edges(
     entity_nodes: list[EntityNode],
     community_node: CommunityNode,
