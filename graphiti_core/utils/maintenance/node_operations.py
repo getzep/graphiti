@@ -362,6 +362,10 @@ async def extract_attributes_from_node(
         'ensure_ascii': ensure_ascii,
     }
 
+    has_entity_attributes: bool = bool(
+        entity_type is not None and len(entity_type.model_fields) != 0
+    )
+
     llm_response = (
         (
             await llm_client.generate_response(
@@ -370,7 +374,7 @@ async def extract_attributes_from_node(
                 model_size=ModelSize.small,
             )
         )
-        if entity_type is not None
+        if has_entity_attributes
         else {}
     )
 
@@ -380,7 +384,7 @@ async def extract_attributes_from_node(
         model_size=ModelSize.small,
     )
 
-    if entity_type is not None:
+    if has_entity_attributes and entity_type is not None:
         entity_type(**llm_response)
 
     node.summary = summary_response.get('summary', '')
