@@ -503,7 +503,7 @@ class Graphiti:
             )
 
             # Extract edges and resolve nodes
-            (nodes, uuid_map, node_duplicates), extracted_edges = await semaphore_gather(
+            (nodes, uuid_map, _), extracted_edges = await semaphore_gather(
                 resolve_extracted_nodes(
                     self.clients,
                     extracted_nodes,
@@ -540,9 +540,7 @@ class Graphiti:
                 max_coroutines=self.max_coroutines,
             )
 
-            duplicate_of_edges = build_duplicate_of_edges(episode, now, node_duplicates)
-
-            entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
+            entity_edges = resolved_edges + invalidated_edges
 
             episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
 
