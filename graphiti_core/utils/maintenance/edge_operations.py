@@ -41,6 +41,7 @@ from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
+from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +397,19 @@ async def resolve_extracted_edge(
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, [], []
+
+    # Fast path: if the fact text and endpoints already exist verbatim, reuse the matching edge.
+    normalized_fact = _normalize_string_exact(extracted_edge.fact)
+    for edge in related_edges:
+        if (
+            edge.source_node_uuid == extracted_edge.source_node_uuid
+            and edge.target_node_uuid == extracted_edge.target_node_uuid
+            and _normalize_string_exact(edge.fact) == normalized_fact
+        ):
+            resolved = edge
+            if episode is not None and episode.uuid not in resolved.episodes:
+                resolved.episodes.append(episode.uuid)
+            return resolved, [], []
 
     start = time()
 
