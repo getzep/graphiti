@@ -36,7 +36,7 @@ _MINHASH_PERMUTATIONS = 32
 _MINHASH_BAND_SIZE = 4
 
 
-def _normalize_name_exact(name: str) -> str:
+def _normalize_string_exact(name: str) -> str:
     """Lowercase text and collapse whitespace so equal names map to the same key."""
     normalized = re.sub(r'[\s]+', ' ', name.lower())
     return normalized.strip()
@@ -44,7 +44,7 @@ def _normalize_name_exact(name: str) -> str:
 
 def _normalize_name_for_fuzzy(name: str) -> str:
     """Produce a fuzzier form that keeps alphanumerics and apostrophes for n-gram shingles."""
-    normalized = re.sub(r"[^a-z0-9' ]", ' ', _normalize_name_exact(name))
+    normalized = re.sub(r"[^a-z0-9' ]", ' ', _normalize_string_exact(name))
     normalized = normalized.strip()
     return re.sub(r'[\s]+', ' ', normalized)
 
@@ -174,7 +174,7 @@ def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidate
     lsh_buckets: defaultdict[tuple[int, tuple[int, ...]], list[str]] = defaultdict(list)
 
     for candidate in existing_nodes:
-        normalized = _normalize_name_exact(candidate.name)
+        normalized = _normalize_string_exact(candidate.name)
         normalized_existing[normalized].append(candidate)
         nodes_by_uuid[candidate.uuid] = candidate
 
@@ -201,7 +201,7 @@ def _resolve_with_similarity(
 ) -> None:
     """Attempt deterministic resolution using exact name hits and fuzzy MinHash comparisons."""
     for idx, node in enumerate(extracted_nodes):
-        normalized_exact = _normalize_name_exact(node.name)
+        normalized_exact = _normalize_string_exact(node.name)
         normalized_fuzzy = _normalize_name_for_fuzzy(node.name)
 
         if not _has_high_entropy(normalized_fuzzy):
@@ -244,7 +244,7 @@ def _resolve_with_similarity(
 __all__ = [
     'DedupCandidateIndexes',
     'DedupResolutionState',
-    '_normalize_name_exact',
+    '_normalize_string_exact',
     '_normalize_name_for_fuzzy',
     '_has_high_entropy',
     '_minhash_signature',
