@@ -18,8 +18,8 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _lsh_bands,
     _minhash_signature,
     _name_entropy,
-    _normalize_name_exact,
     _normalize_name_for_fuzzy,
+    _normalize_string_exact,
     _resolve_with_similarity,
     _shingles,
 )
@@ -205,7 +205,7 @@ def test_build_candidate_indexes_populates_structures():
 
 
 def test_normalize_helpers():
-    assert _normalize_name_exact('  Alice   Smith ') == 'alice smith'
+    assert _normalize_string_exact('  Alice   Smith ') == 'alice smith'
     assert _normalize_name_for_fuzzy('Alice-Smith!') == 'alice smith'
 
 
