@@ -151,6 +151,7 @@ class DedupCandidateIndexes:
     """Precomputed lookup structures that drive entity deduplication heuristics."""
 
     existing_nodes: list[EntityNode]
+    nodes_by_uuid: dict[str, EntityNode]
     normalized_existing: defaultdict[str, list[EntityNode]]
     shingles_by_candidate: dict[str, set[str]]
     lsh_buckets: defaultdict[tuple[int, tuple[int, ...]], list[str]]
@@ -168,12 +169,14 @@ class DedupResolutionState:
 def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidateIndexes:
     """Precompute exact and fuzzy lookup structures once per dedupe run."""
     normalized_existing: defaultdict[str, list[EntityNode]] = defaultdict(list)
+    nodes_by_uuid: dict[str, EntityNode] = {}
     shingles_by_candidate: dict[str, set[str]] = {}
     lsh_buckets: defaultdict[tuple[int, tuple[int, ...]], list[str]] = defaultdict(list)
 
     for candidate in existing_nodes:
         normalized = _normalize_name_exact(candidate.name)
         normalized_existing[normalized].append(candidate)
+        nodes_by_uuid[candidate.uuid] = candidate
 
         shingles = _cached_shingles(_normalize_name_for_fuzzy(candidate.name))
         shingles_by_candidate[candidate.uuid] = shingles
@@ -184,6 +187,7 @@ def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidate
 
     return DedupCandidateIndexes(
         existing_nodes=existing_nodes,
+        nodes_by_uuid=nodes_by_uuid,
         normalized_existing=normalized_existing,
         shingles_by_candidate=shingles_by_candidate,
         lsh_buckets=lsh_buckets,
@@ -210,6 +214,9 @@ def _resolve_with_similarity(
             state.resolved_nodes[idx] = match
             state.uuid_map[node.uuid] = match.uuid
             continue
+        if len(existing_matches) > 1:
+            state.unresolved_indices.append(idx)
+            continue
 
         shingles = _cached_shingles(normalized_fuzzy)
         signature = _minhash_signature(shingles)
@@ -224,10 +231,7 @@ def _resolve_with_similarity(
             score = _jaccard_similarity(shingles, candidate_shingles)
             if score > best_score:
                 best_score = score
-                best_candidate = next(
-                    (cand for cand in indexes.existing_nodes if cand.uuid == candidate_id),
-                    None,
-                )
+                best_candidate = indexes.nodes_by_uuid.get(candidate_id)
 
         if best_candidate is not None and best_score >= _FUZZY_JACCARD_THRESHOLD:
             state.resolved_nodes[idx] = best_candidate

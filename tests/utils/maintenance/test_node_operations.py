@@ -199,6 +199,7 @@ def test_build_candidate_indexes_populates_structures():
 
     normalized_key = candidate.name.lower()
     assert indexes.normalized_existing[normalized_key][0].uuid == candidate.uuid
+    assert indexes.nodes_by_uuid[candidate.uuid] is candidate
     assert candidate.uuid in indexes.shingles_by_candidate
     assert any(candidate.uuid in bucket for bucket in indexes.lsh_buckets.values())
 
@@ -260,7 +261,27 @@ def test_resolve_with_similarity_exact_match_updates_state():
 
 def test_resolve_with_similarity_low_entropy_defers_resolution():
     extracted = EntityNode(name='Bob', group_id='group', labels=['Entity'])
-    indexes = DedupCandidateIndexes([], defaultdict(list), {}, defaultdict(list))
+    indexes = DedupCandidateIndexes(
+        existing_nodes=[],
+        nodes_by_uuid={},
+        normalized_existing=defaultdict(list),
+        shingles_by_candidate={},
+        lsh_buckets=defaultdict(list),
+    )
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    assert state.resolved_nodes[0] is None
+    assert state.unresolved_indices == [0]
+
+
+def test_resolve_with_similarity_multiple_exact_matches_defers_to_llm():
+    candidate1 = EntityNode(name='Johnny Appleseed', group_id='group', labels=['Entity'])
+    candidate2 = EntityNode(name='Johnny Appleseed', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='Johnny Appleseed', group_id='group', labels=['Entity'])
+
+    indexes = _build_candidate_indexes([candidate1, candidate2])
     state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
 
     _resolve_with_similarity([extracted], indexes, state)
