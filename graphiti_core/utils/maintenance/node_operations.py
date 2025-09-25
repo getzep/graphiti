@@ -306,6 +306,8 @@ async def _resolve_with_llm(
 
         state.resolved_nodes[original_index] = resolved_node
         state.uuid_map[extracted_node.uuid] = resolved_node.uuid
+        if resolved_node.uuid != extracted_node.uuid:
+            state.duplicate_pairs.append((extracted_node, resolved_node))
 
 
 async def resolve_extracted_nodes(
@@ -332,7 +334,6 @@ async def resolve_extracted_nodes(
         uuid_map={},
         unresolved_indices=[],
     )
-    node_duplicates: list[tuple[EntityNode, EntityNode]] = []
 
     _resolve_with_similarity(extracted_nodes, indexes, state)
 
@@ -359,7 +360,7 @@ async def resolve_extracted_nodes(
 
     new_node_duplicates: list[
         tuple[EntityNode, EntityNode]
-    ] = await filter_existing_duplicate_of_edges(driver, node_duplicates)
+    ] = await filter_existing_duplicate_of_edges(driver, state.duplicate_pairs)
 
     return (
         [node for node in state.resolved_nodes if node is not None],

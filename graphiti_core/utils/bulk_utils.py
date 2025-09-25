@@ -43,7 +43,7 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
     get_episode_node_save_bulk_query,
 )
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
@@ -266,83 +266,66 @@ async def dedupe_nodes_bulk(
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
-    embedder = clients.embedder
-    min_score = 0.8
-
-    # generate embeddings
-    await semaphore_gather(
-        *[create_entity_node_embeddings(embedder, nodes) for nodes in extracted_nodes]
-    )
-
-    # Find similar results
-    dedupe_tuples: list[tuple[list[EntityNode], list[EntityNode]]] = []
-    for i, nodes_i in enumerate(extracted_nodes):
-        existing_nodes: list[EntityNode] = []
-        for j, nodes_j in enumerate(extracted_nodes):
-            if i == j:
-                continue
-            existing_nodes += nodes_j
-
-        candidates_i: list[EntityNode] = []
-        for node in nodes_i:
-            for existing_node in existing_nodes:
-                # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
-                # This approach will cast a wider net than BM25, which is ideal for this use case
-                node_words = set(node.name.lower().split())
-                existing_node_words = set(existing_node.name.lower().split())
-                has_overlap = not node_words.isdisjoint(existing_node_words)
-                if has_overlap:
-                    candidates_i.append(existing_node)
-                    continue
-
-                # Check for semantic similarity even if there is no overlap
-                similarity = np.dot(
-                    normalize_l2(node.name_embedding or []),
-                    normalize_l2(existing_node.name_embedding or []),
-                )
-                if similarity >= min_score:
-                    candidates_i.append(existing_node)
-
-        dedupe_tuples.append((nodes_i, candidates_i))
-
-    # Determine Node Resolutions
-    bulk_node_resolutions: list[
-        tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]
-    ] = await semaphore_gather(
-        *[
-            resolve_extracted_nodes(
-                clients,
-                dedupe_tuple[0],
-                episode_tuples[i][0],
-                episode_tuples[i][1],
-                entity_types,
-                existing_nodes_override=dedupe_tuples[i][1],
-            )
-            for i, dedupe_tuple in enumerate(dedupe_tuples)
-        ]
-    )
-
-    # Collect all duplicate pairs sorted by uuid
+    canonical_nodes: dict[str, EntityNode] = {}
+    episode_resolutions: list[tuple[str, list[EntityNode]]] = []
+    per_episode_uuid_maps: list[dict[str, str]] = []
     duplicate_pairs: list[tuple[str, str]] = []
-    for _, _, duplicates in bulk_node_resolutions:
-        for duplicate in duplicates:
-            n, m = duplicate
-            duplicate_pairs.append((n.uuid, m.uuid))
 
-    # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
-    compressed_map: dict[str, str] = compress_uuid_map(duplicate_pairs)
+    for nodes, (episode, previous_episodes) in zip(extracted_nodes, episode_tuples, strict=True):
+        existing_override = list(canonical_nodes.values()) if canonical_nodes else None
 
-    node_uuid_map: dict[str, EntityNode] = {
-        node.uuid: node for nodes in extracted_nodes for node in nodes
-    }
+        resolved_nodes, uuid_map, duplicates = await resolve_extracted_nodes(
+            clients,
+            nodes,
+            episode,
+            previous_episodes,
+            entity_types,
+            existing_nodes_override=existing_override,
+        )
+
+        per_episode_uuid_maps.append(uuid_map)
+        episode_resolutions.append((episode.uuid, resolved_nodes))
+
+        for node in resolved_nodes:
+            canonical_nodes[node.uuid] = node
+
+        duplicate_pairs.extend((source.uuid, target.uuid) for source, target in duplicates)
+
+    uuid_chains: dict[str, str] = {}
+    for uuid_map in per_episode_uuid_maps:
+        uuid_chains.update(uuid_map)
+    for duplicate_uuid, canonical_uuid in duplicate_pairs:
+        uuid_chains[duplicate_uuid] = canonical_uuid
+
+    def _resolve_uuid(uuid: str) -> str:
+        seen: set[str] = set()
+        current = uuid
+        while True:
+            target = uuid_chains.get(current)
+            if target is None or target == current:
+                return current if target is None else target
+            if current in seen:
+                return current
+            seen.add(current)
+            current = target
+
+    compressed_map: dict[str, str] = {uuid: _resolve_uuid(uuid) for uuid in uuid_chains}
+    for canonical_uuid in canonical_nodes:
+        compressed_map.setdefault(canonical_uuid, canonical_uuid)
 
     nodes_by_episode: dict[str, list[EntityNode]] = {}
-    for i, nodes in enumerate(extracted_nodes):
-        episode = episode_tuples[i][0]
+    for episode_uuid, resolved_nodes in episode_resolutions:
+        deduped_nodes: list[EntityNode] = []
+        seen: set[str] = set()
+        for node in resolved_nodes:
+            canonical_uuid = compressed_map.get(node.uuid, node.uuid)
+            if canonical_uuid in seen:
+                continue
+            seen.add(canonical_uuid)
+            canonical_node = canonical_nodes.get(canonical_uuid, node)
+            deduped_nodes.append(canonical_node)
 
-        nodes_by_episode[episode.uuid] = [
-            node_uuid_map[compressed_map.get(node.uuid, node.uuid)] for node in nodes
-        ]
+        nodes_by_episode[episode_uuid] = deduped_nodes
 
     return nodes_by_episode, compressed_map
 
