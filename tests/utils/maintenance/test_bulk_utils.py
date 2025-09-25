@@ -65,8 +65,7 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
             return [canonical], {canonical.uuid: canonical.uuid}, []
 
         assert nodes_arg == [extracted_two]
-        assert existing_nodes_override is not None
-        assert existing_nodes_override[0] is canonical
+        assert existing_nodes_override is None
 
         return [canonical], {extracted_two.uuid: canonical.uuid}, [(extracted_two, canonical)]
 
@@ -80,7 +79,7 @@ async def test_dedupe_nodes_bulk_reuses_canonical_nodes(monkeypatch):
 
     assert len(call_queue) == 2
     assert call_queue[0] is None
-    assert list(call_queue[1]) == [canonical]
+    assert call_queue[1] is None
 
     assert nodes_by_episode[episode_one.uuid] == [canonical]
     assert nodes_by_episode[episode_two.uuid] == [canonical]
