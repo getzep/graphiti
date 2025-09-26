@@ -43,8 +43,14 @@ from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_save_bulk_query,
     get_episode_node_save_bulk_query,
 )
-from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode, create_entity_node_embeddings
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
+from graphiti_core.utils.maintenance.dedup_helpers import (
+    DedupResolutionState,
+    _build_candidate_indexes,
+    _normalize_string_exact,
+    _resolve_with_similarity,
+)
 from graphiti_core.utils.maintenance.edge_operations import (
     extract_edges,
     resolve_extracted_edge,
@@ -61,6 +67,38 @@ from graphiti_core.utils.maintenance.node_operations import (
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 10
+
+
+def _build_directed_uuid_map(pairs: list[tuple[str, str]]) -> dict[str, str]:
+    """Collapse alias -> canonical chains while preserving direction.
+
+    The incoming pairs represent directed mappings discovered during node dedupe. We use a simple
+    union-find with iterative path compression to ensure every source UUID resolves to its ultimate
+    canonical target, even if aliases appear lexicographically smaller than the canonical UUID.
+    """
+
+    parent: dict[str, str] = {}
+
+    def find(uuid: str) -> str:
+        """Directed union-find lookup using iterative path compression."""
+        parent.setdefault(uuid, uuid)
+        root = uuid
+        while parent[root] != root:
+            root = parent[root]
+
+        while parent[uuid] != root:
+            next_uuid = parent[uuid]
+            parent[uuid] = root
+            uuid = next_uuid
+
+        return root
+
+    for source_uuid, target_uuid in pairs:
+        parent.setdefault(source_uuid, source_uuid)
+        parent.setdefault(target_uuid, target_uuid)
+        parent[find(source_uuid)] = find(target_uuid)
+
+    return {uuid: find(uuid) for uuid in parent}
 
 
 class RawEpisode(BaseModel):
@@ -266,83 +304,111 @@ async def dedupe_nodes_bulk(
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
     entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
-    embedder = clients.embedder
-    min_score = 0.8
+    """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
-    # generate embeddings
-    await semaphore_gather(
-        *[create_entity_node_embeddings(embedder, nodes) for nodes in extracted_nodes]
-    )
+    1. Run :func:`resolve_extracted_nodes` for every episode in parallel so each batch item is
+       reconciled against the live graph just like the non-batch flow.
+    2. Re-run the deterministic similarity heuristics across the union of resolved nodes to catch
+       duplicates that only co-occur inside this batch, emitting a canonical UUID map that callers
+       can apply to edges and persistence.
+    """
 
-    # Find similar results
-    dedupe_tuples: list[tuple[list[EntityNode], list[EntityNode]]] = []
-    for i, nodes_i in enumerate(extracted_nodes):
-        existing_nodes: list[EntityNode] = []
-        for j, nodes_j in enumerate(extracted_nodes):
-            if i == j:
-                continue
-            existing_nodes += nodes_j
-
-        candidates_i: list[EntityNode] = []
-        for node in nodes_i:
-            for existing_node in existing_nodes:
-                # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
-                # This approach will cast a wider net than BM25, which is ideal for this use case
-                node_words = set(node.name.lower().split())
-                existing_node_words = set(existing_node.name.lower().split())
-                has_overlap = not node_words.isdisjoint(existing_node_words)
-                if has_overlap:
-                    candidates_i.append(existing_node)
-                    continue
-
-                # Check for semantic similarity even if there is no overlap
-                similarity = np.dot(
-                    normalize_l2(node.name_embedding or []),
-                    normalize_l2(existing_node.name_embedding or []),
-                )
-                if similarity >= min_score:
-                    candidates_i.append(existing_node)
-
-        dedupe_tuples.append((nodes_i, candidates_i))
-
-    # Determine Node Resolutions
-    bulk_node_resolutions: list[
-        tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]
-    ] = await semaphore_gather(
+    first_pass_results = await semaphore_gather(
         *[
             resolve_extracted_nodes(
                 clients,
-                dedupe_tuple[0],
+                nodes,
                 episode_tuples[i][0],
                 episode_tuples[i][1],
                 entity_types,
-                existing_nodes_override=dedupe_tuples[i][1],
             )
-            for i, dedupe_tuple in enumerate(dedupe_tuples)
+            for i, nodes in enumerate(extracted_nodes)
         ]
     )
 
-    # Collect all duplicate pairs sorted by uuid
+    episode_resolutions: list[tuple[str, list[EntityNode]]] = []
+    per_episode_uuid_maps: list[dict[str, str]] = []
     duplicate_pairs: list[tuple[str, str]] = []
-    for _, _, duplicates in bulk_node_resolutions:
-        for duplicate in duplicates:
-            n, m = duplicate
-            duplicate_pairs.append((n.uuid, m.uuid))
 
-    # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
-    compressed_map: dict[str, str] = compress_uuid_map(duplicate_pairs)
+    for (resolved_nodes, uuid_map, duplicates), (episode, _) in zip(
+        first_pass_results, episode_tuples, strict=True
+    ):
+        episode_resolutions.append((episode.uuid, resolved_nodes))
+        per_episode_uuid_maps.append(uuid_map)
+        duplicate_pairs.extend((source.uuid, target.uuid) for source, target in duplicates)
 
-    node_uuid_map: dict[str, EntityNode] = {
-        node.uuid: node for nodes in extracted_nodes for node in nodes
-    }
+    canonical_nodes: dict[str, EntityNode] = {}
+    for _, resolved_nodes in episode_resolutions:
+        for node in resolved_nodes:
+            # NOTE: this loop is O(n^2) in the number of nodes inside the batch because we rebuild
+            # the MinHash index for the accumulated canonical pool each time. The LRU-backed
+            # shingle cache keeps the constant factors low for typical batch sizes (≤ CHUNK_SIZE),
+            # but if batches grow significantly we should switch to an incremental index or chunked
+            # processing.
+            if not canonical_nodes:
+                canonical_nodes[node.uuid] = node
+                continue
+
+            existing_candidates = list(canonical_nodes.values())
+            normalized = _normalize_string_exact(node.name)
+            exact_match = next(
+                (
+                    candidate
+                    for candidate in existing_candidates
+                    if _normalize_string_exact(candidate.name) == normalized
+                ),
+                None,
+            )
+            if exact_match is not None:
+                if exact_match.uuid != node.uuid:
+                    duplicate_pairs.append((node.uuid, exact_match.uuid))
+                continue
+
+            indexes = _build_candidate_indexes(existing_candidates)
+            state = DedupResolutionState(
+                resolved_nodes=[None],
+                uuid_map={},
+                unresolved_indices=[],
+            )
+            _resolve_with_similarity([node], indexes, state)
+
+            resolved = state.resolved_nodes[0]
+            if resolved is None:
+                canonical_nodes[node.uuid] = node
+                continue
+
+            canonical_uuid = resolved.uuid
+            canonical_nodes.setdefault(canonical_uuid, resolved)
+            if canonical_uuid != node.uuid:
+                duplicate_pairs.append((node.uuid, canonical_uuid))
+
+    union_pairs: list[tuple[str, str]] = []
+    for uuid_map in per_episode_uuid_maps:
+        union_pairs.extend(uuid_map.items())
+    union_pairs.extend(duplicate_pairs)
+
+    compressed_map: dict[str, str] = _build_directed_uuid_map(union_pairs)
 
     nodes_by_episode: dict[str, list[EntityNode]] = {}
-    for i, nodes in enumerate(extracted_nodes):
-        episode = episode_tuples[i][0]
+    for episode_uuid, resolved_nodes in episode_resolutions:
+        deduped_nodes: list[EntityNode] = []
+        seen: set[str] = set()
+        for node in resolved_nodes:
+            canonical_uuid = compressed_map.get(node.uuid, node.uuid)
+            if canonical_uuid in seen:
+                continue
+            seen.add(canonical_uuid)
+            canonical_node = canonical_nodes.get(canonical_uuid)
+            if canonical_node is None:
+                logger.error(
+                    'Canonical node %s missing during batch dedupe; falling back to %s',
+                    canonical_uuid,
+                    node.uuid,
+                )
+                canonical_node = node
+            deduped_nodes.append(canonical_node)
 
-        nodes_by_episode[episode.uuid] = [
-            node_uuid_map[compressed_map.get(node.uuid, node.uuid)] for node in nodes
-        ]
+        nodes_by_episode[episode_uuid] = deduped_nodes
 
     return nodes_by_episode, compressed_map
 

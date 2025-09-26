@@ -257,6 +257,7 @@ def test_resolve_with_similarity_exact_match_updates_state():
     assert state.resolved_nodes[0].uuid == candidate.uuid
     assert state.uuid_map[extracted.uuid] == candidate.uuid
     assert state.unresolved_indices == []
+    assert state.duplicate_pairs == [(extracted, candidate)]
 
 
 def test_resolve_with_similarity_low_entropy_defers_resolution():
@@ -274,6 +275,7 @@ def test_resolve_with_similarity_low_entropy_defers_resolution():
 
     assert state.resolved_nodes[0] is None
     assert state.unresolved_indices == [0]
+    assert state.duplicate_pairs == []
 
 
 def test_resolve_with_similarity_multiple_exact_matches_defers_to_llm():
@@ -288,6 +290,7 @@ def test_resolve_with_similarity_multiple_exact_matches_defers_to_llm():
 
     assert state.resolved_nodes[0] is None
     assert state.unresolved_indices == [0]
+    assert state.duplicate_pairs == []
 
 
 @pytest.mark.asyncio
@@ -339,3 +342,4 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
     assert state.uuid_map[extracted.uuid] == candidate.uuid
     assert captured_context['existing_nodes'][0]['idx'] == 0
     assert isinstance(captured_context['existing_nodes'], list)
+    assert state.duplicate_pairs == [(extracted, candidate)]

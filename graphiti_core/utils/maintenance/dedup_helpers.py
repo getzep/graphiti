@@ -20,7 +20,7 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from hashlib import blake2b
 from typing import TYPE_CHECKING
@@ -164,6 +164,7 @@ class DedupResolutionState:
     resolved_nodes: list[EntityNode | None]
     uuid_map: dict[str, str]
     unresolved_indices: list[int]
+    duplicate_pairs: list[tuple[EntityNode, EntityNode]] = field(default_factory=list)
 
 
 def _build_candidate_indexes(existing_nodes: list[EntityNode]) -> DedupCandidateIndexes:
@@ -213,6 +214,8 @@ def _resolve_with_similarity(
             match = existing_matches[0]
             state.resolved_nodes[idx] = match
             state.uuid_map[node.uuid] = match.uuid
+            if match.uuid != node.uuid:
+                state.duplicate_pairs.append((node, match))
             continue
         if len(existing_matches) > 1:
             state.unresolved_indices.append(idx)
@@ -236,6 +239,8 @@ def _resolve_with_similarity(
         if best_candidate is not None and best_score >= _FUZZY_JACCARD_THRESHOLD:
             state.resolved_nodes[idx] = best_candidate
             state.uuid_map[node.uuid] = best_candidate.uuid
+            if best_candidate.uuid != node.uuid:
+                state.duplicate_pairs.append((node, best_candidate))
             continue
 
         state.unresolved_indices.append(idx)
