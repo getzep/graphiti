@@ -69,6 +69,37 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 10
 
 
+def _build_directed_uuid_map(pairs: list[tuple[str, str]]) -> dict[str, str]:
+    """Collapse alias -> canonical chains while preserving direction.
+
+    The incoming pairs represent directed mappings discovered during node dedupe. We use a simple
+    union-find with iterative path compression to ensure every source UUID resolves to its ultimate
+    canonical target, even if aliases appear lexicographically smaller than the canonical UUID.
+    """
+
+    parent: dict[str, str] = {}
+
+    def find(uuid: str) -> str:
+        parent.setdefault(uuid, uuid)
+        root = uuid
+        while parent[root] != root:
+            root = parent[root]
+
+        while parent[uuid] != root:
+            next_uuid = parent[uuid]
+            parent[uuid] = root
+            uuid = next_uuid
+
+        return root
+
+    for source_uuid, target_uuid in pairs:
+        parent.setdefault(source_uuid, source_uuid)
+        parent.setdefault(target_uuid, target_uuid)
+        parent[find(source_uuid)] = find(target_uuid)
+
+    return {uuid: find(uuid) for uuid in parent}
+
+
 class RawEpisode(BaseModel):
     name: str
     uuid: str | None = Field(default=None)
@@ -355,24 +386,7 @@ async def dedupe_nodes_bulk(
         union_pairs.extend(uuid_map.items())
     union_pairs.extend(duplicate_pairs)
 
-    parent: dict[str, str] = {}
-
-    def find(uuid: str) -> str:
-        """Directed union-find lookup so aliases always point to the true canonical UUID."""
-        parent.setdefault(uuid, uuid)
-        if parent[uuid] != uuid:
-            parent[uuid] = find(parent[uuid])
-        return parent[uuid]
-
-    for source_uuid, target_uuid in union_pairs:
-        parent.setdefault(source_uuid, source_uuid)
-        parent.setdefault(target_uuid, target_uuid)
-        # Force the alias chain (source -> target) to collapse in the canonical direction.
-        root_target = find(target_uuid)
-        root_source = find(source_uuid)
-        parent[root_source] = root_target
-
-    compressed_map: dict[str, str] = {uuid: find(uuid) for uuid in parent}
+    compressed_map: dict[str, str] = _build_directed_uuid_map(union_pairs)
 
     nodes_by_episode: dict[str, list[EntityNode]] = {}
     for episode_uuid, resolved_nodes in episode_resolutions:

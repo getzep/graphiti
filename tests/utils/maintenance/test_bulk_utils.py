@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils import bulk_utils
@@ -184,3 +185,48 @@ async def test_dedupe_nodes_bulk_missing_canonical_falls_back(monkeypatch, caplo
     assert nodes_by_episode[episode.uuid] == [extracted]
     assert compressed_map.get(extracted.uuid) == 'missing-canonical'
     assert any('Canonical node missing' in rec.message for rec in caplog.records)
+
+
+def test_build_directed_uuid_map_empty():
+    assert bulk_utils._build_directed_uuid_map([]) == {}
+
+
+def test_build_directed_uuid_map_chain():
+    mapping = bulk_utils._build_directed_uuid_map(
+        [
+            ('a', 'b'),
+            ('b', 'c'),
+        ]
+    )
+
+    assert mapping['a'] == 'c'
+    assert mapping['b'] == 'c'
+    assert mapping['c'] == 'c'
+
+
+def test_build_directed_uuid_map_preserves_direction():
+    mapping = bulk_utils._build_directed_uuid_map(
+        [
+            ('alias', 'canonical'),
+        ]
+    )
+
+    assert mapping['alias'] == 'canonical'
+    assert mapping['canonical'] == 'canonical'
+
+
+def test_resolve_edge_pointers_updates_sources():
+    created_at = utc_now()
+    edge = EntityEdge(
+        name='knows',
+        fact='fact',
+        group_id='group',
+        source_node_uuid='alias',
+        target_node_uuid='target',
+        created_at=created_at,
+    )
+
+    bulk_utils.resolve_edge_pointers([edge], {'alias': 'canonical'})
+
+    assert edge.source_node_uuid == 'canonical'
+    assert edge.target_node_uuid == 'target'
