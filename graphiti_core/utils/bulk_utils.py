@@ -375,7 +375,7 @@ async def dedupe_nodes_bulk(
             seen.add(canonical_uuid)
             canonical_node = canonical_nodes.get(canonical_uuid)
             if canonical_node is None:
-                logger.warning(
+                logger.error(
                     'Canonical node %s missing during batch dedupe; falling back to %s',
                     canonical_uuid,
                     node.uuid,
