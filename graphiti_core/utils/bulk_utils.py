@@ -308,6 +308,11 @@ async def dedupe_nodes_bulk(
     canonical_nodes: dict[str, EntityNode] = {}
     for _, resolved_nodes in episode_resolutions:
         for node in resolved_nodes:
+            # NOTE: this loop is O(n^2) in the number of nodes inside the batch because we rebuild
+            # the MinHash index for the accumulated canonical pool each time. The LRU-backed
+            # shingle cache keeps the constant factors low for typical batch sizes (≤ CHUNK_SIZE),
+            # but if batches grow significantly we should switch to an incremental index or chunked
+            # processing.
             if not canonical_nodes:
                 canonical_nodes[node.uuid] = node
                 continue
