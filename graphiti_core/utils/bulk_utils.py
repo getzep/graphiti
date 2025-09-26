@@ -80,6 +80,7 @@ def _build_directed_uuid_map(pairs: list[tuple[str, str]]) -> dict[str, str]:
     parent: dict[str, str] = {}
 
     def find(uuid: str) -> str:
+        """Directed union-find lookup using iterative path compression."""
         parent.setdefault(uuid, uuid)
         root = uuid
         while parent[root] != root:
