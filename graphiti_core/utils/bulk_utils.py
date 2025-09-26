@@ -355,14 +355,24 @@ async def dedupe_nodes_bulk(
         union_pairs.extend(uuid_map.items())
     union_pairs.extend(duplicate_pairs)
 
-    compressed_map: dict[str, str] = compress_uuid_map(union_pairs)
-    # We pass directed edges (extracted -> canonical) to the compressor, but the utility treats
-    # them as undirected pairs and picks the lexicographically smaller UUID as the component root.
-    # Re-write the entries using the original direction so that each source maps to the canonical
-    # target returned by the first/second pass even if its UUID sorts before the canonical one.
+    parent: dict[str, str] = {}
+
+    def find(uuid: str) -> str:
+        """Directed union-find lookup so aliases always point to the true canonical UUID."""
+        parent.setdefault(uuid, uuid)
+        if parent[uuid] != uuid:
+            parent[uuid] = find(parent[uuid])
+        return parent[uuid]
+
     for source_uuid, target_uuid in union_pairs:
-        canonical_uuid = compressed_map.get(target_uuid, target_uuid)
-        compressed_map[source_uuid] = canonical_uuid
+        parent.setdefault(source_uuid, source_uuid)
+        parent.setdefault(target_uuid, target_uuid)
+        # Force the alias chain (source -> target) to collapse in the canonical direction.
+        root_target = find(target_uuid)
+        root_source = find(source_uuid)
+        parent[root_source] = root_target
+
+    compressed_map: dict[str, str] = {uuid: find(uuid) for uuid in parent}
 
     nodes_by_episode: dict[str, list[EntityNode]] = {}
     for episode_uuid, resolved_nodes in episode_resolutions:
