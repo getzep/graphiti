@@ -241,7 +241,11 @@ async def _resolve_with_llm(
     previous_episodes: list[EpisodicNode] | None,
     entity_types: dict[str, type[BaseModel]] | None,
 ) -> None:
-    """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates."""
+    """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates.
+
+    The guardrails below defensively ignore malformed or duplicate LLM responses so the
+    ingestion workflow remains deterministic even when the model misbehaves.
+    """
     if not state.unresolved_indices:
         return
 
