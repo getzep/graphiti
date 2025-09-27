@@ -153,7 +153,7 @@ class LLMClient(ABC):
             cached_response = self.cache_dir.get(cache_key)
             if cached_response is not None:
                 logger.debug(f'Cache hit for {cache_key}')
-                return cached_response
+                return cached_response # type: ignore
 
         for message in messages:
             message.content = self._clean_input(message.content)
