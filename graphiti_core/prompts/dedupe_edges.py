@@ -73,7 +73,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
         <NEW EDGE>
         {to_prompt_json(context['extracted_edges'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
         </NEW EDGE>
-        
+
         Task:
         If the New Edges represents the same factual information as any edge in Existing Edges, return the id of the duplicate fact
             as part of the list of duplicate_facts.
@@ -127,27 +127,28 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         <NEW FACT>
         {context['new_edge']}
         </NEW FACT>
-        
+
         <EXISTING FACTS>
         {context['existing_edges']}
         </EXISTING FACTS>
         <FACT INVALIDATION CANDIDATES>
         {context['edge_invalidation_candidates']}
         </FACT INVALIDATION CANDIDATES>
-        
+
         <FACT TYPES>
         {context['edge_types']}
         </FACT TYPES>
-        
+
 
         Task:
         If the NEW FACT represents identical factual information of one or more in EXISTING FACTS, return the idx of the duplicate facts.
         Facts with similar information that contain key differences should not be marked as duplicates.
+        When returning the idx list, ensure to use the integer id from FACT INVALIDATION CANDIDATES items, not the uuid from EXISTING FACTS.
         If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return an empty list.
-        
+
         Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
         Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
-        
+
         Based on the provided FACT INVALIDATION CANDIDATES and NEW FACT, determine which existing facts the new fact contradicts.
         Return a list containing all idx's of the facts that are contradicted by the NEW FACT.
         If there are no contradicted facts, return an empty list.
