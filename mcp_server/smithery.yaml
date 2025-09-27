@@ -1,0 +1,27 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - openaiApiKey
+      - groupId
+    properties:
+      openaiApiKey:
+        type: string
+        description: Your OpenAI API key.
+      groupId:
+        type: string
+        description: The group ID to namespace the graph. An arbitrary string.
+  commandFunction: |
+    (config) => ({ 
+      command: 'uv', 
+      args: [
+        'run', 
+        'graphiti_mcp_server.py',
+        '--group-id',
+        config.groupId
+      ],
+      env: {
+        OPENAI_API_KEY: config.openaiApiKey
+      }
+    }) 
