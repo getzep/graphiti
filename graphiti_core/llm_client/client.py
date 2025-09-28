@@ -32,9 +32,19 @@ from .errors import RateLimitError
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
-MULTILINGUAL_EXTRACTION_RESPONSES = (
-    '\n\nAny extracted information should be returned in the same language as it was written in.'
-)
+
+def get_extraction_language_instruction() -> str:
+    """Returns instruction for language extraction behavior.
+
+    Override this function to customize language extraction:
+    - Return empty string to disable multilingual instructions
+    - Return custom instructions for specific language requirements
+
+    Returns:
+        str: Language instruction to append to system messages
+    """
+    return '\n\nAny extracted information should be returned in the same language as it was written in.'
+
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +155,7 @@ class LLMClient(ABC):
             )
 
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction()
 
         if self.cache_enabled and self.cache_dir is not None:
             cache_key = self._get_cache_key(messages)

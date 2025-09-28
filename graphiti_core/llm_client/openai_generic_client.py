@@ -25,7 +25,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -136,7 +136,7 @@ class OpenAIGenericClient(LLMClient):
             )
 
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction()
 
         while retry_count <= self.MAX_RETRIES:
             try:
