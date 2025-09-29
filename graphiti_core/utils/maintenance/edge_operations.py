@@ -43,6 +43,8 @@ from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 
+DEFAULT_EDGE_NAME = 'RELATES_TO'
+
 logger = logging.getLogger(__name__)
 
 
@@ -310,6 +312,15 @@ async def resolve_extracted_edges(
 
         edge_types_lst.append(extracted_edge_types)
 
+    for extracted_edge, extracted_edge_types in zip(extracted_edges, edge_types_lst, strict=True):
+        allowed_type_names = set(extracted_edge_types)
+        if not allowed_type_names:
+            if extracted_edge.name != DEFAULT_EDGE_NAME:
+                extracted_edge.name = DEFAULT_EDGE_NAME
+            continue
+        if extracted_edge.name not in allowed_type_names:
+            extracted_edge.name = DEFAULT_EDGE_NAME
+
     # resolve edges with related edges in the graph and find invalidation candidates
     results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]] = list(
         await semaphore_gather(
@@ -392,7 +403,7 @@ async def resolve_extracted_edge(
     related_edges: list[EntityEdge],
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
-    edge_types: dict[str, type[BaseModel]] | None = None,
+    edge_type_candidates: dict[str, type[BaseModel]] | None = None,
     ensure_ascii: bool = True,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     if len(related_edges) == 0 and len(existing_edges) == 0:
@@ -429,9 +440,9 @@ async def resolve_extracted_edge(
                 'fact_type_name': type_name,
                 'fact_type_description': type_model.__doc__,
             }
-            for i, (type_name, type_model) in enumerate(edge_types.items())
+            for i, (type_name, type_model) in enumerate(edge_type_candidates.items())
         ]
-        if edge_types is not None
+        if edge_type_candidates is not None
         else []
     )
 
@@ -468,7 +479,8 @@ async def resolve_extracted_edge(
     ]
 
     fact_type: str = response_object.fact_type
-    if fact_type.upper() != 'DEFAULT' and edge_types is not None:
+    candidate_type_names = set(edge_type_candidates or {})
+    if candidate_type_names and fact_type in candidate_type_names:
         resolved_edge.name = fact_type
 
         edge_attributes_context = {
@@ -478,7 +490,7 @@ async def resolve_extracted_edge(
             'ensure_ascii': ensure_ascii,
         }
 
-        edge_model = edge_types.get(fact_type)
+        edge_model = edge_type_candidates.get(fact_type) if edge_type_candidates else None
         if edge_model is not None and len(edge_model.model_fields) != 0:
             edge_attributes_response = await llm_client.generate_response(
                 prompt_library.extract_edges.extract_attributes(edge_attributes_context),
@@ -487,6 +499,9 @@ async def resolve_extracted_edge(
             )
 
             resolved_edge.attributes = edge_attributes_response
+    elif fact_type.upper() != 'DEFAULT':
+        resolved_edge.name = DEFAULT_EDGE_NAME
+        resolved_edge.attributes = {}
 
     end = time()
     logger.debug(
