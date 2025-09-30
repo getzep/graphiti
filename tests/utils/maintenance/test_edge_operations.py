@@ -1,13 +1,6 @@
-import sys
-import types
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-
-opensearch_stub = types.ModuleType('opensearchpy')
-opensearch_stub.AsyncOpenSearch = None
-opensearch_stub.helpers = None
-sys.modules.setdefault('opensearchpy', opensearch_stub)
 
 import pytest
 from pydantic import BaseModel
@@ -179,7 +172,11 @@ async def test_resolve_extracted_edges_resets_unmapped_names(monkeypatch):
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
-        return_value={'duplicate_facts': [], 'contradicted_facts': [], 'fact_type': 'DEFAULT'}
+        return_value={
+            'duplicate_facts': [],
+            'contradicted_facts': [],
+            'fact_type': 'DEFAULT',
+        }
     )
 
     clients = SimpleNamespace(
@@ -256,7 +253,11 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
 
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
-        return_value={'duplicate_facts': [], 'contradicted_facts': [], 'fact_type': 'DEFAULT'}
+        return_value={
+            'duplicate_facts': [],
+            'contradicted_facts': [],
+            'fact_type': 'DEFAULT',
+        }
     )
 
     clients = SimpleNamespace(
