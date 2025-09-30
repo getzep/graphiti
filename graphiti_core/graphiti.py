@@ -1070,6 +1070,7 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
+            None,
             self.ensure_ascii,
         )
 

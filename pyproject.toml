@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.30.0pre4"
+version = "0.30.0pre5"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -42,6 +42,9 @@ dev = [
     "google-genai>=1.8.0",
     "falkordb>=1.1.2,<2.0.0",
     "kuzu>=0.11.2",
+    "boto3>=1.39.16",
+    "opensearch-py>=3.0.0",
+    "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "diskcache-stubs>=5.6.3.6.20240818",

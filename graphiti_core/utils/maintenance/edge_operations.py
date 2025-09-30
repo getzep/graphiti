@@ -283,8 +283,12 @@ async def resolve_extracted_edges(
     # Build entity hash table
     uuid_entity_map: dict[str, EntityNode] = {entity.uuid: entity for entity in entities}
 
-    # Determine which edge types are relevant for each edge
+    # Determine which edge types are relevant for each edge.
+    # `edge_types_lst` stores the subset of custom edge definitions whose
+    # node signature matches each extracted edge. Anything outside this subset
+    # should only stay on the edge if it is a non-custom (LLM generated) label.
     edge_types_lst: list[dict[str, type[BaseModel]]] = []
+    custom_type_names = set(edge_types or {})
     for extracted_edge in extracted_edges:
         source_node = uuid_entity_map.get(extracted_edge.source_node_uuid)
         target_node = uuid_entity_map.get(extracted_edge.target_node_uuid)
@@ -314,11 +318,16 @@ async def resolve_extracted_edges(
 
     for extracted_edge, extracted_edge_types in zip(extracted_edges, edge_types_lst, strict=True):
         allowed_type_names = set(extracted_edge_types)
+        is_custom_name = extracted_edge.name in custom_type_names
         if not allowed_type_names:
-            if extracted_edge.name != DEFAULT_EDGE_NAME:
+            # No custom types are valid for this node pairing. Keep LLM generated
+            # labels, but flip disallowed custom names back to the default.
+            if is_custom_name and extracted_edge.name != DEFAULT_EDGE_NAME:
                 extracted_edge.name = DEFAULT_EDGE_NAME
             continue
-        if extracted_edge.name not in allowed_type_names:
+        if is_custom_name and extracted_edge.name not in allowed_type_names:
+            # Custom name exists but it is not permitted for this source/target
+            # signature, so fall back to the default edge label.
             extracted_edge.name = DEFAULT_EDGE_NAME
 
     # resolve edges with related edges in the graph and find invalidation candidates
@@ -332,6 +341,7 @@ async def resolve_extracted_edges(
                     existing_edges,
                     episode,
                     extracted_edge_types,
+                    custom_type_names,
                     clients.ensure_ascii,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
@@ -404,8 +414,37 @@ async def resolve_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
+    custom_edge_type_names: set[str] | None = None,
     ensure_ascii: bool = True,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
+    """Resolve an extracted edge against existing graph context.
+
+    Parameters
+    ----------
+    llm_client : LLMClient
+        Client used to invoke the LLM for deduplication and attribute extraction.
+    extracted_edge : EntityEdge
+        Newly extracted edge whose canonical representation is being resolved.
+    related_edges : list[EntityEdge]
+        Candidate edges with identical endpoints used for duplicate detection.
+    existing_edges : list[EntityEdge]
+        Broader set of edges evaluated for contradiction / invalidation.
+    episode : EpisodicNode
+        Episode providing content context when extracting edge attributes.
+    edge_type_candidates : dict[str, type[BaseModel]] | None
+        Custom edge types permitted for the current source/target signature.
+    custom_edge_type_names : set[str] | None
+        Full catalog of registered custom edge names. Used to distinguish
+        between disallowed custom types (which fall back to the default label)
+        and ad-hoc labels emitted by the LLM.
+    ensure_ascii : bool
+        Whether prompt payloads should coerce ASCII output.
+
+    Returns
+    -------
+    tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]
+        The resolved edge, any duplicates, and edges to invalidate.
+    """
     if len(related_edges) == 0 and len(existing_edges) == 0:
         return extracted_edge, [], []
 
@@ -480,7 +519,15 @@ async def resolve_extracted_edge(
 
     fact_type: str = response_object.fact_type
     candidate_type_names = set(edge_type_candidates or {})
-    if candidate_type_names and fact_type in candidate_type_names:
+    custom_type_names = custom_edge_type_names or set()
+
+    is_default_type = fact_type.upper() == 'DEFAULT'
+    is_custom_type = fact_type in custom_type_names
+    is_allowed_custom_type = fact_type in candidate_type_names
+
+    if is_allowed_custom_type:
+        # The LLM selected a custom type that is allowed for the node pair.
+        # Adopt the custom type and, if needed, extract its structured attributes.
         resolved_edge.name = fact_type
 
         edge_attributes_context = {
@@ -499,8 +546,15 @@ async def resolve_extracted_edge(
             )
 
             resolved_edge.attributes = edge_attributes_response
-    elif fact_type.upper() != 'DEFAULT':
+    elif not is_default_type and is_custom_type:
+        # The LLM picked a custom type that is not allowed for this signature.
+        # Reset to the default label and drop any structured attributes.
         resolved_edge.name = DEFAULT_EDGE_NAME
+        resolved_edge.attributes = {}
+    elif not is_default_type:
+        # Non-custom labels are allowed to pass through so long as the LLM does
+        # not return the sentinel DEFAULT value.
+        resolved_edge.name = fact_type
         resolved_edge.attributes = {}
 
     end = time()
