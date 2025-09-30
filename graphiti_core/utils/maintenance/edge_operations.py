@@ -139,6 +139,7 @@ async def extract_edges(
             prompt_library.extract_edges.edge(context),
             response_model=ExtractedEdges,
             max_tokens=extract_edges_max_tokens,
+            group_id=group_id,
         )
         edges_data = ExtractedEdges(**llm_response).edges
 
@@ -150,6 +151,7 @@ async def extract_edges(
                 prompt_library.extract_edges.reflexion(context),
                 response_model=MissingFacts,
                 max_tokens=extract_edges_max_tokens,
+                group_id=group_id,
             )
 
             missing_facts = reflexion_response.get('missing_facts', [])
