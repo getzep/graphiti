@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
@@ -376,7 +376,7 @@ class GeminiClient(LLMClient):
         last_output = None
 
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction()
 
         while retry_count < self.MAX_RETRIES:
             try:
