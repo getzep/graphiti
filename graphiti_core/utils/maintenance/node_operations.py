@@ -65,7 +65,7 @@ async def extract_nodes_reflexion(
     previous_episodes: list[EpisodicNode],
     node_names: list[str],
     ensure_ascii: bool = False,
-    group_id: str = '',
+    group_id: str | None = None,
 ) -> list[str]:
     # Prepare context for LLM
     context = {
