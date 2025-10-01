@@ -313,7 +313,7 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
         episodes=[episode.uuid],
     )
 
-    edges_by_episode = await bulk_utils.dedupe_edges_bulk(
+    await bulk_utils.dedupe_edges_bulk(
         clients,
         [[edge1, edge2, edge3]],
         [(episode, [])],
@@ -325,6 +325,6 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
     # Verify that edges were compared against each other (within same episode)
     # Each edge should have been compared against all 3 edges (including itself, which gets filtered)
     assert len(comparisons_made) == 3
-    for edge_uuid, compared_against in comparisons_made:
+    for _, compared_against in comparisons_made:
         # Each edge should have access to all 3 edges as candidates
         assert len(compared_against) >= 2  # At least 2 others (self is filtered out)

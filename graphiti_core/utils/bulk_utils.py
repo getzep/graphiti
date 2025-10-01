@@ -433,7 +433,7 @@ async def dedupe_edges_bulk(
     dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge]]] = []
     for i, edges_i in enumerate(extracted_edges):
         existing_edges: list[EntityEdge] = []
-        for j, edges_j in enumerate(extracted_edges):
+        for edges_j in extracted_edges:
             existing_edges += edges_j
 
         for edge in edges_i:
