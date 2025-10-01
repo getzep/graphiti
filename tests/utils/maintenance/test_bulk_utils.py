@@ -230,3 +230,101 @@ def test_resolve_edge_pointers_updates_sources():
 
     assert edge.source_node_uuid == 'canonical'
     assert edge.target_node_uuid == 'target'
+
+
+@pytest.mark.asyncio
+async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
+    """Test that dedupe_edges_bulk correctly compares edges within the same episode.
+
+    This test verifies the fix that removed the `if i == j: continue` check,
+    which was preventing edges from the same episode from being compared against each other.
+    """
+    clients = _make_clients()
+
+    # Track which edges are compared
+    comparisons_made = []
+
+    # Create mock embedder that sets embedding values
+    async def mock_create_embeddings(embedder, edges):
+        for edge in edges:
+            edge.fact_embedding = [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(bulk_utils, 'create_entity_edge_embeddings', mock_create_embeddings)
+
+    # Mock resolve_extracted_edge to track comparisons and mark duplicates
+    async def mock_resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges,
+        existing_edges,
+        episode,
+        edge_type_candidates=None,
+        custom_edge_type_names=None,
+        ensure_ascii=False,
+    ):
+        # Track that this edge was compared against the related_edges
+        comparisons_made.append((extracted_edge.uuid, [r.uuid for r in related_edges]))
+
+        # If there are related edges with same source/target/fact, mark as duplicate
+        for related in related_edges:
+            if (
+                related.uuid != extracted_edge.uuid  # Can't be duplicate of self
+                and related.source_node_uuid == extracted_edge.source_node_uuid
+                and related.target_node_uuid == extracted_edge.target_node_uuid
+                and related.fact.strip().lower() == extracted_edge.fact.strip().lower()
+            ):
+                # Return the related edge and mark extracted_edge as duplicate
+                return related, [], [related]
+        # Otherwise return the extracted edge as-is
+        return extracted_edge, [], []
+
+    monkeypatch.setattr(bulk_utils, 'resolve_extracted_edge', mock_resolve_extracted_edge)
+
+    episode = _make_episode('1')
+    source_uuid = 'source-uuid'
+    target_uuid = 'target-uuid'
+
+    # Create 3 identical edges within the same episode
+    edge1 = EntityEdge(
+        name='recommends',
+        fact='assistant recommends yoga poses',
+        group_id='group',
+        source_node_uuid=source_uuid,
+        target_node_uuid=target_uuid,
+        created_at=utc_now(),
+        episodes=[episode.uuid],
+    )
+    edge2 = EntityEdge(
+        name='recommends',
+        fact='assistant recommends yoga poses',
+        group_id='group',
+        source_node_uuid=source_uuid,
+        target_node_uuid=target_uuid,
+        created_at=utc_now(),
+        episodes=[episode.uuid],
+    )
+    edge3 = EntityEdge(
+        name='recommends',
+        fact='assistant recommends yoga poses',
+        group_id='group',
+        source_node_uuid=source_uuid,
+        target_node_uuid=target_uuid,
+        created_at=utc_now(),
+        episodes=[episode.uuid],
+    )
+
+    edges_by_episode = await bulk_utils.dedupe_edges_bulk(
+        clients,
+        [[edge1, edge2, edge3]],
+        [(episode, [])],
+        [],
+        {},
+        {},
+    )
+
+    # Verify that edges were compared against each other (within same episode)
+    # Each edge should have been compared against all 3 edges (including itself, which gets filtered)
+    assert len(comparisons_made) == 3
+    for edge_uuid, compared_against in comparisons_made:
+        # Each edge should have access to all 3 edges as candidates
+        assert len(compared_against) >= 2  # At least 2 others (self is filtered out)
