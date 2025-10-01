@@ -480,9 +480,7 @@ async def resolve_extracted_edge(
     start = time()
 
     # Prepare context for LLM
-    related_edges_context = [
-        {'id': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)
-    ]
+    related_edges_context = [{'id': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
 
     invalidation_edge_candidates_context = [
         {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
