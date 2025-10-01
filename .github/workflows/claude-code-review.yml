@@ -29,6 +29,8 @@ jobs:
 
             Please review this pull request.
 
+            IMPORTANT: Your role is to critically review code. You must not provide POSITIVE feedback on code, this only adds noise to the review process.
+
             Note: The PR branch is already checked out in the current working directory.
 
             Focus on:
