@@ -151,8 +151,9 @@ For each entity extracted, also determine its entity type based on the provided 
 Indicate the classified entity type by providing its entity_type_id.
 
 Guidelines:
-1. Always try to extract an entities that the JSON represents. This will often be something like a "name" or "user field
-2. Do NOT extract any properties that contain dates
+1. Extract all entities that the JSON represents. This will often be something like a "name" or "user" field
+2. Extract all entities mentioned in all other properties throughout the JSON structure
+3. Do NOT extract any properties that contain dates
 """
     return [
         Message(role='system', content=sys_prompt),

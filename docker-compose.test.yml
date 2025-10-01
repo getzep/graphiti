@@ -25,7 +25,7 @@ services:
       - PORT=8000
 
   neo4j:
-    image: neo4j:5.22.0
+    image: neo4j:5.26.2
     ports:
       - "7474:7474"
       - "${NEO4J_PORT}:${NEO4J_PORT}"
