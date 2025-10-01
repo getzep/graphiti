@@ -434,13 +434,14 @@ async def dedupe_edges_bulk(
     for i, edges_i in enumerate(extracted_edges):
         existing_edges: list[EntityEdge] = []
         for j, edges_j in enumerate(extracted_edges):
-            if i == j:
-                continue
             existing_edges += edges_j
 
         for edge in edges_i:
             candidates: list[EntityEdge] = []
             for existing_edge in existing_edges:
+                # Skip self-comparison
+                if edge.uuid == existing_edge.uuid:
+                    continue
                 # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
                 # This approach will cast a wider net than BM25, which is ideal for this use case
                 if (
