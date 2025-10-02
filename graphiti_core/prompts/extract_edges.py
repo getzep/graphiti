@@ -88,7 +88,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{to_prompt_json(context['nodes'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+{to_prompt_json(context['nodes'], indent=2)}
 </ENTITIES>
 
 <REFERENCE_TIME>
