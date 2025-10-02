@@ -269,6 +269,27 @@ async def _resolve_with_llm(
         for i, node in enumerate(llm_extracted_nodes)
     ]
 
+    sent_ids = [ctx['id'] for ctx in extracted_nodes_context]
+    logger.debug(
+        'Sending %d entities to LLM for deduplication with IDs 0-%d (actual IDs sent: %s)',
+        len(llm_extracted_nodes),
+        len(llm_extracted_nodes) - 1,
+        sent_ids if len(sent_ids) <= 20 else f'{sent_ids[:10]}...{sent_ids[-10:]}',
+    )
+    if llm_extracted_nodes:
+        sample_size = min(3, len(extracted_nodes_context))
+        logger.debug(
+            'First %d entities: %s',
+            sample_size,
+            [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[:sample_size]],
+        )
+        if len(extracted_nodes_context) > 3:
+            logger.debug(
+                'Last %d entities: %s',
+                sample_size,
+                [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[-sample_size:]],
+            )
+
     existing_nodes_context = [
         {
             **{
@@ -301,15 +322,39 @@ async def _resolve_with_llm(
     valid_relative_range = range(len(state.unresolved_indices))
     processed_relative_ids: set[int] = set()
 
+    received_ids = {r.id for r in node_resolutions}
+    expected_ids = set(valid_relative_range)
+    missing_ids = expected_ids - received_ids
+    extra_ids = received_ids - expected_ids
+
+    logger.debug(
+        'Received %d resolutions for %d entities (expected %d)',
+        len(node_resolutions),
+        len(state.unresolved_indices),
+        len(state.unresolved_indices),
+    )
+
+    if missing_ids:
+        logger.warning('LLM did not return resolutions for IDs: %s', sorted(missing_ids))
+
+    if extra_ids:
+        logger.warning(
+            'LLM returned invalid IDs outside valid range 0-%d: %s (all returned IDs: %s)',
+            len(state.unresolved_indices) - 1,
+            sorted(extra_ids),
+            sorted(received_ids),
+        )
+
     for resolution in node_resolutions:
         relative_id: int = resolution.id
         duplicate_idx: int = resolution.duplicate_idx
 
         if relative_id not in valid_relative_range:
             logger.warning(
-                'Skipping invalid LLM dedupe id %s (unresolved indices: %s)',
+                'Skipping invalid LLM dedupe id %d (valid range: 0-%d, received %d resolutions)',
                 relative_id,
-                state.unresolved_indices,
+                len(state.unresolved_indices) - 1,
+                len(node_resolutions),
             )
             continue
 
