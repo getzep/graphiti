@@ -131,9 +131,7 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     return clusters
 
 
-async def summarize_pair(
-    llm_client: LLMClient, summary_pair: tuple[str, str]
-) -> str:
+async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
     # Prepare context for LLM
     context = {
         'node_summaries': [{'summary': summary} for summary in summary_pair],
@@ -148,9 +146,7 @@ async def summarize_pair(
     return pair_summary
 
 
-async def generate_summary_description(
-    llm_client: LLMClient, summary: str
-) -> str:
+async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
     context = {
         'summary': summary,
     }
@@ -178,9 +174,7 @@ async def build_community(
         new_summaries: list[str] = list(
             await semaphore_gather(
                 *[
-                    summarize_pair(
-                        llm_client, (str(left_summary), str(right_summary))
-                    )
+                    summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
                         summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
@@ -315,9 +309,7 @@ async def update_community(
     if community is None:
         return [], []
 
-    new_summary = await summarize_pair(
-        llm_client, (entity.summary, community.summary)
-    )
+    new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
     new_name = await generate_summary_description(llm_client, new_summary)
 
     community.summary = new_summary

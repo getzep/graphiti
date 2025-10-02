@@ -552,9 +552,7 @@ class Graphiti:
             if update_communities:
                 communities, community_edges = await semaphore_gather(
                     *[
-                        update_community(
-                            self.driver, self.llm_client, self.embedder, node
-                        )
+                        update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
                     ],
                     max_coroutines=self.max_coroutines,

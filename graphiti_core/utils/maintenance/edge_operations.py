@@ -542,7 +542,7 @@ async def resolve_extracted_edge(
             'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
-            }
+        }
 
         edge_model = edge_type_candidates.get(fact_type) if edge_type_candidates else None
         if edge_model is not None and len(edge_model.model_fields) != 0:
