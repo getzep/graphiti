@@ -1,0 +1,140 @@
+name: Issue Triage and Deduplication
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for Issue Triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_non_write_users: "*"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You're an issue triage assistant for GitHub issues. Your task is to analyze the issue and select appropriate labels from the provided list.
+
+            IMPORTANT: Don't post any comments or messages to the issue. Your only action should be to apply labels. DO NOT check for duplicates - that's handled by a separate job.
+
+            Issue Information:
+            - REPO: ${{ github.repository }}
+            - ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+            TASK OVERVIEW:
+
+            1. First, fetch the list of labels available in this repository by running: `gh label list`. Run exactly this command with nothing else.
+
+            2. Next, use gh commands to get context about the issue:
+               - Use `gh issue view ${{ github.event.issue.number }}` to retrieve the current issue's details
+               - Use `gh search issues` to find similar issues that might provide context for proper categorization
+               - You have access to these Bash commands:
+                 - Bash(gh label list:*) - to get available labels
+                 - Bash(gh issue view:*) - to view issue details
+                 - Bash(gh issue edit:*) - to apply labels to the issue
+                 - Bash(gh search:*) - to search for similar issues
+
+            3. Analyze the issue content, considering:
+               - The issue title and description
+               - The type of issue (bug report, feature request, question, etc.)
+               - Technical areas mentioned
+               - Database mentions (neo4j, falkordb, neptune, etc.)
+               - LLM providers mentioned (openai, anthropic, gemini, groq, etc.)
+               - Components affected (embeddings, search, prompts, server, mcp, etc.)
+
+            4. Select appropriate labels from the available labels list:
+               - Choose labels that accurately reflect the issue's nature
+               - Be specific but comprehensive
+               - Add database-specific labels if mentioned: neo4j, falkordb, neptune
+               - Add component labels if applicable
+               - DO NOT add priority labels (P1, P2, P3)
+               - DO NOT add duplicate label - that's handled by the deduplication job
+
+            5. Apply the selected labels:
+               - Use `gh issue edit ${{ github.event.issue.number }} --add-label "label1,label2,label3"` to apply your selected labels
+               - DO NOT post any comments explaining your decision
+               - DO NOT communicate directly with users
+               - If no labels are clearly applicable, do not apply any labels
+
+            IMPORTANT GUIDELINES:
+            - Be thorough in your analysis
+            - Only select labels from the provided list
+            - DO NOT post any comments to the issue
+            - Your ONLY action should be to apply labels using gh issue edit
+            - It's okay to not add any labels if none are clearly applicable
+            - DO NOT check for duplicates
+
+          claude_args: |
+            --allowedTools "Bash(gh label list:*),Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh search:*)"
+            --model claude-sonnet-4-5-20250929
+
+  deduplicate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: triage
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check for duplicate issues
+        uses: anthropics/claude-code-action@v1
+        with:
+          prompt: |
+            Analyze this new issue and check if it's a duplicate of existing issues in the repository.
+
+            Issue: #${{ github.event.issue.number }}
+            Repository: ${{ github.repository }}
+
+            Your task:
+            1. Use mcp__github__get_issue to get details of the current issue (#${{ github.event.issue.number }})
+            2. Search for similar existing OPEN issues using mcp__github__search_issues with relevant keywords from the issue title and body
+            3. Compare the new issue with existing ones to identify potential duplicates
+
+            Criteria for duplicates:
+            - Same bug or error being reported
+            - Same feature request (even if worded differently)
+            - Same question being asked
+            - Issues describing the same root problem
+
+            If you find duplicates:
+            - Add a comment on the new issue linking to the original issue(s)
+            - Apply the "duplicate" label to the new issue
+            - Be polite and explain why it's a duplicate
+            - Suggest the user follow the original issue for updates
+
+            If it's NOT a duplicate:
+            - Don't add any comments
+            - Don't modify labels
+
+            Use these tools:
+            - mcp__github__get_issue: Get issue details
+            - mcp__github__search_issues: Search for similar issues (use state:open)
+            - mcp__github__list_issues: List recent issues if needed
+            - mcp__github__create_issue_comment: Add a comment if duplicate found
+            - mcp__github__update_issue: Add "duplicate" label
+
+            Be thorough but efficient. Focus on finding true duplicates, not just similar issues.
+
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --allowedTools "mcp__github__get_issue,mcp__github__search_issues,mcp__github__list_issues,mcp__github__create_issue_comment,mcp__github__update_issue,mcp__github__get_issue_comments"
+            --model claude-sonnet-4-5-20250929
