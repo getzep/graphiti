@@ -649,5 +649,5 @@ async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[En
     # filter out falsey values from edges
     filtered_edges = [edge for edge in edges if edge.fact]
     fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
-    for edge, fact_embedding in zip(edges, fact_embeddings, strict=True):
+    for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding
