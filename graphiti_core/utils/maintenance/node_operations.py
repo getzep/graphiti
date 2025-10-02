@@ -328,9 +328,8 @@ async def _resolve_with_llm(
     extra_ids = received_ids - expected_ids
 
     logger.debug(
-        'Received %d resolutions for %d entities (expected %d)',
+        'Received %d resolutions for %d entities',
         len(node_resolutions),
-        len(state.unresolved_indices),
         len(state.unresolved_indices),
     )
 
