@@ -124,37 +124,48 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-        <NEW FACT>
-        {context['new_edge']}
-        </NEW FACT>
-        
-        <EXISTING FACTS>
-        {context['existing_edges']}
-        </EXISTING FACTS>
-        <FACT INVALIDATION CANDIDATES>
-        {context['edge_invalidation_candidates']}
-        </FACT INVALIDATION CANDIDATES>
-        
-        <FACT TYPES>
-        {context['edge_types']}
-        </FACT TYPES>
-        
-
         Task:
-        If the NEW FACT represents identical factual information of one or more in EXISTING FACTS, return the idx of the duplicate facts.
-        Facts with similar information that contain key differences should not be marked as duplicates.
-        If the NEW FACT is not a duplicate of any of the EXISTING FACTS, return an empty list.
-        
-        Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
-        Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
-        
-        Based on the provided FACT INVALIDATION CANDIDATES and NEW FACT, determine which existing facts the new fact contradicts.
-        Return a list containing all idx's of the facts that are contradicted by the NEW FACT.
-        If there are no contradicted facts, return an empty list.
+        You will receive TWO separate lists of facts. Each list uses 'idx' as its index field, starting from 0.
+
+        1. DUPLICATE DETECTION:
+           - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.
+           - Facts with similar information that contain key differences should NOT be marked as duplicates.
+           - Return idx values from EXISTING FACTS.
+           - If no duplicates, return an empty list for duplicate_facts.
+
+        2. FACT TYPE CLASSIFICATION:
+           - Given the predefined FACT TYPES, determine if the NEW FACT should be classified as one of these types.
+           - Return the fact type as fact_type or DEFAULT if NEW FACT is not one of the FACT TYPES.
+
+        3. CONTRADICTION DETECTION:
+           - Based on FACT INVALIDATION CANDIDATES and NEW FACT, determine which facts the new fact contradicts.
+           - Return idx values from FACT INVALIDATION CANDIDATES.
+           - If no contradictions, return an empty list for contradicted_facts.
+
+        IMPORTANT:
+        - duplicate_facts: Use ONLY 'idx' values from EXISTING FACTS
+        - contradicted_facts: Use ONLY 'idx' values from FACT INVALIDATION CANDIDATES
+        - These are two separate lists with independent idx ranges starting from 0
 
         Guidelines:
         1. Some facts may be very similar but will have key differences, particularly around numeric values in the facts.
             Do not mark these facts as duplicates.
+
+        <FACT TYPES>
+        {context['edge_types']}
+        </FACT TYPES>
+
+        <EXISTING FACTS>
+        {context['existing_edges']}
+        </EXISTING FACTS>
+
+        <FACT INVALIDATION CANDIDATES>
+        {context['edge_invalidation_candidates']}
+        </FACT INVALIDATION CANDIDATES>
+
+        <NEW FACT>
+        {context['new_edge']}
+        </NEW FACT>
         """,
         ),
     ]

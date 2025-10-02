@@ -480,20 +480,19 @@ async def resolve_extracted_edge(
     start = time()
 
     # Prepare context for LLM
-    related_edges_context = [{'id': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
+    related_edges_context = [{'idx': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
 
     invalidation_edge_candidates_context = [
-        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
+        {'idx': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
     ]
 
     edge_types_context = (
         [
             {
-                'fact_type_id': i,
                 'fact_type_name': type_name,
                 'fact_type_description': type_model.__doc__,
             }
-            for i, (type_name, type_model) in enumerate(edge_type_candidates.items())
+            for type_name, type_model in edge_type_candidates.items()
         ]
         if edge_type_candidates is not None
         else []
@@ -507,6 +506,14 @@ async def resolve_extracted_edge(
         'ensure_ascii': ensure_ascii,
     }
 
+    logger.debug(
+        'Resolving edge: sent %d EXISTING FACTS (idx 0-%d) and %d INVALIDATION CANDIDATES (idx 0-%d)',
+        len(related_edges),
+        len(related_edges) - 1,
+        len(existing_edges),
+        len(existing_edges) - 1,
+    )
+
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_edges.resolve_edge(context),
         response_model=EdgeDuplicate,
@@ -514,6 +521,15 @@ async def resolve_extracted_edge(
     )
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
+
+    # Validate duplicate_facts are in valid range for EXISTING FACTS
+    invalid_duplicates = [i for i in duplicate_facts if i < 0 or i >= len(related_edges)]
+    if invalid_duplicates:
+        logger.warning(
+            'LLM returned invalid duplicate_facts idx values %s (valid range: 0-%d for EXISTING FACTS)',
+            invalid_duplicates,
+            len(related_edges) - 1,
+        )
 
     duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
 
@@ -526,6 +542,15 @@ async def resolve_extracted_edge(
         resolved_edge.episodes.append(episode.uuid)
 
     contradicted_facts: list[int] = response_object.contradicted_facts
+
+    # Validate contradicted_facts are in valid range for INVALIDATION CANDIDATES
+    invalid_contradictions = [i for i in contradicted_facts if i < 0 or i >= len(existing_edges)]
+    if invalid_contradictions:
+        logger.warning(
+            'LLM returned invalid contradicted_facts idx values %s (valid range: 0-%d for INVALIDATION CANDIDATES)',
+            invalid_contradictions,
+            len(existing_edges) - 1,
+        )
 
     invalidation_candidates: list[EntityEdge] = [
         existing_edges[i] for i in contradicted_facts if 0 <= i < len(existing_edges)
