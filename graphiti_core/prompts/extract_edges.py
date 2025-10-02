@@ -73,7 +73,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </FACT TYPES>
 
 <PREVIOUS_MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS_MESSAGES>
 
 <CURRENT_MESSAGE>
@@ -133,7 +133,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -167,7 +167,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGE>
-        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+        {to_prompt_json(context['episode_content'], indent=2)}
         </MESSAGE>
         <REFERENCE TIME>
         {context['reference_time']}

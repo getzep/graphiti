@@ -34,7 +34,6 @@ def _make_clients() -> GraphitiClients:
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
-        ensure_ascii=False,
     )
 
 
@@ -260,7 +259,6 @@ async def test_dedupe_edges_bulk_deduplicates_within_episode(monkeypatch):
         episode,
         edge_type_candidates=None,
         custom_edge_type_names=None,
-        ensure_ascii=False,
     ):
         # Track that this edge was compared against the related_edges
         comparisons_made.append((extracted_edge.uuid, [r.uuid for r in related_edges]))

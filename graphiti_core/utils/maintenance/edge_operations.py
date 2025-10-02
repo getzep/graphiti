@@ -130,7 +130,6 @@ async def extract_edges(
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
         'custom_prompt': '',
-        'ensure_ascii': clients.ensure_ascii,
     }
 
     facts_missed = True
@@ -358,7 +357,6 @@ async def resolve_extracted_edges(
                     episode,
                     extracted_edge_types,
                     custom_type_names,
-                    clients.ensure_ascii,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
                     extracted_edges,
@@ -431,7 +429,6 @@ async def resolve_extracted_edge(
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
     custom_edge_type_names: set[str] | None = None,
-    ensure_ascii: bool = True,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     """Resolve an extracted edge against existing graph context.
 
@@ -453,8 +450,6 @@ async def resolve_extracted_edge(
         Full catalog of registered custom edge names. Used to distinguish
         between disallowed custom types (which fall back to the default label)
         and ad-hoc labels emitted by the LLM.
-    ensure_ascii : bool
-        Whether prompt payloads should coerce ASCII output.
 
     Returns
     -------
@@ -504,7 +499,6 @@ async def resolve_extracted_edge(
         'new_edge': extracted_edge.fact,
         'edge_invalidation_candidates': invalidation_edge_candidates_context,
         'edge_types': edge_types_context,
-        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
@@ -548,7 +542,6 @@ async def resolve_extracted_edge(
             'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
-            'ensure_ascii': ensure_ascii,
         }
 
         edge_model = edge_type_candidates.get(fact_type) if edge_type_candidates else None

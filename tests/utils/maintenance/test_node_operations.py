@@ -46,7 +46,6 @@ def _make_clients():
         embedder=embedder,
         cross_encoder=cross_encoder,
         llm_client=llm_client,
-        ensure_ascii=False,
     )
 
     return clients, llm_generate
@@ -335,7 +334,6 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
         [extracted],
         indexes,
         state,
-        ensure_ascii=False,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
@@ -380,7 +378,6 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
             [extracted],
             indexes,
             state,
-            ensure_ascii=False,
             episode=_make_episode(),
             previous_episodes=[],
             entity_types=None,
@@ -428,7 +425,6 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
         [extracted],
         indexes,
         state,
-        ensure_ascii=False,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
@@ -470,7 +466,6 @@ async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monk
         [extracted],
         indexes,
         state,
-        ensure_ascii=False,
         episode=_make_episode(),
         previous_episodes=[],
         entity_types=None,
@@ -498,7 +493,6 @@ async def test_extract_attributes_without_callback_generates_summary():
         episode=episode,
         previous_episodes=[],
         entity_type=None,
-        ensure_ascii=False,
         should_summarize_node=None,  # No callback provided
     )
 
@@ -529,7 +523,6 @@ async def test_extract_attributes_with_callback_skip_summary():
         episode=episode,
         previous_episodes=[],
         entity_type=None,
-        ensure_ascii=False,
         should_summarize_node=skip_summary_filter,
     )
 
@@ -560,7 +553,6 @@ async def test_extract_attributes_with_callback_generate_summary():
         episode=episode,
         previous_episodes=[],
         entity_type=None,
-        ensure_ascii=False,
         should_summarize_node=generate_summary_filter,
     )
 
@@ -595,7 +587,6 @@ async def test_extract_attributes_with_selective_callback():
         episode=episode,
         previous_episodes=[],
         entity_type=None,
-        ensure_ascii=False,
         should_summarize_node=selective_filter,
     )
 
@@ -605,7 +596,6 @@ async def test_extract_attributes_with_selective_callback():
         episode=episode,
         previous_episodes=[],
         entity_type=None,
-        ensure_ascii=False,
         should_summarize_node=selective_filter,
     )
 
