@@ -166,7 +166,8 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         - They have similar names or purposes but refer to separate instances or concepts.
 
         Task:
-        Respond with a JSON object that contains an "entity_resolutions" array with one entry for each entity in ENTITIES, ordered by the entity id.
+        ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
+        Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions with IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip or add IDs.
 
         For every entity, return an object with the following keys:
         {{
