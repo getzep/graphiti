@@ -24,8 +24,12 @@ from .prompt_helpers import to_prompt_json
 
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
-    source_entity_id: int = Field(..., description='The id of the source entity of the fact.')
-    target_entity_id: int = Field(..., description='The id of the target entity of the fact.')
+    source_entity_id: int = Field(
+        ..., description='The id of the source entity from the ENTITIES list'
+    )
+    target_entity_id: int = Field(
+        ..., description='The id of the target entity from the ENTITIES list'
+    )
     fact: str = Field(..., description='')
     valid_at: str | None = Field(
         None,
@@ -81,7 +85,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{context['nodes']} 
+{to_prompt_json(context['nodes'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
 </ENTITIES>
 
 <REFERENCE_TIME>
@@ -107,7 +111,8 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 # EXTRACTION RULES
 
-1. Only emit facts where both the subject and object match IDs in ENTITIES.
+1. **Entity ID Validation**: `source_entity_id` and `target_entity_id` must use only the `id` values from the ENTITIES list provided above.
+   - **CRITICAL**: Using IDs not in the list will cause the edge to be rejected
 2. Each fact must involve two **distinct** entities.
 3. Use a SCREAMING_SNAKE_CASE string as the `relation_type` (e.g., FOUNDED, WORKS_AT).
 4. Do not emit duplicate or semantically redundant facts.
