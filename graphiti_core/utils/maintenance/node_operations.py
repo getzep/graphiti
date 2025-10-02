@@ -274,7 +274,7 @@ async def _resolve_with_llm(
         'Sending %d entities to LLM for deduplication with IDs 0-%d (actual IDs sent: %s)',
         len(llm_extracted_nodes),
         len(llm_extracted_nodes) - 1,
-        sent_ids if len(sent_ids) <= 20 else f'{sent_ids[:10]}...{sent_ids[-10:]}',
+        sent_ids if len(sent_ids) < 20 else f'{sent_ids[:10]}...{sent_ids[-10:]}',
     )
     if llm_extracted_nodes:
         sample_size = min(3, len(extracted_nodes_context))

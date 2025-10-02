@@ -167,8 +167,7 @@ def nodes(context: dict[str, Any]) -> list[Message]:
 
         Task:
         ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
-        Respond with a JSON object that contains an "entity_resolutions" array with EXACTLY {len(context['extracted_nodes'])} entries - one for each entity in ENTITIES.
-        Your response MUST use only the IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip any IDs or use IDs outside this range.
+        Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions using these exact IDs (0 through {len(context['extracted_nodes']) - 1}). Do not skip IDs or use IDs outside this range.
 
         For every entity, return an object with the following keys:
         {{
