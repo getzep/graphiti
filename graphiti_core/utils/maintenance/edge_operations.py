@@ -506,13 +506,14 @@ async def resolve_extracted_edge(
         'ensure_ascii': ensure_ascii,
     }
 
-    logger.debug(
-        'Resolving edge: sent %d EXISTING FACTS (idx 0-%d) and %d INVALIDATION CANDIDATES (idx 0-%d)',
-        len(related_edges),
-        len(related_edges) - 1,
-        len(existing_edges),
-        len(existing_edges) - 1,
-    )
+    if related_edges or existing_edges:
+        logger.debug(
+            'Resolving edge: sent %d EXISTING FACTS%s and %d INVALIDATION CANDIDATES%s',
+            len(related_edges),
+            f' (idx 0-{len(related_edges) - 1})' if related_edges else '',
+            len(existing_edges),
+            f' (idx 0-{len(existing_edges) - 1})' if existing_edges else '',
+        )
 
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_edges.resolve_edge(context),

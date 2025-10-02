@@ -25,11 +25,11 @@ from .prompt_helpers import to_prompt_json
 class EdgeDuplicate(BaseModel):
     duplicate_facts: list[int] = Field(
         ...,
-        description='List of ids of any duplicate facts. If no duplicate facts are found, default to empty list.',
+        description='List of idx values of any duplicate facts. If no duplicate facts are found, default to empty list.',
     )
     contradicted_facts: list[int] = Field(
         ...,
-        description='List of ids of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
+        description='List of idx values of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
     )
     fact_type: str = Field(..., description='One of the provided fact types or DEFAULT')
 
