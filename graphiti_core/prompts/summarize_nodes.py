@@ -59,7 +59,7 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
         Summaries must be under 250 words.
 
         Summaries:
-        {to_prompt_json(context['node_summaries'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['node_summaries'], indent=2)}
         """,
         ),
     ]
@@ -76,8 +76,8 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
             content=f"""
             
         <MESSAGES>
-        {to_prompt_json(context['previous_episodes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
-        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['previous_episodes'], indent=2)}
+        {to_prompt_json(context['episode_content'], indent=2)}
         </MESSAGES>
         
         Given the above MESSAGES and the following ENTITY name, create a summary for the ENTITY. Your summary must only use
@@ -100,7 +100,7 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
         </ENTITY CONTEXT>
         
         <ATTRIBUTES>
-        {to_prompt_json(context['attributes'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['attributes'], indent=2)}
         </ATTRIBUTES>
         """,
         ),
@@ -120,7 +120,7 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
         Summaries must be under 250 words.
 
         Summary:
-        {to_prompt_json(context['summary'], ensure_ascii=context.get('ensure_ascii', True), indent=2)}
+        {to_prompt_json(context['summary'], indent=2)}
         """,
         ),
     ]
