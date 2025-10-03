@@ -192,7 +192,8 @@ async def extract_nodes(
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
     logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
-    return extracted_nodes
+    # filter out nodes with empty name
+    return [node for node in extracted_nodes if node.name]
 
 
 async def _collect_candidate_nodes(

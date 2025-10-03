@@ -226,8 +226,8 @@ async def extract_edges(
         )
 
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
-
-    return edges
+    # Filter out edges with empty facts
+    return [edge for edge in edges if edge.fact]
 
 
 async def resolve_extracted_edges(
