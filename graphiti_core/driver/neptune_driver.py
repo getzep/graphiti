@@ -257,7 +257,6 @@ class NeptuneDriver(GraphDriver):
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                for d in data:
                     item = {'_index': name, '_id': d['uuid']}
                     for p in index['body']['mappings']['properties']:
                         if p in d:  # Add safety check for missing fields
