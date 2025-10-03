@@ -177,6 +177,10 @@ async def extract_edges(
         valid_at_datetime = None
         invalid_at_datetime = None
 
+        # Filter out empty edges
+        if not edge_data.fact.strip():
+            continue
+
         source_node_idx = edge_data.source_entity_id
         target_node_idx = edge_data.target_entity_id
 
@@ -226,17 +230,8 @@ async def extract_edges(
         )
 
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
-    # Filter out edges with empty facts
-    filtered_edges = []
-    for edge in edges:
-        if not edge.fact.strip() or not edge.name.strip():
-            logger.warning(
-                f'Dropping edge with empty fact or name: name="{edge.name}", fact="{edge.fact}", '
-                f'source={edge.source_node_uuid}, target={edge.target_node_uuid}'
-            )
-            continue
-        filtered_edges.append(edge)
-    return filtered_edges
+
+    return edges
 
 
 async def resolve_extracted_edges(
