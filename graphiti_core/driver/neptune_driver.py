@@ -241,7 +241,7 @@ class NeptuneDriver(GraphDriver):
 
             try:
                 # Resolve alias → indices
-                alias_info = await client.indices.get_alias(name=alias_name)
+                alias_info = client.indices.get_alias(name=alias_name)
                 indices = list(alias_info.keys())
 
                 if not indices:
@@ -249,8 +249,8 @@ class NeptuneDriver(GraphDriver):
                     continue
 
                 for index in indices:
-                    if await client.indices.exists(index=index):
-                        await client.indices.delete(index=index)
+                    if client.indices.exists(index=index):
+                        client.indices.delete(index=index)
                         logger.info(f"Deleted index '{index}' (alias: {alias_name})")
                     else:
                         logger.warning(f"Index '{index}' not found for alias '{alias_name}'")
@@ -258,7 +258,7 @@ class NeptuneDriver(GraphDriver):
             except Exception as e:
                 logger.error(f"Error deleting indices for alias '{alias_name}': {e}")
 
-    async def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
+    def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
         # No matter what happens above, always return True
         return self.delete_aoss_indices()
 
