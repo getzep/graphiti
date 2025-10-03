@@ -42,6 +42,9 @@ from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 from .summarize_nodes import Prompt as SummarizeNodesPrompt
 from .summarize_nodes import Versions as SummarizeNodesVersions
 from .summarize_nodes import versions as summarize_nodes_versions
+from .summarize_diff import Prompt as SummarizeDiffPrompt
+from .summarize_diff import Versions as SummarizeDiffVersions
+from .summarize_diff import versions as summarize_diff_versions
 
 
 class PromptLibrary(Protocol):
@@ -52,6 +55,7 @@ class PromptLibrary(Protocol):
     invalidate_edges: InvalidateEdgesPrompt
     extract_edge_dates: ExtractEdgeDatesPrompt
     summarize_nodes: SummarizeNodesPrompt
+    summarize_diff: SummarizeDiffPrompt
     eval: EvalPrompt
 
 
@@ -63,6 +67,7 @@ class PromptLibraryImpl(TypedDict):
     invalidate_edges: InvalidateEdgesVersions
     extract_edge_dates: ExtractEdgeDatesVersions
     summarize_nodes: SummarizeNodesVersions
+    summarize_diff: SummarizeDiffVersions
     eval: EvalVersions
 
 
@@ -97,6 +102,7 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
     'invalidate_edges': invalidate_edges_versions,
     'extract_edge_dates': extract_edge_dates_versions,
     'summarize_nodes': summarize_nodes_versions,
+    'summarize_diff': summarize_diff_versions,
     'eval': eval_versions,
 }
 prompt_library: PromptLibrary = PromptLibraryWrapper(PROMPT_LIBRARY_IMPL)  # type: ignore[assignment]

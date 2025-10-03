@@ -164,6 +164,9 @@ async def add_nodes_and_edges_bulk_tx(
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
+        # Serialize metadata dict to JSON string for Neo4j compatibility
+        if episode.get('metadata') is not None:
+            episode['metadata'] = json.dumps(episode['metadata'])
 
     nodes = []
 

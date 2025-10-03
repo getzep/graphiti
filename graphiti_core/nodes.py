@@ -51,6 +51,16 @@ from graphiti_core.utils.datetime_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+# Internal metadata fields to filter out when retrieving episodes
+_INTERNAL_METADATA_FIELDS = {'content_hash', 'sync_type', 'sync_timestamp'}
+
+
+def _filter_internal_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Filter out internal metadata fields from episode metadata before returning to user."""
+    if metadata is None:
+        return None
+    return {k: v for k, v in metadata.items() if k not in _INTERNAL_METADATA_FIELDS}
+
 
 class EpisodeType(Enum):
     """
@@ -361,8 +371,14 @@ class EpisodicNode(Node):
         description='list of entity edges referenced in this episode',
         default_factory=list,
     )
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description='Additional metadata for the episode (e.g., document URI, content hash)',
+    )
 
     async def save(self, driver: GraphDriver):
+        import json
+        logger.debug(f'EpisodicNode.save() called for episode: {self.name}, metadata type: {type(self.metadata)}, metadata value: {self.metadata}')
         episode_args = {
             'uuid': self.uuid,
             'name': self.name,
@@ -373,6 +389,7 @@ class EpisodicNode(Node):
             'created_at': self.created_at,
             'valid_at': self.valid_at,
             'source': self.source.value,
+            'metadata': json.dumps(self.metadata) if self.metadata is not None else None,
         }
 
         if driver.aoss_client:
@@ -381,10 +398,12 @@ class EpisodicNode(Node):
                 [episode_args],
             )
 
+        logger.debug(f'About to execute Cypher query with metadata: {episode_args.get("metadata")}')
         result = await driver.execute_query(
             get_episode_node_save_query(driver.provider), **episode_args
         )
 
+        logger.debug(f'Successfully saved episode to graph: {self.uuid}')
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
         return result
@@ -821,6 +840,7 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         name=record['name'],
         source_description=record['source_description'],
         entity_edges=record['entity_edges'],
+        metadata=_filter_internal_metadata(json.loads(record['metadata'])) if record.get('metadata') else None,
     )
 
 

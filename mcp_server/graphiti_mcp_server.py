@@ -10,6 +10,7 @@ import os
 import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
@@ -19,6 +20,7 @@ from openai import AsyncAzureOpenAI
 from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
+from graphiti_core.document_sync import DocumentSyncManager, DocumentWatcher
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.embedder.client import EmbedderClient
@@ -520,13 +522,20 @@ class MCPConfig(BaseModel):
         return cls(transport=args.transport)
 
 
-# Configure logging
+# Configure logging to both stderr and file
+log_file = '/home/brandt/projects/hector/mcp_debug.log'
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stderr,
+    handlers=[
+        logging.StreamHandler(sys.stderr),
+        logging.FileHandler(log_file, mode='w')  # 'w' = overwrite each run
+    ]
 )
 logger = logging.getLogger(__name__)
+logger.info("=" * 80)
+logger.info("MCP SERVER STARTED - CODE VERSION: metadata-field-v2")
+logger.info("=" * 80)
 
 # Create global config instance - will be properly initialized later
 config = GraphitiConfig()
@@ -551,14 +560,23 @@ Key capabilities:
 3. Find relevant facts (relationships between entities) with search_facts
 4. Retrieve specific entity edges or episodes by UUID
 5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
+6. Synchronize markdown documents from a corpus directory with sync_all_documents
 
-The server connects to a database for persistent storage and uses language models for certain operations. 
+Document Synchronization:
+- If CORPUS_PATH is configured, the server automatically monitors markdown files for changes
+- Files are synced hourly in batches (configurable via SYNC_INTERVAL_HOURS)
+- New files create full-content episodes; modified files create diff episodes
+- Use sync_all_documents() to manually trigger immediate synchronization
+- File renames are tracked and episode metadata URIs are updated automatically
+- Deleted files are preserved in the knowledge graph (append-only history)
+
+The server connects to a database for persistent storage and uses language models for certain operations.
 Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
 
-When adding information, provide descriptive names and detailed content to improve search quality. 
+When adding information, provide descriptive names and detailed content to improve search quality.
 When searching, use specific queries and consider filtering by group_id for more relevant results.
 
-For optimal performance, ensure the database is properly configured and accessible, and valid 
+For optimal performance, ensure the database is properly configured and accessible, and valid
 API keys are provided for any language model operations.
 """
 
@@ -568,13 +586,15 @@ mcp = FastMCP(
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
 )
 
-# Initialize Graphiti client
+# Initialize Graphiti client and document sync
 graphiti_client: Graphiti | None = None
+document_watcher: DocumentWatcher | None = None
+sync_manager: DocumentSyncManager | None = None
 
 
 async def initialize_graphiti():
     """Initialize the Graphiti client with the configured settings."""
-    global graphiti_client, config
+    global graphiti_client, sync_manager, document_watcher, config
 
     try:
         # Create LLM client if possible
@@ -620,6 +640,42 @@ async def initialize_graphiti():
             f'Custom entity extraction: {"enabled" if config.use_custom_entities else "disabled"}'
         )
         logger.info(f'Using concurrency limit: {SEMAPHORE_LIMIT}')
+
+        # Initialize document sync if CORPUS_PATH is set
+        corpus_path_str = os.environ.get('CORPUS_PATH')
+        if corpus_path_str:
+            corpus_path = Path(corpus_path_str)
+            sync_interval = float(os.environ.get('SYNC_INTERVAL_HOURS', '1.0'))
+
+            sync_manager = DocumentSyncManager(
+                corpus_path=corpus_path,
+                graphiti=graphiti_client,
+                group_id=config.group_id,
+            )
+            document_watcher = DocumentWatcher(
+                sync_manager=sync_manager,
+                sync_interval_hours=sync_interval,
+            )
+
+            # Start watcher with current event loop
+            loop = asyncio.get_event_loop()
+            document_watcher.start(loop)
+
+            logger.info(
+                f'Document watcher started for {corpus_path} '
+                f'(sync interval: {sync_interval}h)'
+            )
+
+            # Perform initial sync on startup
+            logger.info('Performing initial document sync...')
+            initial_sync_result = await sync_manager.sync_all()
+            logger.info(
+                f'Initial sync complete: {initial_sync_result["synced"]} synced, '
+                f'{initial_sync_result["skipped"]} skipped, '
+                f'{len(initial_sync_result["errors"])} errors'
+            )
+        else:
+            logger.info('CORPUS_PATH not set - document sync disabled')
 
     except Exception as e:
         logger.error(f'Failed to initialize Graphiti: {str(e)}')
@@ -696,6 +752,7 @@ async def add_memory(
     source: str = 'text',
     source_description: str = '',
     uuid: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
@@ -786,6 +843,13 @@ async def add_memory(
                 # Use all entity types if use_custom_entities is enabled, otherwise use empty dict
                 entity_types = ENTITY_TYPES if config.use_custom_entities else {}
 
+                logger.debug(f"About to call client.add_episode with metadata: {metadata}")
+                logger.debug(f"client type: {type(client)}, client class: {client.__class__.__name__}")
+
+                import inspect
+                sig = inspect.signature(client.add_episode)
+                logger.debug(f"add_episode parameters: {list(sig.parameters.keys())}")
+
                 await client.add_episode(
                     name=name,
                     episode_body=episode_body,
@@ -795,6 +859,7 @@ async def add_memory(
                     uuid=uuid,
                     reference_time=datetime.now(timezone.utc),
                     entity_types=entity_types,
+                    metadata=metadata,
                 )
                 logger.info(f"Episode '{name}' added successfully")
 
@@ -1140,6 +1205,44 @@ async def clear_graph() -> SuccessResponse | ErrorResponse:
         return ErrorResponse(error=f'Error clearing graph: {error_msg}')
 
 
+@mcp.tool()
+async def sync_all_documents() -> dict[str, Any]:
+    """Manually trigger document synchronization for all corpus files.
+
+    Returns:
+        Sync statistics: synced count, skipped count, errors
+    """
+    global document_watcher, sync_manager
+
+    if sync_manager is None:
+        return {
+            'error': 'Document sync not enabled (CORPUS_PATH not set)',
+            'synced': 0,
+            'skipped': 0,
+            'errors': [],
+            'total': 0,
+        }
+
+    try:
+        # If watcher is running, use it to process queued renames first
+        if document_watcher is not None:
+            await document_watcher.trigger_sync()
+
+        # Then do full sync of all files
+        result = await sync_manager.sync_all()
+        return result
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error syncing documents: {error_msg}')
+        return {
+            'error': error_msg,
+            'synced': 0,
+            'skipped': 0,
+            'errors': [{'error': error_msg}],
+            'total': 0,
+        }
+
+
 @mcp.resource('http://graphiti/status')
 async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and Neo4j connection."""
@@ -1241,20 +1344,39 @@ async def initialize_server() -> MCPConfig:
     return MCPConfig.from_cli(args)
 
 
+async def shutdown_graphiti():
+    """Cleanup on server shutdown."""
+    global graphiti_client, document_watcher
+
+    if document_watcher:
+        logger.info('Stopping document watcher...')
+        await document_watcher.stop()
+        logger.info('Document watcher stopped')
+
+    if graphiti_client:
+        logger.info('Closing Graphiti client...')
+        await graphiti_client.close()
+        logger.info('Graphiti client closed')
+
+
 async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
     mcp_config = await initialize_server()
 
-    # Run the server with stdio transport for MCP in the same event loop
-    logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
-    if mcp_config.transport == 'stdio':
-        await mcp.run_stdio_async()
-    elif mcp_config.transport == 'sse':
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        await mcp.run_sse_async()
+    try:
+        # Run the server with stdio transport for MCP in the same event loop
+        logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
+        if mcp_config.transport == 'stdio':
+            await mcp.run_stdio_async()
+        elif mcp_config.transport == 'sse':
+            logger.info(
+                f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
+            )
+            await mcp.run_sse_async()
+    finally:
+        # Always cleanup on exit
+        await shutdown_graphiti()
 
 
 def main():

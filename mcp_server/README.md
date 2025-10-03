@@ -20,6 +20,7 @@ The Graphiti MCP server exposes the following key high-level functions of Graphi
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
+- **Document Synchronization**: Automatic monitoring and syncing of markdown documents from a corpus directory
 
 ## Quick Start
 
@@ -103,6 +104,18 @@ The server uses the following environment variables:
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 - `GRAPHITI_MIN_SIMILARITY_SCORE`: Minimum similarity score for semantic search (default: `0.6`, range: 0.0-1.0). Higher values filter more aggressively.
 - `GRAPHITI_RERANKER_MIN_SCORE`: Minimum score after RRF fusion (default: `0.0`). Typically left at 0.0 as RRF is rank-based.
+
+### Document Sync Configuration (Optional)
+
+- `CORPUS_PATH`: Absolute path to directory containing markdown files to sync (e.g., `/home/user/corpus`)
+- `SYNC_INTERVAL_HOURS`: Hours between automatic sync batches (default: `1.0`)
+
+When `CORPUS_PATH` is set, the MCP server automatically:
+- Monitors the directory for markdown file changes
+- Syncs new files as full-content episodes
+- Syncs modified files as diff episodes (with 15 lines of context)
+- Tracks file renames and updates episode metadata URIs
+- Preserves deleted files in the knowledge graph (append-only)
 
 You can set these variables in a `.env` file in the project directory.
 
@@ -266,7 +279,31 @@ The Graphiti MCP server exposes the following tools:
 - `get_entity_edge`: Get an entity edge by its UUID
 - `get_episodes`: Get the most recent episodes for a specific group
 - `clear_graph`: Clear all data from the knowledge graph and rebuild indices
+- `sync_all_documents`: Manually trigger document synchronization (when CORPUS_PATH is configured)
 - `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
+
+### Document Synchronization
+
+When `CORPUS_PATH` is configured, markdown files are automatically synced to the knowledge graph:
+
+**Automatic Sync**:
+- Files are monitored for changes and synced hourly (configurable via `SYNC_INTERVAL_HOURS`)
+- New files create full-content episodes
+- Modified files create diff episodes showing only changes
+- File renames update all related episode metadata
+
+**Manual Sync**:
+```python
+sync_all_documents(force=False)  # Sync only changed files
+sync_all_documents(force=True)   # Force sync all files
+```
+
+**Episode Metadata**:
+Each synced document creates episodes with metadata:
+- `document_uri`: Relative path from corpus root (e.g., `notes/meeting.md`)
+- `content_hash`: SHA256 hash for change detection
+- `sync_type`: `"full"` for new files, `"diff"` for updates
+- `sync_timestamp`: ISO 8601 timestamp of sync operation
 
 ## Working with JSON Data
 

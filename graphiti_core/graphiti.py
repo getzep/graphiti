@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -395,6 +396,7 @@ class Graphiti:
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -485,6 +487,7 @@ class Graphiti:
                     source_description=source_description,
                     created_at=now,
                     valid_at=reference_time,
+                    metadata=metadata,
                 )
             )
 
