@@ -179,13 +179,20 @@ async def extract_edges(
 
         source_node_idx = edge_data.source_entity_id
         target_node_idx = edge_data.target_entity_id
-        if not (-1 < source_node_idx < len(nodes) and -1 < target_node_idx < len(nodes)):
+
+        if len(nodes) == 0:
+            logger.warning('No entities provided for edge extraction')
+            continue
+
+        if not (0 <= source_node_idx < len(nodes) and 0 <= target_node_idx < len(nodes)):
             logger.warning(
-                f'WARNING: source or target node not filled {edge_data.relation_type}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
+                f'Invalid entity IDs in edge extraction for {edge_data.relation_type}. '
+                f'source_entity_id: {source_node_idx}, target_entity_id: {target_node_idx}, '
+                f'but only {len(nodes)} entities available (valid range: 0-{len(nodes) - 1})'
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
-        target_node_uuid = nodes[edge_data.target_entity_id].uuid
+        target_node_uuid = nodes[target_node_idx].uuid
 
         if valid_at:
             try:
