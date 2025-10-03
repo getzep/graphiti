@@ -22,22 +22,16 @@ from typing import Any
 
 import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
-from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
+from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
-from graphiti_core import helpers
-from graphiti_core.driver.driver import (
-    DEFAULT_SIZE,
-    GraphDriver,
-    GraphDriverSession,
-    GraphProvider,
-)
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
+DEFAULT_SIZE = 10
 
 aoss_indices = [
     {
         'index_name': 'node_name_and_summary',
-        'alias_name': 'entities',
         'body': {
             'mappings': {
                 'properties': {
@@ -55,7 +49,6 @@ aoss_indices = [
     },
     {
         'index_name': 'community_name',
-        'alias_name': 'communities',
         'body': {
             'mappings': {
                 'properties': {
@@ -72,7 +65,6 @@ aoss_indices = [
     },
     {
         'index_name': 'episode_content',
-        'alias_name': 'episodes',
         'body': {
             'mappings': {
                 'properties': {
@@ -96,7 +88,6 @@ aoss_indices = [
     },
     {
         'index_name': 'edge_name_and_fact',
-        'alias_name': 'facts',
         'body': {
             'mappings': {
                 'properties': {
@@ -229,36 +220,10 @@ class NeptuneDriver(GraphDriver):
     async def _delete_all_data(self) -> Any:
         return await self.execute_query('MATCH (n) DETACH DELETE n')
 
-    async def delete_aoss_indices(self):
-        client = self.aoss_client
+    def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
+        return self.delete_all_indexes_impl()
 
-        if not client:
-            logger.warning('No OpenSearch client found')
-            return
-
-        for entry in aoss_indices:
-            alias_name = entry['index_name']
-
-            try:
-                # Resolve alias → indices
-                alias_info = client.indices.get_alias(name=alias_name)
-                indices = list(alias_info.keys())
-
-                if not indices:
-                    logger.info(f"No indices found for alias '{alias_name}'")
-                    continue
-
-                for index in indices:
-                    if client.indices.exists(index=index):
-                        client.indices.delete(index=index)
-                        logger.info(f"Deleted index '{index}' (alias: {alias_name})")
-                    else:
-                        logger.warning(f"Index '{index}' not found for alias '{alias_name}'")
-
-            except Exception as e:
-                logger.error(f"Error deleting indices for alias '{alias_name}': {e}")
-
-    def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
+    async def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
         # No matter what happens above, always return True
         return self.delete_aoss_indices()
 
@@ -266,54 +231,43 @@ class NeptuneDriver(GraphDriver):
         for index in aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
-            if not client:
-                raise ValueError(
-                    'You must provide an AOSS endpoint to create an OpenSearch driver.'
-                )
             if not client.indices.exists(index=index_name):
-                await client.indices.create(index=index_name, body=index['body'])
-
-            alias_name = index.get('alias_name', index_name)
-
-            if not client.indices.exists_alias(name=alias_name, index=index_name):
-                await client.indices.put_alias(index=index_name, name=alias_name)
-
+                client.indices.create(index=index_name, body=index['body'])
         # Sleep for 1 minute to let the index creation complete
         await asyncio.sleep(60)
 
-    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
-        client = self.aoss_client
-        if not client or not helpers:
-            logger.warning('No OpenSearch client found')
-            return 0
+    async def delete_aoss_indices(self):
+        for index in aoss_indices:
+            index_name = index['index_name']
+            client = self.aoss_client
+            if client.indices.exists(index=index_name):
+                client.indices.delete(index=index_name)
 
+    def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                index['query']['query']['multi_match']['query'] = query_text
+                query = {'size': limit, 'query': index['query']}
+                resp = self.aoss_client.search(body=query['query'], index=index['index_name'])
+                return resp
+        return {}
+
+    def save_to_aoss(self, name: str, data: list[dict]) -> int:
         for index in aoss_indices:
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    doc = {}
+                    item = {'_index': name}
                     for p in index['body']['mappings']['properties']:
-                        if p in d:  # protect against missing fields
-                            doc[p] = d[p]
-
-                    item = {
-                        '_index': name,
-                        '_id': d['uuid'],
-                        '_routing': d.get('group_id'),
-                        '_source': doc,
-                    }
+                        item[p] = d[p]
                     to_index.append(item)
-
-                success, failed = await helpers.async_bulk(
-                    client, to_index, stats_only=True, request_timeout=60
-                )
-
-                return success if failed == 0 else success
+                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                if failed > 0:
+                    return success
+                else:
+                    return 0
 
         return 0
-
-    def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
-        return self.delete_all_indexes_impl()
 
 
 class NeptuneDriverSession(GraphDriverSession):

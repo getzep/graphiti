@@ -22,7 +22,6 @@ from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
-from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
