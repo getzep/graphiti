@@ -25,24 +25,6 @@ from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphPr
 
 logger = logging.getLogger(__name__)
 
-try:
-    import boto3
-    from opensearchpy import (
-        AIOHttpConnection,
-        AsyncOpenSearch,
-        AWSV4SignerAuth,
-        Urllib3AWSV4SignerAuth,
-        Urllib3HttpConnection,
-    )
-
-    _HAS_OPENSEARCH = True
-except ImportError:
-    boto3 = None
-    OpenSearch = None
-    Urllib3AWSV4SignerAuth = None
-    Urllib3HttpConnection = None
-    _HAS_OPENSEARCH = False
-
 
 class Neo4jDriver(GraphDriver):
     provider = GraphProvider.NEO4J

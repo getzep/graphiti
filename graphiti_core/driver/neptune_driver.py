@@ -267,9 +267,9 @@ class NeptuneDriver(GraphDriver):
                     to_index.append(item)
                 success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
                 if failed > 0:
-                    return success
-                else:
                     return 0
+                else:
+                    return success
 
         return 0
 

@@ -24,15 +24,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-try:
-    from opensearchpy import AsyncOpenSearch, OpenSearch, helpers
-
-    _HAS_OPENSEARCH = True
-except ImportError:
-    OpenSearch = None
-    helpers = None
-    _HAS_OPENSEARCH = False
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
@@ -82,7 +73,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    aoss_client: OpenSearch | None  # type: ignore
+    aoss_client: Any  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
