@@ -130,7 +130,6 @@ async def extract_edges(
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
         'custom_prompt': '',
-        'ensure_ascii': clients.ensure_ascii,
     }
 
     facts_missed = True
@@ -180,13 +179,20 @@ async def extract_edges(
 
         source_node_idx = edge_data.source_entity_id
         target_node_idx = edge_data.target_entity_id
-        if not (-1 < source_node_idx < len(nodes) and -1 < target_node_idx < len(nodes)):
+
+        if len(nodes) == 0:
+            logger.warning('No entities provided for edge extraction')
+            continue
+
+        if not (0 <= source_node_idx < len(nodes) and 0 <= target_node_idx < len(nodes)):
             logger.warning(
-                f'WARNING: source or target node not filled {edge_data.relation_type}. source_node_uuid: {source_node_idx} and target_node_uuid: {target_node_idx} '
+                f'Invalid entity IDs in edge extraction for {edge_data.relation_type}. '
+                f'source_entity_id: {source_node_idx}, target_entity_id: {target_node_idx}, '
+                f'but only {len(nodes)} entities available (valid range: 0-{len(nodes) - 1})'
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
-        target_node_uuid = nodes[edge_data.target_entity_id].uuid
+        target_node_uuid = nodes[target_node_idx].uuid
 
         if valid_at:
             try:
@@ -358,7 +364,6 @@ async def resolve_extracted_edges(
                     episode,
                     extracted_edge_types,
                     custom_type_names,
-                    clients.ensure_ascii,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
                     extracted_edges,
@@ -431,7 +436,6 @@ async def resolve_extracted_edge(
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
     custom_edge_type_names: set[str] | None = None,
-    ensure_ascii: bool = True,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     """Resolve an extracted edge against existing graph context.
 
@@ -453,8 +457,6 @@ async def resolve_extracted_edge(
         Full catalog of registered custom edge names. Used to distinguish
         between disallowed custom types (which fall back to the default label)
         and ad-hoc labels emitted by the LLM.
-    ensure_ascii : bool
-        Whether prompt payloads should coerce ASCII output.
 
     Returns
     -------
@@ -480,20 +482,19 @@ async def resolve_extracted_edge(
     start = time()
 
     # Prepare context for LLM
-    related_edges_context = [{'id': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
+    related_edges_context = [{'idx': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
 
     invalidation_edge_candidates_context = [
-        {'id': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
+        {'idx': i, 'fact': existing_edge.fact} for i, existing_edge in enumerate(existing_edges)
     ]
 
     edge_types_context = (
         [
             {
-                'fact_type_id': i,
                 'fact_type_name': type_name,
                 'fact_type_description': type_model.__doc__,
             }
-            for i, (type_name, type_model) in enumerate(edge_type_candidates.items())
+            for type_name, type_model in edge_type_candidates.items()
         ]
         if edge_type_candidates is not None
         else []
@@ -504,8 +505,16 @@ async def resolve_extracted_edge(
         'new_edge': extracted_edge.fact,
         'edge_invalidation_candidates': invalidation_edge_candidates_context,
         'edge_types': edge_types_context,
-        'ensure_ascii': ensure_ascii,
     }
+
+    if related_edges or existing_edges:
+        logger.debug(
+            'Resolving edge: sent %d EXISTING FACTS%s and %d INVALIDATION CANDIDATES%s',
+            len(related_edges),
+            f' (idx 0-{len(related_edges) - 1})' if related_edges else '',
+            len(existing_edges),
+            f' (idx 0-{len(existing_edges) - 1})' if existing_edges else '',
+        )
 
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_edges.resolve_edge(context),
@@ -514,6 +523,15 @@ async def resolve_extracted_edge(
     )
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
+
+    # Validate duplicate_facts are in valid range for EXISTING FACTS
+    invalid_duplicates = [i for i in duplicate_facts if i < 0 or i >= len(related_edges)]
+    if invalid_duplicates:
+        logger.warning(
+            'LLM returned invalid duplicate_facts idx values %s (valid range: 0-%d for EXISTING FACTS)',
+            invalid_duplicates,
+            len(related_edges) - 1,
+        )
 
     duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
 
@@ -526,6 +544,15 @@ async def resolve_extracted_edge(
         resolved_edge.episodes.append(episode.uuid)
 
     contradicted_facts: list[int] = response_object.contradicted_facts
+
+    # Validate contradicted_facts are in valid range for INVALIDATION CANDIDATES
+    invalid_contradictions = [i for i in contradicted_facts if i < 0 or i >= len(existing_edges)]
+    if invalid_contradictions:
+        logger.warning(
+            'LLM returned invalid contradicted_facts idx values %s (valid range: 0-%d for INVALIDATION CANDIDATES)',
+            invalid_contradictions,
+            len(existing_edges) - 1,
+        )
 
     invalidation_candidates: list[EntityEdge] = [
         existing_edges[i] for i in contradicted_facts if 0 <= i < len(existing_edges)
@@ -548,7 +575,6 @@ async def resolve_extracted_edge(
             'episode_content': episode.content,
             'reference_time': episode.valid_at,
             'fact': resolved_edge.fact,
-            'ensure_ascii': ensure_ascii,
         }
 
         edge_model = edge_type_candidates.get(fact_type) if edge_type_candidates else None

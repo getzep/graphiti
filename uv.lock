@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10, <4"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -783,7 +783,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.21.0rc8"
+version = "0.21.0rc11"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -803,7 +803,6 @@ anthropic = [
 ]
 dev = [
     { name = "anthropic" },
-    { name = "boto3" },
     { name = "diskcache-stubs" },
     { name = "falkordb" },
     { name = "google-genai" },
@@ -812,11 +811,9 @@ dev = [
     { name = "jupyterlab" },
     { name = "kuzu" },
     { name = "langchain-anthropic" },
-    { name = "langchain-aws" },
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "langsmith" },
-    { name = "opensearch-py" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -858,7 +855,6 @@ voyageai = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.49.0" },
-    { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neo4j-opensearch'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
     { name = "diskcache", specifier = ">=5.6.3" },
@@ -874,7 +870,6 @@ requires-dist = [
     { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.2" },
     { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.2" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
-    { name = "langchain-aws", marker = "extra == 'dev'", specifier = ">=0.2.29" },
     { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
     { name = "langchain-openai", marker = "extra == 'dev'", specifier = ">=0.2.6" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2.15" },
@@ -882,7 +877,6 @@ requires-dist = [
     { name = "neo4j", specifier = ">=5.26.0" },
     { name = "numpy", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.91.0" },
-    { name = "opensearch-py", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neo4j-opensearch'", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neptune'", specifier = ">=3.0.0" },
     { name = "posthog", specifier = ">=3.0.0" },
