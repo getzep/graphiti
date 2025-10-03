@@ -118,3 +118,9 @@ class GraphDriver(ABC):
         Only implemented by providers that need custom fulltext query building.
         """
         raise NotImplementedError(f'build_fulltext_query not implemented for {self.provider}')
+
+    def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        pass
+
+    def clear_aoss_indices(self):
+        pass
