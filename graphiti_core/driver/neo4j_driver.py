@@ -54,11 +54,6 @@ class Neo4jDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'neo4j',
-        aoss_host: str | None = None,
-        aoss_port: int | None = None,
-        aws_profile_name: str | None = None,
-        aws_region: str | None = None,
-        aws_service: str | None = None,
     ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
@@ -68,24 +63,6 @@ class Neo4jDriver(GraphDriver):
         self._database = database
 
         self.aoss_client = None
-        if aoss_host and aoss_port and boto3 is not None:
-            try:
-                region = aws_region
-                service = aws_service
-                credentials = boto3.Session(profile_name=aws_profile_name).get_credentials()
-                auth = AWSV4SignerAuth(credentials, region or '', service or '')
-
-                self.aoss_client = AsyncOpenSearch(
-                    hosts=[{'host': aoss_host, 'port': aoss_port}],
-                    auth=auth,
-                    use_ssl=True,
-                    verify_certs=True,
-                    connection_class=AIOHttpConnection,
-                    pool_maxsize=20,
-                )  # type: ignore
-            except Exception as e:
-                logger.warning(f'Failed to initialize OpenSearch client: {e}')
-                self.aoss_client = None
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         # Check if database_ is provided in kwargs.
@@ -111,13 +88,6 @@ class Neo4jDriver(GraphDriver):
         return await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine:
-        if self.aoss_client:
-            return semaphore_gather(
-                self.client.execute_query(
-                    'CALL db.indexes() YIELD name DROP INDEX name',
-                ),
-                self.delete_aoss_indices(),
-            )
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )

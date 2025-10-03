@@ -24,6 +24,7 @@ import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
 
+from graphiti_core import helpers
 from graphiti_core.driver.driver import (
     DEFAULT_SIZE,
     GraphDriver,
@@ -33,7 +34,7 @@ from graphiti_core.driver.driver import (
 
 logger = logging.getLogger(__name__)
 
-neptune_aoss_indices = [
+aoss_indices = [
     {
         'index_name': 'node_name_and_summary',
         'alias_name': 'entities',
@@ -228,8 +229,41 @@ class NeptuneDriver(GraphDriver):
     async def _delete_all_data(self) -> Any:
         return await self.execute_query('MATCH (n) DETACH DELETE n')
 
+    async def delete_aoss_indices(self):
+        client = self.aoss_client
+
+        if not client:
+            logger.warning('No OpenSearch client found')
+            return
+
+        for entry in aoss_indices:
+            alias_name = entry['index_name']
+
+            try:
+                # Resolve alias → indices
+                alias_info = await client.indices.get_alias(name=alias_name)
+                indices = list(alias_info.keys())
+
+                if not indices:
+                    logger.info(f"No indices found for alias '{alias_name}'")
+                    continue
+
+                for index in indices:
+                    if await client.indices.exists(index=index):
+                        await client.indices.delete(index=index)
+                        logger.info(f"Deleted index '{index}' (alias: {alias_name})")
+                    else:
+                        logger.warning(f"Index '{index}' not found for alias '{alias_name}'")
+
+            except Exception as e:
+                logger.error(f"Error deleting indices for alias '{alias_name}': {e}")
+
+    async def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
+        # No matter what happens above, always return True
+        return self.delete_aoss_indices()
+
     async def create_aoss_indices(self):
-        for index in neptune_aoss_indices:
+        for index in aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
             if not client:
@@ -246,6 +280,37 @@ class NeptuneDriver(GraphDriver):
 
         # Sleep for 1 minute to let the index creation complete
         await asyncio.sleep(60)
+
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        client = self.aoss_client
+        if not client or not helpers:
+            logger.warning('No OpenSearch client found')
+            return 0
+
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                to_index = []
+                for d in data:
+                    doc = {}
+                    for p in index['body']['mappings']['properties']:
+                        if p in d:  # protect against missing fields
+                            doc[p] = d[p]
+
+                    item = {
+                        '_index': name,
+                        '_id': d['uuid'],
+                        '_routing': d.get('group_id'),
+                        '_source': doc,
+                    }
+                    to_index.append(item)
+
+                success, failed = await helpers.async_bulk(
+                    client, to_index, stats_only=True, request_timeout=60
+                )
+
+                return success if failed == 0 else success
+
+        return 0
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
         return self.delete_all_indexes_impl()
