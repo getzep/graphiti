@@ -177,6 +177,10 @@ async def extract_edges(
         valid_at_datetime = None
         invalid_at_datetime = None
 
+        # Filter out empty edges
+        if not edge_data.fact.strip():
+            continue
+
         source_node_idx = edge_data.source_entity_id
         target_node_idx = edge_data.target_entity_id
 
