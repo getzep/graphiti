@@ -64,7 +64,6 @@ async def extract_nodes_reflexion(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     node_names: list[str],
-    ensure_ascii: bool = False,
     group_id: str | None = None,
 ) -> list[str]:
     # Prepare context for LLM
@@ -157,7 +156,6 @@ async def extract_nodes(
                 episode,
                 previous_episodes,
                 [entity.name for entity in extracted_entities],
-                clients.ensure_ascii,
                 episode.group_id,
             )
 
