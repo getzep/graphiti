@@ -357,6 +357,7 @@ class GeminiClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model with retry logic and error handling.
@@ -367,6 +368,7 @@ class GeminiClient(LLMClient):
             response_model (type[BaseModel] | None): An optional Pydantic model to parse the response into.
             max_tokens (int | None): The maximum number of tokens to generate in the response.
             model_size (ModelSize): The size of the model to use (small or medium).
+            group_id (str | None): Optional partition identifier for the graph.
 
         Returns:
             dict[str, typing.Any]: The response from the language model.
@@ -376,7 +378,7 @@ class GeminiClient(LLMClient):
         last_output = None
 
         # Add multilingual extraction instructions
-        messages[0].content += get_extraction_language_instruction()
+        messages[0].content += get_extraction_language_instruction(group_id)
 
         while retry_count < self.MAX_RETRIES:
             try:
