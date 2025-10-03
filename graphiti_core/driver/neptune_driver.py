@@ -259,17 +259,11 @@ class NeptuneDriver(GraphDriver):
                 for d in data:
                     item = {'_index': name, '_id': d['uuid']}
                     for p in index['body']['mappings']['properties']:
-                        if p in d:  # Add safety check for missing fields
+                        if p in d:
                             item[p] = d[p]
                     to_index.append(item)
-                    for p in index['body']['mappings']['properties']:
-                        item[p] = d[p]
-                    to_index.append(item)
                 success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                if failed > 0:
-                    return 0
-                else:
-                    return success
+                return success
 
         return 0
 

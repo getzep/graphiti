@@ -110,8 +110,8 @@ class GraphDriver(ABC):
         """
         raise NotImplementedError(f'build_fulltext_query not implemented for {self.provider}')
 
-    def save_to_aoss(self, name: str, data: list[dict]) -> int:
-        pass
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        return 0
 
-    def clear_aoss_indices(self):
-        pass
+    async def clear_aoss_indices(self):
+        return 1
