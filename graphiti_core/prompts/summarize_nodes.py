@@ -25,7 +25,7 @@ from .prompt_helpers import to_prompt_json
 class Summary(BaseModel):
     summary: str = Field(
         ...,
-        description="Summary containing the important information about the entity. Under 250 words",
+        description="Summary containing the important information about the entity. Under 8 sentences",
     )
 
 
