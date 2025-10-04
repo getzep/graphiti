@@ -120,7 +120,7 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
             role="user",
             content=f"""
         Create a short one sentence description of the summary that explains what kind of information is summarized.
-        Summaries must be under 250 words.
+        Summaries must be under 8 sentences.
 
         Summary:
         {to_prompt_json(context['summary'], indent=2)}
