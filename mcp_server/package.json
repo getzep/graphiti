@@ -1,0 +1,12 @@
+{
+  "name": "mcp_server",
+  "version": "1.0.0",
+  "description": "Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents\r operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti\r continuously integrates user interactions, structured and unstructured enterprise data, and external information into a\r coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical\r queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI\r applications.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
