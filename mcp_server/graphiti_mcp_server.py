@@ -75,31 +75,78 @@ class GeminiClient(LLMClient):
     def __init__(self, api_key: str, model: str, temperature: float = 0.7):
         if not api_key:
             raise ValueError("Google API Key cannot be empty.")
-        
+
+        # Initialize the inherited config FIRST
+        super().__init__(config=LLMConfig(api_key=api_key, model=model, temperature=temperature))
+
+        # Then configure Gemini and create the model object
         genai.configure(api_key=api_key)
         self.model_name = model # Store the model name string
-        self.model = genai.GenerativeModel(model)
+        self.gemini_model = genai.GenerativeModel(model)  # Use different name to avoid conflict with base class
         self.temperature = temperature
-        # Initialize the inherited config
-        super().__init__(config=LLMConfig(api_key=api_key, model=model, temperature=temperature))
         logger.info(f"GeminiClient initialized for model: {model}")
 
-    async def _generate_response(self, prompt: str) -> str:
+    async def _generate_response(
+        self,
+        messages: list,
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = 8192,
+        model_size = None,
+    ) -> dict[str, Any]:
         """
         This is the core method that communicates with the Gemini API.
         It's the one required by the abstract base class.
         """
         try:
+            # Convert messages to a single prompt string for Gemini
+            if isinstance(messages, list):
+                # Messages format: [{"role": "user", "content": "..."}, ...]
+                prompt = "\n".join(
+                    f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+                    if isinstance(msg, dict)
+                    else str(msg)
+                    for msg in messages
+                )
+            else:
+                prompt = str(messages)
+
             generation_config = genai.types.GenerationConfig(
                 candidate_count=1,
-                temperature=self.temperature
+                temperature=self.temperature,
+                max_output_tokens=max_tokens
             )
-            response = await self.model.generate_content_async(
+
+            # If response_model is provided, add JSON schema to prompt
+            if response_model:
+                schema_prompt = f"\n\nPlease respond with valid JSON matching this schema:\n{response_model.model_json_schema()}"
+                prompt = prompt + schema_prompt
+
+            response = await self.gemini_model.generate_content_async(
                 prompt,
                 generation_config=generation_config
             )
             result_text = "".join(part.text for part in response.parts)
-            return result_text
+
+            # If response_model is provided, parse JSON response
+            if response_model:
+                import json
+                # Try to extract JSON from the response
+                try:
+                    # Clean up markdown code blocks if present
+                    if "```json" in result_text:
+                        result_text = result_text.split("```json")[1].split("```")[0].strip()
+                    elif "```" in result_text:
+                        result_text = result_text.split("```")[1].split("```")[0].strip()
+
+                    parsed = json.loads(result_text)
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON from Gemini response: {e}\nResponse: {result_text}")
+                    # Return a dict anyway
+                    return {"content": result_text}
+
+            # Return as dict for consistency with base class
+            return {"content": result_text}
         except Exception as e:
             logger.error(f"Error during Gemini API call in _generate_response: {e}")
             # Re-raise the exception to be handled by the caller
@@ -107,18 +154,19 @@ class GeminiClient(LLMClient):
 
     async def acomplete(self, prompt: str, **kwargs) -> str:
         """Generate a completion using the Gemini model."""
-        # This method can now simply call the core method.
-        return await self._generate_response(prompt)
+        # Convert prompt to message format
+        messages = [{"role": "user", "content": prompt}]
+        result = await self._generate_response(messages)
+        return result.get("content", "")
 
     async def achat(self, messages: list[dict[str, str]], **kwargs) -> str:
         """Generate a chat completion using the Gemini model."""
-        # For Gemini, we often need to format the chat history into a single string prompt.
-        # This is a simplification; a more complex implementation would handle multi-turn conversations better.
-        prompt = "\n".join(f"{msg['role']}: {msg['content']}" for msg in messages)
-        return await self._generate_response(prompt)
+        result = await self._generate_response(messages)
+        return result.get("content", "")
 
 # --- START of FINAL, CORRECT, COMPLETE GeminiEmbedderClient ---
 from typing import Dict, List, Union
+from collections.abc import Iterable
 
 class GeminiEmbedderClient(EmbedderClient):
     """An embedder client for Google Gemini embedding models."""
@@ -130,38 +178,42 @@ class GeminiEmbedderClient(EmbedderClient):
         self.model_name = model
         logger.info(f"GeminiEmbedderClient initialized for model: {self.model_name}")
 
-    @classmethod
-    def create(cls, api_key: str, model: str, **_kwargs):
-        """
-        Factory method to create an instance of the client.
-        This is the abstract method required by the EmbedderClient base class.
-        """
-        return cls(api_key=api_key, model=model)
+    async def create(self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]) -> list[float]:
+        """Generate embedding for a single input using Gemini API."""
 
-    async def aembed(self, texts: List[str]) -> List[Dict[str, Union[str, List[float]]]]:
-        """
-        Generate embeddings for a list of texts using Gemini API.
-        """
-        if not texts:
+        if isinstance(input_data, str):
+            text = input_data
+        elif isinstance(input_data, list) and len(input_data) > 0 and isinstance(input_data[0], str):
+            text = input_data[0]
+        else:
+            raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+
+        try:
+            result = await genai.embed_content_async(
+                model=self.model_name,
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result['embedding']
+        except Exception as e:
+            logger.error(f"Error during Gemini embedding API call: {e}")
+            return []
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts using Gemini API."""
+        if not input_data_list:
             return []
 
         try:
             result = await genai.embed_content_async(
                 model=self.model_name,
-                content=texts,
+                content=input_data_list,
                 task_type="retrieval_document"
             )
-
-            embeddings_list = result['embedding']
-            
-            return [
-                {'text': text, 'embedding': vector}
-                for text, vector in zip(texts, embeddings_list)
-            ]
-
+            return result['embedding']
         except Exception as e:
-            logger.error(f"Error during Gemini embedding API call: {e}")
-            return [{'text': text, 'embedding': []} for text in texts]
+            logger.error(f"Error during Gemini embedding batch API call: {e}")
+            return [[] for _ in input_data_list]
 
 # --- END of FINAL, CORRECT, COMPLETE GeminiEmbedderClient ---
 # --- END of REVISED Gemini Client ---
@@ -637,12 +689,38 @@ class MCPConfig(BaseModel):
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stderr,
-)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     stream=sys.stderr,
+# )
+# 检查是否以 stdio 模式运行
+# sys.argv 包含了所有命令行参数，例如 ['graphiti_mcp_server.py', '--transport', 'stdio']
+is_stdio_transport = '--transport' in sys.argv and 'stdio' in sys.argv[sys.argv.index('--transport') + 1]
+
+# 如果是 stdio 模式，将日志输出到 stderr
+if is_stdio_transport:
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,  # <--- 这是关键的修改
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+else:
+    # 否则，保持默认行为（输出到 stdout 或默认）
+    logging.basicConfig(
+        level=logging.DEBUG,  # Changed to DEBUG for troubleshooting
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+# Add file handler for debugging (writes to debug.log in same directory as script)
+debug_log_path = os.path.join(os.path.dirname(__file__), 'debug.log')
+file_handler = logging.FileHandler(debug_log_path, mode='a')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
 logger = logging.getLogger(__name__)
+logger.addHandler(file_handler)
+logger.setLevel(logging.DEBUG)
 
 # Create global config instance - will be properly initialized later
 config = GraphitiConfig()
@@ -776,6 +854,8 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
 episode_queues: dict[str, asyncio.Queue] = {}
 # Dictionary to track if a worker is running for each group_id
 queue_workers: dict[str, bool] = {}
+# Store task references to prevent garbage collection
+queue_tasks: dict[str, asyncio.Task] = {}
 
 
 async def process_episode_queue(group_id: str):
@@ -786,23 +866,52 @@ async def process_episode_queue(group_id: str):
     """
     global queue_workers
 
+    import sys
+
+    # Create debug file
+    debug_file = open(r'C:\workspace\graphiti\mcp_server\debug_worker.log', 'a', encoding='utf-8')
+    debug_file.write(f"\n{'='*80}\n")
+    debug_file.write(f"🔥🔥🔥 Worker STARTED for group_id={group_id} at {datetime.now()} 🔥🔥🔥\n")
+    debug_file.flush()
+
+    print(f"🔥🔥🔥 Worker STARTED for group_id={group_id} 🔥🔥🔥", file=sys.stderr, flush=True)
+    logger.debug(f"🔥🔥🔥 Worker STARTED for group_id={group_id}")
     logger.info(f'Starting episode queue worker for group_id: {group_id}')
     queue_workers[group_id] = True
 
     try:
         while True:
+            debug_file.write(f"🔥 Worker for {group_id}: Waiting for task from queue...\n")
+            debug_file.flush()
+            print(f"🔥 Worker for {group_id}: Waiting for task from queue...", file=sys.stderr, flush=True)
             # Get the next episode processing function from the queue
             # This will wait if the queue is empty
             process_func = await episode_queues[group_id].get()
+            debug_file.write(f"🔥 Worker for {group_id}: Got task from queue, executing...\n")
+            debug_file.flush()
+            print(f"🔥 Worker for {group_id}: Got task from queue, executing...", file=sys.stderr, flush=True)
 
             try:
                 # Process the episode
                 await process_func()
+                debug_file.write(f"🔥 Worker for {group_id}: Task completed successfully\n")
+                debug_file.flush()
+                print(f"🔥 Worker for {group_id}: Task completed successfully", file=sys.stderr, flush=True)
             except Exception as e:
-                logger.error(f'Error processing queued episode for group_id {group_id}: {str(e)}')
+                import traceback
+                error_trace = traceback.format_exc()
+                debug_file.write(f"🔥🔥🔥 ERROR in worker for {group_id}: {str(e)}\n")
+                debug_file.write(f"🔥🔥🔥 Traceback:\n{error_trace}\n")
+                debug_file.flush()
+                print(f"🔥🔥🔥 ERROR in worker for {group_id}: {str(e)}", file=sys.stderr, flush=True)
+                print(f"🔥🔥🔥 Traceback:\n{error_trace}", file=sys.stderr, flush=True)
+                logger.error(f'Error processing queued episode for group_id {group_id}: {str(e)}\n{error_trace}')
             finally:
                 # Mark the task as done regardless of success/failure
                 episode_queues[group_id].task_done()
+                debug_file.write(f"🔥 Worker for {group_id}: Task marked as done\n")
+                debug_file.flush()
+                print(f"🔥 Worker for {group_id}: Task marked as done", file=sys.stderr, flush=True)
     except asyncio.CancelledError:
         logger.info(f'Episode queue worker for group_id {group_id} was cancelled')
     except Exception as e:
@@ -810,6 +919,17 @@ async def process_episode_queue(group_id: str):
     finally:
         queue_workers[group_id] = False
         logger.info(f'Stopped episode queue worker for group_id: {group_id}')
+
+
+@mcp.tool()
+async def debug_worker_status() -> dict:
+    """Get debug information about worker and queue status"""
+    return {
+        "queue_workers": dict(queue_workers),
+        "queue_tasks": {k: str(v) for k, v in queue_tasks.items()},
+        "episode_queues_sizes": {k: v.qsize() for k, v in episode_queues.items()},
+        "graphiti_client_initialized": graphiti_client is not None,
+    }
 
 
 @mcp.tool()
@@ -876,7 +996,7 @@ async def add_memory(
         - Entities will be created from appropriate JSON properties
         - Relationships between entities will be established based on the JSON structure
     """
-    global graphiti_client, episode_queues, queue_workers
+    global graphiti_client, episode_queues, queue_workers, queue_tasks
 
     if graphiti_client is None:
         return ErrorResponse(error='Graphiti client not initialized')
@@ -905,10 +1025,37 @@ async def add_memory(
 
         # Define the episode processing function
         async def process_episode():
+            debug_log = open(r'C:\workspace\graphiti\mcp_server\debug_episode.log', 'a', encoding='utf-8')
             try:
+                import sys
+                import traceback
+                debug_log.write(f"\n{'='*80}\n")
+                debug_log.write(f"🔥🔥🔥 Processing episode '{name}' for group_id={group_id_str} at {datetime.now()} 🔥🔥🔥\n")
+                debug_log.flush()
+                print(f"🔥🔥🔥 DEBUG: Processing episode '{name}' for group_id={group_id_str} 🔥🔥🔥", file=sys.stderr, flush=True)
                 logger.info(f"Processing queued episode '{name}' for group_id: {group_id_str}")
+
+                # Debug: Check if client is properly initialized
+                debug_log.write(f"🔥 Client type: {type(client)}, initialized: {client is not None}\n")
+                debug_log.write(f"🔥 Client has llm_client: {hasattr(client, 'llm_client') and client.llm_client is not None}\n")
+                debug_log.write(f"🔥 Client has embedder: {hasattr(client, 'embedder') and client.embedder is not None}\n")
+                debug_log.flush()
+                print(f"🔥 DEBUG: Client type: {type(client)}, Client initialized: {client is not None}", file=sys.stderr, flush=True)
+
                 # Use all entity types if use_custom_entities is enabled, otherwise use empty dict
                 entity_types = ENTITY_TYPES if config.use_custom_entities else {}
+                debug_log.write(f"🔥 Entity types: {entity_types}\n")
+                debug_log.write(f"🔥 use_custom_entities: {config.use_custom_entities}\n")
+                debug_log.flush()
+                print(f"🔥 DEBUG: Entity types: {entity_types}", file=sys.stderr, flush=True)
+
+                debug_log.write(f"🔥 About to call client.add_episode with:\n")
+                debug_log.write(f"  - name: {name}\n")
+                debug_log.write(f"  - group_id: {group_id_str}\n")
+                debug_log.write(f"  - source: {source_type}\n")
+                debug_log.write(f"  - episode_body length: {len(episode_body)}\n")
+                debug_log.flush()
+                print(f"🔥 DEBUG: About to call client.add_episode...", file=sys.stderr, flush=True)
 
                 await client.add_episode(
                     name=name,
@@ -920,14 +1067,26 @@ async def add_memory(
                     reference_time=datetime.now(timezone.utc),
                     entity_types=entity_types,
                 )
+                debug_log.write(f"🔥 client.add_episode completed successfully\n")
+                debug_log.flush()
+                print(f"🔥 DEBUG: client.add_episode completed successfully", file=sys.stderr, flush=True)
                 logger.info(f"Episode '{name}' added successfully")
 
                 logger.info(f"Episode '{name}' processed successfully")
             except Exception as e:
+                import traceback
                 error_msg = str(e)
+                full_trace = traceback.format_exc()
+                debug_log.write(f"🔥🔥🔥 ERROR: {error_msg}\n")
+                debug_log.write(f"🔥🔥🔥 Traceback:\n{full_trace}\n")
+                debug_log.flush()
+                print(f"🔥🔥🔥 ERROR in process_episode: {error_msg}", file=sys.stderr, flush=True)
+                print(f"🔥🔥🔥 Full traceback:\n{full_trace}", file=sys.stderr, flush=True)
                 logger.error(
-                    f"Error processing episode '{name}' for group_id {group_id_str}: {error_msg}"
+                    f"Error processing episode '{name}' for group_id {group_id_str}: {error_msg}\n{full_trace}"
                 )
+            finally:
+                debug_log.close()
 
         # Initialize queue for this group_id if it doesn't exist
         if group_id_str not in episode_queues:
@@ -936,9 +1095,25 @@ async def add_memory(
         # Add the episode processing function to the queue
         await episode_queues[group_id_str].put(process_episode)
 
+        # CRITICAL DEBUG: Check worker status
+        worker_exists = queue_workers.get(group_id_str, False)
+        logger.debug(f"🔥🔥🔥 Worker exists for {group_id_str}: {worker_exists}")
+        logger.debug(f"🔥🔥🔥 All workers: {dict(queue_workers)}")
+        logger.debug(f"🔥🔥🔥 Episode queue size for {group_id_str}: {episode_queues[group_id_str].qsize()}")
+
         # Start a worker for this queue if one isn't already running
-        if not queue_workers.get(group_id_str, False):
-            asyncio.create_task(process_episode_queue(group_id_str))
+        if not worker_exists:
+            logger.debug(f"🔥🔥🔥 Creating worker task for group_id={group_id_str}")
+            # Set worker status BEFORE creating task to prevent race condition
+            queue_workers[group_id_str] = True
+            # Create and store task reference to prevent garbage collection
+            task = asyncio.create_task(process_episode_queue(group_id_str))
+            queue_tasks[group_id_str] = task
+            logger.debug(f"🔥🔥🔥 Worker task created and stored for {group_id_str}, task ID: {id(task)}")
+            # Add done callback to handle task completion/errors
+            task.add_done_callback(lambda t: logger.info(f"Queue worker task completed for {group_id_str}") if not t.cancelled() else None)
+        else:
+            logger.debug(f"🔥🔥🔥 Worker already exists, skipping creation")
 
         # Return immediately with a success message
         return SuccessResponse(
