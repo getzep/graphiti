@@ -33,12 +33,16 @@ DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
 
-def get_extraction_language_instruction() -> str:
+def get_extraction_language_instruction(group_id: str | None = None) -> str:
     """Returns instruction for language extraction behavior.
 
     Override this function to customize language extraction:
     - Return empty string to disable multilingual instructions
     - Return custom instructions for specific language requirements
+    - Use group_id to provide different instructions per group/partition
+
+    Args:
+        group_id: Optional partition identifier for the graph
 
     Returns:
         str: Language instruction to append to system messages
@@ -142,6 +146,7 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -155,7 +160,7 @@ class LLMClient(ABC):
             )
 
         # Add multilingual extraction instructions
-        messages[0].content += get_extraction_language_instruction()
+        messages[0].content += get_extraction_language_instruction(group_id)
 
         if self.cache_enabled and self.cache_dir is not None:
             cache_key = self._get_cache_key(messages)

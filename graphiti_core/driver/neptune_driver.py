@@ -22,21 +22,16 @@ from typing import Any
 
 import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
-from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection
+from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
-from graphiti_core.driver.driver import (
-    DEFAULT_SIZE,
-    GraphDriver,
-    GraphDriverSession,
-    GraphProvider,
-)
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 
 logger = logging.getLogger(__name__)
+DEFAULT_SIZE = 10
 
-neptune_aoss_indices = [
+aoss_indices = [
     {
         'index_name': 'node_name_and_summary',
-        'alias_name': 'entities',
         'body': {
             'mappings': {
                 'properties': {
@@ -54,7 +49,6 @@ neptune_aoss_indices = [
     },
     {
         'index_name': 'community_name',
-        'alias_name': 'communities',
         'body': {
             'mappings': {
                 'properties': {
@@ -71,7 +65,6 @@ neptune_aoss_indices = [
     },
     {
         'index_name': 'episode_content',
-        'alias_name': 'episodes',
         'body': {
             'mappings': {
                 'properties': {
@@ -95,7 +88,6 @@ neptune_aoss_indices = [
     },
     {
         'index_name': 'edge_name_and_fact',
-        'alias_name': 'facts',
         'body': {
             'mappings': {
                 'properties': {
@@ -228,27 +220,52 @@ class NeptuneDriver(GraphDriver):
     async def _delete_all_data(self) -> Any:
         return await self.execute_query('MATCH (n) DETACH DELETE n')
 
+    def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
+        return self.delete_all_indexes_impl()
+
+    async def delete_all_indexes_impl(self) -> Coroutine[Any, Any, Any]:
+        # No matter what happens above, always return True
+        return self.delete_aoss_indices()
+
     async def create_aoss_indices(self):
-        for index in neptune_aoss_indices:
+        for index in aoss_indices:
             index_name = index['index_name']
             client = self.aoss_client
-            if not client:
-                raise ValueError(
-                    'You must provide an AOSS endpoint to create an OpenSearch driver.'
-                )
             if not client.indices.exists(index=index_name):
-                await client.indices.create(index=index_name, body=index['body'])
-
-            alias_name = index.get('alias_name', index_name)
-
-            if not client.indices.exists_alias(name=alias_name, index=index_name):
-                await client.indices.put_alias(index=index_name, name=alias_name)
-
+                client.indices.create(index=index_name, body=index['body'])
         # Sleep for 1 minute to let the index creation complete
         await asyncio.sleep(60)
 
-    def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
-        return self.delete_all_indexes_impl()
+    async def delete_aoss_indices(self):
+        for index in aoss_indices:
+            index_name = index['index_name']
+            client = self.aoss_client
+            if client.indices.exists(index=index_name):
+                client.indices.delete(index=index_name)
+
+    def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                index['query']['query']['multi_match']['query'] = query_text
+                query = {'size': limit, 'query': index['query']}
+                resp = self.aoss_client.search(body=query['query'], index=index['index_name'])
+                return resp
+        return {}
+
+    def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        for index in aoss_indices:
+            if name.lower() == index['index_name']:
+                to_index = []
+                for d in data:
+                    item = {'_index': name, '_id': d['uuid']}
+                    for p in index['body']['mappings']['properties']:
+                        if p in d:
+                            item[p] = d[p]
+                    to_index.append(item)
+                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                return success
+
+        return 0
 
 
 class NeptuneDriverSession(GraphDriverSession):

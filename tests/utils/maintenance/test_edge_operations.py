@@ -143,7 +143,6 @@ async def test_resolve_extracted_edge_exact_fact_short_circuit(
         mock_existing_edges,
         mock_current_episode,
         edge_type_candidates=None,
-        ensure_ascii=True,
     )
 
     assert resolved_edge is related_edges[0]
@@ -184,7 +183,6 @@ async def test_resolve_extracted_edges_resets_unmapped_names(monkeypatch):
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
-        ensure_ascii=True,
     )
 
     source_node = EntityNode(
@@ -265,7 +263,6 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
-        ensure_ascii=True,
     )
 
     source_node = EntityNode(
@@ -369,7 +366,6 @@ async def test_resolve_extracted_edge_rejects_unmapped_fact_type(mock_llm_client
         episode,
         edge_type_candidates={},
         custom_edge_type_names={'OCCURRED_AT'},
-        ensure_ascii=True,
     )
 
     assert resolved_edge.name == DEFAULT_EDGE_NAME
@@ -427,7 +423,6 @@ async def test_resolve_extracted_edge_accepts_unknown_fact_type(mock_llm_client)
         episode,
         edge_type_candidates={'OCCURRED_AT': OccurredAtEdge},
         custom_edge_type_names={'OCCURRED_AT'},
-        ensure_ascii=True,
     )
 
     assert resolved_edge.name == 'INTERACTED_WITH'
@@ -515,7 +510,6 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
         episode,
         edge_type_candidates=None,
         custom_edge_type_names=set(),
-        ensure_ascii=True,
     )
 
     # Verify LLM was called
@@ -553,7 +547,6 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         episode,
         edge_type_candidates=None,
         custom_edge_type_names=None,
-        ensure_ascii=False,
     ):
         nonlocal resolve_call_count
         resolve_call_count += 1
@@ -576,7 +569,6 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         llm_client=llm_client,
         embedder=MagicMock(),
         cross_encoder=MagicMock(),
-        ensure_ascii=True,
     )
 
     source_node = EntityNode(

@@ -24,9 +24,16 @@ from .prompt_helpers import to_prompt_json
 
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
-    source_entity_id: int = Field(..., description='The id of the source entity of the fact.')
-    target_entity_id: int = Field(..., description='The id of the target entity of the fact.')
-    fact: str = Field(..., description='')
+    source_entity_id: int = Field(
+        ..., description='The id of the source entity from the ENTITIES list'
+    )
+    target_entity_id: int = Field(
+        ..., description='The id of the target entity from the ENTITIES list'
+    )
+    fact: str = Field(
+        ...,
+        description='A natural language description of the relationship between the entities, paraphrased from the source text',
+    )
     valid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact became true or was established. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
@@ -73,7 +80,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </FACT TYPES>
 
 <PREVIOUS_MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS_MESSAGES>
 
 <CURRENT_MESSAGE>
@@ -81,7 +88,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{context['nodes']} 
+{to_prompt_json(context['nodes'], indent=2)}
 </ENTITIES>
 
 <REFERENCE_TIME>
@@ -107,11 +114,12 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 # EXTRACTION RULES
 
-1. Only emit facts where both the subject and object match IDs in ENTITIES.
+1. **Entity ID Validation**: `source_entity_id` and `target_entity_id` must use only the `id` values from the ENTITIES list provided above.
+   - **CRITICAL**: Using IDs not in the list will cause the edge to be rejected
 2. Each fact must involve two **distinct** entities.
 3. Use a SCREAMING_SNAKE_CASE string as the `relation_type` (e.g., FOUNDED, WORKS_AT).
 4. Do not emit duplicate or semantically redundant facts.
-5. The `fact_text` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
+5. The `fact` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
 6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
 7. Do **not** hallucinate or infer temporal bounds from unrelated events.
 
@@ -133,7 +141,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -167,7 +175,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGE>
-        {to_prompt_json(context['episode_content'], ensure_ascii=context.get('ensure_ascii', False), indent=2)}
+        {to_prompt_json(context['episode_content'], indent=2)}
         </MESSAGE>
         <REFERENCE TIME>
         {context['reference_time']}

@@ -27,6 +27,5 @@ class GraphitiClients(BaseModel):
     llm_client: LLMClient
     embedder: EmbedderClient
     cross_encoder: CrossEncoderClient
-    ensure_ascii: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

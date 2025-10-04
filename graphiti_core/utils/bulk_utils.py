@@ -482,7 +482,6 @@ async def dedupe_edges_bulk(
                 episode,
                 edge_types,
                 set(edge_types),
-                clients.ensure_ascii,
             )
             for episode, edge, candidates in dedupe_tuples
         ]

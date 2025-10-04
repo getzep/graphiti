@@ -64,18 +64,17 @@ async def extract_nodes_reflexion(
     episode: EpisodicNode,
     previous_episodes: list[EpisodicNode],
     node_names: list[str],
-    ensure_ascii: bool = False,
+    group_id: str | None = None,
 ) -> list[str]:
     # Prepare context for LLM
     context = {
         'episode_content': episode.content,
         'previous_episodes': [ep.content for ep in previous_episodes],
         'extracted_entities': node_names,
-        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.reflexion(context), MissedEntities
+        prompt_library.extract_nodes.reflexion(context), MissedEntities, group_id=group_id
     )
     missed_entities = llm_response.get('missed_entities', [])
 
@@ -124,7 +123,6 @@ async def extract_nodes(
         'custom_prompt': custom_prompt,
         'entity_types': entity_types_context,
         'source_description': episode.source_description,
-        'ensure_ascii': clients.ensure_ascii,
     }
 
     while entities_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
@@ -132,16 +130,19 @@ async def extract_nodes(
             llm_response = await llm_client.generate_response(
                 prompt_library.extract_nodes.extract_message(context),
                 response_model=ExtractedEntities,
+                group_id=episode.group_id,
             )
         elif episode.source == EpisodeType.text:
             llm_response = await llm_client.generate_response(
                 prompt_library.extract_nodes.extract_text(context),
                 response_model=ExtractedEntities,
+                group_id=episode.group_id,
             )
         elif episode.source == EpisodeType.json:
             llm_response = await llm_client.generate_response(
                 prompt_library.extract_nodes.extract_json(context),
                 response_model=ExtractedEntities,
+                group_id=episode.group_id,
             )
 
         response_object = ExtractedEntities(**llm_response)
@@ -155,7 +156,7 @@ async def extract_nodes(
                 episode,
                 previous_episodes,
                 [entity.name for entity in extracted_entities],
-                clients.ensure_ascii,
+                episode.group_id,
             )
 
             entities_missed = len(missing_entities) != 0
@@ -196,6 +197,7 @@ async def extract_nodes(
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
 
     logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+
     return extracted_nodes
 
 
@@ -239,7 +241,6 @@ async def _resolve_with_llm(
     extracted_nodes: list[EntityNode],
     indexes: DedupCandidateIndexes,
     state: DedupResolutionState,
-    ensure_ascii: bool,
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_types: dict[str, type[BaseModel]] | None,
@@ -269,6 +270,27 @@ async def _resolve_with_llm(
         for i, node in enumerate(llm_extracted_nodes)
     ]
 
+    sent_ids = [ctx['id'] for ctx in extracted_nodes_context]
+    logger.debug(
+        'Sending %d entities to LLM for deduplication with IDs 0-%d (actual IDs sent: %s)',
+        len(llm_extracted_nodes),
+        len(llm_extracted_nodes) - 1,
+        sent_ids if len(sent_ids) < 20 else f'{sent_ids[:10]}...{sent_ids[-10:]}',
+    )
+    if llm_extracted_nodes:
+        sample_size = min(3, len(extracted_nodes_context))
+        logger.debug(
+            'First %d entities: %s',
+            sample_size,
+            [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[:sample_size]],
+        )
+        if len(extracted_nodes_context) > 3:
+            logger.debug(
+                'Last %d entities: %s',
+                sample_size,
+                [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[-sample_size:]],
+            )
+
     existing_nodes_context = [
         {
             **{
@@ -288,7 +310,6 @@ async def _resolve_with_llm(
         'previous_episodes': (
             [ep.content for ep in previous_episodes] if previous_episodes is not None else []
         ),
-        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
@@ -301,15 +322,38 @@ async def _resolve_with_llm(
     valid_relative_range = range(len(state.unresolved_indices))
     processed_relative_ids: set[int] = set()
 
+    received_ids = {r.id for r in node_resolutions}
+    expected_ids = set(valid_relative_range)
+    missing_ids = expected_ids - received_ids
+    extra_ids = received_ids - expected_ids
+
+    logger.debug(
+        'Received %d resolutions for %d entities',
+        len(node_resolutions),
+        len(state.unresolved_indices),
+    )
+
+    if missing_ids:
+        logger.warning('LLM did not return resolutions for IDs: %s', sorted(missing_ids))
+
+    if extra_ids:
+        logger.warning(
+            'LLM returned invalid IDs outside valid range 0-%d: %s (all returned IDs: %s)',
+            len(state.unresolved_indices) - 1,
+            sorted(extra_ids),
+            sorted(received_ids),
+        )
+
     for resolution in node_resolutions:
         relative_id: int = resolution.id
         duplicate_idx: int = resolution.duplicate_idx
 
         if relative_id not in valid_relative_range:
             logger.warning(
-                'Skipping invalid LLM dedupe id %s (unresolved indices: %s)',
+                'Skipping invalid LLM dedupe id %d (valid range: 0-%d, received %d resolutions)',
                 relative_id,
-                state.unresolved_indices,
+                len(state.unresolved_indices) - 1,
+                len(node_resolutions),
             )
             continue
 
@@ -372,7 +416,6 @@ async def resolve_extracted_nodes(
         extracted_nodes,
         indexes,
         state,
-        clients.ensure_ascii,
         episode,
         previous_episodes,
         entity_types,
@@ -421,7 +464,6 @@ async def extract_attributes_from_nodes(
                     if entity_types is not None
                     else None
                 ),
-                clients.ensure_ascii,
                 should_summarize_node,
             )
             for node in nodes
@@ -439,7 +481,6 @@ async def extract_attributes_from_node(
     episode: EpisodicNode | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_type: type[BaseModel] | None = None,
-    ensure_ascii: bool = False,
     should_summarize_node: NodeSummaryFilter | None = None,
 ) -> EntityNode:
     node_context: dict[str, Any] = {
@@ -455,7 +496,6 @@ async def extract_attributes_from_node(
         'previous_episodes': (
             [ep.content for ep in previous_episodes] if previous_episodes is not None else []
         ),
-        'ensure_ascii': ensure_ascii,
     }
 
     summary_context: dict[str, Any] = {
@@ -464,7 +504,6 @@ async def extract_attributes_from_node(
         'previous_episodes': (
             [ep.content for ep in previous_episodes] if previous_episodes is not None else []
         ),
-        'ensure_ascii': ensure_ascii,
     }
 
     has_entity_attributes: bool = bool(
@@ -477,6 +516,7 @@ async def extract_attributes_from_node(
                 prompt_library.extract_nodes.extract_attributes(attributes_context),
                 response_model=entity_type,
                 model_size=ModelSize.small,
+                group_id=node.group_id,
             )
         )
         if has_entity_attributes
@@ -494,6 +534,7 @@ async def extract_attributes_from_node(
             prompt_library.extract_nodes.extract_summary(summary_context),
             response_model=EntitySummary,
             model_size=ModelSize.small,
+            group_id=node.group_id,
         )
         node.summary = summary_response.get('summary', '')
 
