@@ -209,7 +209,6 @@ class Graphiti:
             self.cross_encoder = cross_encoder
         else:
             self.cross_encoder = OpenAIRerankerClient()
-
         self.clients = GraphitiClients(
             driver=self.driver,
             llm_client=self.llm_client,

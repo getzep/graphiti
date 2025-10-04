@@ -10,4 +10,5 @@ dependencies = [
     "graphiti-core>=0.14.0",
     "azure-identity>=1.21.0",
     "graphiti-core",
+    "google-generativeai"
 ]
