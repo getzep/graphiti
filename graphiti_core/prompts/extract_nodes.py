@@ -23,39 +23,44 @@ from .prompt_helpers import to_prompt_json
 
 
 class ExtractedEntity(BaseModel):
-    name: str = Field(..., description='Name of the extracted entity')
+    name: str = Field(..., description="Name of the extracted entity")
     entity_type_id: int = Field(
-        description='ID of the classified entity type. '
-        'Must be one of the provided entity_type_id integers.',
+        description="ID of the classified entity type. "
+        "Must be one of the provided entity_type_id integers.",
     )
 
 
 class ExtractedEntities(BaseModel):
-    extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
+    extracted_entities: list[ExtractedEntity] = Field(
+        ..., description="List of extracted entities"
+    )
 
 
 class MissedEntities(BaseModel):
-    missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
+    missed_entities: list[str] = Field(
+        ..., description="Names of entities that weren't extracted"
+    )
 
 
 class EntityClassificationTriple(BaseModel):
-    uuid: str = Field(description='UUID of the entity')
-    name: str = Field(description='Name of the entity')
+    uuid: str = Field(description="UUID of the entity")
+    name: str = Field(description="Name of the entity")
     entity_type: str | None = Field(
-        default=None, description='Type of the entity. Must be one of the provided types or None'
+        default=None,
+        description="Type of the entity. Must be one of the provided types or None",
     )
 
 
 class EntityClassification(BaseModel):
     entity_classifications: list[EntityClassificationTriple] = Field(
-        ..., description='List of entities classification triples.'
+        ..., description="List of entities classification triples."
     )
 
 
 class EntitySummary(BaseModel):
     summary: str = Field(
         ...,
-        description='Summary containing the important information about the entity. Under 250 words',
+        description="Summary containing the important information about the entity. Under 8 sentences.",
     )
 
 
@@ -123,8 +128,8 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don
 {context['custom_prompt']}
 """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
@@ -156,8 +161,8 @@ Guidelines:
 3. Do NOT extract any properties that contain dates
 """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
@@ -187,8 +192,8 @@ Guidelines:
 4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
 """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
@@ -211,8 +216,8 @@ Given the above previous messages, current message, and list of extracted entiti
 extracted.
 """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
@@ -243,19 +248,19 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
     3. If none of the provided entity types accurately classify an extracted node, the type should be set to None
 """
     return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
+        Message(role="system", content=sys_prompt),
+        Message(role="user", content=user_prompt),
     ]
 
 
 def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
-            role='system',
-            content='You are a helpful assistant that extracts entity properties from the provided text.',
+            role="system",
+            content="You are a helpful assistant that extracts entity properties from the provided text.",
         ),
         Message(
-            role='user',
+            role="user",
             content=f"""
 
         <MESSAGES>
@@ -281,11 +286,11 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
 def extract_summary(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
-            role='system',
-            content='You are a helpful assistant that extracts entity summaries from the provided text.',
+            role="system",
+            content="You are a helpful assistant that extracts entity summaries from the provided text.",
         ),
         Message(
-            role='user',
+            role="user",
             content=f"""
 
         <MESSAGES>
@@ -300,7 +305,7 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
         1. Do not hallucinate entity summary information if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
         3. The summary attribute represents a summary of the ENTITY, and should be updated with new information about the Entity from the MESSAGES. 
-            Summaries must be no longer than 250 words.
+        4. Keep the summary concise and to the point. SUMMARIES MUST BE LESS THAN 8 SENTENCES.
 
         <ENTITY>
         {context['node']}
@@ -311,11 +316,11 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
 
 
 versions: Versions = {
-    'extract_message': extract_message,
-    'extract_json': extract_json,
-    'extract_text': extract_text,
-    'reflexion': reflexion,
-    'extract_summary': extract_summary,
-    'classify_nodes': classify_nodes,
-    'extract_attributes': extract_attributes,
+    "extract_message": extract_message,
+    "extract_json": extract_json,
+    "extract_text": extract_text,
+    "reflexion": reflexion,
+    "extract_summary": extract_summary,
+    "classify_nodes": classify_nodes,
+    "extract_attributes": extract_attributes,
 }
