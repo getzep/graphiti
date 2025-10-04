@@ -260,10 +260,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
 
-        <MESSAGES>
-        {to_prompt_json(context['previous_episodes'], indent=2)}
-        {to_prompt_json(context['episode_content'], indent=2)}
-        </MESSAGES>
+
 
         Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
         in MESSAGES. Use the provided attribute descriptions to better understand how each attribute should be determined.
@@ -271,6 +268,11 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
+
+                <MESSAGES>
+        {to_prompt_json(context['previous_episodes'], indent=2)}
+        {to_prompt_json(context['episode_content'], indent=2)}
+        </MESSAGES>
         
         <ENTITY>
         {context['node']}
@@ -289,16 +291,15 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
+        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary.
+        
+        {summary_instructions}
 
         <MESSAGES>
         {to_prompt_json(context['previous_episodes'], indent=2)}
         {to_prompt_json(context['episode_content'], indent=2)}
         </MESSAGES>
-
-        Given the above MESSAGES and the following ENTITY, update the summary that combines relevant information about the entity
-        from the messages and relevant information from the existing summary.
-        
-        {summary_instructions}
 
         <ENTITY>
         {context['node']}
