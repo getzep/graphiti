@@ -359,7 +359,7 @@ class Graphiti:
         previous_episodes: list[EpisodicNode],
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
-    ) -> tuple[list[EntityNode], dict[str, str], list[EntityNode]]:
+    ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
         """Extract nodes from episode and resolve against existing graph."""
         extracted_nodes = await extract_nodes(
             self.clients, episode, previous_episodes, entity_types, excluded_entity_types
@@ -889,10 +889,6 @@ class Graphiti:
                     )
                     for episode in bulk_episodes
                 ]
-
-                episodes_by_uuid: dict[str, EpisodicNode] = {
-                    episode.uuid: episode for episode in episodes
-                }
 
                 # Save all episodes
                 await add_nodes_and_edges_bulk(

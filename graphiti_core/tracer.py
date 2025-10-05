@@ -15,18 +15,19 @@ limitations under the License.
 """
 
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
-from typing import Any
+from collections.abc import Generator
+from contextlib import AbstractContextManager, contextmanager, suppress
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opentelemetry.trace import Span, StatusCode
 
 try:
-    from opentelemetry import trace
     from opentelemetry.trace import Span, StatusCode
 
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
-    Span = Any  # type: ignore
-    StatusCode = Any  # type: ignore
 
 
 class TracerSpan(ABC):
@@ -52,8 +53,7 @@ class Tracer(ABC):
     """Abstract base class for tracers."""
 
     @abstractmethod
-    @contextmanager
-    def start_span(self, name: str):
+    def start_span(self, name: str) -> AbstractContextManager[TracerSpan]:
         """Start a new span with the given name."""
         pass
 
@@ -75,7 +75,7 @@ class NoOpTracer(Tracer):
     """No-op tracer implementation that does nothing."""
 
     @contextmanager
-    def start_span(self, name: str):
+    def start_span(self, name: str) -> Generator[NoOpSpan, None, None]:
         """Return a no-op span."""
         yield NoOpSpan()
 
@@ -83,7 +83,7 @@ class NoOpTracer(Tracer):
 class OpenTelemetrySpan(TracerSpan):
     """Wrapper for OpenTelemetry span."""
 
-    def __init__(self, span: Span):
+    def __init__(self, span: 'Span'):
         self._span = span
 
     def add_attributes(self, attributes: dict[str, Any]) -> None:
@@ -94,7 +94,7 @@ class OpenTelemetrySpan(TracerSpan):
             for key, value in attributes.items():
                 if value is not None:
                     # Convert to string if not a primitive type
-                    if isinstance(value, (str, int, float, bool)):
+                    if isinstance(value, str | int | float | bool):
                         filtered_attrs[key] = value
                     else:
                         filtered_attrs[key] = str(value)
@@ -108,21 +108,19 @@ class OpenTelemetrySpan(TracerSpan):
     def set_status(self, status: str, description: str | None = None) -> None:
         """Set the status of the OpenTelemetry span."""
         try:
-            if status == 'error':
-                self._span.set_status(StatusCode.ERROR, description)
-            elif status == 'ok':
-                self._span.set_status(StatusCode.OK, description)
+            if OTEL_AVAILABLE:
+                if status == 'error':
+                    self._span.set_status(StatusCode.ERROR, description)
+                elif status == 'ok':
+                    self._span.set_status(StatusCode.OK, description)
         except Exception:
             # Silently ignore tracing errors
             pass
 
     def record_exception(self, exception: Exception) -> None:
         """Record an exception in the OpenTelemetry span."""
-        try:
+        with suppress(Exception):
             self._span.record_exception(exception)
-        except Exception:
-            # Silently ignore tracing errors
-            pass
 
 
 class OpenTelemetryTracer(Tracer):
@@ -147,7 +145,7 @@ class OpenTelemetryTracer(Tracer):
         self._span_prefix = span_prefix.rstrip('.')
 
     @contextmanager
-    def start_span(self, name: str):
+    def start_span(self, name: str) -> Generator[OpenTelemetrySpan | NoOpSpan, None, None]:
         """Start a new OpenTelemetry span with the configured prefix."""
         try:
             full_name = f'{self._span_prefix}.{name}'

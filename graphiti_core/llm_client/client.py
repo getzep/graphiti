@@ -78,7 +78,7 @@ class LLMClient(ABC):
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
         self.cache_dir = None
-        self.tracer: 'Tracer | None' = None
+        self.tracer: Tracer | None = None
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
