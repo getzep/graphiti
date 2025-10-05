@@ -78,6 +78,7 @@ async def extract_nodes_reflexion(
         prompt_library.extract_nodes.reflexion(context),
         MissedEntities,
         group_id=group_id,
+        prompt_name='extract_nodes.reflexion',
     )
     missed_entities = llm_response.get('missed_entities', [])
 
@@ -134,18 +135,21 @@ async def extract_nodes(
                 prompt_library.extract_nodes.extract_message(context),
                 response_model=ExtractedEntities,
                 group_id=episode.group_id,
+                prompt_name='extract_nodes.extract_message',
             )
         elif episode.source == EpisodeType.text:
             llm_response = await llm_client.generate_response(
                 prompt_library.extract_nodes.extract_text(context),
                 response_model=ExtractedEntities,
                 group_id=episode.group_id,
+                prompt_name='extract_nodes.extract_text',
             )
         elif episode.source == EpisodeType.json:
             llm_response = await llm_client.generate_response(
                 prompt_library.extract_nodes.extract_json(context),
                 response_model=ExtractedEntities,
                 group_id=episode.group_id,
+                prompt_name='extract_nodes.extract_json',
             )
 
         response_object = ExtractedEntities(**llm_response)
@@ -318,6 +322,7 @@ async def _resolve_with_llm(
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_nodes.nodes(context),
         response_model=NodeResolutions,
+        prompt_name='dedupe_nodes.nodes',
     )
 
     node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
@@ -527,6 +532,7 @@ async def _extract_entity_attributes(
         response_model=entity_type,
         model_size=ModelSize.small,
         group_id=node.group_id,
+        prompt_name='extract_nodes.extract_attributes',
     )
 
     # validate response
@@ -561,6 +567,7 @@ async def _extract_entity_summary(
         response_model=EntitySummary,
         model_size=ModelSize.small,
         group_id=node.group_id,
+        prompt_name='extract_nodes.extract_summary',
     )
 
     node.summary = truncate_at_sentence(summary_response.get('summary', ''), MAX_SUMMARY_CHARS)
