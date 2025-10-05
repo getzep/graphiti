@@ -28,6 +28,7 @@ from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
     CommunityEdge,
+    Edge,
     EntityEdge,
     EpisodicEdge,
     create_entity_edge_embeddings,
@@ -46,6 +47,7 @@ from graphiti_core.nodes import (
     EntityNode,
     EpisodeType,
     EpisodicNode,
+    Node,
     create_entity_node_embeddings,
 )
 from graphiti_core.search.search import SearchConfig, search
@@ -58,9 +60,7 @@ from graphiti_core.search.search_config_recipes import (
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import (
     RELEVANT_SCHEMA_LIMIT,
-    get_edge_invalidation_candidates,
     get_mentioned_nodes,
-    get_relevant_edges,
 )
 from graphiti_core.telemetry import capture_event
 from graphiti_core.utils.bulk_utils import (
@@ -79,7 +79,6 @@ from graphiti_core.utils.maintenance.community_operations import (
     update_community,
 )
 from graphiti_core.utils.maintenance.edge_operations import (
-    build_duplicate_of_edges,
     build_episodic_edges,
     extract_edges,
     resolve_extracted_edge,
@@ -111,6 +110,20 @@ class AddEpisodeResults(BaseModel):
     community_edges: list[CommunityEdge]
 
 
+class AddBulkEpisodeResults(BaseModel):
+    episodes: list[EpisodicNode]
+    episodic_edges: list[EpisodicEdge]
+    nodes: list[EntityNode]
+    edges: list[EntityEdge]
+    communities: list[CommunityNode]
+    community_edges: list[CommunityEdge]
+
+
+class AddTripletResults(BaseModel):
+    nodes: list[EntityNode]
+    edges: list[EntityEdge]
+
+
 class Graphiti:
     def __init__(
         self,
@@ -123,7 +136,6 @@ class Graphiti:
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
         max_coroutines: int | None = None,
-        ensure_ascii: bool = False,
     ):
         """
         Initialize a Graphiti instance.
@@ -156,10 +168,6 @@ class Graphiti:
         max_coroutines : int | None, optional
             The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
             If not set, the Graphiti default is used.
-        ensure_ascii : bool, optional
-            Whether to escape non-ASCII characters in JSON serialization for prompts. Defaults to False.
-            Set to False to preserve non-ASCII characters (e.g., Korean, Japanese, Chinese) in their
-            original form, making them readable in LLM logs and improving model understanding.
 
         Returns
         -------
@@ -189,7 +197,6 @@ class Graphiti:
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
-        self.ensure_ascii = ensure_ascii
         if llm_client:
             self.llm_client = llm_client
         else:
@@ -208,7 +215,6 @@ class Graphiti:
             llm_client=self.llm_client,
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
-            ensure_ascii=self.ensure_ascii,
         )
 
         # Capture telemetry event
@@ -442,12 +448,12 @@ class Graphiti:
             start = time()
             now = utc_now()
 
-            # if group_id is None, use the default group id by the provider
-            group_id = group_id or get_default_group_id(self.driver.provider)
             validate_entity_types(entity_types)
 
             validate_excluded_entity_types(excluded_entity_types, entity_types)
             validate_group_id(group_id)
+            # if group_id is None, use the default group id by the provider
+            group_id = group_id or get_default_group_id(self.driver.provider)
 
             previous_episodes = (
                 await self.retrieve_episodes(
@@ -489,7 +495,7 @@ class Graphiti:
             )
 
             # Extract edges and resolve nodes
-            (nodes, uuid_map, node_duplicates), extracted_edges = await semaphore_gather(
+            (nodes, uuid_map, _), extracted_edges = await semaphore_gather(
                 resolve_extracted_nodes(
                     self.clients,
                     extracted_nodes,
@@ -526,9 +532,7 @@ class Graphiti:
                 max_coroutines=self.max_coroutines,
             )
 
-            duplicate_of_edges = build_duplicate_of_edges(episode, now, node_duplicates)
-
-            entity_edges = resolved_edges + invalidated_edges + duplicate_of_edges
+            entity_edges = resolved_edges + invalidated_edges
 
             episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
 
@@ -548,9 +552,7 @@ class Graphiti:
             if update_communities:
                 communities, community_edges = await semaphore_gather(
                     *[
-                        update_community(
-                            self.driver, self.llm_client, self.embedder, node, self.ensure_ascii
-                        )
+                        update_community(self.driver, self.llm_client, self.embedder, node)
                         for node in nodes
                     ],
                     max_coroutines=self.max_coroutines,
@@ -570,7 +572,6 @@ class Graphiti:
         except Exception as e:
             raise e
 
-    ##### EXPERIMENTAL #####
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
@@ -579,7 +580,7 @@ class Graphiti:
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
-    ):
+    ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -595,7 +596,7 @@ class Graphiti:
 
         Returns
         -------
-        None
+        AddBulkEpisodeResults
 
         Notes
         -----
@@ -847,6 +848,15 @@ class Graphiti:
             end = time()
             logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
 
+            return AddBulkEpisodeResults(
+                episodes=episodes,
+                episodic_edges=resolved_episodic_edges,
+                nodes=final_hydrated_nodes,
+                edges=resolved_edges + invalidated_edges,
+                communities=[],
+                community_edges=[],
+            )
+
         except Exception as e:
             raise e
 
@@ -996,7 +1006,9 @@ class Graphiti:
 
         return SearchResults(edges=edges, nodes=nodes)
 
-    async def add_triplet(self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode):
+    async def add_triplet(
+        self, source_node: EntityNode, edge: EntityEdge, target_node: EntityNode
+    ) -> AddTripletResults:
         if source_node.name_embedding is None:
             await source_node.generate_name_embedding(self.embedder)
         if target_node.name_embedding is None:
@@ -1011,10 +1023,28 @@ class Graphiti:
 
         updated_edge = resolve_edge_pointers([edge], uuid_map)[0]
 
-        related_edges = (await get_relevant_edges(self.driver, [updated_edge], SearchFilters()))[0]
+        valid_edges = await EntityEdge.get_between_nodes(
+            self.driver, edge.source_node_uuid, edge.target_node_uuid
+        )
+
+        related_edges = (
+            await search(
+                self.clients,
+                updated_edge.fact,
+                group_ids=[updated_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
+            )
+        ).edges
         existing_edges = (
-            await get_edge_invalidation_candidates(self.driver, [updated_edge], SearchFilters())
-        )[0]
+            await search(
+                self.clients,
+                updated_edge.fact,
+                group_ids=[updated_edge.group_id],
+                config=EDGE_HYBRID_SEARCH_RRF,
+                search_filter=SearchFilters(),
+            )
+        ).edges
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,
@@ -1031,7 +1061,7 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
-            self.ensure_ascii,
+            None,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges
@@ -1040,6 +1070,7 @@ class Graphiti:
         await create_entity_node_embeddings(self.embedder, nodes)
 
         await add_nodes_and_edges_bulk(self.driver, [], [], nodes, edges, self.embedder)
+        return AddTripletResults(edges=edges, nodes=nodes)
 
     async def remove_episode(self, episode_uuid: str):
         # Find the episode to be deleted
@@ -1066,12 +1097,7 @@ class Graphiti:
                 if record['episode_count'] == 1:
                     nodes_to_delete.append(node)
 
-        await semaphore_gather(
-            *[node.delete(self.driver) for node in nodes_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
-        await semaphore_gather(
-            *[edge.delete(self.driver) for edge in edges_to_delete],
-            max_coroutines=self.max_coroutines,
-        )
+        await Edge.delete_by_uuids(self.driver, [edge.uuid for edge in edges_to_delete])
+        await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
+
         await episode.delete(self.driver)
