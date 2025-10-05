@@ -138,7 +138,9 @@ async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
+        prompt_library.summarize_nodes.summarize_pair(context),
+        response_model=Summary,
+        prompt_name='summarize_nodes.summarize_pair',
     )
 
     pair_summary = llm_response.get('summary', '')
@@ -154,6 +156,7 @@ async def generate_summary_description(llm_client: LLMClient, summary: str) -> s
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),
         response_model=SummaryDescription,
+        prompt_name='summarize_nodes.summary_description',
     )
 
     description = llm_response.get('description', '')

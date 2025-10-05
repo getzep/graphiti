@@ -153,6 +153,7 @@ class LLMClient(ABC):
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -173,14 +174,15 @@ class LLMClient(ABC):
 
         # Wrap entire operation in tracing span
         with self.tracer.start_span('llm.generate') as span:
-            span.add_attributes(
-                {
-                    'llm.provider': self._get_provider_type(),
-                    'model.size': model_size.value,
-                    'max_tokens': max_tokens,
-                    'cache.enabled': self.cache_enabled,
-                }
-            )
+            attributes = {
+                'llm.provider': self._get_provider_type(),
+                'model.size': model_size.value,
+                'max_tokens': max_tokens,
+                'cache.enabled': self.cache_enabled,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
             # Check cache first
             if self.cache_enabled and self.cache_dir is not None:

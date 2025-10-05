@@ -140,6 +140,7 @@ async def extract_edges(
             response_model=ExtractedEdges,
             max_tokens=extract_edges_max_tokens,
             group_id=group_id,
+            prompt_name='extract_edges.edge',
         )
         edges_data = ExtractedEdges(**llm_response).edges
 
@@ -152,6 +153,7 @@ async def extract_edges(
                 response_model=MissingFacts,
                 max_tokens=extract_edges_max_tokens,
                 group_id=group_id,
+                prompt_name='extract_edges.reflexion',
             )
 
             missing_facts = reflexion_response.get('missing_facts', [])
@@ -526,6 +528,7 @@ async def resolve_extracted_edge(
         prompt_library.dedupe_edges.resolve_edge(context),
         response_model=EdgeDuplicate,
         model_size=ModelSize.small,
+        prompt_name='dedupe_edges.resolve_edge',
     )
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
@@ -589,6 +592,7 @@ async def resolve_extracted_edge(
                 prompt_library.extract_edges.extract_attributes(edge_attributes_context),
                 response_model=edge_model,  # type: ignore
                 model_size=ModelSize.small,
+                prompt_name='extract_edges.extract_attributes',
             )
 
             resolved_edge.attributes = edge_attributes_response
