@@ -791,7 +791,6 @@ dependencies = [
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "openai" },
-    { name = "opentelemetry-api" },
     { name = "posthog" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -852,6 +851,10 @@ neptune = [
 sentence-transformers = [
     { name = "sentence-transformers" },
 ]
+tracing = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+]
 voyageai = [
     { name = "voyageai" },
 ]
@@ -887,8 +890,9 @@ requires-dist = [
     { name = "opensearch-py", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neo4j-opensearch'", specifier = ">=3.0.0" },
     { name = "opensearch-py", marker = "extra == 'neptune'", specifier = ">=3.0.0" },
-    { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "opentelemetry-api", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
     { name = "posthog", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.404" },
@@ -904,7 +908,7 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "dev"]
+provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
 
 [[package]]
 name = "groq"

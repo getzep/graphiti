@@ -19,7 +19,6 @@ import json
 import logging
 import typing
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 import httpx
 from diskcache import Cache
@@ -27,11 +26,9 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
+from ..tracer import NoOpTracer, Tracer
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
-
-if TYPE_CHECKING:
-    from ..tracer import Tracer
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
@@ -78,13 +75,13 @@ class LLMClient(ABC):
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
         self.cache_dir = None
-        self.tracer: Tracer | None = None
+        self.tracer: Tracer = NoOpTracer()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
             self.cache_dir = Cache(DEFAULT_CACHE_DIR)
 
-    def set_tracer(self, tracer: 'Tracer') -> None:
+    def set_tracer(self, tracer: Tracer) -> None:
         """Set the tracer for this LLM client."""
         self.tracer = tracer
 
@@ -171,64 +168,47 @@ class LLMClient(ABC):
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
 
-        cache_hit = False
-        if self.cache_enabled and self.cache_dir is not None:
-            cache_key = self._get_cache_key(messages)
-
-            cached_response = self.cache_dir.get(cache_key)
-            if cached_response is not None:
-                logger.debug(f'Cache hit for {cache_key}')
-                cache_hit = True
-
-                # Add tracing for cache hit
-                if self.tracer:
-                    with self.tracer.start_span('llm.generate') as span:
-                        span.add_attributes(
-                            {
-                                'llm.provider': self._get_provider_type(),
-                                'model.size': model_size.value,
-                                'max_tokens': max_tokens,
-                                'cache.enabled': True,
-                                'cache.hit': True,
-                            }
-                        )
-
-                return cached_response
-
         for message in messages:
             message.content = self._clean_input(message.content)
 
-        # Wrap LLM call in tracing span
-        if self.tracer:
-            with self.tracer.start_span('llm.generate') as span:
-                span.add_attributes(
-                    {
-                        'llm.provider': self._get_provider_type(),
-                        'model.size': model_size.value,
-                        'max_tokens': max_tokens,
-                        'cache.enabled': self.cache_enabled,
-                        'cache.hit': cache_hit,
-                    }
-                )
-
-                try:
-                    response = await self._generate_response_with_retry(
-                        messages, response_model, max_tokens, model_size
-                    )
-                except Exception as e:
-                    span.set_status('error', str(e))
-                    span.record_exception(e)
-                    raise
-        else:
-            response = await self._generate_response_with_retry(
-                messages, response_model, max_tokens, model_size
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            span.add_attributes(
+                {
+                    'llm.provider': self._get_provider_type(),
+                    'model.size': model_size.value,
+                    'max_tokens': max_tokens,
+                    'cache.enabled': self.cache_enabled,
+                }
             )
 
-        if self.cache_enabled and self.cache_dir is not None:
-            cache_key = self._get_cache_key(messages)
-            self.cache_dir.set(cache_key, response)
+            # Check cache first
+            if self.cache_enabled and self.cache_dir is not None:
+                cache_key = self._get_cache_key(messages)
+                cached_response = self.cache_dir.get(cache_key)
+                if cached_response is not None:
+                    logger.debug(f'Cache hit for {cache_key}')
+                    span.add_attributes({'cache.hit': True})
+                    return cached_response
 
-        return response
+            span.add_attributes({'cache.hit': False})
+
+            # Execute LLM call
+            try:
+                response = await self._generate_response_with_retry(
+                    messages, response_model, max_tokens, model_size
+                )
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                raise
+
+            # Cache response if enabled
+            if self.cache_enabled and self.cache_dir is not None:
+                cache_key = self._get_cache_key(messages)
+                self.cache_dir.set(cache_key, response)
+
+            return response
 
     def _get_provider_type(self) -> str:
         """Get provider type from class name."""

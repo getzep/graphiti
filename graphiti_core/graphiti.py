@@ -782,10 +782,16 @@ class Graphiti:
                     {
                         'episode.uuid': episode.uuid,
                         'episode.source': source.value,
+                        'episode.reference_time': reference_time.isoformat(),
                         'group_id': group_id,
                         'node.count': len(hydrated_nodes),
                         'edge.count': len(entity_edges),
+                        'edge.invalidated_count': len(invalidated_edges),
+                        'previous_episodes.count': len(previous_episodes),
+                        'entity_types.count': len(entity_types) if entity_types else 0,
+                        'edge_types.count': len(edge_types) if edge_types else 0,
                         'update_communities': update_communities,
+                        'communities.count': len(communities) if update_communities else 0,
                         'duration_ms': (end - start) * 1000,
                     }
                 )
@@ -802,13 +808,6 @@ class Graphiti:
                 )
 
         except Exception as e:
-            # Record exception in current span if active
-            try:
-                with self.tracer.start_span('add_episode_error') as error_span:
-                    error_span.set_status('error', str(e))
-                    error_span.record_exception(e)
-            except Exception:
-                pass
             raise e
 
     async def add_episode_bulk(
