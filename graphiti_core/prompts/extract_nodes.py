@@ -261,17 +261,14 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-
-
-
-        Given the above MESSAGES and the following ENTITY, update any of its attributes based on the information provided
+        Given the MESSAGES and the following ENTITY, update any of its attributes based on the information provided
         in MESSAGES. Use the provided attribute descriptions to better understand how each attribute should be determined.
 
         Guidelines:
         1. Do not hallucinate entity property values if they cannot be found in the current context.
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
 
-                <MESSAGES>
+        <MESSAGES>
         {to_prompt_json(context['previous_episodes'], indent=2)}
         {to_prompt_json(context['episode_content'], indent=2)}
         </MESSAGES>
