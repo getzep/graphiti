@@ -18,7 +18,8 @@ dependencies = [
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
-    "posthog>=3.0.0"
+    "posthog>=3.0.0",
+    "opentelemetry-api>=1.20.0"
 ]
 
 [project.urls]
@@ -59,6 +60,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
+    "opentelemetry-sdk>=1.20.0",
 ]
 
 [build-system]
