@@ -54,7 +54,7 @@ def get_default_group_id(provider: GraphProvider) -> str:
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
     if provider == GraphProvider.FALKORDB:
-        return '_'
+        return '\\_'
     else:
         return ''
 
@@ -116,7 +116,7 @@ async def semaphore_gather(
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
 
 
-def validate_group_id(group_id: str) -> bool:
+def validate_group_id(group_id: str | None) -> bool:
     """
     Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
 

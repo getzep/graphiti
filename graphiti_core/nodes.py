@@ -26,7 +26,14 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import (
+    COMMUNITY_INDEX_NAME,
+    ENTITY_EDGE_INDEX_NAME,
+    ENTITY_INDEX_NAME,
+    EPISODE_INDEX_NAME,
+    GraphDriver,
+    GraphProvider,
+)
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
@@ -94,13 +101,39 @@ class Node(BaseModel, ABC):
     async def delete(self, driver: GraphDriver):
         match driver.provider:
             case GraphProvider.NEO4J:
-                await driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
-                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                    MATCH (n {uuid: $uuid})
+                    WHERE n:Entity OR n:Episodic OR n:Community
+                    OPTIONAL MATCH (n)-[r]-()
+                    WITH collect(r.uuid) AS edge_uuids, n
                     DETACH DELETE n
+                    RETURN edge_uuids
                     """,
                     uuid=self.uuid,
                 )
+
+                edge_uuids: list[str] = records[0].get('edge_uuids', []) if records else []
+
+                if driver.aoss_client:
+                    # Delete the node from OpenSearch indices
+                    for index in (EPISODE_INDEX_NAME, ENTITY_INDEX_NAME, COMMUNITY_INDEX_NAME):
+                        await driver.aoss_client.delete(
+                            index=index,
+                            id=self.uuid,
+                            params={'routing': self.group_id},
+                        )
+
+                    # Bulk delete the detached edges
+                    if edge_uuids:
+                        actions = []
+                        for eid in edge_uuids:
+                            actions.append(
+                                {'delete': {'_index': ENTITY_EDGE_INDEX_NAME, '_id': eid}}
+                            )
+
+                        await driver.aoss_client.bulk(body=actions)
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -162,6 +195,32 @@ class Node(BaseModel, ABC):
                         group_id=group_id,
                         batch_size=batch_size,
                     )
+
+                if driver.aoss_client:
+                    await driver.aoss_client.delete_by_query(
+                        index=EPISODE_INDEX_NAME,
+                        body={'query': {'term': {'group_id': group_id}}},
+                        params={'routing': group_id},
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index=ENTITY_INDEX_NAME,
+                        body={'query': {'term': {'group_id': group_id}}},
+                        params={'routing': group_id},
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index=COMMUNITY_INDEX_NAME,
+                        body={'query': {'term': {'group_id': group_id}}},
+                        params={'routing': group_id},
+                    )
+
+                    await driver.aoss_client.delete_by_query(
+                        index=ENTITY_EDGE_INDEX_NAME,
+                        body={'query': {'term': {'group_id': group_id}}},
+                        params={'routing': group_id},
+                    )
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -240,6 +299,23 @@ class Node(BaseModel, ABC):
                 )
             case _:  # Neo4J, Neptune
                 async with driver.session() as session:
+                    # Collect all edge UUIDs before deleting nodes
+                    result = await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community)
+                        WHERE n.uuid IN $uuids
+                        MATCH (n)-[r]-()
+                        RETURN collect(r.uuid) AS edge_uuids
+                        """,
+                        uuids=uuids,
+                    )
+
+                    record = await result.single()
+                    edge_uuids: list[str] = (
+                        record['edge_uuids'] if record and record['edge_uuids'] else []
+                    )
+
+                    # Now delete the nodes in batches
                     await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community)
@@ -252,6 +328,20 @@ class Node(BaseModel, ABC):
                         uuids=uuids,
                         batch_size=batch_size,
                     )
+
+                if driver.aoss_client:
+                    for index in (EPISODE_INDEX_NAME, ENTITY_INDEX_NAME, COMMUNITY_INDEX_NAME):
+                        await driver.aoss_client.delete_by_query(
+                            index=index,
+                            body={'query': {'terms': {'uuid': uuids}}},
+                        )
+
+                    if edge_uuids:
+                        actions = [
+                            {'delete': {'_index': ENTITY_EDGE_INDEX_NAME, '_id': eid}}
+                            for eid in edge_uuids
+                        ]
+                        await driver.aoss_client.bulk(body=actions)
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -286,7 +376,7 @@ class EpisodicNode(Node):
         }
 
         if driver.aoss_client:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'episodes',
                 [episode_args],
             )
@@ -426,13 +516,13 @@ class EntityNode(Node):
                 RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
         elif driver.aoss_client:
-            resp = driver.aoss_client.search(
+            resp = await driver.aoss_client.search(
                 body={
                     'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
                     'size': 1,
                 },
-                index='entities',
-                routing=self.group_id,
+                index=ENTITY_INDEX_NAME,
+                params={'routing': self.group_id},
             )
 
             if resp['hits']['hits']:
@@ -479,7 +569,7 @@ class EntityNode(Node):
             labels = ':'.join(self.labels + ['Entity'])
 
             if driver.aoss_client:
-                driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+                await driver.save_to_aoss(ENTITY_INDEX_NAME, [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),
@@ -577,7 +667,7 @@ class CommunityNode(Node):
 
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
@@ -778,9 +868,12 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
-    if not nodes:  # Handle empty list case
+    # filter out falsey values from nodes
+    filtered_nodes = [node for node in nodes if node.name]
+
+    if not filtered_nodes:
         return
 
-    name_embeddings = await embedder.create_batch([node.name for node in nodes])
-    for node, name_embedding in zip(nodes, name_embeddings, strict=True):
+    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
+    for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

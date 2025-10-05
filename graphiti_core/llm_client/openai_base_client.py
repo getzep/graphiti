@@ -25,7 +25,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -175,6 +175,7 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling."""
         if max_tokens is None:
@@ -184,7 +185,7 @@ class BaseOpenAIClient(LLMClient):
         last_error = None
 
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction(group_id)
 
         while retry_count <= self.MAX_RETRIES:
             try:
