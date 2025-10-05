@@ -18,6 +18,8 @@ from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
+from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
+
 from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
@@ -57,7 +59,7 @@ class EntityClassification(BaseModel):
 class EntitySummary(BaseModel):
     summary: str = Field(
         ...,
-        description='Summary containing the important information about the entity. Under 250 characters.',
+        description=f'Summary containing the important information about the entity. Under {MAX_SUMMARY_CHARS} characters.',
     )
 
 
