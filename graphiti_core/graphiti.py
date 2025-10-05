@@ -679,18 +679,18 @@ class Graphiti:
                 background_tasks.add_task(graphiti.add_episode, **episode_data.dict())
                 return {"message": "Episode processing started"}
         """
-        try:
-            start = time()
-            now = utc_now()
+        start = time()
+        now = utc_now()
 
-            validate_entity_types(entity_types)
+        validate_entity_types(entity_types)
 
-            validate_excluded_entity_types(excluded_entity_types, entity_types)
-            validate_group_id(group_id)
-            # if group_id is None, use the default group id by the provider
-            group_id = group_id or get_default_group_id(self.driver.provider)
+        validate_excluded_entity_types(excluded_entity_types, entity_types)
+        validate_group_id(group_id)
+        # if group_id is None, use the default group id by the provider
+        group_id = group_id or get_default_group_id(self.driver.provider)
 
-            with self.tracer.start_span('add_episode') as span:
+        with self.tracer.start_span('add_episode') as span:
+            try:
                 # Retrieve previous episodes for context
                 previous_episodes = (
                     await self.retrieve_episodes(
@@ -807,8 +807,10 @@ class Graphiti:
                     community_edges=community_edges,
                 )
 
-        except Exception as e:
-            raise e
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                raise e
 
     async def add_episode_bulk(
         self,
