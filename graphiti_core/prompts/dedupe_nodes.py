@@ -64,20 +64,20 @@ def node(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         <PREVIOUS MESSAGES>
-        {to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+        {to_prompt_json([ep for ep in context['previous_episodes']])}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
         {context['episode_content']}
         </CURRENT MESSAGE>
         <NEW ENTITY>
-        {to_prompt_json(context['extracted_node'], indent=2)}
+        {to_prompt_json(context['extracted_node'])}
         </NEW ENTITY>
         <ENTITY TYPE DESCRIPTION>
-        {to_prompt_json(context['entity_type_description'], indent=2)}
+        {to_prompt_json(context['entity_type_description'])}
         </ENTITY TYPE DESCRIPTION>
 
         <EXISTING ENTITIES>
-        {to_prompt_json(context['existing_nodes'], indent=2)}
+        {to_prompt_json(context['existing_nodes'])}
         </EXISTING ENTITIES>
         
         Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
@@ -125,13 +125,13 @@ def nodes(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         <PREVIOUS MESSAGES>
-        {to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+        {to_prompt_json([ep for ep in context['previous_episodes']])}
         </PREVIOUS MESSAGES>
         <CURRENT MESSAGE>
         {context['episode_content']}
         </CURRENT MESSAGE>
-        
-        
+
+
         Each of the following ENTITIES were extracted from the CURRENT MESSAGE.
         Each entity in ENTITIES is represented as a JSON object with the following structure:
         {{
@@ -142,11 +142,11 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         }}
 
         <ENTITIES>
-        {to_prompt_json(context['extracted_nodes'], indent=2)}
+        {to_prompt_json(context['extracted_nodes'])}
         </ENTITIES>
 
         <EXISTING ENTITIES>
-        {to_prompt_json(context['existing_nodes'], indent=2)}
+        {to_prompt_json(context['existing_nodes'])}
         </EXISTING ENTITIES>
 
         Each entry in EXISTING ENTITIES is an object with the following structure:
@@ -197,7 +197,7 @@ def node_list(context: dict[str, Any]) -> list[Message]:
         Given the following context, deduplicate a list of nodes:
 
         Nodes:
-        {to_prompt_json(context['nodes'], indent=2)}
+        {to_prompt_json(context['nodes'])}
 
         Task:
         1. Group nodes together such that all duplicate nodes are in the same list of uuids
