@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -191,9 +192,38 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.close()
 
     async def delete_all_indexes(self) -> None:
-        await self.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        result = await self.execute_query("CALL db.indexes()")
+        if not result:
+            return
+
+        records, _, _ = result
+        drop_tasks = []
+
+        for record in records:
+            label = record["label"]
+            entity_type = record["entitytype"]
+
+            for field_name, index_type in record["types"].items():
+                if "RANGE" in index_type:
+                    drop_tasks.append(
+                        self.execute_query(f"DROP INDEX ON :{label}({field_name})")
+                    )
+                elif "FULLTEXT" in index_type:
+                    if entity_type == "NODE":
+                        drop_tasks.append(
+                            self.execute_query(
+                                f"DROP FULLTEXT INDEX FOR (n:{label}) ON (n.{field_name})"
+                            )
+                        )
+                    elif entity_type == "RELATIONSHIP":
+                        drop_tasks.append(
+                            self.execute_query(
+                                f"DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field_name})"
+                            )
+                        )
+
+        if drop_tasks:
+            await asyncio.gather(*drop_tasks)
 
     def clone(self, database: str) -> 'GraphDriver':
         """
