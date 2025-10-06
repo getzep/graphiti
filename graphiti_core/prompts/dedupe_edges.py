@@ -67,13 +67,13 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Given the following context, determine whether the New Edge represents any of the edges in the list of Existing Edges.
 
         <EXISTING EDGES>
-        {to_prompt_json(context['related_edges'], indent=2)}
+        {to_prompt_json(context['related_edges'])}
         </EXISTING EDGES>
 
         <NEW EDGE>
-        {to_prompt_json(context['extracted_edges'], indent=2)}
+        {to_prompt_json(context['extracted_edges'])}
         </NEW EDGE>
-        
+
         Task:
         If the New Edges represents the same factual information as any edge in Existing Edges, return the id of the duplicate fact
             as part of the list of duplicate_facts.
@@ -98,7 +98,7 @@ def edge_list(context: dict[str, Any]) -> list[Message]:
         Given the following context, find all of the duplicates in a list of facts:
 
         Facts:
-        {to_prompt_json(context['edges'], indent=2)}
+        {to_prompt_json(context['edges'])}
 
         Task:
         If any facts in Facts is a duplicate of another fact, return a new fact with one of their uuid's.

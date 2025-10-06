@@ -349,7 +349,9 @@ class AnthropicClient(LLMClient):
                     # Common retry logic
                     retry_count += 1
                     messages.append(Message(role='user', content=error_context))
-                    logger.warning(f'Retrying after error (attempt {retry_count}/{max_retries}): {e}')
+                    logger.warning(
+                        f'Retrying after error (attempt {retry_count}/{max_retries}): {e}'
+                    )
 
             # If we somehow get here, raise the last error
             span.set_status('error', str(last_error))

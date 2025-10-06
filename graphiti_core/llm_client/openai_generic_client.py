@@ -161,7 +161,11 @@ class OpenAIGenericClient(LLMClient):
                     # These errors should not trigger retries
                     span.set_status('error', str(last_error))
                     raise
-                except (openai.APITimeoutError, openai.APIConnectionError, openai.InternalServerError):
+                except (
+                    openai.APITimeoutError,
+                    openai.APIConnectionError,
+                    openai.InternalServerError,
+                ):
                     # Let OpenAI's client handle these retries
                     span.set_status('error', str(last_error))
                     raise

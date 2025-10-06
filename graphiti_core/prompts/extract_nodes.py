@@ -93,7 +93,7 @@ def extract_message(context: dict[str, Any]) -> list[Message]:
 </ENTITY TYPES>
 
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS MESSAGES>
 
 <CURRENT MESSAGE>
@@ -201,7 +201,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -225,22 +225,22 @@ def classify_nodes(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
     <PREVIOUS MESSAGES>
-    {to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+    {to_prompt_json([ep for ep in context['previous_episodes']])}
     </PREVIOUS MESSAGES>
     <CURRENT MESSAGE>
     {context['episode_content']}
     </CURRENT MESSAGE>
-    
+
     <EXTRACTED ENTITIES>
     {context['extracted_entities']}
     </EXTRACTED ENTITIES>
-    
+
     <ENTITY TYPES>
     {context['entity_types']}
     </ENTITY TYPES>
-    
+
     Given the above conversation, extracted entities, and provided entity types and their descriptions, classify the extracted entities.
-    
+
     Guidelines:
     1. Each entity must have exactly one type
     2. Only use the provided ENTITY TYPES as types, do not use additional types to classify entities.
@@ -269,10 +269,10 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         2. Only use the provided MESSAGES and ENTITY to set attribute values.
 
         <MESSAGES>
-        {to_prompt_json(context['previous_episodes'], indent=2)}
-        {to_prompt_json(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'])}
+        {to_prompt_json(context['episode_content'])}
         </MESSAGES>
-        
+
         <ENTITY>
         {context['node']}
         </ENTITY>
@@ -292,12 +292,12 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
             content=f"""
         Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
         from the messages and relevant information from the existing summary.
-        
+
         {summary_instructions}
 
         <MESSAGES>
-        {to_prompt_json(context['previous_episodes'], indent=2)}
-        {to_prompt_json(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'])}
+        {to_prompt_json(context['episode_content'])}
         </MESSAGES>
 
         <ENTITY>
