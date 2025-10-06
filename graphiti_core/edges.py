@@ -53,6 +53,9 @@ class Edge(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_delete(self, driver)
+
         if driver.provider == GraphProvider.KUZU:
             await driver.execute_query(
                 """
@@ -77,17 +80,13 @@ class Edge(BaseModel, ABC):
                 uuid=self.uuid,
             )
 
-            if driver.aoss_client:
-                await driver.aoss_client.delete(
-                    index=ENTITY_EDGE_INDEX_NAME,
-                    id=self.uuid,
-                    params={'routing': self.group_id},
-                )
-
         logger.debug(f'Deleted Edge: {self.uuid}')
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_delete_by_uuids(cls, driver, uuids)
+
         if driver.provider == GraphProvider.KUZU:
             await driver.execute_query(
                 """
@@ -114,12 +113,6 @@ class Edge(BaseModel, ABC):
                 """,
                 uuids=uuids,
             )
-
-            if driver.aoss_client:
-                await driver.aoss_client.delete_by_query(
-                    index=ENTITY_EDGE_INDEX_NAME,
-                    body={'query': {'terms': {'uuid': uuids}}},
-                )
 
         logger.debug(f'Deleted Edges: {uuids}')
 
@@ -258,6 +251,9 @@ class EntityEdge(Edge):
         return self.fact_embedding
 
     async def load_fact_embedding(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_load_embeddings(self, driver)
+
         query = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
@@ -268,21 +264,6 @@ class EntityEdge(Edge):
                 MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
                 RETURN [x IN split(e.fact_embedding, ",") | toFloat(x)] as fact_embedding
             """
-        elif driver.aoss_client:
-            resp = await driver.aoss_client.search(
-                body={
-                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
-                    'size': 1,
-                },
-                index=ENTITY_EDGE_INDEX_NAME,
-                params={'routing': self.group_id},
-            )
-
-            if resp['hits']['hits']:
-                self.fact_embedding = resp['hits']['hits'][0]['_source']['fact_embedding']
-                return
-            else:
-                raise EdgeNotFoundError(self.uuid)
 
         if driver.provider == GraphProvider.KUZU:
             query = """
