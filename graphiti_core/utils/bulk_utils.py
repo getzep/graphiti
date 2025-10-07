@@ -215,7 +215,7 @@ async def add_nodes_and_edges_bulk_tx(
 
     if driver.graph_operations_interface:
         await driver.graph_operations_interface.episodic_node_save_bulk(
-            None, driver, episodic_nodes
+            None, driver, tx, episodic_nodes
         )
         await driver.graph_operations_interface.node_save_bulk(None, driver, tx, nodes)
         await driver.graph_operations_interface.episodic_edge_save_bulk(

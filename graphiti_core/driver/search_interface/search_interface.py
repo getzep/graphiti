@@ -80,10 +80,6 @@ class SearchInterface(BaseModel):
 
     # ---------- SEARCH FILTERS (sync) ----------
     def build_node_search_filters(self, search_filters: Any) -> Any:
-        """
-        Return the AOSS filter expression or None. Should match the structure expected by your
-        AOSS client (e.g., ['And', [...]] / ['Or', [...]] / ['field', 'Op', value]).
-        """
         raise NotImplementedError
 
     def build_edge_search_filters(self, search_filters: Any) -> Any:

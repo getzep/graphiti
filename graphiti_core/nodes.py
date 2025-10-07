@@ -273,8 +273,6 @@ class Node(BaseModel, ABC):
                         uuids=uuids,
                     )
 
-                    record = await result.single()
-
                     # Now delete the nodes in batches
                     await session.run(
                         """

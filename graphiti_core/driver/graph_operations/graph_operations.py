@@ -118,7 +118,7 @@ class GraphOperationsInterface(BaseModel):
         episodic_edges: list[Any],
         batch_size: int = 100,
     ) -> None:
-        """Persist (create or update) many episodic nodes in batches."""
+        """Persist (create or update) many episodic edges in batches."""
         raise NotImplementedError
 
     async def episodic_node_delete_by_group_id(

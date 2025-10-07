@@ -34,9 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
-    if driver.aoss_client:
-        await driver.create_aoss_indices()  # pyright: ignore[reportAttributeAccessIssue]
-        return
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -151,9 +148,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                                MATCH (e:Episodic)
-                                WHERE e.valid_at <= $reference_time
-                                """
+                                    MATCH (e:Episodic)
+                                    WHERE e.valid_at <= $reference_time
+                                    """
         + query_filter
         + """
         RETURN

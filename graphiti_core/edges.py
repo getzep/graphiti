@@ -306,10 +306,6 @@ class EntityEdge(Edge):
             )
         else:
             edge_data.update(self.attributes or {})
-
-            if driver.aoss_client:
-                await driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, [edge_data])  # pyright: ignore reportAttributeAccessIssue
-
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,
