@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
-    if driver.provider == GraphProvider.NEPTUNE:
+    if driver.aoss_client:
         await driver.create_aoss_indices()  # pyright: ignore[reportAttributeAccessIssue]
         return
     if delete_existing:
@@ -56,7 +56,9 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
+    # Don't create fulltext indices if OpenSearch is being used
+    if not driver.aoss_client:
+        fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     if driver.provider == GraphProvider.KUZU:
         # Skip creating fulltext indices if they already exist. Need to do this manually
@@ -93,6 +95,8 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
+            if driver.aoss_client:
+                await driver.clear_aoss_indices()
 
         async def delete_group_ids(tx):
             labels = ['Entity', 'Episodic', 'Community']
@@ -149,9 +153,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-        MATCH (e:Episodic)
-        WHERE e.valid_at <= $reference_time
-        """
+                        MATCH (e:Episodic)
+                        WHERE e.valid_at <= $reference_time
+                        """
         + query_filter
         + """
         RETURN
@@ -175,46 +179,3 @@ async def retrieve_episodes(
 
     episodes = [get_episodic_node_from_record(record) for record in result]
     return list(reversed(episodes))  # Return in chronological order
-
-
-async def build_dynamic_indexes(driver: GraphDriver, group_id: str):
-    # Make sure indices exist for this group_id in Neo4j
-    if driver.provider == GraphProvider.NEO4J:
-        await semaphore_gather(
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $episode_content IF NOT EXISTS
-FOR (e:"""
-                + 'Episodic_'
-                + group_id.replace('-', '')
-                + """) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-                episode_content='episode_content_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $node_name_and_summary IF NOT EXISTS FOR (n:"""
-                + 'Entity_'
-                + group_id.replace('-', '')
-                + """) ON EACH [n.name, n.summary, n.group_id]""",
-                node_name_and_summary='node_name_and_summary_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE FULLTEXT INDEX $community_name IF NOT EXISTS
-                                                         FOR (n:"""
-                + 'Community_'
-                + group_id.replace('-', '')
-                + """) ON EACH [n.name, n.group_id]""",
-                community_name='Community_' + group_id.replace('-', ''),
-            ),
-            driver.execute_query(
-                """CREATE VECTOR INDEX $group_entity_vector IF NOT EXISTS
-                                                        FOR (n:"""
-                + 'Entity_'
-                + group_id.replace('-', '')
-                + """)
-                               ON n.embedding
-                               OPTIONS { indexConfig: {
-                                `vector.dimensions`: 1024,
-                                `vector.similarity_function`: 'cosine'
-                               }}""",
-                group_entity_vector='group_entity_vector_' + group_id.replace('-', ''),
-            ),
-        )

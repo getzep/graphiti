@@ -16,12 +16,24 @@ limitations under the License.
 
 import copy
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from enum import Enum
 from typing import Any
 
+from dotenv import load_dotenv
+
 logger = logging.getLogger(__name__)
+
+DEFAULT_SIZE = 10
+
+load_dotenv()
+
+ENTITY_INDEX_NAME = os.environ.get('ENTITY_INDEX_NAME', 'entities')
+EPISODE_INDEX_NAME = os.environ.get('EPISODE_INDEX_NAME', 'episodes')
+COMMUNITY_INDEX_NAME = os.environ.get('COMMUNITY_INDEX_NAME', 'communities')
+ENTITY_EDGE_INDEX_NAME = os.environ.get('ENTITY_EDGE_INDEX_NAME', 'entity_edges')
 
 
 class GraphProvider(Enum):
@@ -61,6 +73,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
+    aoss_client: Any  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -87,3 +100,18 @@ class GraphDriver(ABC):
         cloned._database = database
 
         return cloned
+
+    def build_fulltext_query(
+        self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
+    ) -> str:
+        """
+        Specific fulltext query builder for database providers.
+        Only implemented by providers that need custom fulltext query building.
+        """
+        raise NotImplementedError(f'build_fulltext_query not implemented for {self.provider}')
+
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        return 0
+
+    async def clear_aoss_indices(self):
+        return 1

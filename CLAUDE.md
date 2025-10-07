@@ -12,6 +12,7 @@ Key features:
 - Hybrid retrieval combining semantic embeddings, keyword search (BM25), and graph traversal
 - Support for custom entity definitions via Pydantic models
 - Integration with Neo4j and FalkorDB as graph storage backends
+- Optional OpenTelemetry distributed tracing support
 
 ## Development Commands
 

@@ -330,7 +330,12 @@ async def node_search(
     if NodeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(
             node_similarity_search(
-                driver, query_vector, search_filter, group_ids, 2 * limit, config.sim_min_score
+                driver,
+                query_vector,
+                search_filter,
+                group_ids,
+                2 * limit,
+                config.sim_min_score,
             )
         )
     if NodeSearchMethod.bfs in config.search_methods:

@@ -52,6 +52,17 @@ class SearchFilters(BaseModel):
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
+    edge_uuids: list[str] | None = Field(default=None)
+
+
+def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
+    mapping = {
+        ComparisonOperator.greater_than: 'gt',
+        ComparisonOperator.less_than: 'lt',
+        ComparisonOperator.greater_than_equal: 'gte',
+        ComparisonOperator.less_than_equal: 'lte',
+    }
+    return mapping.get(op, op.value)
 
 
 def node_search_filter_query_constructor(
@@ -97,6 +108,10 @@ def edge_search_filter_query_constructor(
         edge_types = filters.edge_types
         filter_queries.append('e.name in $edge_types')
         filter_params['edge_types'] = edge_types
+
+    if filters.edge_uuids is not None:
+        filter_queries.append('e.uuid in $edge_uuids')
+        filter_params['edge_uuids'] = filters.edge_uuids
 
     if filters.node_labels is not None:
         if provider == GraphProvider.KUZU:
@@ -234,3 +249,41 @@ def edge_search_filter_query_constructor(
         filter_queries.append(expired_at_filter)
 
     return filter_queries, filter_params
+
+
+def build_aoss_node_filters(group_ids: list[str], search_filters: SearchFilters) -> list[dict]:
+    filters = [{'terms': {'group_id': group_ids}}]
+
+    if search_filters.node_labels:
+        filters.append({'terms': {'node_labels': search_filters.node_labels}})
+
+    return filters
+
+
+def build_aoss_edge_filters(group_ids: list[str], search_filters: SearchFilters) -> list[dict]:
+    filters: list[dict] = [{'terms': {'group_id': group_ids}}]
+
+    if search_filters.edge_types:
+        filters.append({'terms': {'edge_types': search_filters.edge_types}})
+
+    if search_filters.edge_uuids:
+        filters.append({'terms': {'uuid': search_filters.edge_uuids}})
+
+    for field in ['valid_at', 'invalid_at', 'created_at', 'expired_at']:
+        ranges = getattr(search_filters, field)
+        if ranges:
+            # OR of ANDs
+            should_clauses = []
+            for and_group in ranges:
+                and_filters = []
+                for df in and_group:  # df is a DateFilter
+                    range_query = {
+                        'range': {
+                            field: {cypher_to_opensearch_operator(df.comparison_operator): df.date}
+                        }
+                    }
+                    and_filters.append(range_query)
+                should_clauses.append({'bool': {'filter': and_filters}})
+            filters.append({'bool': {'should': should_clauses, 'minimum_should_match': 1}})
+
+    return filters

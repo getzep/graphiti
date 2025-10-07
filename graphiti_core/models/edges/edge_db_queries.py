@@ -60,7 +60,7 @@ EPISODIC_EDGE_RETURN = """
 """
 
 
-def get_entity_edge_save_query(provider: GraphProvider) -> str:
+def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) -> str:
     match provider:
         case GraphProvider.FALKORDB:
             return """
@@ -99,17 +99,28 @@ def get_entity_edge_save_query(provider: GraphProvider) -> str:
                 RETURN e.uuid AS uuid
             """
         case _:  # Neo4j
-            return """
-                MATCH (source:Entity {uuid: $edge_data.source_uuid})
-                MATCH (target:Entity {uuid: $edge_data.target_uuid})
-                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
-                SET e = $edge_data
-                WITH e CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", $edge_data.fact_embedding)
+            save_embedding_query = (
+                """WITH e CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", $edge_data.fact_embedding)"""
+                if not has_aoss
+                else ''
+            )
+            return (
+                (
+                    """
+                        MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                        MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                        MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                        SET e = $edge_data
+                        """
+                    + save_embedding_query
+                )
+                + """
                 RETURN e.uuid AS uuid
-            """
+                """
+            )
 
 
-def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
+def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = False) -> str:
     match provider:
         case GraphProvider.FALKORDB:
             return """
@@ -152,15 +163,24 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider) -> str:
                 RETURN e.uuid AS uuid
             """
         case _:
-            return """
-                UNWIND $entity_edges AS edge
-                MATCH (source:Entity {uuid: edge.source_node_uuid})
-                MATCH (target:Entity {uuid: edge.target_node_uuid})
-                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
-                SET e = edge
-                WITH e, edge CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", edge.fact_embedding)
+            save_embedding_query = (
+                'WITH e, edge CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", edge.fact_embedding)'
+                if not has_aoss
+                else ''
+            )
+            return (
+                """
+                    UNWIND $entity_edges AS edge
+                    MATCH (source:Entity {uuid: edge.source_node_uuid})
+                    MATCH (target:Entity {uuid: edge.target_node_uuid})
+                    MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                    SET e = edge
+                    """
+                + save_embedding_query
+                + """
                 RETURN edge.uuid AS uuid
             """
+            )
 
 
 def get_entity_edge_return_query(provider: GraphProvider) -> str:
