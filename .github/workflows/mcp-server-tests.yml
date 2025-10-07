@@ -61,7 +61,7 @@ jobs:
       - name: Install MCP server dependencies
         run: |
           cd mcp_server
-          uv sync --group dev
+          uv sync --extra dev
 
       - name: Run configuration tests
         run: |
