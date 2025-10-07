@@ -263,7 +263,7 @@ class Node(BaseModel, ABC):
             case _:  # Neo4J, Neptune
                 async with driver.session() as session:
                     # Collect all edge UUIDs before deleting nodes
-                    result = await session.run(
+                    await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community)
                         WHERE n.uuid IN $uuids
