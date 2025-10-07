@@ -166,8 +166,8 @@ class Node(BaseModel, ABC):
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str, batch_size: int = 100):
         if driver.graph_operations_interface:
-            return await driver.graph_operations_interface.delete_by_group_id(
-                cls, group_id, batch_size
+            return await driver.graph_operations_interface.node_delete_by_group_id(
+                cls, driver, group_id, batch_size
             )
 
         match driver.provider:
@@ -223,8 +223,8 @@ class Node(BaseModel, ABC):
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
         if driver.graph_operations_interface:
-            return await driver.graph_operations_interface.delete_by_uuids(
-                driver, uuids, batch_size
+            return await driver.graph_operations_interface.node_delete_by_uuids(
+                cls, driver, uuids, group_id=None, batch_size=batch_size
             )
 
         match driver.provider:

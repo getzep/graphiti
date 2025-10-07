@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 class GraphOperationsInterface(BaseModel):
     """
-    Interface for updaing graph mutation behavior.
+    Interface for updating graph mutation behavior.
     """
 
     # -----------------

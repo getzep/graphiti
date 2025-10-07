@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 class SearchInterface(BaseModel):
     """
-    The is an interface for implementing custom search logic
+    This is an interface for implementing custom search logic
     """
 
     async def edge_fulltext_search(
