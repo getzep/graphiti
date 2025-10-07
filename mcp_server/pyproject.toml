@@ -23,8 +23,6 @@ providers = [
     "voyageai>=0.2.3",
     "sentence-transformers>=2.0.0",
 ]
-
-[dependency-groups]
 dev = [
     "graphiti-core>=0.16.0",
     "httpx>=0.28.1",
