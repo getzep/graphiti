@@ -177,12 +177,10 @@ async def add_nodes_and_edges_bulk_tx(
             'group_id': node.group_id,
             'summary': node.summary,
             'created_at': node.created_at,
+            'name_embedding': node.name_embedding,
+            'labels': list(set(node.labels + ['Entity'])),
         }
 
-        if not bool(driver.aoss_client):
-            entity_data['name_embedding'] = node.name_embedding
-
-        entity_data['labels'] = list(set(node.labels + ['Entity']))
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
@@ -207,10 +205,8 @@ async def add_nodes_and_edges_bulk_tx(
             'expired_at': edge.expired_at,
             'valid_at': edge.valid_at,
             'invalid_at': edge.invalid_at,
+            'fact_embedding': edge.fact_embedding,
         }
-
-        if not bool(driver.aoss_client):
-            edge_data['fact_embedding'] = edge.fact_embedding
 
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
@@ -220,7 +216,16 @@ async def add_nodes_and_edges_bulk_tx(
 
         edges.append(edge_data)
 
-    if driver.provider == GraphProvider.KUZU:
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.episodic_node_save_bulk(
+            None, driver, episodic_nodes
+        )
+        await driver.graph_operations_interface.episodic_edges_save_bulk(None, driver, nodes)
+        await driver.graph_operations_interface.episodic_edges_save_bulk(
+            None, driver, episodic_edges
+        )
+
+    elif driver.provider == GraphProvider.KUZU:
         # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
         episode_query = get_episode_node_save_bulk_query(driver.provider)
         for episode in episodes:
@@ -237,9 +242,7 @@ async def add_nodes_and_edges_bulk_tx(
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
         await tx.run(
-            get_entity_node_save_bulk_query(
-                driver.provider, nodes, has_aoss=bool(driver.aoss_client)
-            ),
+            get_entity_node_save_bulk_query(driver.provider, nodes),
             nodes=nodes,
         )
         await tx.run(
@@ -247,22 +250,9 @@ async def add_nodes_and_edges_bulk_tx(
             episodic_edges=[edge.model_dump() for edge in episodic_edges],
         )
         await tx.run(
-            get_entity_edge_save_bulk_query(driver.provider, has_aoss=bool(driver.aoss_client)),
+            get_entity_edge_save_bulk_query(driver.provider),
             entity_edges=edges,
         )
-
-        if bool(driver.aoss_client):
-            for node_data, entity_node in zip(nodes, entity_nodes, strict=True):
-                if node_data.get('uuid') == entity_node.uuid:
-                    node_data['name_embedding'] = entity_node.name_embedding
-
-            for edge_data, entity_edge in zip(edges, entity_edges, strict=True):
-                if edge_data.get('uuid') == entity_edge.uuid:
-                    edge_data['fact_embedding'] = entity_edge.fact_embedding
-
-            await driver.save_to_aoss(EPISODE_INDEX_NAME, episodes)
-            await driver.save_to_aoss(ENTITY_INDEX_NAME, nodes)
-            await driver.save_to_aoss(ENTITY_EDGE_INDEX_NAME, edges)
 
 
 async def extract_nodes_and_edges_bulk(
