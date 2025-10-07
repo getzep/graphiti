@@ -39,6 +39,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,  # kept for parity; callers won't pass it
         driver: Any,
+        transaction: Any,
         nodes: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -78,6 +79,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,
         driver: Any,
+        transaction: Any,
         nodes: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -101,6 +103,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,
         driver: Any,
+        transaction: Any,
         nodes: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -111,6 +114,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,
         driver: Any,
+        transaction: Any,
         episodic_edges: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -151,6 +155,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,
         driver: Any,
+        transaction: Any,
         edges: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -180,6 +185,7 @@ class GraphOperationsInterface(BaseModel):
         self,
         _cls: Any,
         driver: Any,
+        transaction: Any,
         edges: list[Any],
         batch_size: int = 100,
     ) -> None:

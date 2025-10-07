@@ -56,8 +56,8 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    # Don't create fulltext indices if OpenSearch is being used
-    if not driver.aoss_client:
+    # Don't create fulltext indices if search_interface is being used
+    if not driver.search_interface:
         fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     if driver.provider == GraphProvider.KUZU:
@@ -151,9 +151,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                            MATCH (e:Episodic)
-                            WHERE e.valid_at <= $reference_time
-                            """
+                                MATCH (e:Episodic)
+                                WHERE e.valid_at <= $reference_time
+                                """
         + query_filter
         + """
         RETURN

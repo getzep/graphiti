@@ -79,14 +79,14 @@ class SearchInterface(BaseModel):
         raise NotImplementedError
 
     # ---------- SEARCH FILTERS (sync) ----------
-    def build_aoss_node_filters(self, search_filters: Any) -> Any:
+    def build_node_search_filters(self, search_filters: Any) -> Any:
         """
         Return the AOSS filter expression or None. Should match the structure expected by your
         AOSS client (e.g., ['And', [...]] / ['Or', [...]] / ['field', 'Op', value]).
         """
         raise NotImplementedError
 
-    def build_aoss_edge_filters(self, search_filters: Any) -> Any:
+    def build_edge_search_filters(self, search_filters: Any) -> Any:
         raise NotImplementedError
 
     class Config:

@@ -112,8 +112,6 @@ class Node(BaseModel, ABC):
                     uuid=self.uuid,
                 )
 
-                edge_uuids: list[str] = records[0].get('edge_uuids', []) if records else []
-
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -276,9 +274,6 @@ class Node(BaseModel, ABC):
                     )
 
                     record = await result.single()
-                    edge_uuids: list[str] = (
-                        record['edge_uuids'] if record and record['edge_uuids'] else []
-                    )
 
                     # Now delete the nodes in batches
                     await session.run(

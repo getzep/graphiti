@@ -217,11 +217,11 @@ async def add_nodes_and_edges_bulk_tx(
         await driver.graph_operations_interface.episodic_node_save_bulk(
             None, driver, episodic_nodes
         )
-        await driver.graph_operations_interface.node_save_bulk(None, driver, nodes)
+        await driver.graph_operations_interface.node_save_bulk(None, driver, tx, nodes)
         await driver.graph_operations_interface.episodic_edge_save_bulk(
-            None, driver, episodic_edges
+            None, driver, tx, episodic_edges
         )
-        await driver.graph_operations_interface.edge_save_bulk(None, driver, edges)
+        await driver.graph_operations_interface.edge_save_bulk(None, driver, tx, edges)
 
     elif driver.provider == GraphProvider.KUZU:
         # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
