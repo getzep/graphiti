@@ -624,7 +624,7 @@ async def resolve_extracted_edge(
 
     # Determine if the new_edge needs to be expired
     if resolved_edge.expired_at is None:
-        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, c.valid_at))
+        invalidation_candidates.sort(key=lambda c: (c.valid_at is None, ensure_utc(c.valid_at)))
         for candidate in invalidation_candidates:
             candidate_valid_at_utc = ensure_utc(candidate.valid_at)
             resolved_edge_valid_at_utc = ensure_utc(resolved_edge.valid_at)
