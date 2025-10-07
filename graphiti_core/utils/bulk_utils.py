@@ -24,9 +24,6 @@ from pydantic import BaseModel, Field
 from typing_extensions import Any
 
 from graphiti_core.driver.driver import (
-    ENTITY_EDGE_INDEX_NAME,
-    ENTITY_INDEX_NAME,
-    EPISODE_INDEX_NAME,
     GraphDriver,
     GraphDriverSession,
     GraphProvider,
@@ -221,7 +218,7 @@ async def add_nodes_and_edges_bulk_tx(
             None, driver, episodic_nodes
         )
         await driver.graph_operations_interface.node_save_bulk(None, driver, nodes)
-        await driver.graph_operations_interface.episodic_edges_save_bulk(
+        await driver.graph_operations_interface.episodic_edge_save_bulk(
             None, driver, episodic_edges
         )
         await driver.graph_operations_interface.edge_save_bulk(None, driver, edges)

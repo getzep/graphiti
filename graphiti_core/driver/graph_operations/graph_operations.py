@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -59,7 +59,7 @@ class GraphOperationsInterface(BaseModel):
         _cls: Any,
         driver: Any,
         uuids: list[str],
-        group_id: Optional[str] = None,
+        group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
         raise NotImplementedError
@@ -107,6 +107,16 @@ class GraphOperationsInterface(BaseModel):
         """Persist (create or update) many episodic nodes in batches."""
         raise NotImplementedError
 
+    async def episodic_edge_save_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        episodic_edges: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Persist (create or update) many episodic nodes in batches."""
+        raise NotImplementedError
+
     async def episodic_node_delete_by_group_id(
         self,
         _cls: Any,
@@ -121,7 +131,7 @@ class GraphOperationsInterface(BaseModel):
         _cls: Any,
         driver: Any,
         uuids: list[str],
-        group_id: Optional[str] = None,
+        group_id: str | None = None,
         batch_size: int = 100,
     ) -> None:
         raise NotImplementedError
@@ -152,7 +162,7 @@ class GraphOperationsInterface(BaseModel):
         _cls: Any,
         driver: Any,
         uuids: list[str],
-        group_id: Optional[str] = None,
+        group_id: str | None = None,
     ) -> None:
         raise NotImplementedError
 

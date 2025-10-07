@@ -27,10 +27,6 @@ from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
-    COMMUNITY_INDEX_NAME,
-    ENTITY_EDGE_INDEX_NAME,
-    ENTITY_INDEX_NAME,
-    EPISODE_INDEX_NAME,
     GraphDriver,
     GraphProvider,
 )

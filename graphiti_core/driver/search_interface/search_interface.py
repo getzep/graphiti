@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -29,7 +29,7 @@ class SearchInterface(BaseModel):
         driver: Any,
         query: str,
         search_filter: Any,
-        group_ids: Optional[list[str]] = None,
+        group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
         raise NotImplementedError
@@ -38,10 +38,10 @@ class SearchInterface(BaseModel):
         self,
         driver: Any,
         search_vector: list[float],
-        source_node_uuid: Optional[str],
-        target_node_uuid: Optional[str],
+        source_node_uuid: str | None,
+        target_node_uuid: str | None,
         search_filter: Any,
-        group_ids: Optional[list[str]] = None,
+        group_ids: list[str] | None = None,
         limit: int = 100,
         min_score: float = 0.7,
     ) -> list[Any]:
@@ -52,7 +52,7 @@ class SearchInterface(BaseModel):
         driver: Any,
         query: str,
         search_filter: Any,
-        group_ids: Optional[list[str]] = None,
+        group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
         raise NotImplementedError
@@ -62,7 +62,7 @@ class SearchInterface(BaseModel):
         driver: Any,
         search_vector: list[float],
         search_filter: Any,
-        group_ids: Optional[list[str]] = None,
+        group_ids: list[str] | None = None,
         limit: int = 100,
         min_score: float = 0.7,
     ) -> list[Any]:
@@ -73,7 +73,7 @@ class SearchInterface(BaseModel):
         driver: Any,
         query: str,
         search_filter: Any,  # kept for parity even if unused in your impl
-        group_ids: Optional[list[str]] = None,
+        group_ids: list[str] | None = None,
         limit: int = 100,
     ) -> list[Any]:
         raise NotImplementedError
