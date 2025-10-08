@@ -29,10 +29,31 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
             def replacer(match):
                 var_name = match.group(1)
                 default_value = match.group(3) if match.group(3) is not None else ''
-                return os.environ.get(var_name, default_value)
+                result = os.environ.get(var_name, default_value)
+
+                # Convert string booleans to actual booleans
+                if result.lower() == 'true':
+                    return 'true'  # Keep as string, let Pydantic handle conversion
+                elif result.lower() == 'false':
+                    return 'false'  # Keep as string, let Pydantic handle conversion
+                return result
 
             pattern = r'\$\{([^:}]+)(:([^}]*))?\}'
-            return re.sub(pattern, replacer, value)
+
+            # Check if the entire value is a single env var expression with boolean default
+            full_match = re.fullmatch(pattern, value)
+            if full_match:
+                result = replacer(full_match)
+                # If the result is a boolean string and the whole value was the env var,
+                # return the actual boolean
+                if result == 'true':
+                    return True
+                elif result == 'false':
+                    return False
+                return result
+            else:
+                # Otherwise, do string substitution
+                return re.sub(pattern, replacer, value)
         elif isinstance(value, dict):
             return {k: self._expand_env_vars(v) for k, v in value.items()}
         elif isinstance(value, list):

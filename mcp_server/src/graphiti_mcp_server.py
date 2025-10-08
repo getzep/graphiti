@@ -641,8 +641,12 @@ async def get_status() -> StatusResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # Test database connection
-        await client.driver.client.verify_connectivity()  # type: ignore
+        # Test database connection with a simple query
+        # This works for all supported databases (Neo4j, FalkorDB, KuzuDB)
+        async with client.driver.session() as session:
+            result = await session.run('MATCH (n) RETURN count(n) as count')
+            # Consume the result to verify query execution
+            _ = [record async for record in result]
 
         provider_info = f'{config.database.provider} database'
         return StatusResponse(

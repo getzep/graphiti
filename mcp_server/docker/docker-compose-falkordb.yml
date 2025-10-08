@@ -51,7 +51,7 @@ services:
       - ../config/config-docker-falkordb.yaml:/app/config/config.yaml:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP for SSE transport
-    command: ["uv", "run", "graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
+    command: ["uv", "run", "src/graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
 
 volumes:
   falkordb_data:
