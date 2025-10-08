@@ -44,6 +44,9 @@ def test_config_loading():
     assert config is not None
     assert config2 is not None
 
+    # Return the first config for subsequent tests
+    return config
+
 
 def test_llm_factory(config: GraphitiConfig):
     """Test LLM client factory creation."""
