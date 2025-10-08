@@ -119,6 +119,23 @@ docker-compose up
 - Type checking with Pyright is enforced
 - Main project uses `typeCheckingMode = "basic"`, server uses `typeCheckingMode = "standard"`
 
+### Pre-Commit Requirements
+
+**IMPORTANT:** Always format and lint code before committing:
+
+```bash
+# Format code (required before commit)
+make format  # or: uv run ruff format
+
+# Lint code (required before commit)
+make lint    # or: uv run ruff check --fix && uv run pyright
+
+# Run all checks (format + lint + test)
+make check
+```
+
+**Never commit code without running these commands first.** This ensures code quality and consistency across the codebase.
+
 ### Testing Requirements
 
 - Run tests with `make test` or `pytest`

@@ -33,8 +33,10 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Copy application code
-COPY graphiti_mcp_server.py ./
+# Copy application code and configuration
+COPY main.py ./
+COPY src/ ./src/
+COPY config/ ./config/
 
 # Change ownership to app user
 RUN chown -Rv app:app /app
@@ -46,4 +48,4 @@ USER app
 EXPOSE 8000
 
 # Command to run the application
-CMD ["uv", "run", "graphiti_mcp_server.py"]
+CMD ["uv", "run", "main.py"]

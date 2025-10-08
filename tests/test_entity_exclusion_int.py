@@ -102,9 +102,9 @@ async def test_exclude_default_entity_type(driver):
         for node in found_nodes:
             assert 'Entity' in node.labels  # All nodes should have Entity label
             # But they should also have specific type labels
-            assert any(label in ['Person', 'Organization'] for label in node.labels), (
-                f'Node {node.name} should have a specific type label, got: {node.labels}'
-            )
+            assert any(
+                label in ['Person', 'Organization'] for label in node.labels
+            ), f'Node {node.name} should have a specific type label, got: {node.labels}'
 
         # Clean up
         await _cleanup_test_nodes(graphiti, 'test_exclude_default')
@@ -160,9 +160,9 @@ async def test_exclude_specific_custom_types(driver):
         for node in found_nodes:
             assert 'Entity' in node.labels
             # Should not have excluded types
-            assert 'Organization' not in node.labels, (
-                f'Found excluded Organization in node: {node.name}'
-            )
+            assert (
+                'Organization' not in node.labels
+            ), f'Found excluded Organization in node: {node.name}'
             assert 'Location' not in node.labels, f'Found excluded Location in node: {node.name}'
 
         # Should find at least one Person entity (Sarah Johnson)
@@ -213,9 +213,9 @@ async def test_exclude_all_types(driver):
 
         # There should be minimal to no entities created
         found_nodes = search_results.nodes
-        assert len(found_nodes) == 0, (
-            f'Expected no entities, but found: {[n.name for n in found_nodes]}'
-        )
+        assert (
+            len(found_nodes) == 0
+        ), f'Expected no entities, but found: {[n.name for n in found_nodes]}'
 
         # Clean up
         await _cleanup_test_nodes(graphiti, 'test_exclude_all')
