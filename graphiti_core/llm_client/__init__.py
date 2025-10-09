@@ -18,5 +18,6 @@ from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
 from .openai_client import OpenAIClient
+from .vscode_client import VSCodeClient
 
-__all__ = ['LLMClient', 'OpenAIClient', 'LLMConfig', 'RateLimitError']
+__all__ = ['LLMClient', 'OpenAIClient', 'VSCodeClient', 'LLMConfig', 'RateLimitError']
