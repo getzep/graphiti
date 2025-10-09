@@ -53,6 +53,9 @@ class Edge(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_delete(self, driver)
+
         if driver.provider == GraphProvider.KUZU:
             await driver.execute_query(
                 """
@@ -81,6 +84,9 @@ class Edge(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_delete_by_uuids(cls, driver, uuids)
+
         if driver.provider == GraphProvider.KUZU:
             await driver.execute_query(
                 """
@@ -245,6 +251,9 @@ class EntityEdge(Edge):
         return self.fact_embedding
 
     async def load_fact_embedding(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.edge_load_embeddings(self, driver)
+
         query = """
             MATCH (n:Entity)-[e:RELATES_TO {uuid: $uuid}]->(m:Entity)
             RETURN e.fact_embedding AS fact_embedding
@@ -297,10 +306,6 @@ class EntityEdge(Edge):
             )
         else:
             edge_data.update(self.attributes or {})
-
-            if driver.provider == GraphProvider.NEPTUNE:
-                driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue
-
             result = await driver.execute_query(
                 get_entity_edge_save_query(driver.provider),
                 edge_data=edge_data,
@@ -335,6 +340,35 @@ class EntityEdge(Edge):
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
+
+    @classmethod
+    async def get_between_nodes(
+        cls, driver: GraphDriver, source_node_uuid: str, target_node_uuid: str
+    ):
+        match_query = """
+            MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+        """
+        if driver.provider == GraphProvider.KUZU:
+            match_query = """
+                MATCH (n:Entity {uuid: $source_node_uuid})
+                      -[:RELATES_TO]->(e:RelatesToNode_)
+                      -[:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
+            """
+
+        records, _, _ = await driver.execute_query(
+            match_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider),
+            source_node_uuid=source_node_uuid,
+            target_node_uuid=target_node_uuid,
+            routing_='r',
+        )
+
+        edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+
+        return edges
 
     @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
@@ -587,8 +621,11 @@ def get_community_edge_from_record(record: Any):
 
 
 async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[EntityEdge]):
-    if len(edges) == 0:
+    # filter out falsey values from edges
+    filtered_edges = [edge for edge in edges if edge.fact]
+
+    if len(filtered_edges) == 0:
         return
-    fact_embeddings = await embedder.create_batch([edge.fact for edge in edges])
-    for edge, fact_embedding in zip(edges, fact_embeddings, strict=True):
+    fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
+    for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding

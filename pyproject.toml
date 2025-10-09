@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.20.4"
+version = "0.22.0pre5"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -32,9 +32,11 @@ google-genai = ["google-genai>=1.8.0"]
 kuzu = ["kuzu>=0.11.2"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
 voyageai = ["voyageai>=0.2.3"]
+neo4j-opensearch = ["boto3>=1.39.16", "opensearch-py>=3.0.0"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
 neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0", "boto3>=1.39.16"]
 ollama = ["ollama>=0.5.3"]
+tracing = ["opentelemetry-api>=1.20.0", "opentelemetry-sdk>=1.20.0"]
 dev = [
     "pyright>=1.1.404",
     "groq>=0.2.0",
@@ -42,6 +44,9 @@ dev = [
     "google-genai>=1.8.0",
     "falkordb>=1.1.2,<2.0.0",
     "kuzu>=0.11.2",
+    "boto3>=1.39.16",
+    "opensearch-py>=3.0.0",
+    "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "diskcache-stubs>=5.6.3.6.20240818",
@@ -57,6 +62,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
+    "opentelemetry-sdk>=1.20.0",
 ]
 
 [build-system]
