@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
+    if driver.aoss_client:
+        await driver.create_aoss_indices()  # pyright: ignore[reportAttributeAccessIssue]
+        return
     if delete_existing:
         records, _, _ = await driver.execute_query(
             """
@@ -53,8 +56,8 @@ async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bo
 
     range_indices: list[LiteralString] = get_range_indices(driver.provider)
 
-    # Don't create fulltext indices if search_interface is being used
-    if not driver.search_interface:
+    # Don't create fulltext indices if OpenSearch is being used
+    if not driver.aoss_client:
         fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
 
     if driver.provider == GraphProvider.KUZU:
@@ -92,6 +95,8 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
+            if driver.aoss_client:
+                await driver.clear_aoss_indices()
 
         async def delete_group_ids(tx):
             labels = ['Entity', 'Episodic', 'Community']
@@ -148,9 +153,9 @@ async def retrieve_episodes(
 
     query: LiteralString = (
         """
-                                    MATCH (e:Episodic)
-                                    WHERE e.valid_at <= $reference_time
-                                    """
+                        MATCH (e:Episodic)
+                        WHERE e.valid_at <= $reference_time
+                        """
         + query_filter
         + """
         RETURN
