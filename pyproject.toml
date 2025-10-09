@@ -18,7 +18,8 @@ dependencies = [
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
     "python-dotenv>=1.0.1",
-    "posthog>=3.0.0"
+    "posthog>=3.0.0",
+    "pyyaml>=6.0.2",
 ]
 
 [project.urls]
@@ -60,6 +61,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
+    "mcp>=1.9.4",
     "opentelemetry-sdk>=1.20.0",
 ]
 
@@ -69,6 +71,8 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+norecursedirs = ["mcp_server", "mcp_server/*", ".git", "*.egg", "build", "dist"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
@@ -99,3 +103,8 @@ docstring-code-format = true
 include = ["graphiti_core"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.404",
+]
