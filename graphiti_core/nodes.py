@@ -170,8 +170,7 @@ class Node(BaseModel, ABC):
                     await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community {group_id: $group_id})
-                        CALL {
-                            WITH n
+                        CALL (n) {
                             DETACH DELETE n
                         } IN TRANSACTIONS OF $batch_size ROWS
                         """,
@@ -278,8 +277,7 @@ class Node(BaseModel, ABC):
                         """
                         MATCH (n:Entity|Episodic|Community)
                         WHERE n.uuid IN $uuids
-                        CALL {
-                            WITH n
+                        CALL (n) {
                             DETACH DELETE n
                         } IN TRANSACTIONS OF $batch_size ROWS
                         """,
