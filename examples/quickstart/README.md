@@ -17,7 +17,7 @@ This example demonstrates the basic functionality of Graphiti, including:
   - Neo4j Desktop installed and running  
   - A local DBMS created and started in Neo4j Desktop  
 - **For FalkorDB**:
-  - FalkorDB server running (see [FalkorDB documentation](https://falkordb.com/docs/) for setup)
+  - FalkorDB server running (see [FalkorDB documentation](https://docs.falkordb.com) for setup)
 - **For Amazon Neptune**:
   - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
 
