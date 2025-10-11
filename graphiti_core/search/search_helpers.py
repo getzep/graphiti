@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
-
 from graphiti_core.edges import EntityEdge
+from graphiti_core.prompts.prompt_helpers import to_prompt_json
 from graphiti_core.search.search_config import SearchResults
 
 
@@ -57,16 +56,16 @@ def search_results_to_context_string(search_results: SearchResults) -> str:
     These are the most relevant facts and their valid and invalid dates. Facts are considered valid
     between their valid_at and invalid_at dates. Facts with an invalid_at date of "Present" are considered valid.
     <FACTS>
-    {json.dumps(fact_json, indent=12)}
+            {to_prompt_json(fact_json)}
     </FACTS>
     <ENTITIES>
-    {json.dumps(entity_json, indent=12)}
+            {to_prompt_json(entity_json)}
     </ENTITIES>
     <EPISODES>
-    {json.dumps(episode_json, indent=12)}
+            {to_prompt_json(episode_json)}
     </EPISODES>
     <COMMUNITIES>
-    {json.dumps(community_json, indent=12)}
+            {to_prompt_json(community_json)}
     </COMMUNITIES>
 """
 

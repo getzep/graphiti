@@ -26,8 +26,8 @@ from dotenv import load_dotenv
 from neo4j import time as neo4j_time
 from numpy._typing import NDArray
 from pydantic import BaseModel
-from typing_extensions import LiteralString
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
 
 load_dotenv()
@@ -37,28 +37,24 @@ SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
 DEFAULT_PAGE_LIMIT = 20
 
-RUNTIME_QUERY: LiteralString = (
-    'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
-)
+
+def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
+    if isinstance(input_date, neo4j_time.DateTime):
+        return input_date.to_native()
+
+    if isinstance(input_date, str):
+        return datetime.fromisoformat(input_date)
+
+    return input_date
 
 
-def parse_db_date(neo_date: neo4j_time.DateTime | str | None) -> datetime | None:
-    return (
-        neo_date.to_native()
-        if isinstance(neo_date, neo4j_time.DateTime)
-        else datetime.fromisoformat(neo_date)
-        if neo_date
-        else None
-    )
-
-
-def get_default_group_id(db_type: str) -> str:
+def get_default_group_id(provider: GraphProvider) -> str:
     """
     This function differentiates the default group id based on the database type.
     For most databases, the default group id is an empty string, while there are database types that require a specific default group id.
     """
-    if db_type == 'falkordb':
-        return '_'
+    if provider == GraphProvider.FALKORDB:
+        return '\\_'
     else:
         return ''
 
@@ -120,7 +116,7 @@ async def semaphore_gather(
     return await asyncio.gather(*(_wrap_coroutine(coroutine) for coroutine in coroutines))
 
 
-def validate_group_id(group_id: str) -> bool:
+def validate_group_id(group_id: str | None) -> bool:
     """
     Validate that a group_id contains only ASCII alphanumeric characters, dashes, and underscores.
 
@@ -147,7 +143,7 @@ def validate_group_id(group_id: str) -> bool:
 
 
 def validate_excluded_entity_types(
-    excluded_entity_types: list[str] | None, entity_types: dict[str, BaseModel] | None = None
+    excluded_entity_types: list[str] | None, entity_types: dict[str, type[BaseModel]] | None = None
 ) -> bool:
     """
     Validate that excluded entity types are valid type names.
