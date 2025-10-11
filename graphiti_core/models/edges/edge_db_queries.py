@@ -68,6 +68,7 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                 MATCH (target:Entity {uuid: $edge_data.target_uuid})
                 MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
                 SET e = $edge_data
+                SET e.fact_embedding = vecf32($edge_data.fact_embedding)
                 RETURN e.uuid AS uuid
             """
         case GraphProvider.NEPTUNE:
