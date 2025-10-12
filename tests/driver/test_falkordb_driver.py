@@ -366,7 +366,6 @@ class TestDatetimeConversion:
 class TestFalkorDriverIntegration:
     """Simple integration test for FalkorDB driver."""
 
-    @pytest.mark.integration
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     async def test_basic_integration_with_real_falkordb(self):
