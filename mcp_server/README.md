@@ -65,7 +65,11 @@ cd graphiti && pwd
 
 1. Ensure you have Python 3.10 or higher installed.
 2. A running Neo4j database (version 5.26 or later required)
-3. OpenAI API key for LLM operations
+3. LLM provider configuration:
+   - OpenAI API key for LLM operations, OR
+   - VS Code models (no external API key required when running within VS Code), OR  
+   - Google Gemini API key, OR
+   - Other supported LLM providers
 
 ### Setup
 
@@ -87,7 +91,11 @@ The server uses the following environment variables:
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
-- `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
+
+**LLM Provider Configuration (choose one):**
+- `USE_VSCODE_MODELS`: Enable VS Code models integration (no external API key required)
+- `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM operations)
+- `GOOGLE_API_KEY`: Google API key (required for Gemini LLM operations)
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
@@ -100,6 +108,13 @@ The server uses the following environment variables:
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
 - `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+
+**VS Code Models Configuration (when USE_VSCODE_MODELS=true):**
+- `VSCODE_LLM_MODEL`: VS Code model name for LLM operations (default: detected from VS Code)
+- `VSCODE_EMBEDDING_MODEL`: VS Code model name for embeddings (default: detected from VS Code)
+- `VSCODE_EMBEDDING_DIM`: Embedding dimensions (default: 1024)
+
+**General Configuration:**
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
