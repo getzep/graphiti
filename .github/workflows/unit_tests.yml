@@ -99,6 +99,7 @@ jobs:
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
+          DISABLE_KUZU: 1
         run: |
           uv run pytest tests/test_graphiti_mock.py tests/utils/maintenance/test_bulk_utils.py tests/utils/maintenance/test_edge_operations.py tests/utils/maintenance/test_node_operations.py
 
@@ -151,6 +152,7 @@ jobs:
           NEO4J_PASSWORD: testpass
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
+          DISABLE_KUZU: 1
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
