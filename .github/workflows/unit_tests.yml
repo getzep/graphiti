@@ -81,15 +81,6 @@ jobs:
       - name: Wait for Neo4j
         run: |
           timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
-      - name: Run FalkorDB driver tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          FALKORDB_HOST: localhost
-          FALKORDB_PORT: 6379
-          DISABLE_NEO4J: 1
-          DISABLE_NEPTUNE: 1
-        run: |
-          uv run pytest tests/driver/test_falkordb_driver.py
       - name: Run database integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -100,4 +91,12 @@ jobs:
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
         run: |
-          uv run pytest tests/test_graphiti_mock.py
+          uv run pytest \
+            tests/test_graphiti_mock.py \
+            tests/test_graphiti_int.py \
+            tests/test_node_int.py \
+            tests/test_edge_int.py \
+            tests/test_entity_exclusion_int.py \
+            tests/cross_encoder/test_bge_reranker_client_int.py \
+            tests/driver/test_falkordb_driver.py \
+            -m "not integration"
