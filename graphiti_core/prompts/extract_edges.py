@@ -80,7 +80,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </FACT TYPES>
 
 <PREVIOUS_MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS_MESSAGES>
 
 <CURRENT_MESSAGE>
@@ -88,7 +88,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{to_prompt_json(context['nodes'], indent=2)}
+{to_prompt_json(context['nodes'])}
 </ENTITIES>
 
 <REFERENCE_TIME>
@@ -141,7 +141,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -175,7 +175,7 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
             content=f"""
 
         <MESSAGE>
-        {to_prompt_json(context['episode_content'], indent=2)}
+        {to_prompt_json(context['episode_content'])}
         </MESSAGE>
         <REFERENCE TIME>
         {context['reference_time']}

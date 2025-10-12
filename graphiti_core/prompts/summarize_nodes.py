@@ -56,11 +56,11 @@ def summarize_pair(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Synthesize the information from the following two summaries into a single succinct summary.
-        
+
         IMPORTANT: Keep the summary concise and to the point. SUMMARIES MUST BE LESS THAN 250 CHARACTERS.
 
         Summaries:
-        {to_prompt_json(context['node_summaries'], indent=2)}
+        {to_prompt_json(context['node_summaries'])}
         """,
         ),
     ]
@@ -77,28 +77,28 @@ def summarize_context(context: dict[str, Any]) -> list[Message]:
             content=f"""
         Given the MESSAGES and the ENTITY name, create a summary for the ENTITY. Your summary must only use
         information from the provided MESSAGES. Your summary should also only contain information relevant to the
-        provided ENTITY. 
-        
+        provided ENTITY.
+
         In addition, extract any values for the provided entity properties based on their descriptions.
         If the value of the entity property cannot be found in the current context, set the value of the property to the Python value None.
-        
+
         {summary_instructions}
 
         <MESSAGES>
-        {to_prompt_json(context['previous_episodes'], indent=2)}
-        {to_prompt_json(context['episode_content'], indent=2)}
+        {to_prompt_json(context['previous_episodes'])}
+        {to_prompt_json(context['episode_content'])}
         </MESSAGES>
-        
+
         <ENTITY>
         {context['node_name']}
         </ENTITY>
-        
+
         <ENTITY CONTEXT>
         {context['node_summary']}
         </ENTITY CONTEXT>
-        
+
         <ATTRIBUTES>
-        {to_prompt_json(context['attributes'], indent=2)}
+        {to_prompt_json(context['attributes'])}
         </ATTRIBUTES>
         """,
         ),
@@ -118,7 +118,7 @@ def summary_description(context: dict[str, Any]) -> list[Message]:
         Summaries must be under 250 characters.
 
         Summary:
-        {to_prompt_json(context['summary'], indent=2)}
+        {to_prompt_json(context['summary'])}
         """,
         ),
     ]

@@ -176,53 +176,74 @@ class BaseOpenAIClient(LLMClient):
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling."""
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        retry_count = 0
-        last_error = None
-
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
 
-        while retry_count <= self.MAX_RETRIES:
-            try:
-                response = await self._generate_response(
-                    messages, response_model, max_tokens, model_size
-                )
-                return response
-            except (RateLimitError, RefusalError):
-                # These errors should not trigger retries
-                raise
-            except (openai.APITimeoutError, openai.APIConnectionError, openai.InternalServerError):
-                # Let OpenAI's client handle these retries
-                raise
-            except Exception as e:
-                last_error = e
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            attributes = {
+                'llm.provider': 'openai',
+                'model.size': model_size.value,
+                'max_tokens': max_tokens,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
-                # Don't retry if we've hit the max retries
-                if retry_count >= self.MAX_RETRIES:
-                    logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+            retry_count = 0
+            last_error = None
+
+            while retry_count <= self.MAX_RETRIES:
+                try:
+                    response = await self._generate_response(
+                        messages, response_model, max_tokens, model_size
+                    )
+                    return response
+                except (RateLimitError, RefusalError):
+                    # These errors should not trigger retries
+                    span.set_status('error', str(last_error))
                     raise
+                except (
+                    openai.APITimeoutError,
+                    openai.APIConnectionError,
+                    openai.InternalServerError,
+                ):
+                    # Let OpenAI's client handle these retries
+                    span.set_status('error', str(last_error))
+                    raise
+                except Exception as e:
+                    last_error = e
 
-                retry_count += 1
+                    # Don't retry if we've hit the max retries
+                    if retry_count >= self.MAX_RETRIES:
+                        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+                        span.set_status('error', str(e))
+                        span.record_exception(e)
+                        raise
 
-                # Construct a detailed error message for the LLM
-                error_context = (
-                    f'The previous response attempt was invalid. '
-                    f'Error type: {e.__class__.__name__}. '
-                    f'Error details: {str(e)}. '
-                    f'Please try again with a valid response, ensuring the output matches '
-                    f'the expected format and constraints.'
-                )
+                    retry_count += 1
 
-                error_message = Message(role='user', content=error_context)
-                messages.append(error_message)
-                logger.warning(
-                    f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
-                )
+                    # Construct a detailed error message for the LLM
+                    error_context = (
+                        f'The previous response attempt was invalid. '
+                        f'Error type: {e.__class__.__name__}. '
+                        f'Error details: {str(e)}. '
+                        f'Please try again with a valid response, ensuring the output matches '
+                        f'the expected format and constraints.'
+                    )
 
-        # If we somehow get here, raise the last error
-        raise last_error or Exception('Max retries exceeded with no specific error')
+                    error_message = Message(role='user', content=error_context)
+                    messages.append(error_message)
+                    logger.warning(
+                        f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
+                    )
+
+            # If we somehow get here, raise the last error
+            span.set_status('error', str(last_error))
+            raise last_error or Exception('Max retries exceeded with no specific error')
