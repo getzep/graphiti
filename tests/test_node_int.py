@@ -33,8 +33,6 @@ from tests.helpers_test import (
     group_id,
 )
 
-pytestmark = pytest.mark.integration
-
 created_at = datetime.now()
 deleted_at = created_at + timedelta(days=3)
 valid_at = created_at + timedelta(days=1)

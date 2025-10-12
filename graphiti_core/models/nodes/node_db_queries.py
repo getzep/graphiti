@@ -328,6 +328,4 @@ COMMUNITY_NODE_RETURN_NEPTUNE = """
     n.group_id AS group_id,
     n.summary AS summary,
     n.created_at AS created_at
-""" 
-
-
+"""

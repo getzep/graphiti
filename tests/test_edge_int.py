@@ -26,7 +26,6 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, Episodic
 from tests.helpers_test import get_edge_count, get_node_count, group_id
 
 pytest_plugins = ('pytest_asyncio',)
-pytestmark = pytest.mark.integration
 
 
 def setup_logging():
