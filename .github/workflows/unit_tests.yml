@@ -24,7 +24,7 @@ jobs:
           version: "latest"
       - name: Install dependencies
         run: uv sync --all-extras
-      - name: Run unit tests (no API keys required)
+      - name: Run unit tests (no external dependencies)
         env:
           PYTHONPATH: ${{ github.workspace }}
           DISABLE_NEPTUNE: 1
@@ -44,9 +44,67 @@ jobs:
             --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
             --ignore=tests/evals/
 
-  integration-tests:
+  database-integration-tests:
     runs-on: depot-ubuntu-22.04
-    # Only run integration tests for internal contributors (push to main or PRs from same repo)
+    services:
+      falkordb:
+        image: falkordb/falkordb:latest
+        ports:
+          - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+      neo4j:
+        image: neo4j:5.26-community
+        ports:
+          - 7687:7687
+          - 7474:7474
+        env:
+          NEO4J_AUTH: neo4j/testpass
+          NEO4J_PLUGINS: '["apoc"]'
+        options: --health-cmd "cypher-shell -u neo4j -p testpass 'RETURN 1'" --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Install redis-cli for FalkorDB health check
+        run: sudo apt-get update && sudo apt-get install -y redis-tools
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Wait for FalkorDB
+        run: |
+          timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
+      - name: Wait for Neo4j
+        run: |
+          timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
+      - name: Run FalkorDB driver tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: 6379
+          DISABLE_NEO4J: 1
+          DISABLE_NEPTUNE: 1
+        run: |
+          uv run pytest tests/driver/test_falkordb_driver.py
+      - name: Run database integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpass
+          FALKORDB_HOST: localhost
+          FALKORDB_PORT: 6379
+          DISABLE_NEPTUNE: 1
+        run: |
+          uv run pytest tests/test_graphiti_mock.py tests/utils/maintenance/test_bulk_utils.py tests/utils/maintenance/test_edge_operations.py tests/utils/maintenance/test_node_operations.py
+
+  api-integration-tests:
+    runs-on: depot-ubuntu-22.04
+    # Only run API integration tests for internal contributors (push to main or PRs from same repo)
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     environment:
       name: development
@@ -85,25 +143,6 @@ jobs:
       - name: Wait for Neo4j
         run: |
           timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
-      - name: Run FalkorDB integration tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          FALKORDB_HOST: localhost
-          FALKORDB_PORT: 6379
-          DISABLE_NEO4J: 1
-        run: |
-          uv run pytest tests/driver/test_falkordb_driver.py
-      - name: Run database integration tests (no API keys required)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          NEO4J_URI: bolt://localhost:7687
-          NEO4J_USER: neo4j
-          NEO4J_PASSWORD: testpass
-          FALKORDB_HOST: localhost
-          FALKORDB_PORT: 6379
-          DISABLE_NEPTUNE: 1
-        run: |
-          uv run pytest tests/test_graphiti_mock.py tests/utils/maintenance/test_bulk_utils.py tests/utils/maintenance/test_edge_operations.py tests/utils/maintenance/test_node_operations.py
       - name: Run API integration tests (requires API keys)
         env:
           PYTHONPATH: ${{ github.workspace }}
