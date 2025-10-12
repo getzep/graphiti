@@ -25,6 +25,7 @@ from graphiti_core.search.search_helpers import search_results_to_context_string
 from graphiti_core.utils.datetime_utils import utc_now
 from tests.helpers_test import GraphProvider
 
+pytestmark = pytest.mark.integration
 pytest_plugins = ('pytest_asyncio',)
 
 

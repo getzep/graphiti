@@ -23,6 +23,7 @@ from graphiti_core.graphiti import Graphiti
 from graphiti_core.helpers import validate_excluded_entity_types
 from tests.helpers_test import drivers, get_driver
 
+pytestmark = pytest.mark.integration
 pytest_plugins = ('pytest_asyncio',)
 
 
