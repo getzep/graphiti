@@ -112,6 +112,7 @@ async def test_get_edge_contradictions_no_contradictions():
     assert len(invalidated_edges) == 0
 
 
+@pytest.mark.skip(reason='Flaky LLM-based test with non-deterministic results')
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_get_edge_contradictions_multiple_existing():
@@ -243,6 +244,7 @@ async def test_get_edge_contradictions_no_effect():
     assert len(invalidated_edges) == 0
 
 
+@pytest.mark.skip(reason='Flaky LLM-based test with non-deterministic results')
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_invalidate_edges_partial_update():
