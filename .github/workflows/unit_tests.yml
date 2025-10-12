@@ -40,7 +40,7 @@ jobs:
             --ignore=tests/test_entity_exclusion_int.py \
             --ignore=tests/driver/ \
             --ignore=tests/llm_client/test_anthropic_client_int.py \
-            --ignore=tests/utils/maintenance/ \
+            --ignore=tests/utils/maintenance/test_temporal_operations_int.py \
             --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
             --ignore=tests/evals/
 
@@ -100,7 +100,7 @@ jobs:
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
         run: |
-          uv run pytest tests/test_graphiti_mock.py tests/utils/maintenance/test_bulk_utils.py tests/utils/maintenance/test_edge_operations.py tests/utils/maintenance/test_node_operations.py
+          uv run pytest tests/test_graphiti_mock.py
 
   api-integration-tests:
     runs-on: depot-ubuntu-22.04
