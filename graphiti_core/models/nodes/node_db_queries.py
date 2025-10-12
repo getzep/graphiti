@@ -133,6 +133,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 SET n:{labels}
                 SET n = $entity_data
+                SET n.name_embedding = vecf32($entity_data.name_embedding)
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
