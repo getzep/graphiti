@@ -24,9 +24,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from graphiti_core.driver.graph_operations.graph_operations import GraphOperationsInterface
-from graphiti_core.driver.search_interface.search_interface import SearchInterface
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 10
@@ -76,8 +73,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
-    search_interface: SearchInterface | None = None
-    graph_operations_interface: GraphOperationsInterface | None = None
+    aoss_client: Any  # type: ignore
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:
@@ -113,3 +109,9 @@ class GraphDriver(ABC):
         Only implemented by providers that need custom fulltext query building.
         """
         raise NotImplementedError(f'build_fulltext_query not implemented for {self.provider}')
+
+    async def save_to_aoss(self, name: str, data: list[dict]) -> int:
+        return 0
+
+    async def clear_aoss_indices(self):
+        return 1
