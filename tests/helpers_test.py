@@ -133,6 +133,7 @@ embeddings = {
         'Alice',
         'Bob',
         'Alice likes Bob',
+        'Alice knows Bob',
         'test_entity_1',
         'test_entity_2',
         'test_entity_3',

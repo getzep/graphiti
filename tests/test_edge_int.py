@@ -395,3 +395,70 @@ async def test_community_edge(graph_driver, mock_embedder):
     assert node_count == 0
 
     await graph_driver.close()
+
+
+@pytest.mark.asyncio
+async def test_entity_edge_stores_node_uuids(graph_driver, mock_embedder):
+    """Test that entity edges store source_node_uuid and target_node_uuid properties."""
+    now = datetime.now()
+
+    # Create entity nodes
+    alice_node = EntityNode(
+        name='Alice',
+        labels=[],
+        created_at=now,
+        summary='Alice summary',
+        group_id=group_id,
+    )
+    await alice_node.generate_name_embedding(mock_embedder)
+    await alice_node.save(graph_driver)
+
+    bob_node = EntityNode(
+        name='Bob', labels=[], created_at=now, summary='Bob summary', group_id=group_id
+    )
+    await bob_node.generate_name_embedding(mock_embedder)
+    await bob_node.save(graph_driver)
+
+    # Create entity edge
+    entity_edge = EntityEdge(
+        source_node_uuid=alice_node.uuid,
+        target_node_uuid=bob_node.uuid,
+        created_at=now,
+        name='knows',
+        fact='Alice knows Bob',
+        episodes=[],
+        expired_at=now,
+        valid_at=now,
+        invalid_at=now,
+        group_id=group_id,
+    )
+    await entity_edge.generate_embedding(mock_embedder)
+    await entity_edge.save(graph_driver)
+
+    # Verify edge properties directly from the database
+    # This query checks if the edge relationship itself has the UUID properties
+    query = """
+        MATCH (source:Entity)-[r:RELATES_TO]->(target:Entity)
+        WHERE r.uuid = $edge_uuid
+        RETURN
+            source.uuid AS source_uuid,
+            target.uuid AS target_uuid,
+            r.source_node_uuid AS stored_source_uuid,
+            r.target_node_uuid AS stored_target_uuid
+    """
+
+    results, _, _ = await graph_driver.execute_query(query, edge_uuid=entity_edge.uuid)
+
+    # Verify results
+    assert len(results) == 1
+    result = results[0]
+
+    # The edge properties should contain source_node_uuid and target_node_uuid
+    assert result['stored_source_uuid'] == alice_node.uuid
+    assert result['stored_target_uuid'] == bob_node.uuid
+
+    # Cleanup
+    await entity_edge.delete(graph_driver)
+    await alice_node.delete(graph_driver)
+    await bob_node.delete(graph_driver)
+    await graph_driver.close()

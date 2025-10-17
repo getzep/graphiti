@@ -286,6 +286,8 @@ class EntityEdge(Edge):
         edge_data: dict[str, Any] = {
             'source_uuid': self.source_node_uuid,
             'target_uuid': self.target_node_uuid,
+            'source_node_uuid': self.source_node_uuid,
+            'target_node_uuid': self.target_node_uuid,
             'uuid': self.uuid,
             'name': self.name,
             'group_id': self.group_id,
