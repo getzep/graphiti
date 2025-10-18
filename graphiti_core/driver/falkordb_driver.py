@@ -13,9 +13,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import asyncio
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -34,11 +34,50 @@ else:
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
+STOPWORDS = [
+    'a',
+    'is',
+    'the',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'but',
+    'by',
+    'for',
+    'if',
+    'in',
+    'into',
+    'it',
+    'no',
+    'not',
+    'of',
+    'on',
+    'or',
+    'such',
+    'that',
+    'their',
+    'then',
+    'there',
+    'these',
+    'they',
+    'this',
+    'to',
+    'was',
+    'will',
+    'with',
+]
+
 
 class FalkorDriverSession(GraphDriverSession):
+    provider = GraphProvider.FALKORDB
+
     def __init__(self, graph: FalkorGraph):
         self.graph = graph
 
@@ -75,6 +114,7 @@ class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
     default_group_id: str = '\\_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
+    aoss_client: None = None
 
     def __init__(
         self,
@@ -170,9 +210,36 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.close()
 
     async def delete_all_indexes(self) -> None:
-        await self.execute_query(
-            'CALL db.indexes() YIELD name DROP INDEX name',
-        )
+        result = await self.execute_query('CALL db.indexes()')
+        if not result:
+            return
+
+        records, _, _ = result
+        drop_tasks = []
+
+        for record in records:
+            label = record['label']
+            entity_type = record['entitytype']
+
+            for field_name, index_type in record['types'].items():
+                if 'RANGE' in index_type:
+                    drop_tasks.append(self.execute_query(f'DROP INDEX ON :{label}({field_name})'))
+                elif 'FULLTEXT' in index_type:
+                    if entity_type == 'NODE':
+                        drop_tasks.append(
+                            self.execute_query(
+                                f'DROP FULLTEXT INDEX FOR (n:{label}) ON (n.{field_name})'
+                            )
+                        )
+                    elif entity_type == 'RELATIONSHIP':
+                        drop_tasks.append(
+                            self.execute_query(
+                                f'DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field_name})'
+                            )
+                        )
+
+        if drop_tasks:
+            await asyncio.gather(*drop_tasks)
 
     async def build_indices_and_constraints(self, delete_existing=False):
         if delete_existing:
@@ -196,15 +263,77 @@ class FalkorDriver(GraphDriver):
         
         return cloned
 
+    def sanitize(self, query: str) -> str:
+        """
+        Replace FalkorDB special characters with whitespace.
+        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~
+        """
+        # FalkorDB separator characters that break text into tokens
+        separator_map = str.maketrans(
+            {
+                ',': ' ',
+                '.': ' ',
+                '<': ' ',
+                '>': ' ',
+                '{': ' ',
+                '}': ' ',
+                '[': ' ',
+                ']': ' ',
+                '"': ' ',
+                "'": ' ',
+                ':': ' ',
+                ';': ' ',
+                '!': ' ',
+                '@': ' ',
+                '#': ' ',
+                '$': ' ',
+                '%': ' ',
+                '^': ' ',
+                '&': ' ',
+                '*': ' ',
+                '(': ' ',
+                ')': ' ',
+                '-': ' ',
+                '+': ' ',
+                '=': ' ',
+                '~': ' ',
+                '?': ' ',
+            }
+        )
+        sanitized = query.translate(separator_map)
+        # Clean up multiple spaces
+        sanitized = ' '.join(sanitized.split())
+        return sanitized
 
-def convert_datetimes_to_strings(obj):
-    if isinstance(obj, dict):
-        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_datetimes_to_strings(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_datetimes_to_strings(item) for item in obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    else:
-        return obj
+    def build_fulltext_query(
+        self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
+    ) -> str:
+        """
+        Build a fulltext query string for FalkorDB using RedisSearch syntax.
+        FalkorDB uses RedisSearch-like syntax where:
+        - Field queries use @ prefix: @field:value
+        - Multiple values for same field: (@field:value1|value2)
+        - Text search doesn't need @ prefix for content fields
+        - AND is implicit with space: (@group_id:value) (text)
+        - OR uses pipe within parentheses: (@group_id:value1|value2)
+        """
+        if group_ids is None or len(group_ids) == 0:
+            group_filter = ''
+        else:
+            group_values = '|'.join(group_ids)
+            group_filter = f'(@group_id:{group_values})'
+
+        sanitized_query = self.sanitize(query)
+
+        # Remove stopwords from the sanitized query
+        query_words = sanitized_query.split()
+        filtered_words = [word for word in query_words if word.lower() not in STOPWORDS]
+        sanitized_query = ' | '.join(filtered_words)
+
+        # If the query is too long return no query
+        if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+            return ''
+
+        full_query = group_filter + ' (' + sanitized_query + ')'
+
+        return full_query

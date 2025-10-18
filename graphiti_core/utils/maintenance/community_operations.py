@@ -4,11 +4,12 @@ from collections import defaultdict
 
 from pydantic import BaseModel
 
-from graphiti_core.driver.driver import GraphDriver
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
 from graphiti_core.edges import CommunityEdge
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
+from graphiti_core.models.nodes.node_db_queries import COMMUNITY_NODE_RETURN
 from graphiti_core.nodes import CommunityNode, EntityNode, get_community_node_from_record
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.summarize_nodes import Summary, SummaryDescription
@@ -33,10 +34,11 @@ async def get_community_clusters(
     if group_ids is None:
         group_id_values, _, _ = await driver.execute_query(
             """
-        MATCH (n:Entity WHERE n.group_id IS NOT NULL)
-        RETURN
-            collect(DISTINCT n.group_id) AS group_ids
-        """,
+            MATCH (n:Entity)
+            WHERE n.group_id IS NOT NULL
+            RETURN
+                collect(DISTINCT n.group_id) AS group_ids
+            """
         )
 
         group_ids = group_id_values[0]['group_ids'] if group_id_values else []
@@ -45,14 +47,21 @@ async def get_community_clusters(
         projection: dict[str, list[Neighbor]] = {}
         nodes = await EntityNode.get_by_group_ids(driver, [group_id])
         for node in nodes:
-            records, _, _ = await driver.execute_query(
+            match_query = """
+                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
+            """
+            if driver.provider == GraphProvider.KUZU:
+                match_query = """
+                MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
                 """
-            MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[r:RELATES_TO]-(m: Entity {group_id: $group_id})
-            WITH count(r) AS count, m.uuid AS uuid
-            RETURN
-                uuid,
-                count
-            """,
+            records, _, _ = await driver.execute_query(
+                match_query
+                + """
+                WITH count(e) AS count, m.uuid AS uuid
+                RETURN
+                    uuid,
+                    count
+                """,
                 uuid=node.uuid,
                 group_id=group_id,
             )
@@ -122,17 +131,16 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
     return clusters
 
 
-async def summarize_pair(
-    llm_client: LLMClient, summary_pair: tuple[str, str], ensure_ascii: bool = True
-) -> str:
+async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
     # Prepare context for LLM
     context = {
         'node_summaries': [{'summary': summary} for summary in summary_pair],
-        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
-        prompt_library.summarize_nodes.summarize_pair(context), response_model=Summary
+        prompt_library.summarize_nodes.summarize_pair(context),
+        response_model=Summary,
+        prompt_name='summarize_nodes.summarize_pair',
     )
 
     pair_summary = llm_response.get('summary', '')
@@ -140,17 +148,15 @@ async def summarize_pair(
     return pair_summary
 
 
-async def generate_summary_description(
-    llm_client: LLMClient, summary: str, ensure_ascii: bool = True
-) -> str:
+async def generate_summary_description(llm_client: LLMClient, summary: str) -> str:
     context = {
         'summary': summary,
-        'ensure_ascii': ensure_ascii,
     }
 
     llm_response = await llm_client.generate_response(
         prompt_library.summarize_nodes.summary_description(context),
         response_model=SummaryDescription,
+        prompt_name='summarize_nodes.summary_description',
     )
 
     description = llm_response.get('description', '')
@@ -159,7 +165,7 @@ async def generate_summary_description(
 
 
 async def build_community(
-    llm_client: LLMClient, community_cluster: list[EntityNode], ensure_ascii: bool = True
+    llm_client: LLMClient, community_cluster: list[EntityNode]
 ) -> tuple[CommunityNode, list[CommunityEdge]]:
     summaries = [entity.summary for entity in community_cluster]
     length = len(summaries)
@@ -171,9 +177,7 @@ async def build_community(
         new_summaries: list[str] = list(
             await semaphore_gather(
                 *[
-                    summarize_pair(
-                        llm_client, (str(left_summary), str(right_summary)), ensure_ascii
-                    )
+                    summarize_pair(llm_client, (str(left_summary), str(right_summary)))
                     for left_summary, right_summary in zip(
                         summaries[: int(length / 2)], summaries[int(length / 2) :], strict=False
                     )
@@ -186,7 +190,7 @@ async def build_community(
         length = len(summaries)
 
     summary = summaries[0]
-    name = await generate_summary_description(llm_client, summary, ensure_ascii)
+    name = await generate_summary_description(llm_client, summary)
     now = utc_now()
     community_node = CommunityNode(
         name=name,
@@ -206,7 +210,6 @@ async def build_communities(
     driver: GraphDriver,
     llm_client: LLMClient,
     group_ids: list[str] | None,
-    ensure_ascii: bool = True,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community_clusters = await get_community_clusters(driver, group_ids)
 
@@ -214,7 +217,7 @@ async def build_communities(
 
     async def limited_build_community(cluster):
         async with semaphore:
-            return await build_community(llm_client, cluster, ensure_ascii)
+            return await build_community(llm_client, cluster)
 
     communities: list[tuple[CommunityNode, list[CommunityEdge]]] = list(
         await semaphore_gather(
@@ -234,9 +237,9 @@ async def build_communities(
 async def remove_communities(driver: GraphDriver):
     await driver.execute_query(
         """
-    MATCH (c:Community)
-    DETACH DELETE c
-    """,
+        MATCH (c:Community)
+        DETACH DELETE c
+        """
     )
 
 
@@ -246,14 +249,10 @@ async def determine_entity_community(
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
         """
-    MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid AS uuid,
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at,
-        c.summary AS summary
-    """,
+        MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
+        RETURN
+        """
+        + COMMUNITY_NODE_RETURN,
         entity_uuid=entity.uuid,
     )
 
@@ -261,16 +260,19 @@ async def determine_entity_community(
         return get_community_node_from_record(records[0]), False
 
     # If the node has no community, add it to the mode community of surrounding entities
-    records, _, _ = await driver.execute_query(
+    match_query = """
+        MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+    """
+    if driver.provider == GraphProvider.KUZU:
+        match_query = """
+            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
         """
-    MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
-    RETURN
-        c.uuid AS uuid,
-        c.name AS name,
-        c.group_id AS group_id,
-        c.created_at AS created_at,
-        c.summary AS summary
-    """,
+    records, _, _ = await driver.execute_query(
+        match_query
+        + """
+        RETURN
+        """
+        + COMMUNITY_NODE_RETURN,
         entity_uuid=entity.uuid,
     )
 
@@ -304,17 +306,14 @@ async def update_community(
     llm_client: LLMClient,
     embedder: EmbedderClient,
     entity: EntityNode,
-    ensure_ascii: bool = True,
 ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
     community, is_new = await determine_entity_community(driver, entity)
 
     if community is None:
         return [], []
 
-    new_summary = await summarize_pair(
-        llm_client, (entity.summary, community.summary), ensure_ascii
-    )
-    new_name = await generate_summary_description(llm_client, new_summary, ensure_ascii)
+    new_summary = await summarize_pair(llm_client, (entity.summary, community.summary))
+    new_name = await generate_summary_description(llm_client, new_summary)
 
     community.summary = new_summary
     community.name = new_name
