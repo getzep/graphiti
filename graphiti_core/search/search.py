@@ -74,10 +74,11 @@ async def search(
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
     query_vector: list[float] | None = None,
+    driver: GraphDriver | None = None,
 ) -> SearchResults:
     start = time()
 
-    driver = clients.driver
+    driver = driver or clients.driver
     embedder = clients.embedder
     cross_encoder = clients.cross_encoder
 

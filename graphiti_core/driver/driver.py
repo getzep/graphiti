@@ -76,6 +76,7 @@ class GraphDriver(ABC):
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )
     _database: str
+    default_group_id: str = ''
     search_interface: SearchInterface | None = None
     graph_operations_interface: GraphOperationsInterface | None = None
 
@@ -104,6 +105,14 @@ class GraphDriver(ABC):
         cloned._database = database
 
         return cloned
+
+    @abstractmethod
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        raise NotImplementedError()
+
+    def clone(self, database: str) -> 'GraphDriver':
+        """Clone the driver with a different database or graph name."""
+        return self
 
     def build_fulltext_query(
         self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
