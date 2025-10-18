@@ -45,9 +45,10 @@ class Neo4jDriver(GraphDriver):
             auth=(user or '', password or ''),
         )
         self._database = database
-        
+
         # Schedule the indices and constraints to be built
         import asyncio
+
         try:
             # Try to get the current event loop
             loop = asyncio.get_running_loop()

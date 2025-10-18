@@ -609,7 +609,7 @@ class Graphiti:
         """
         if driver is None:
             driver = self.clients.driver
-        
+
         return await retrieve_episodes(driver, reference_time, last_n, group_ids, source)
 
     async def add_episode(
@@ -688,7 +688,7 @@ class Graphiti:
 
         validate_entity_types(entity_types)
         validate_excluded_entity_types(excluded_entity_types, entity_types)
-        
+
         if group_id is None:
             # if group_id is None, use the default group id by the provider
             # and the preset database name will be used
@@ -1012,8 +1012,7 @@ class Graphiti:
 
     @handle_multiple_group_ids
     async def build_communities(
-        self, group_ids: list[str] | None = None,
-        driver: GraphDriver | None = None
+        self, group_ids: list[str] | None = None, driver: GraphDriver | None = None
     ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
         """
         Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
@@ -1056,7 +1055,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
         search_filter: SearchFilters | None = None,
-        driver: GraphDriver | None = None
+        driver: GraphDriver | None = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -1104,7 +1103,7 @@ class Graphiti:
                 search_config,
                 search_filter if search_filter is not None else SearchFilters(),
                 driver=driver,
-                center_node_uuid=center_node_uuid
+                center_node_uuid=center_node_uuid,
             )
         ).edges
 
@@ -1133,7 +1132,7 @@ class Graphiti:
         center_node_uuid: str | None = None,
         bfs_origin_node_uuids: list[str] | None = None,
         search_filter: SearchFilters | None = None,
-        driver: GraphDriver | None = None
+        driver: GraphDriver | None = None,
     ) -> SearchResults:
         """search_ (replaces _search) is our advanced search method that returns Graph objects (nodes and edges) rather
         than a list of facts. This endpoint allows the end user to utilize more advanced features such as filters and
@@ -1150,7 +1149,7 @@ class Graphiti:
             search_filter if search_filter is not None else SearchFilters(),
             center_node_uuid,
             bfs_origin_node_uuids,
-            driver=driver
+            driver=driver,
         )
 
     async def get_nodes_and_edges_by_episode(self, episode_uuids: list[str]) -> SearchResults:

@@ -132,12 +132,12 @@ class SearchResults(BaseModel):
     def merge(cls, results_list: list['SearchResults']) -> 'SearchResults':
         """
         Merge multiple SearchResults objects into a single SearchResults object.
-        
+
         Parameters
         ----------
         results_list : list[SearchResults]
             List of SearchResults objects to merge
-            
+
         Returns
         -------
         SearchResults
@@ -145,7 +145,7 @@ class SearchResults(BaseModel):
         """
         if not results_list:
             return cls()
-        
+
         merged = cls()
         for result in results_list:
             merged.edges.extend(result.edges)
@@ -156,5 +156,5 @@ class SearchResults(BaseModel):
             merged.episode_reranker_scores.extend(result.episode_reranker_scores)
             merged.communities.extend(result.communities)
             merged.community_reranker_scores.extend(result.community_reranker_scores)
-        
+
         return merged

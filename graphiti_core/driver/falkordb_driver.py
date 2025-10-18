@@ -260,7 +260,7 @@ class FalkorDriver(GraphDriver):
         else:
             # Create a new instance of FalkorDriver with the same connection but a different database
             cloned = FalkorDriver(falkor_db=self.client, database=database)
-        
+
         return cloned
 
     def sanitize(self, query: str) -> str:

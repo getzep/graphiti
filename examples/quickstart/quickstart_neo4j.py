@@ -67,7 +67,6 @@ async def main():
     graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
 
     try:
-
         #################################################
         # ADDING EPISODES
         #################################################

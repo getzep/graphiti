@@ -20,8 +20,6 @@ from datetime import datetime
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_RETURN_NEPTUNE,
