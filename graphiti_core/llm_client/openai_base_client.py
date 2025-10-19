@@ -25,14 +25,16 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-4.1-mini'
-DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
+DEFAULT_MODEL = 'gpt-5-mini'
+DEFAULT_SMALL_MODEL = 'gpt-5-nano'
+DEFAULT_REASONING = 'minimal'
+DEFAULT_VERBOSITY = 'low'
 
 
 class BaseOpenAIClient(LLMClient):
@@ -51,6 +53,8 @@ class BaseOpenAIClient(LLMClient):
         config: LLMConfig | None = None,
         cache: bool = False,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        reasoning: str | None = DEFAULT_REASONING,
+        verbosity: str | None = DEFAULT_VERBOSITY,
     ):
         if cache:
             raise NotImplementedError('Caching is not implemented for OpenAI-based clients')
@@ -60,6 +64,8 @@ class BaseOpenAIClient(LLMClient):
 
         super().__init__(config, cache)
         self.max_tokens = max_tokens
+        self.reasoning = reasoning
+        self.verbosity = verbosity
 
     @abstractmethod
     async def _create_completion(
@@ -81,6 +87,8 @@ class BaseOpenAIClient(LLMClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
+        reasoning: str | None,
+        verbosity: str | None,
     ) -> Any:
         """Create a structured completion using the specific client implementation."""
         pass
@@ -107,10 +115,10 @@ class BaseOpenAIClient(LLMClient):
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation."""
-        response_object = response.choices[0].message
+        response_object = response.output_text
 
-        if response_object.parsed:
-            return response_object.parsed.model_dump()
+        if response_object:
+            return json.loads(response_object)
         elif response_object.refusal:
             raise RefusalError(response_object.refusal)
         else:
@@ -140,6 +148,8 @@ class BaseOpenAIClient(LLMClient):
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
                     response_model=response_model,
+                    reasoning=self.reasoning,
+                    verbosity=self.verbosity,
                 )
                 return self._handle_structured_response(response)
             else:
@@ -165,53 +175,75 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling."""
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        retry_count = 0
-        last_error = None
-
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction(group_id)
 
-        while retry_count <= self.MAX_RETRIES:
-            try:
-                response = await self._generate_response(
-                    messages, response_model, max_tokens, model_size
-                )
-                return response
-            except (RateLimitError, RefusalError):
-                # These errors should not trigger retries
-                raise
-            except (openai.APITimeoutError, openai.APIConnectionError, openai.InternalServerError):
-                # Let OpenAI's client handle these retries
-                raise
-            except Exception as e:
-                last_error = e
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            attributes = {
+                'llm.provider': 'openai',
+                'model.size': model_size.value,
+                'max_tokens': max_tokens,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
-                # Don't retry if we've hit the max retries
-                if retry_count >= self.MAX_RETRIES:
-                    logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+            retry_count = 0
+            last_error = None
+
+            while retry_count <= self.MAX_RETRIES:
+                try:
+                    response = await self._generate_response(
+                        messages, response_model, max_tokens, model_size
+                    )
+                    return response
+                except (RateLimitError, RefusalError):
+                    # These errors should not trigger retries
+                    span.set_status('error', str(last_error))
                     raise
+                except (
+                    openai.APITimeoutError,
+                    openai.APIConnectionError,
+                    openai.InternalServerError,
+                ):
+                    # Let OpenAI's client handle these retries
+                    span.set_status('error', str(last_error))
+                    raise
+                except Exception as e:
+                    last_error = e
 
-                retry_count += 1
+                    # Don't retry if we've hit the max retries
+                    if retry_count >= self.MAX_RETRIES:
+                        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+                        span.set_status('error', str(e))
+                        span.record_exception(e)
+                        raise
 
-                # Construct a detailed error message for the LLM
-                error_context = (
-                    f'The previous response attempt was invalid. '
-                    f'Error type: {e.__class__.__name__}. '
-                    f'Error details: {str(e)}. '
-                    f'Please try again with a valid response, ensuring the output matches '
-                    f'the expected format and constraints.'
-                )
+                    retry_count += 1
 
-                error_message = Message(role='user', content=error_context)
-                messages.append(error_message)
-                logger.warning(
-                    f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
-                )
+                    # Construct a detailed error message for the LLM
+                    error_context = (
+                        f'The previous response attempt was invalid. '
+                        f'Error type: {e.__class__.__name__}. '
+                        f'Error details: {str(e)}. '
+                        f'Please try again with a valid response, ensuring the output matches '
+                        f'the expected format and constraints.'
+                    )
 
-        # If we somehow get here, raise the last error
-        raise last_error or Exception('Max retries exceeded with no specific error')
+                    error_message = Message(role='user', content=error_context)
+                    messages.append(error_message)
+                    logger.warning(
+                        f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
+                    )
+
+            # If we somehow get here, raise the last error
+            span.set_status('error', str(last_error))
+            raise last_error or Exception('Max retries exceeded with no specific error')

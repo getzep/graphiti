@@ -18,8 +18,6 @@ import pytest
 
 from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
 
-pytestmark = pytest.mark.integration
-
 
 @pytest.fixture
 def client():
@@ -27,7 +25,6 @@ def client():
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
 async def test_rank_basic_functionality(client):
     query = 'What is the capital of France?'
     passages = [
@@ -56,7 +53,6 @@ async def test_rank_basic_functionality(client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
 async def test_rank_empty_input(client):
     query = 'Empty test'
     passages = []
@@ -68,7 +64,6 @@ async def test_rank_empty_input(client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
 async def test_rank_single_passage(client):
     query = 'Test query'
     passages = ['Single test passage']

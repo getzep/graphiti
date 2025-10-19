@@ -265,6 +265,8 @@ class AnthropicClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -285,55 +287,72 @@ class AnthropicClient(LLMClient):
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        retry_count = 0
-        max_retries = 2
-        last_error: Exception | None = None
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            attributes = {
+                'llm.provider': 'anthropic',
+                'model.size': model_size.value,
+                'max_tokens': max_tokens,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
-        while retry_count <= max_retries:
-            try:
-                response = await self._generate_response(
-                    messages, response_model, max_tokens, model_size
-                )
+            retry_count = 0
+            max_retries = 2
+            last_error: Exception | None = None
 
-                # If we have a response_model, attempt to validate the response
-                if response_model is not None:
-                    # Validate the response against the response_model
-                    model_instance = response_model(**response)
-                    return model_instance.model_dump()
-
-                # If no validation needed, return the response
-                return response
-
-            except (RateLimitError, RefusalError):
-                # These errors should not trigger retries
-                raise
-            except Exception as e:
-                last_error = e
-
-                if retry_count >= max_retries:
-                    if isinstance(e, ValidationError):
-                        logger.error(
-                            f'Validation error after {retry_count}/{max_retries} attempts: {e}'
-                        )
-                    else:
-                        logger.error(f'Max retries ({max_retries}) exceeded. Last error: {e}')
-                    raise e
-
-                if isinstance(e, ValidationError):
-                    response_model_cast = typing.cast(type[BaseModel], response_model)
-                    error_context = f'The previous response was invalid. Please provide a valid {response_model_cast.__name__} object. Error: {e}'
-                else:
-                    error_context = (
-                        f'The previous response attempt was invalid. '
-                        f'Error type: {e.__class__.__name__}. '
-                        f'Error details: {str(e)}. '
-                        f'Please try again with a valid response.'
+            while retry_count <= max_retries:
+                try:
+                    response = await self._generate_response(
+                        messages, response_model, max_tokens, model_size
                     )
 
-                # Common retry logic
-                retry_count += 1
-                messages.append(Message(role='user', content=error_context))
-                logger.warning(f'Retrying after error (attempt {retry_count}/{max_retries}): {e}')
+                    # If we have a response_model, attempt to validate the response
+                    if response_model is not None:
+                        # Validate the response against the response_model
+                        model_instance = response_model(**response)
+                        return model_instance.model_dump()
 
-        # If we somehow get here, raise the last error
-        raise last_error or Exception('Max retries exceeded with no specific error')
+                    # If no validation needed, return the response
+                    return response
+
+                except (RateLimitError, RefusalError):
+                    # These errors should not trigger retries
+                    span.set_status('error', str(last_error))
+                    raise
+                except Exception as e:
+                    last_error = e
+
+                    if retry_count >= max_retries:
+                        if isinstance(e, ValidationError):
+                            logger.error(
+                                f'Validation error after {retry_count}/{max_retries} attempts: {e}'
+                            )
+                        else:
+                            logger.error(f'Max retries ({max_retries}) exceeded. Last error: {e}')
+                        span.set_status('error', str(e))
+                        span.record_exception(e)
+                        raise e
+
+                    if isinstance(e, ValidationError):
+                        response_model_cast = typing.cast(type[BaseModel], response_model)
+                        error_context = f'The previous response was invalid. Please provide a valid {response_model_cast.__name__} object. Error: {e}'
+                    else:
+                        error_context = (
+                            f'The previous response attempt was invalid. '
+                            f'Error type: {e.__class__.__name__}. '
+                            f'Error details: {str(e)}. '
+                            f'Please try again with a valid response.'
+                        )
+
+                    # Common retry logic
+                    retry_count += 1
+                    messages.append(Message(role='user', content=error_context))
+                    logger.warning(
+                        f'Retrying after error (attempt {retry_count}/{max_retries}): {e}'
+                    )
+
+            # If we somehow get here, raise the last error
+            span.set_status('error', str(last_error))
+            raise last_error or Exception('Max retries exceeded with no specific error')

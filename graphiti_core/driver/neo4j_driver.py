@@ -29,13 +29,21 @@ logger = logging.getLogger(__name__)
 class Neo4jDriver(GraphDriver):
     provider = GraphProvider.NEO4J
 
-    def __init__(self, uri: str, user: str | None, password: str | None, database: str = 'neo4j'):
+    def __init__(
+        self,
+        uri: str,
+        user: str | None,
+        password: str | None,
+        database: str = 'neo4j',
+    ):
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
             auth=(user or '', password or ''),
         )
         self._database = database
+
+        self.aoss_client = None
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         # Check if database_ is provided in kwargs.
@@ -60,7 +68,7 @@ class Neo4jDriver(GraphDriver):
     async def close(self) -> None:
         return await self.client.close()
 
-    def delete_all_indexes(self) -> Coroutine[Any, Any, EagerResult]:
+    def delete_all_indexes(self) -> Coroutine:
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )

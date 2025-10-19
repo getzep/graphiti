@@ -40,3 +40,16 @@ def ensure_utc(dt: datetime | None) -> datetime | None:
         return dt.astimezone(timezone.utc)
 
     return dt
+
+
+def convert_datetimes_to_strings(obj):
+    if isinstance(obj, dict):
+        return {k: convert_datetimes_to_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetimes_to_strings(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_datetimes_to_strings(item) for item in obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj

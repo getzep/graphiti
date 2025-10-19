@@ -209,9 +209,12 @@ class TestFalkorDriver:
     async def test_delete_all_indexes(self):
         """Test delete_all_indexes method."""
         with patch.object(self.driver, 'execute_query', new_callable=AsyncMock) as mock_execute:
+            # Return None to simulate no indexes found
+            mock_execute.return_value = None
+
             await self.driver.delete_all_indexes()
 
-            mock_execute.assert_called_once_with('CALL db.indexes() YIELD name DROP INDEX name')
+            mock_execute.assert_called_once_with('CALL db.indexes()')
 
 
 class TestFalkorDriverSession:
@@ -363,7 +366,6 @@ class TestDatetimeConversion:
 class TestFalkorDriverIntegration:
     """Simple integration test for FalkorDB driver."""
 
-    @pytest.mark.integration
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     async def test_basic_integration_with_real_falkordb(self):

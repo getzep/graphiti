@@ -31,9 +31,15 @@ Graphiti
 <br />
 
 > [!TIP]
-> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful Knowledge Graph-based memory.
+> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful
+> Knowledge Graph-based memory.
 
-Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
+Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents
+operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti
+continuously integrates user interactions, structured and unstructured enterprise data, and external information into a
+coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical
+queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI
+applications.
 
 Use Graphiti to:
 
@@ -44,19 +50,21 @@ Use Graphiti to:
 <br />
 
 <p align="center">
-    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">   
+    <img src="images/graphiti-graph-intro.gif" alt="Graphiti temporal walkthrough" width="700px">
 </p>
 
 <br />
 
-A knowledge graph is a network of interconnected facts, such as _"Kendra loves Adidas shoes."_ Each fact is a "triplet" represented by two entities, or
+A knowledge graph is a network of interconnected facts, such as _"Kendra loves Adidas shoes."_ Each fact is a "triplet"
+represented by two entities, or
 nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Knowledge Graphs have been explored
 extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
 while handling changing relationships and maintaining historical context.
 
 ## Graphiti and Zep's Context Engineering Platform.
 
-Graphiti powers the core of [Zep](https://www.getzep.com), a turn-key context engineering platform for AI Agents. Zep offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
+Graphiti powers the core of [Zep](https://www.getzep.com), a turn-key context engineering platform for AI Agents. Zep
+offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
 
 Using Graphiti, we've demonstrated Zep is
 the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
@@ -71,22 +79,26 @@ We're excited to open-source Graphiti, believing its potential reaches far beyon
 
 ## Why Graphiti?
 
-Traditional RAG approaches often rely on batch processing and static data summarization, making them inefficient for frequently changing data. Graphiti addresses these challenges by providing:
+Traditional RAG approaches often rely on batch processing and static data summarization, making them inefficient for
+frequently changing data. Graphiti addresses these challenges by providing:
 
 - **Real-Time Incremental Updates:** Immediate integration of new data episodes without batch recomputation.
-- **Bi-Temporal Data Model:** Explicit tracking of event occurrence and ingestion times, allowing accurate point-in-time queries.
-- **Efficient Hybrid Retrieval:** Combines semantic embeddings, keyword (BM25), and graph traversal to achieve low-latency queries without reliance on LLM summarization.
-- **Custom Entity Definitions:** Flexible ontology creation and support for developer-defined entities through straightforward Pydantic models.
+- **Bi-Temporal Data Model:** Explicit tracking of event occurrence and ingestion times, allowing accurate point-in-time
+  queries.
+- **Efficient Hybrid Retrieval:** Combines semantic embeddings, keyword (BM25), and graph traversal to achieve
+  low-latency queries without reliance on LLM summarization.
+- **Custom Entity Definitions:** Flexible ontology creation and support for developer-defined entities through
+  straightforward Pydantic models.
 - **Scalability:** Efficiently manages large datasets with parallel processing, suitable for enterprise environments.
 
 <p align="center">
-    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
+    <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">
 </p>
 
 ## Graphiti vs. GraphRAG
 
 | Aspect                     | GraphRAG                              | Graphiti                                         |
-| -------------------------- | ------------------------------------- | ------------------------------------------------ |
+|----------------------------|---------------------------------------|--------------------------------------------------|
 | **Primary Use**            | Static document summarization         | Dynamic data management                          |
 | **Data Handling**          | Batch-oriented processing             | Continuous, incremental updates                  |
 | **Knowledge Structure**    | Entity clusters & community summaries | Episodic data, semantic entities, communities    |
@@ -98,14 +110,16 @@ Traditional RAG approaches often rely on batch processing and static data summar
 | **Custom Entity Types**    | No                                    | Yes, customizable                                |
 | **Scalability**            | Moderate                              | High, optimized for large datasets               |
 
-Graphiti is specifically designed to address the challenges of dynamic and frequently updated datasets, making it particularly suitable for applications requiring real-time interaction and precise historical queries.
+Graphiti is specifically designed to address the challenges of dynamic and frequently updated datasets, making it
+particularly suitable for applications requiring real-time interaction and precise historical queries.
 
 ## Installation
 
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 or higher (serves as the embeddings storage backend)
+- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
+  OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
 > [!IMPORTANT]
@@ -148,6 +162,28 @@ pip install graphiti-core[falkordb]
 uv add graphiti-core[falkordb]
 ```
 
+### Installing with Kuzu Support
+
+If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
+
+```bash
+pip install graphiti-core[kuzu]
+
+# or with uv
+uv add graphiti-core[kuzu]
+```
+
+### Installing with Amazon Neptune Support
+
+If you plan to use Amazon Neptune as your graph database backend, install with the Amazon Neptune extra:
+
+```bash
+pip install graphiti-core[neptune]
+
+# or with uv
+uv add graphiti-core[neptune]
+```
+
 ### You can also install optional LLM providers as extras:
 
 ```bash
@@ -165,37 +201,48 @@ pip install graphiti-core[anthropic,groq,google-genai]
 
 # Install with FalkorDB and LLM providers
 pip install graphiti-core[falkordb,anthropic,google-genai]
+
+# Install with Amazon Neptune
+pip install graphiti-core[neptune]
 ```
 
 ## Default to Low Concurrency; LLM Provider 429 Rate Limit Errors
 
-Graphiti's ingestion pipelines are designed for high concurrency. By default, concurrency is set low to avoid LLM Provider 429 Rate Limit Errors. If you find Graphiti slow, please increase concurrency as described below.
+Graphiti's ingestion pipelines are designed for high concurrency. By default, concurrency is set low to avoid LLM
+Provider 429 Rate Limit Errors. If you find Graphiti slow, please increase concurrency as described below.
 
-Concurrency controlled by the `SEMAPHORE_LIMIT` environment variable. By default, `SEMAPHORE_LIMIT` is set to `10` concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try lowering this value.
+Concurrency controlled by the `SEMAPHORE_LIMIT` environment variable. By default, `SEMAPHORE_LIMIT` is set to `10`
+concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try
+lowering this value.
 
-If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion performance.
+If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion
+performance.
 
 ## Quick Start
 
 > [!IMPORTANT]
-> Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your environment.
+> Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
+> environment.
 > Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
 > compatible APIs.
 
-For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory. The quickstart demonstrates:
+For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory.
+The quickstart demonstrates:
 
-1. Connecting to a Neo4j or FalkorDB database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
 5. Reranking search results using graph distance
 6. Searching for nodes using predefined search recipes
 
-The example is fully documented with clear explanations of each functionality and includes a comprehensive README with setup instructions and next steps.
+The example is fully documented with clear explanations of each functionality and includes a comprehensive README with
+setup instructions and next steps.
 
 ## MCP Server
 
-The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server allows AI assistants to interact with Graphiti's knowledge graph capabilities through the MCP protocol.
+The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
+allows AI assistants to interact with Graphiti's knowledge graph capabilities through the MCP protocol.
 
 Key features of the MCP server include:
 
@@ -205,7 +252,8 @@ Key features of the MCP server include:
 - Group management for organizing related data
 - Graph maintenance operations
 
-The MCP server can be deployed using Docker with Neo4j, making it easy to integrate Graphiti into your AI assistant workflows.
+The MCP server can be deployed using Docker with Neo4j, making it easy to integrate Graphiti into your AI assistant
+workflows.
 
 For detailed setup instructions and usage examples, see the [MCP server README](./mcp_server/README.md).
 
@@ -228,7 +276,8 @@ Database names are configured directly in the driver constructors:
 - **Neo4j**: Database name defaults to `neo4j` (hardcoded in Neo4jDriver)
 - **FalkorDB**: Database name defaults to `default_db` (hardcoded in FalkorDriver)
 
-As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it to the Graphiti constructor using the `graph_driver` parameter.
+As of v0.17.0, if you need to customize your database configuration, you can instantiate a database driver and pass it
+to the Graphiti constructor using the `graph_driver` parameter.
 
 #### Neo4j with Custom Database Name
 
@@ -267,17 +316,57 @@ driver = FalkorDriver(
 graphiti = Graphiti(graph_driver=driver)
 ```
 
+#### Kuzu
 
-### Performance Configuration
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.kuzu_driver import KuzuDriver
 
-`USE_PARALLEL_RUNTIME` is an optional boolean variable that can be set to true if you wish
-to enable Neo4j's parallel runtime feature for several of our search queries.
-Note that this feature is not supported for Neo4j Community edition or for smaller AuraDB instances,
-as such this feature is off by default.
+# Create a Kuzu driver
+driver = KuzuDriver(db="/tmp/graphiti.kuzu")
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
+#### Amazon Neptune
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+# Create a FalkorDB driver with custom database name
+driver = NeptuneDriver(
+    host= < NEPTUNE
+ENDPOINT >,
+aoss_host = < Amazon
+OpenSearch
+Serverless
+Host >,
+port = < PORT >  # Optional, defaults to 8182,
+         aoss_port = < PORT >  # Optional, defaults to 443
+)
+
+driver = NeptuneDriver(host=neptune_uri, aoss_host=aoss_host, port=neptune_port)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
 
 ## Using Graphiti with Azure OpenAI
 
-Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different endpoints for LLM and embedding services, and separate deployments for default and small models.
+Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different
+endpoints for LLM and embedding services, and separate deployments for default and small models.
+
+> [!IMPORTANT]
+> **Azure OpenAI v1 API Opt-in Required for Structured Outputs**
+>
+> Graphiti uses structured outputs via the `client.beta.chat.completions.parse()` method, which requires Azure OpenAI
+> deployments to opt into the v1 API. Without this opt-in, you'll encounter 404 Resource not found errors during episode
+> ingestion.
+>
+> To enable v1 API support in your Azure OpenAI deployment, follow Microsoft's
+> guide: [Azure OpenAI API version lifecycle](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=key#api-evolution).
 
 ```python
 from openai import AsyncAzureOpenAI
@@ -337,11 +426,13 @@ graphiti = Graphiti(
 # Now you can use Graphiti with Azure OpenAI
 ```
 
-Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names that match your Azure OpenAI service configuration.
+Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names that match
+your Azure OpenAI service configuration.
 
 ## Using Graphiti with Google Gemini
 
-Graphiti supports Google's Gemini models for LLM inference, embeddings, and cross-encoding/reranking. To use Gemini, you'll need to configure the LLM client, embedder, and the cross-encoder with your Google API key.
+Graphiti supports Google's Gemini models for LLM inference, embeddings, and cross-encoding/reranking. To use Gemini,
+you'll need to configure the LLM client, embedder, and the cross-encoder with your Google API key.
 
 Install Graphiti:
 
@@ -390,32 +481,38 @@ graphiti = Graphiti(
 # Now you can use Graphiti with Google Gemini for all components
 ```
 
-The Gemini reranker uses the `gemini-2.5-flash-lite-preview-06-17` model by default, which is optimized for cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
+The Gemini reranker uses the `gemini-2.5-flash-lite-preview-06-17` model by default, which is optimized for
+cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI
+reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
 ## Using Graphiti with Ollama (Local LLM)
 
-Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal for privacy-focused applications or when you want to avoid API costs.
+Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
+for privacy-focused applications or when you want to avoid API costs.
 
 Install the models:
+
+```bash
 ollama pull deepseek-r1:7b # LLM
 ollama pull nomic-embed-text # embeddings
+```
 
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.openai_client import OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
 # Configure Ollama LLM client
 llm_config = LLMConfig(
-    api_key="abc",  # Ollama doesn't require a real API key
+    api_key="ollama",  # Ollama doesn't require a real API key, but some placeholder is needed
     model="deepseek-r1:7b",
     small_model="deepseek-r1:7b",
-    base_url="http://localhost:11434/v1", # Ollama provides this port
+    base_url="http://localhost:11434/v1",  # Ollama's OpenAI-compatible endpoint
 )
 
-llm_client = OpenAIClient(config=llm_config)
+llm_client = OpenAIGenericClient(config=llm_config)
 
 # Initialize Graphiti with Ollama clients
 graphiti = Graphiti(
@@ -425,7 +522,7 @@ graphiti = Graphiti(
     llm_client=llm_client,
     embedder=OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
-            api_key="abc",
+            api_key="ollama",  # Placeholder API key
             embedding_model="nomic-embed-text",
             embedding_dim=768,
             base_url="http://localhost:11434/v1",
@@ -443,11 +540,12 @@ Ensure Ollama is running (`ollama serve`) and that you have pulled the models yo
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
 - [Quick Start](https://help.getzep.com/graphiti/graphiti/quick-start)
-- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/graphiti/lang-graph-agent)
+- [Building an agent with LangChain's LangGraph and Graphiti](https://help.getzep.com/graphiti/integrations/lang-graph-agent)
 
 ## Telemetry
 
-Graphiti collects anonymous usage statistics to help us understand how the framework is being used and improve it for everyone. We believe transparency is important, so here's exactly what we collect and why.
+Graphiti collects anonymous usage statistics to help us understand how the framework is being used and improve it for
+everyone. We believe transparency is important, so here's exactly what we collect and why.
 
 ### What We Collect
 
@@ -457,9 +555,9 @@ When you initialize a Graphiti instance, we collect:
 - **System information**: Operating system, Python version, and system architecture
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
-  - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-  - Database backend (Neo4j, FalkorDB)
-  - Embedder provider (OpenAI, Azure, Voyage, etc.)
+    - LLM provider type (OpenAI, Azure, Anthropic, etc.)
+    - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+    - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
 
@@ -511,10 +609,12 @@ echo 'export GRAPHITI_TELEMETRY_ENABLED=false' >> ~/.zshrc
 
 ```python
 import os
+
 os.environ['GRAPHITI_TELEMETRY_ENABLED'] = 'false'
 
 # Then initialize Graphiti as usual
 from graphiti_core import Graphiti
+
 graphiti = Graphiti(...)
 ```
 
@@ -523,7 +623,8 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 ### Technical Details
 
 - Telemetry uses PostHog for anonymous analytics collection
-- All telemetry operations are designed to fail silently - they will never interrupt your application or affect Graphiti functionality
+- All telemetry operations are designed to fail silently - they will never interrupt your application or affect Graphiti
+  functionality
 - The anonymous ID is stored locally and is not tied to any personal information
 
 ## Status and Roadmap
@@ -531,8 +632,8 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 Graphiti is under active development. We aim to maintain API stability while working on:
 
 - [x] Supporting custom graph schemas:
-  - Allow developers to provide their own defined node and edge classes when ingesting episodes
-  - Enable more flexible knowledge representation tailored to specific use cases
+    - Allow developers to provide their own defined node and edge classes when ingesting episodes
+    - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
 - [x] Graphiti MCP Server
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
