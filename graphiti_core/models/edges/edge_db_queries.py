@@ -129,8 +129,8 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 MATCH (source:Entity {uuid: edge.source_node_uuid})
                 MATCH (target:Entity {uuid: edge.target_node_uuid})
                 MERGE (source)-[r:RELATES_TO {uuid: edge.uuid}]->(target)
-                SET r = {uuid: edge.uuid, name: edge.name, group_id: edge.group_id, fact: edge.fact, episodes: edge.episodes,
-                created_at: edge.created_at, expired_at: edge.expired_at, valid_at: edge.valid_at, invalid_at: edge.invalid_at, fact_embedding: vecf32(edge.fact_embedding)}
+                SET r = edge
+                SET r.fact_embedding = vecf32(edge.fact_embedding)
                 WITH r, edge
                 RETURN edge.uuid AS uuid
             """
