@@ -100,6 +100,25 @@ The server uses the following environment variables:
 - `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
 - `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
 - `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+
+### Gemini Configuration
+
+The server also supports Google Gemini models for LLM, embedding, and cross-encoding operations:
+
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY`: Google API key for Gemini models
+- `USE_GEMINI`: Set to "true" to use Gemini models (automatically enabled when Gemini API key is provided)
+- `MODEL_NAME`: When using Gemini, defaults to "gemini-2.5-flash"
+- `SMALL_MODEL_NAME`: When using Gemini, defaults to "models/gemini-2.5-flash-lite-preview-06-17"
+- `EMBEDDER_MODEL_NAME`: When using Gemini, defaults to "embedding-001"
+
+When Gemini is detected (via API key or USE_GEMINI=true), the server will automatically use Gemini for:
+
+- LLM operations (text generation, entity extraction)
+- Embedding operations (text embeddings)
+- Cross-encoding operations (passage reranking)
+
+### Other Configuration
+
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
@@ -118,11 +137,25 @@ With options:
 uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 ```
 
+Using Gemini:
+
+```bash
+uv run graphiti_mcp_server.py --use-gemini --transport sse
+```
+
+Or with a specific Gemini API key:
+
+```bash
+uv run graphiti_mcp_server.py --gemini-api-key your-api-key --transport sse
+```
+
 Available arguments:
 
 - `--model`: Overrides the `MODEL_NAME` environment variable.
 - `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
 - `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
+- `--use-gemini`: Use Gemini models instead of OpenAI (requires GOOGLE_API_KEY or GEMINI_API_KEY environment variable).
+- `--gemini-api-key`: Google API key for Gemini models (can also use GOOGLE_API_KEY or GEMINI_API_KEY environment variable).
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
@@ -233,6 +266,37 @@ To use the Graphiti MCP server with an MCP-compatible client, configure it to co
         "NEO4J_PASSWORD": "password",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
         "MODEL_NAME": "gpt-4.1-mini"
+      }
+    }
+  }
+}
+```
+
+For Gemini models, use this configuration:
+
+```json
+{
+  "mcpServers": {
+    "graphiti-memory": {
+      "transport": "stdio",
+      "command": "/Users/<user>/.local/bin/uv",
+      "args": [
+        "run",
+        "--isolated",
+        "--directory",
+        "/Users/<user>/dev/zep/graphiti/mcp_server",
+        "--project",
+        ".",
+        "graphiti_mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password",
+        "GOOGLE_API_KEY": "your-google-api-key",
+        "USE_GEMINI": "true"
       }
     }
   }
