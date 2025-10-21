@@ -72,3 +72,12 @@ class Neo4jDriver(GraphDriver):
         return self.client.execute_query(
             'CALL db.indexes() YIELD name DROP INDEX name',
         )
+    
+    async def health_check(self) -> None:
+        """Check Neo4j connectivity by running the driver's verify_connectivity method."""
+        try:
+            await self.client.verify_connectivity()
+            return None
+        except Exception as e:
+            print(f"Neo4j health check failed: {e}")
+            raise
