@@ -14,10 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import datetime
 import asyncio
+import datetime
 import logging
 from typing import TYPE_CHECKING, Any
+
+from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
@@ -32,9 +35,6 @@ else:
             'falkordb is required for FalkorDriver. '
             'Install it with: pip install graphiti-core[falkordb]'
         ) from None
-
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
-from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
 
