@@ -687,11 +687,11 @@ async def node_similarity_search(
         )
         resp, header, _ = await driver.execute_query(
             query,
-            params=filter_params,
             search_vector=search_vector,
             limit=limit,
             min_score=min_score,
             routing_='r',
+            **filter_params,
         )
 
         if len(resp) > 0:
