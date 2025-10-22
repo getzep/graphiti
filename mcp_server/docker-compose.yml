@@ -39,7 +39,11 @@ services:
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-demodemo}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - MODEL_NAME=${MODEL_NAME}
+      - EMBEDDER_API_KEY=${EMBEDDER_API_KEY}          
+      - EMBEDDER_BASE_URL=${EMBEDDER_BASE_URL}       
+      - EMBEDDER_MODEL_NAME=${EMBEDDER_MODEL_NAME}     
       - PATH=/root/.local/bin:${PATH}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
     ports:
