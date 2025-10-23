@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import datetime
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
@@ -261,7 +262,29 @@ class FalkorDriver(GraphDriver):
             # Create a new instance of FalkorDriver with the same connection but a different database
             cloned = FalkorDriver(falkor_db=self.client, database=database)
 
-        return cloned
+        return cloned    
+
+    async def health_check(self) -> None:
+        """Check FalkorDB connectivity by running a simple query."""
+        try:
+            await self.execute_query("MATCH (n) RETURN 1 LIMIT 1")
+            return None
+        except Exception as e:
+            print(f"FalkorDB health check failed: {e}")
+            raise
+    
+    @staticmethod
+    def convert_datetimes_to_strings(obj):
+        if isinstance(obj, dict):
+            return {k: FalkorDriver.convert_datetimes_to_strings(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [FalkorDriver.convert_datetimes_to_strings(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(FalkorDriver.convert_datetimes_to_strings(item) for item in obj)
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        else:
+            return obj
 
     def sanitize(self, query: str) -> str:
         """
