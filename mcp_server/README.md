@@ -101,6 +101,7 @@ The server supports both Neo4j and FalkorDB as database backends. Use the `DATAB
 - `OPENAI_BASE_URL`: Optional base URL for OpenAI API
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
+- `EMBEDDER_MODEL_NAME`: OpenAI model name to use for embedding operations.
 - `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
 - `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
