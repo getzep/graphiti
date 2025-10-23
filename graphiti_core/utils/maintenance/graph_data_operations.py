@@ -20,8 +20,6 @@ from datetime import datetime
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_RETURN_NEPTUNE,
@@ -31,46 +29,6 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_fro
 EPISODE_WINDOW_LEN = 3
 
 logger = logging.getLogger(__name__)
-
-
-async def build_indices_and_constraints(driver: GraphDriver, delete_existing: bool = False):
-    if delete_existing:
-        await driver.delete_all_indexes()
-
-    range_indices: list[LiteralString] = get_range_indices(driver.provider)
-
-    # Don't create fulltext indices if search_interface is being used
-    if not driver.search_interface:
-        fulltext_indices: list[LiteralString] = get_fulltext_indices(driver.provider)
-
-    if driver.provider == GraphProvider.KUZU:
-        # Skip creating fulltext indices if they already exist. Need to do this manually
-        # until Kuzu supports `IF NOT EXISTS` for indices.
-        result, _, _ = await driver.execute_query('CALL SHOW_INDEXES() RETURN *;')
-        if len(result) > 0:
-            fulltext_indices = []
-
-        # Only load the `fts` extension if it's not already loaded, otherwise throw an error.
-        result, _, _ = await driver.execute_query('CALL SHOW_LOADED_EXTENSIONS() RETURN *;')
-        if len(result) == 0:
-            fulltext_indices.insert(
-                0,
-                """
-                INSTALL fts;
-                LOAD fts;
-                """,
-            )
-
-    index_queries: list[LiteralString] = range_indices + fulltext_indices
-
-    await semaphore_gather(
-        *[
-            driver.execute_query(
-                query,
-            )
-            for query in index_queries
-        ]
-    )
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
