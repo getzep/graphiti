@@ -51,12 +51,18 @@ else:
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
 
 
-# Configure logging
+# Configure logging to match uvicorn format
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(levelname)-8s %(message)s',  # Match uvicorn's default format
     stream=sys.stderr,
 )
+
+# Configure specific loggers
+logging.getLogger('uvicorn').setLevel(logging.INFO)
+logging.getLogger('uvicorn.access').setLevel(logging.WARNING)  # Reduce access log noise
+logging.getLogger('mcp.server.streamable_http_manager').setLevel(logging.WARNING)  # Reduce MCP noise
+
 logger = logging.getLogger(__name__)
 
 # Create global config instance - will be properly initialized later
