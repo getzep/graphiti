@@ -15,6 +15,15 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_file = Path(__file__).parent.parent / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
+else:
+    # Try loading from current directory
+    load_dotenv()
 
 
 class TestRunner:
@@ -31,7 +40,13 @@ class TestRunner:
 
         # Check for OpenAI API key if not using mocks
         if not self.args.mock_llm:
-            checks['openai_api_key'] = bool(os.environ.get('OPENAI_API_KEY'))
+            api_key = os.environ.get('OPENAI_API_KEY')
+            checks['openai_api_key'] = bool(api_key)
+            if not api_key:
+                # Check if .env file exists for helpful message
+                env_path = Path(__file__).parent.parent / '.env'
+                if not env_path.exists():
+                    checks['openai_api_key_hint'] = 'Set OPENAI_API_KEY in environment or create mcp_server/.env file'
         else:
             checks['openai_api_key'] = True
 
@@ -149,7 +164,6 @@ class TestRunner:
         print(f"Running {suite} tests with pytest args: {' '.join(pytest_args)}")
 
         # Change to test directory to run tests
-        import os
         original_dir = os.getcwd()
         os.chdir(self.test_dir)
 
@@ -308,14 +322,23 @@ Examples:
 
     # Check if prerequisites are met
     checks = runner.check_prerequisites()
-    if not all(checks.values()):
+    # Filter out hint keys from validation
+    validation_checks = {k: v for k, v in checks.items() if not k.endswith('_hint')}
+
+    if not all(validation_checks.values()):
         print("⚠️  Some prerequisites are not met:")
         for check, passed in checks.items():
+            if check.endswith('_hint'):
+                continue  # Skip hint entries
             if not passed:
                 print(f"  ❌ {check}")
+                # Show hint if available
+                hint_key = f"{check}_hint"
+                if hint_key in checks:
+                    print(f"     💡 {checks[hint_key]}")
 
         if not args.mock_llm and not checks.get('openai_api_key'):
-            print("\nHint: Use --mock-llm to run tests without OpenAI API key")
+            print("\n💡 Tip: Use --mock-llm to run tests without OpenAI API key")
 
         response = input("\nContinue anyway? (y/N): ")
         if response.lower() != 'y':
