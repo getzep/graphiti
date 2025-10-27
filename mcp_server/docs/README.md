@@ -78,38 +78,57 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Create a virtual environment and install dependencies in one step
 uv sync
+
+# Optional: Install additional LLM providers (anthropic, gemini, groq, voyage, sentence-transformers)
+uv sync --extra providers
 ```
 
 ## Configuration
 
-The server supports both Neo4j and FalkorDB as database backends. Use the `DATABASE_TYPE` environment variable to choose between them.
+The server can be configured using a `config.yaml` file, environment variables, or command-line arguments (in order of precedence).
 
-#### Neo4j Configuration (default)
+### Configuration File (config.yaml)
+
+The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq) and embedders. Edit `config.yaml` to configure:
+
+```yaml
+llm:
+  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
+  model: "gpt-4o"
+  
+database:
+  provider: "neo4j"  # or "falkordb" (requires additional setup)
+```
+
+### Using Ollama for Local LLM
+
+To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
+
+```yaml
+llm:
+  provider: "openai"
+  model: "llama3.2"  # or your preferred Ollama model
+  api_base: "http://localhost:11434/v1"
+  api_key: "ollama"  # dummy key required
+
+embedder:
+  provider: "sentence_transformers"  # recommended for local setup
+  model: "all-MiniLM-L6-v2"
+```
+
+Make sure Ollama is running locally with: `ollama serve`
+
+### Environment Variables
+
+The `config.yaml` file supports environment variable expansion using `${VAR_NAME}` or `${VAR_NAME:default}` syntax. Key variables:
 
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
-
-#### FalkorDB Configuration
-- `DATABASE_TYPE`: Set to `falkordb`
-- `FALKORDB_HOST`: FalkorDB host (default: `localhost`)
-- `FALKORDB_PORT`: FalkorDB port (default: `6379`)
-- `FALKORDB_USERNAME`: FalkorDB username (optional)
-- `FALKORDB_PASSWORD`: FalkorDB password (optional)
-
-- `OPENAI_API_KEY`: OpenAI API key (required for LLM operations)
-- `OPENAI_BASE_URL`: Optional base URL for OpenAI API
-- `MODEL_NAME`: OpenAI model name to use for LLM operations.
-- `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
-- `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
-- `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
-- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
-- `AZURE_OPENAI_EMBEDDING_API_KEY`: Optional Azure OpenAI Embedding deployment key (if other than `OPENAI_API_KEY`)
-- `AZURE_OPENAI_EMBEDDING_ENDPOINT`: Optional Azure OpenAI Embedding endpoint URL
-- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`: Optional Azure OpenAI embedding deployment name
-- `AZURE_OPENAI_EMBEDDING_API_VERSION`: Optional Azure OpenAI API version
-- `AZURE_OPENAI_USE_MANAGED_IDENTITY`: Optional use Azure Managed Identities for authentication
+- `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
+- `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
+- `GOOGLE_API_KEY`: Google API key (for Gemini models)
+- `GROQ_API_KEY`: Groq API key (for Groq models)
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
@@ -125,18 +144,20 @@ uv run graphiti_mcp_server.py
 With options:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse --database-type falkordb --port 8001
+uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
 ```
 
 Available arguments:
 
-- `--model`: Overrides the `MODEL_NAME` environment variable.
-- `--small-model`: Overrides the `SMALL_MODEL_NAME` environment variable.
-- `--temperature`: Overrides the `LLM_TEMPERATURE` environment variable.
+- `--config`: Path to YAML configuration file (default: config.yaml)
+- `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
+- `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
+- `--database-provider`: Database provider to use (neo4j, falkordb)
+- `--model`: Model name to use with the LLM client
+- `--temperature`: Temperature setting for the LLM (0.0-2.0)
 - `--transport`: Choose the transport method (sse or stdio, default: sse)
-- `--database-type`: Choose database backend (neo4j or falkordb, default: neo4j)
-- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "default".
-- `--destroy-graph`: If set, destroys all Graphiti graphs on startup.
+- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
+- `--destroy-graph`: If set, destroys all Graphiti graphs on startup
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
@@ -186,30 +207,11 @@ The Docker Compose setup includes a Neo4j container with the following default c
 - URI: `bolt://neo4j:7687` (from within the Docker network)
 - Memory settings optimized for development use
 
-To run only Neo4j with its MCP server:
-```bash
-docker compose up
-```
-- Neo4j MCP server on port 8000
-
-#### FalkorDB Configuration
-
-The Docker Compose setup includes a FalkorDB container with the following default configuration:
-- Host: `falkordb`
-- Port: `6379`
-- No authentication by default
-
-To run only FalkorDB with its MCP server:
-```bash
-docker compose --profile falkordb up
-```
-- FalkorDB MCP server on port 8001
-
 #### Running with Docker Compose
 
 A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
 
-Start the services using Docker Compose For Neo4j:
+Start the services using Docker Compose:
 
 ```bash
 docker compose up
@@ -221,31 +223,36 @@ Or if you're using an older version of Docker Compose:
 docker-compose up
 ```
 
-For FalkorDB:
-
-```bash
-docker compose --profile falkordb up
-```
-
-Or if you're using an older version of Docker Compose:
-
-```bash
-docker-compose --profile falkordb up
-```
-
-This will start the database(s) and the Graphiti MCP server(s). The Docker setup:
+This will start both the Neo4j database and the Graphiti MCP server. The Docker setup:
 
 - Uses `uv` for package management and running the server
 - Installs dependencies from the `pyproject.toml` file
-- Connects to the database container using the environment variables
-- Exposes the server on port 8000 (Neo4j) or 8001 (FalkorDB) for HTTP-based SSE transport
-- Includes healthchecks to ensure databases are fully operational before starting the MCP server
+- Connects to the Neo4j container using the environment variables
+- Exposes the server on port 8000 for HTTP-based SSE transport
+- Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
 
-### Configuration
+### VS Code / GitHub Copilot
 
-To use the Graphiti MCP server with an MCP-compatible client, configure it to connect to the server:
+VS Code with GitHub Copilot Chat extension supports MCP servers. Add to your VS Code settings (`.vscode/mcp.json` or global settings):
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "uri": "http://localhost:8000/sse",
+      "transport": {
+        "type": "sse"
+      }
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+To use the Graphiti MCP server with other MCP-compatible clients, configure it to connect to the server:
 
 > [!IMPORTANT]
 > You will need the Python package manager, `uv` installed. Please refer to the [`uv` install instructions](https://docs.astral.sh/uv/getting-started/installation/).
