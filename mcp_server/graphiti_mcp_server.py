@@ -467,6 +467,7 @@ class Neo4jConfig(BaseModel):
             password=os.environ.get('NEO4J_PASSWORD', 'password'),
         )
 
+
 class FalkorConfig(BaseModel):
     """Configuration for FalkorDB database connection."""
 
@@ -482,6 +483,7 @@ class FalkorConfig(BaseModel):
         user = os.environ.get('FALKORDB_USER', '')
         password = os.environ.get('FALKORDB_PASSWORD', '')
         return cls(host=host, port=port, user=user, password=password)
+
 
 class GraphitiConfig(BaseModel):
     """Configuration for Graphiti client.
@@ -504,7 +506,9 @@ class GraphitiConfig(BaseModel):
         """Create a configuration instance from environment variables."""
         db_type = os.environ.get('DATABASE_TYPE')
         if not db_type:
-            raise ValueError('DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")')
+            raise ValueError(
+                'DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")'
+            )
         if db_type == 'neo4j':
             return cls(
                 llm=GraphitiLLMConfig.from_env(),
@@ -622,7 +626,9 @@ async def initialize_graphiti():
             raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
         # Validate FalkorDB configuration
-        if config.database_type == 'falkordb' and (not config.falkordb.host or not config.falkordb.port):
+        if config.database_type == 'falkordb' and (
+            not config.falkordb.host or not config.falkordb.port
+        ):
             raise ValueError('FALKORDB_HOST and FALKORDB_PORT must be set for FalkorDB')
 
         embedder_client = config.embedder.create_client()
@@ -637,6 +643,7 @@ async def initialize_graphiti():
             )
         elif config.database_type == 'falkordb':
             from graphiti_core.driver.falkordb_driver import FalkorDriver
+
             host = config.falkordb.host if hasattr(config.falkordb, 'host') else 'localhost'
             port = int(config.falkordb.port) if hasattr(config.falkordb, 'port') else 6379
             username = config.falkordb.user or None
@@ -1205,10 +1212,11 @@ async def get_status() -> StatusResponse:
         client = cast(Graphiti, graphiti_client)
 
         # Test database connection
-        await client.driver.health_check() # type: ignore  # type: ignore
+        await client.driver.health_check()  # type: ignore  # type: ignore
 
         return StatusResponse(
-            status='ok', message=f'Graphiti MCP server is running and connected to {config.database_type}'
+            status='ok',
+            message=f'Graphiti MCP server is running and connected to {config.database_type}',
         )
     except Exception as e:
         error_msg = str(e)
