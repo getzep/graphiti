@@ -614,7 +614,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.22.0rc5"
+version = "0.22.0"
 source = { editable = "../" }
 dependencies = [
     { name = "diskcache" },
@@ -624,7 +624,6 @@ dependencies = [
     { name = "posthog" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "pyyaml" },
     { name = "tenacity" },
 ]
 
@@ -645,15 +644,14 @@ requires-dist = [
     { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.2.4" },
-    { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.2" },
-    { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.2" },
+    { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.3" },
+    { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.3" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
     { name = "langchain-aws", marker = "extra == 'dev'", specifier = ">=0.2.29" },
     { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
     { name = "langchain-openai", marker = "extra == 'dev'", specifier = ">=0.2.6" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2.15" },
     { name = "langsmith", marker = "extra == 'dev'", specifier = ">=0.1.108" },
-    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.9.4" },
     { name = "neo4j", specifier = ">=5.26.0" },
     { name = "numpy", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.91.0" },
@@ -670,7 +668,6 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'dev'", specifier = ">=3.2.1" },
     { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },
@@ -680,9 +677,6 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
 provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pyright", specifier = ">=1.1.404" }]
 
 [[package]]
 name = "groq"
@@ -1089,15 +1083,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-providers = [
-    { name = "anthropic" },
-    { name = "google-genai" },
-    { name = "groq" },
-    { name = "sentence-transformers" },
-    { name = "voyageai" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "graphiti-core" },
     { name = "httpx" },
@@ -1107,6 +1092,13 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
+providers = [
+    { name = "anthropic" },
+    { name = "google-genai" },
+    { name = "groq" },
+    { name = "sentence-transformers" },
+    { name = "voyageai" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1114,28 +1106,24 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.21.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.8.0" },
     { name = "graphiti-core", editable = "../" },
+    { name = "graphiti-core", marker = "extra == 'dev'", editable = "../" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
     { name = "kuzu", specifier = ">=0.11.2" },
     { name = "mcp", specifier = ">=1.9.4" },
+    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.9.4" },
     { name = "openai", specifier = ">=1.91.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.404" },
     { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
     { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["providers"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "graphiti-core", editable = "../" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "mcp", specifier = ">=1.9.4" },
-    { name = "pyright", specifier = ">=1.1.404" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.21.0" },
-    { name = "ruff", specifier = ">=0.7.1" },
-]
+provides-extras = ["providers", "dev"]
 
 [[package]]
 name = "mpmath"
