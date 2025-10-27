@@ -62,22 +62,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: MCP Server ${{ steps.version.outputs.tag }}
-          body: |
-            ## MCP Server Release ${{ steps.version.outputs.version }}
-
-            Docker image available at:
-            - `docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}`
-            - `docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
-
-            ### Installation
-
-            Update your `docker-compose.yml` or pull the latest image:
-            ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
-            ```
-          generate_release_notes: true
