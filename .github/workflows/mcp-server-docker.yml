@@ -6,6 +6,8 @@ on:
       - "mcp_server/pyproject.toml"
     branches:
       - main
+    tags:
+      - "mcp-v*.*.*"
   pull_request:
     paths:
       - "mcp_server/pyproject.toml"

@@ -1,0 +1,83 @@
+name: Release MCP Server
+
+on:
+  push:
+    tags: ["mcp-v*.*.*"]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: zepai/knowledge-graph-mcp
+
+jobs:
+  release:
+    runs-on: depot-ubuntu-24.04-small
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract and validate version
+        id: version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
+          PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('mcp_server/pyproject.toml', 'rb'))['project']['version'])")
+
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag version mcp-v$TAG_VERSION does not match mcp_server/pyproject.toml version $PROJECT_VERSION"
+            exit 1
+          fi
+
+          echo "version=$PROJECT_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=mcp-v$PROJECT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Depot CLI
+        uses: depot/setup-action@v1
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: depot/build-push-action@v1
+        with:
+          project: v9jv1mlpwc
+          context: ./mcp_server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MCP Server ${{ steps.version.outputs.tag }}
+          body: |
+            ## MCP Server Release ${{ steps.version.outputs.version }}
+
+            Docker image available at:
+            - `docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}`
+            - `docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
+
+            ### Installation
+
+            Update your `docker-compose.yml` or pull the latest image:
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            ```
+          generate_release_notes: true
