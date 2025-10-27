@@ -820,11 +820,22 @@ async def run_mcp_server():
         logger.info(
             f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
+        logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
         await mcp.run_sse_async()
     elif mcp_config.transport == 'http':
+        # Use localhost for display if binding to 0.0.0.0
+        display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
         logger.info(
             f'Running MCP server with streamable HTTP transport on {mcp.settings.host}:{mcp.settings.port}'
         )
+        logger.info('=' * 60)
+        logger.info('MCP Server Access Information:')
+        logger.info(f'  Server URL: http://{display_host}:{mcp.settings.port}/')
+        logger.info(f'  MCP Endpoint: POST http://{display_host}:{mcp.settings.port}/')
+        logger.info('  Transport: HTTP (streamable)')
+        logger.info('  Status endpoint: GET /status')
+        logger.info('=' * 60)
+        logger.info('For MCP clients, use the server URL above as the endpoint')
         await mcp.run_streamable_http_async()
     else:
         raise ValueError(
