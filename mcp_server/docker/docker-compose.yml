@@ -33,8 +33,8 @@ services:
       # Persistent KuzuDB data storage
       - kuzu_data:/data
     ports:
-      - "8000:8000" # Expose the MCP server via HTTP for SSE transport
-    command: ["uv", "run", "src/graphiti_mcp_server.py", "--transport", "sse", "--config", "/app/config/config.yaml"]
+      - "8000:8000" # Expose the MCP server via HTTP transport
+    command: ["uv", "run", "src/graphiti_mcp_server.py", "--transport", "http", "--config", "/app/config/config.yaml"]
 
 # Volume for persistent KuzuDB storage
 volumes:

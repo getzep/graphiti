@@ -3,7 +3,7 @@
 # It uses persistent KuzuDB storage at /data/graphiti.kuzu
 
 server:
-  transport: "sse"  # SSE for HTTP access from Docker
+  transport: "http"  # HTTP transport (SSE is deprecated)
   host: "0.0.0.0"
   port: 8000
   

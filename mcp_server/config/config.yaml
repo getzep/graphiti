@@ -2,7 +2,7 @@
 # This file supports environment variable expansion using ${VAR_NAME} or ${VAR_NAME:default_value}
 
 server:
-  transport: "sse"  # Options: stdio, sse, http
+  transport: "http"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
   port: 8000
   

@@ -2,7 +2,7 @@
 # This configuration is optimized for running with docker-compose-falkordb.yml
 
 server:
-  transport: "sse"  # SSE for HTTP access from Docker
+  transport: "http"  # HTTP transport (SSE is deprecated)
   host: "0.0.0.0"
   port: 8000
   
