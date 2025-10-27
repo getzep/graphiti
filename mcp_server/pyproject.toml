@@ -65,3 +65,11 @@ docstring-code-format = true
 
 [tool.uv.sources]
 graphiti-core = { path = "../", editable = true }
+
+[dependency-groups]
+dev = [
+    "faker>=37.12.0",
+    "psutil>=7.1.2",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+]

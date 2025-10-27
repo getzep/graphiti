@@ -18,7 +18,7 @@ async def test_stdio():
     # Configure server parameters
     server_params = StdioServerParameters(
         command='uv',
-        args=['run', 'main.py', '--transport', 'stdio'],
+        args=['run', '../main.py', '--transport', 'stdio'],
         env={
             'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
             'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
@@ -32,8 +32,12 @@ async def test_stdio():
             async with ClientSession(read, write) as session:
                 print('✅ Connected to server')
 
-                # Wait for server initialization
-                await asyncio.sleep(1)
+                # Initialize the session
+                await session.initialize()
+                print('✅ Session initialized')
+
+                # Wait for server to be fully ready
+                await asyncio.sleep(2)
 
                 # List tools
                 print('\n📋 Listing available tools...')

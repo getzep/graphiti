@@ -92,9 +92,9 @@ class TestRunner:
 
         # Add database marker
         if self.args.database:
-            pytest_args.extend(['-m', f'not requires_{db}'
-                              for db in ['neo4j', 'falkordb', 'kuzu']
-                              if db != self.args.database])
+            for db in ['neo4j', 'falkordb', 'kuzu']:
+                if db != self.args.database:
+                    pytest_args.extend(['-m', f'not requires_{db}'])
 
         # Add suite-specific arguments
         if suite == 'unit':
@@ -145,9 +145,20 @@ class TestRunner:
         if self.args.database:
             env['DATABASE_PROVIDER'] = self.args.database
 
-        # Run tests
+        # Run tests from the test directory
         print(f"Running {suite} tests with pytest args: {' '.join(pytest_args)}")
-        return pytest.main(pytest_args)
+
+        # Change to test directory to run tests
+        import os
+        original_dir = os.getcwd()
+        os.chdir(self.test_dir)
+
+        try:
+            result = pytest.main(pytest_args)
+        finally:
+            os.chdir(original_dir)
+
+        return result
 
     def run_performance_benchmark(self):
         """Run performance benchmarking suite."""

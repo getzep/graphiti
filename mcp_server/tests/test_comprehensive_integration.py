@@ -47,12 +47,12 @@ class GraphitiTestClient:
         """Initialize MCP client session."""
         server_params = StdioServerParameters(
             command='uv',
-            args=['run', 'main.py', '--transport', 'stdio'],
+            args=['run', '../main.py', '--transport', 'stdio'],
             env={
                 'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
                 'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
                 'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
-                'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY'),
+                'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'test_key_for_mock'),
                 'KUZU_PATH': os.environ.get('KUZU_PATH', './test_kuzu.db'),
                 'FALKORDB_URI': os.environ.get('FALKORDB_URI', 'redis://localhost:6379'),
             },
@@ -62,6 +62,10 @@ class GraphitiTestClient:
         read, write = await self.client_context.__aenter__()
         self.session = ClientSession(read, write)
         await self.session.initialize()
+
+        # Wait for server to be fully ready
+        await asyncio.sleep(2)
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
