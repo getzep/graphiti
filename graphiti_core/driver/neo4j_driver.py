@@ -113,5 +113,5 @@ class Neo4jDriver(GraphDriver):
             await self.client.verify_connectivity()
             return None
         except Exception as e:
-            print(f"Neo4j health check failed: {e}")
+            print(f'Neo4j health check failed: {e}')
             raise
