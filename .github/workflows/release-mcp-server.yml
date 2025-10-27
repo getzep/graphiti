@@ -29,6 +29,12 @@ jobs:
         id: version
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
+
+          if ! [[ $TAG_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must follow semantic versioning: mcp-vX.Y.Z"
+            exit 1
+          fi
+
           PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('mcp_server/pyproject.toml', 'rb'))['project']['version'])")
 
           if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
