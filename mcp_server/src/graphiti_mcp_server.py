@@ -678,11 +678,13 @@ async def initialize_server() -> ServerConfig:
     )
 
     # Configuration file argument
+    # Default to config/config.yaml relative to the mcp_server directory
+    default_config = Path(__file__).parent.parent / 'config' / 'config.yaml'
     parser.add_argument(
         '--config',
         type=Path,
-        default=Path('config.yaml'),
-        help='Path to YAML configuration file (default: config.yaml)',
+        default=default_config,
+        help='Path to YAML configuration file (default: config/config.yaml)',
     )
 
     # Transport arguments

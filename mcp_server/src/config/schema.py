@@ -150,7 +150,7 @@ class LLMConfig(BaseModel):
     """LLM configuration."""
 
     provider: str = Field(default='openai', description='LLM provider')
-    model: str = Field(default='gpt-4o', description='Model name')
+    model: str = Field(default='gpt-4.1', description='Model name')
     temperature: float = Field(default=0.0, description='Temperature')
     max_tokens: int = Field(default=4096, description='Max tokens')
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)
