@@ -35,7 +35,14 @@ from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClient
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
-load_dotenv()
+# Load .env file from mcp_server directory
+mcp_server_dir = Path(__file__).parent.parent
+env_file = mcp_server_dir / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
+else:
+    # Try current working directory as fallback
+    load_dotenv()
 
 
 # Semaphore limit for concurrent Graphiti operations.
@@ -118,16 +125,17 @@ class GraphitiService:
             llm_client = None
             embedder_client = None
 
-            # Only create LLM client if API key is available
-            if self.config.llm.providers.openai and self.config.llm.providers.openai.api_key:
+            # Create LLM client based on configured provider
+            try:
                 llm_client = LLMClientFactory.create(self.config.llm)
+            except Exception as e:
+                logger.warning(f'Failed to create LLM client: {e}')
 
-            # Only create embedder client if API key is available
-            if (
-                self.config.embedder.providers.openai
-                and self.config.embedder.providers.openai.api_key
-            ):
+            # Create embedder client based on configured provider
+            try:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
+            except Exception as e:
+                logger.warning(f'Failed to create embedder client: {e}')
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
