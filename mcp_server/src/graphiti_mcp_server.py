@@ -830,12 +830,11 @@ async def run_mcp_server():
         )
         logger.info('=' * 60)
         logger.info('MCP Server Access Information:')
-        logger.info(f'  Server URL: http://{display_host}:{mcp.settings.port}/')
-        logger.info(f'  MCP Endpoint: POST http://{display_host}:{mcp.settings.port}/')
+        logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
+        logger.info(f'  MCP Endpoint: http://{display_host}:{mcp.settings.port}/mcp/')
         logger.info('  Transport: HTTP (streamable)')
-        logger.info('  Status endpoint: GET /status')
         logger.info('=' * 60)
-        logger.info('For MCP clients, use the server URL above as the endpoint')
+        logger.info('For MCP clients, connect to the /mcp/ endpoint above')
         await mcp.run_streamable_http_async()
     else:
         raise ValueError(
