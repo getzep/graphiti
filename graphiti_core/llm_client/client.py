@@ -86,7 +86,7 @@ class LLMClient(ABC):
         self.tracer = tracer
 
     def _clean_input(self, input: str) -> str:
-        """Clean input string of invalid unicode and control characters.
+        """Clean input string of invalid Unicode and control characters.
 
         Args:
             input: Raw input string to be cleaned
@@ -97,7 +97,7 @@ class LLMClient(ABC):
         # Clean any invalid Unicode
         cleaned = input.encode('utf-8', errors='ignore').decode('utf-8')
 
-        # Remove zero-width characters and other invisible unicode
+        # Remove zero-width characters and other invisible Unicode
         zero_width = '\u200b\u200c\u200d\ufeff\u2060'
         for char in zero_width:
             cleaned = cleaned.replace(char, '')
