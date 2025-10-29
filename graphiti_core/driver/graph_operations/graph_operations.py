@@ -82,7 +82,7 @@ class GraphOperationsInterface(BaseModel):
         batch_size: int = 100,
     ) -> dict[str, list[float]]:
         """
-        Load embedding vectors for many nodes in batches. Mutates the provided node instances.
+        Load embedding vectors for many nodes in batches.
         """
         raise NotImplementedError
 
@@ -186,6 +186,6 @@ class GraphOperationsInterface(BaseModel):
         batch_size: int = 100,
     ) -> dict[str, list[float]]:
         """
-        Load embedding vectors for many edges in batches. Mutates the provided edge instances.
+        Load embedding vectors for many edges in batches
         """
         raise NotImplementedError
