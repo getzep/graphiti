@@ -239,7 +239,7 @@ This will start the database(s) and the Graphiti MCP server(s). The Docker setup
 - Installs dependencies from the `pyproject.toml` file
 - Connects to the database container using the environment variables
 - Exposes the server on port 8000 (Neo4j) or 8001 (FalkorDB) for HTTP-based SSE transport
-- Includes healthchecks to ensure databases are fully operational before starting the MCP server
+- Includes health checks to ensure databases are fully operational before starting the MCP server
 
 ## Integrating with MCP Clients
 
