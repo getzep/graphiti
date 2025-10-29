@@ -77,9 +77,7 @@ class GraphOperationsInterface(BaseModel):
 
     async def node_load_embeddings_bulk(
         self,
-        _cls: Any,
         driver: Any,
-        transaction: Any,
         nodes: list[Any],
         batch_size: int = 100,
     ) -> None:
@@ -183,9 +181,7 @@ class GraphOperationsInterface(BaseModel):
 
     async def edge_load_embeddings_bulk(
         self,
-        _cls: Any,
         driver: Any,
-        transaction: Any,
         edges: list[Any],
         batch_size: int = 100,
     ) -> None:
