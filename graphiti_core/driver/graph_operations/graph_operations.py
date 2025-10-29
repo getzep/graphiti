@@ -80,7 +80,7 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         nodes: list[Any],
         batch_size: int = 100,
-    ) -> None:
+    ) -> dict[str, list[float]]:
         """
         Load embedding vectors for many nodes in batches. Mutates the provided node instances.
         """
@@ -184,7 +184,7 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         edges: list[Any],
         batch_size: int = 100,
-    ) -> None:
+    ) -> dict[str, list[float]]:
         """
         Load embedding vectors for many edges in batches. Mutates the provided edge instances.
         """
