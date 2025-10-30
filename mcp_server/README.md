@@ -102,6 +102,9 @@ The server supports both Neo4j and FalkorDB as database backends. Use the `DATAB
 - `MODEL_NAME`: OpenAI model name to use for LLM operations.
 - `SMALL_MODEL_NAME`: OpenAI model name to use for smaller LLM operations.
 - `LLM_TEMPERATURE`: Temperature for LLM responses (0.0-2.0).
+- `EMBEDDER_API_KEY`: Optional API key for embedding service (defaults to OPENAI_API_KEY if not set)  
+- `EMBEDDER_BASE_URL`: Optional base URL for embedding service (e.g., http://localhost:11434/v1 for Ollama)  
+- `EMBEDDER_MODEL_NAME`: Embedding model name (default: text-embedding-3-small) 
 - `AZURE_OPENAI_ENDPOINT`: Optional Azure OpenAI LLM endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: Optional Azure OpenAI LLM deployment name
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI LLM API version
