@@ -99,10 +99,13 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
+        # Reasoning models (gpt-5 family) don't support temperature
+        is_reasoning_model = model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
+
         return await self.client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=temperature,
+            temperature=temperature if not is_reasoning_model else None,
             max_tokens=max_tokens,
             response_format={'type': 'json_object'},
         )
