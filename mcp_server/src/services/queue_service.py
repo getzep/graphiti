@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ class QueueService:
                     source_description=source_description,
                     source=episode_type,
                     group_id=group_id,
-                    reference_time=datetime.now(UTC),
+                    reference_time=datetime.now(timezone.utc),
                     entity_types=entity_types,
                     uuid=uuid,
                 )
