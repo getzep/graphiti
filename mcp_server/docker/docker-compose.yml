@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     env_file:
-      - path: .env
+      - path: ../.env
         required: false # Makes the file optional. Default value is 'true'
     environment:
       # Database configuration for KuzuDB - using persistent storage
