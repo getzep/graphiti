@@ -235,8 +235,8 @@ class GraphitiService:
                     max_coroutines=self.semaphore_limit,
                 )
 
-            # Test connection (Neo4j and FalkorDB have verify_connectivity, KuzuDB doesn't need it)
-            if self.config.database.provider.lower() != 'kuzu':
+            # Test connection (only Neo4j has verify_connectivity)
+            if self.config.database.provider.lower() == 'neo4j':
                 await self.client.driver.client.verify_connectivity()  # type: ignore
 
             # Build indices

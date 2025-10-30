@@ -3,6 +3,7 @@ services:
     image: falkordb/falkordb:latest
     ports:
       - "6379:6379" # Redis/FalkorDB port
+      - "3000:3000" # FalkorDB web UI
     environment:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
     volumes:
