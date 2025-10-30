@@ -76,6 +76,11 @@ class OpenAIClient(BaseOpenAIClient):
         # Only pass reasoning parameter for reasoning models (gpt-5 family: o1, o3-mini, o3, gpt-5-*)
         is_reasoning_model = model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
 
+        # Adjust verbosity for gpt-4.1 which only supports 'medium'
+        adjusted_verbosity = verbosity
+        if verbosity == 'low' and model.startswith('gpt-4'):
+            adjusted_verbosity = 'medium'
+
         response = await self.client.responses.parse(
             model=model,
             input=messages,  # type: ignore
@@ -83,7 +88,7 @@ class OpenAIClient(BaseOpenAIClient):
             max_output_tokens=max_tokens,
             text_format=response_model,  # type: ignore
             reasoning={'effort': reasoning} if reasoning is not None and is_reasoning_model else None,  # type: ignore
-            text={'verbosity': verbosity} if verbosity is not None else None,  # type: ignore
+            text={'verbosity': adjusted_verbosity} if adjusted_verbosity is not None else None,  # type: ignore
         )
 
         return response
