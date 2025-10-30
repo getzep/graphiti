@@ -29,30 +29,24 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
             def replacer(match):
                 var_name = match.group(1)
                 default_value = match.group(3) if match.group(3) is not None else ''
-                result = os.environ.get(var_name, default_value)
-
-                # Convert string booleans to actual booleans
-                if result.lower() == 'true':
-                    return 'true'  # Keep as string, let Pydantic handle conversion
-                elif result.lower() == 'false':
-                    return 'false'  # Keep as string, let Pydantic handle conversion
-                return result
+                return os.environ.get(var_name, default_value)
 
             pattern = r'\$\{([^:}]+)(:([^}]*))?\}'
 
-            # Check if the entire value is a single env var expression with boolean default
+            # Check if the entire value is a single env var expression
             full_match = re.fullmatch(pattern, value)
             if full_match:
                 result = replacer(full_match)
-                # If the result is a boolean string and the whole value was the env var,
-                # return the actual boolean
-                if result == 'true':
-                    return True
-                elif result == 'false':
-                    return False
+                # Convert boolean-like strings to actual booleans
+                if isinstance(result, str):
+                    lower_result = result.lower().strip()
+                    if lower_result in ('true', '1', 'yes', 'on'):
+                        return True
+                    elif lower_result in ('false', '0', 'no', 'off', ''):
+                        return False
                 return result
             else:
-                # Otherwise, do string substitution
+                # Otherwise, do string substitution (keep as strings for partial replacements)
                 return re.sub(pattern, replacer, value)
         elif isinstance(value, dict):
             return {k: self._expand_env_vars(v) for k, v in value.items()}

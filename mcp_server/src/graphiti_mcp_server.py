@@ -286,10 +286,10 @@ async def add_memory(
         )
 
         # Adding structured JSON data
-        # NOTE: episode_body must be a properly escaped JSON string. Note the triple backslashes
+        # NOTE: episode_body should be a JSON string (standard JSON escaping)
         add_memory(
             name="Customer Profile",
-            episode_body="{\\\"company\\\": {\\\"name\\\": \\\"Acme Technologies\\\"}, \\\"products\\\": [{\\\"id\\\": \\\"P001\\\", \\\"name\\\": \\\"CloudSync\\\"}, {\\\"id\\\": \\\"P002\\\", \\\"name\\\": \\\"DataMiner\\\"}]}",
+            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}, {"id": "P002", "name": "DataMiner"}]}',
             source="json",
             source_description="CRM data"
         )

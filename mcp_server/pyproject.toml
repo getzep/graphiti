@@ -8,13 +8,14 @@ dependencies = [
     "mcp>=1.9.4",
     "openai>=1.91.0",
     "graphiti-core[falkordb]>=0.16.0",
-    "azure-identity>=1.21.0",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
-    "pytest>=8.4.1",
 ]
 
 [project.optional-dependencies]
+azure = [
+    "azure-identity>=1.21.0",
+]
 providers = [
     "google-genai>=1.8.0",
     "anthropic>=0.49.0",
