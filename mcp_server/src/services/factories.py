@@ -92,8 +92,8 @@ def _validate_and_mask_api_key(provider_name: str, api_key: str | None, logger) 
             f'{provider_name} API key is not configured. Please set the appropriate environment variable.'
         )
 
-    # Log masked API key for debugging
-    masked_key = f'{api_key[:7]}...{api_key[-4:]}' if len(api_key) > 11 else '***'
+    # Log masked API key for debugging (only show first 4 characters)
+    masked_key = f'{api_key[:4]}...' if len(api_key) > 4 else '***'
     logger.info(f'Creating {provider_name} client with API key: {masked_key}')
 
     return masked_key
