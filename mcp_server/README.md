@@ -392,9 +392,9 @@ Default Neo4j credentials:
 - Bolt URI: `bolt://neo4j:7687`
 - Browser UI: `http://localhost:7474`
 
-##### Option 3: FalkorDB Database
+##### Option 3: FalkorDB Database (Separate Containers)
 
-Includes a FalkorDB container (Redis-based graph database):
+Includes separate FalkorDB and MCP server containers:
 
 ```bash
 docker compose -f docker/docker-compose-falkordb.yml up
@@ -404,6 +404,22 @@ FalkorDB configuration:
 - Redis port: `6379`
 - Web UI: `http://localhost:3000`
 - Connection: `redis://falkordb:6379`
+
+##### Option 4: FalkorDB + MCP Server (Combined Image)
+
+Single container with both FalkorDB and MCP server bundled together:
+
+```bash
+docker compose -f docker/docker-compose-falkordb-combined.yml up
+```
+
+This combined setup offers:
+- Simplified deployment (one container to manage)
+- Reduced network latency (localhost communication)
+- Easier development workflow
+- Unified logging via Supervisor
+
+See [docker/README-falkordb-combined.md](docker/README-falkordb-combined.md) for detailed documentation.
 
 #### Accessing the MCP Server
 
