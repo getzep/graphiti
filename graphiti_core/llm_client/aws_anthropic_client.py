@@ -25,7 +25,7 @@ from .openai_base_client import BaseOpenAIClient
 
 logger = logging.getLogger(__name__)
 
-# bedrock support :) cuz i really wanted it.
+# bedrock support :) cuz i really wanted it
 
 class BedrockAnthropicLLMClient(BaseOpenAIClient):
     MAX_RETRIES: ClassVar[int] = 2
