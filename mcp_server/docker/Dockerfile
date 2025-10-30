@@ -26,19 +26,23 @@ ENV UV_COMPILE_BYTECODE=1 \
 # Create non-root user
 RUN groupadd -r app && useradd -r -d /app -g app app
 
+# Accept graphiti-core version as build argument
+ARG GRAPHITI_CORE_VERSION
+
 # Copy project files for dependency installation (better caching)
 COPY pyproject.toml uv.lock ./
 
-# Remove the local path override for graphiti-core in Docker builds
-# This allows uv to use the published package from PyPI
-RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml
+# Remove the local path override and version constraint for graphiti-core in Docker builds
+# This allows us to pin to a specific version passed as a build arg
+RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
+    sed -i 's/graphiti-core\[kuzu,falkordb\]>=0\.16\.0/graphiti-core[kuzu,falkordb]==${GRAPHITI_CORE_VERSION}/' pyproject.toml
 
-# Install dependencies first (better layer caching)
+# Install dependencies with explicit graphiti-core version
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev
 
-# Extract graphiti-core version and store it in a file for runtime access
-RUN uv pip freeze | grep graphiti-core | cut -d'=' -f3 > /app/.graphiti-core-version
+# Store graphiti-core version in a file for runtime access
+RUN echo "${GRAPHITI_CORE_VERSION}" > /app/.graphiti-core-version
 
 # Copy application code and configuration
 COPY main.py ./

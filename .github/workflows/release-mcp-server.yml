@@ -54,34 +54,20 @@ jobs:
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
 
+      - name: Get latest graphiti-core version from PyPI
+        id: graphiti
+        run: |
+          # Query PyPI for the latest graphiti-core version
+          GRAPHITI_VERSION=$(curl -s https://pypi.org/pypi/graphiti-core/json | python -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest Graphiti Core version from PyPI: ${GRAPHITI_VERSION}"
+
       - name: Extract metadata
         id: meta
         run: |
           # Get build date and git ref
           echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
           echo "vcs_ref=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image (temp for version extraction)
-        uses: depot/build-push-action@v1
-        with:
-          project: v9jv1mlpwc
-          context: ./mcp_server
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: temp-image:latest
-          build-args: |
-            MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
-            BUILD_DATE=${{ steps.meta.outputs.build_date }}
-            VCS_REF=${{ steps.meta.outputs.vcs_ref }}
-
-      - name: Extract Graphiti Core version
-        id: graphiti
-        run: |
-          # Extract graphiti-core version from the built image
-          GRAPHITI_VERSION=$(docker run --rm temp-image:latest cat /app/.graphiti-core-version)
-          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
-          echo "Graphiti Core Version: ${GRAPHITI_VERSION}"
 
       - name: Generate Docker metadata
         id: docker_meta
@@ -110,6 +96,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           build-args: |
             MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
+            GRAPHITI_CORE_VERSION=${{ steps.graphiti.outputs.graphiti_version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
             VCS_REF=${{ steps.meta.outputs.vcs_ref }}
 
