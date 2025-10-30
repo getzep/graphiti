@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -134,9 +135,9 @@ class QueueService:
                     name=name,
                     episode_body=content,
                     source_description=source_description,
-                    episode_type=episode_type,
+                    source=episode_type,
                     group_id=group_id,
-                    reference_time=None,  # Let graphiti handle timing
+                    reference_time=datetime.now(UTC),
                     entity_types=entity_types,
                     uuid=uuid,
                 )
