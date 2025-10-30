@@ -235,14 +235,6 @@ class GraphitiService:
                     max_coroutines=self.semaphore_limit,
                 )
 
-            # Test connection based on database provider
-            if self.config.database.provider.lower() == 'neo4j':
-                await self.client.driver.client.verify_connectivity()  # type: ignore
-            elif self.config.database.provider.lower() == 'falkordb':
-                # FalkorDB uses ping() method to test connectivity
-                self.client.driver.client.ping()  # type: ignore
-            # KuzuDB doesn't need a connectivity test (in-memory)
-
             # Build indices
             await self.client.build_indices_and_constraints()
 
