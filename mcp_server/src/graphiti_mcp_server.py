@@ -52,10 +52,13 @@ SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
 
 
 # Configure structured logging with timestamps
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format=LOG_FORMAT,
+    datefmt=DATE_FORMAT,
     stream=sys.stderr,
 )
 
@@ -65,6 +68,19 @@ logging.getLogger('uvicorn.access').setLevel(logging.WARNING)  # Reduce access l
 logging.getLogger('mcp.server.streamable_http_manager').setLevel(
     logging.WARNING
 )  # Reduce MCP noise
+
+
+# Patch uvicorn's logging config to use our format
+def configure_uvicorn_logging():
+    """Configure uvicorn loggers to match our format after they're created."""
+    for logger_name in ['uvicorn', 'uvicorn.error', 'uvicorn.access']:
+        uvicorn_logger = logging.getLogger(logger_name)
+        # Remove existing handlers and add our own with proper formatting
+        uvicorn_logger.handlers.clear()
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        uvicorn_logger.addHandler(handler)
+        uvicorn_logger.propagate = False
 
 logger = logging.getLogger(__name__)
 
@@ -855,6 +871,10 @@ async def run_mcp_server():
         logger.info('  Transport: HTTP (streamable)')
         logger.info('=' * 60)
         logger.info('For MCP clients, connect to the /mcp/ endpoint above')
+
+        # Configure uvicorn logging to match our format
+        configure_uvicorn_logging()
+
         await mcp.run_streamable_http_async()
     else:
         raise ValueError(
