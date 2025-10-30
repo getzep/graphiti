@@ -40,13 +40,9 @@ class Preference(BaseModel):
     Trigger patterns: "I want/like/prefer/choose X", "I don't want/dislike/avoid/reject Y", "X is better/worse", "rather have X than Y", "no X please", "skip X", "go with X instead", etc. Here, X or Y should be classified as Preference.
     """
 
-    category: str = Field(
-        ...,
-        description="The category of the preference. (e.g., 'Brands', 'Food', 'Music')",
-    )
+    name: str = Field(..., description='The name or identifier of the preference')
     description: str = Field(
-        ...,
-        description='Brief description of the preference. Only use information mentioned in the context to write this description.',
+        ..., description='Brief description of the preference and its context.'
     )
 
 
