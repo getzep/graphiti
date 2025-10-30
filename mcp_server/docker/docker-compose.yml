@@ -6,7 +6,7 @@ services:
       dockerfile: docker/Dockerfile
     env_file:
       - path: ../.env
-        required: false # Makes the file optional. Default value is 'true'
+        required: false
     environment:
       # Database configuration for KuzuDB - using persistent storage
       - KUZU_DB=${KUZU_DB:-/data/graphiti.kuzu}
