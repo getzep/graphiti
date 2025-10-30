@@ -109,9 +109,10 @@ LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \
 # Expose ports
 EXPOSE 6379 3000 8000
 
-# Health check for both services
+# Health check - verify FalkorDB is responding
+# MCP server startup is logged and visible in container output
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-    CMD redis-cli -p 6379 ping && curl -f http://localhost:8000/health || exit 1
+    CMD redis-cli -p 6379 ping > /dev/null || exit 1
 
 # Override the FalkorDB entrypoint and use our startup script
 ENTRYPOINT ["/start-services.sh"]

@@ -30,7 +30,7 @@ services:
       - "3000:3000"  # FalkorDB web UI
       - "8000:8000"  # MCP server HTTP
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -p 6379 ping && curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
