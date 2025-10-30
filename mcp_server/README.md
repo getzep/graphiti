@@ -13,13 +13,20 @@ graph capabilities.
 
 ## Features
 
-The Graphiti MCP server exposes the following key high-level functions of Graphiti:
+The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 
 - **Episode Management**: Add, retrieve, and delete episodes (text, messages, or JSON data)
 - **Entity Management**: Search and manage entity nodes and relationships in the knowledge graph
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
+- **Graph Database Support**: Multiple backend options including Kuzu (default), Neo4j, and FalkorDB
+- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
+- **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
+- **Custom Entity Types**: Define and use custom entity types for domain-specific knowledge extraction
+- **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
+- **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
+- **Telemetry**: Optional anonymous usage statistics to help improve the framework
 
 ## Quick Start
 
@@ -47,25 +54,33 @@ cd graphiti && pwd
 
 3. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
 
-### For Cursor and other `sse`-enabled clients
+### For Cursor and other HTTP-enabled clients
 
 1. Change directory to the `mcp_server` directory
 
 `cd graphiti/mcp_server`
 
-2. Start the service using Docker Compose
+2. Option A: Run with default Kuzu database (no Docker required)
 
-`docker compose up`
+```bash
+uv run graphiti_mcp_server.py
+```
 
-3. Point your MCP client to `http://localhost:8000/sse`
+3. Option B: Run with Neo4j using Docker Compose
+
+```bash
+docker compose up  # or docker compose -f docker/docker-compose-neo4j.yml up
+```
+
+4. Point your MCP client to `http://localhost:8000/mcp/`
 
 ## Installation
 
 ### Prerequisites
 
 1. Ensure you have Python 3.10 or higher installed.
-2. A running Neo4j database (version 5.26 or later required)
-3. OpenAI API key for LLM operations
+2. OpenAI API key for LLM operations (or API keys for other supported LLM providers)
+3. (Optional) A running Neo4j or FalkorDB instance if you prefer not to use the default Kuzu database
 
 ### Setup
 
@@ -87,17 +102,76 @@ uv sync --extra providers
 
 The server can be configured using a `config.yaml` file, environment variables, or command-line arguments (in order of precedence).
 
+### Default Configuration
+
+The MCP server comes with sensible defaults:
+- **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
+- **Database**: Kuzu (in-memory, no external dependencies required)
+- **LLM**: OpenAI with model gpt-4.1
+- **Embedder**: OpenAI text-embedding-ada-002
+
+### Database Configuration
+
+#### Kuzu (Default)
+
+The server defaults to using Kuzu, an embedded graph database that runs in-memory without requiring any external services. While the Kuzu project has been archived by its original authors, we continue to use it as the default because:
+- It requires no external dependencies or containers
+- It runs entirely in-memory, making it perfect for development and testing
+- It's fully self-contained within the Python environment
+- We're hopeful the community will continue maintaining this excellent project
+
+```yaml
+database:
+  provider: "kuzu"  # Default - no additional setup required
+  providers:
+    kuzu:
+      db: ":memory:"  # In-memory database (default)
+      # Or use a persistent file: db: "/path/to/database.kuzu"
+```
+
+#### Neo4j
+
+For production use or when you need a full-featured graph database, Neo4j is recommended:
+
+```yaml
+database:
+  provider: "neo4j"
+  providers:
+    neo4j:
+      uri: "bolt://localhost:7687"
+      username: "neo4j"
+      password: "your_password"
+      database: "neo4j"  # Optional, defaults to "neo4j"
+```
+
+#### FalkorDB
+
+FalkorDB is another graph database option based on Redis:
+
+```yaml
+database:
+  provider: "falkordb"
+  providers:
+    falkordb:
+      uri: "redis://localhost:6379"
+      password: ""  # Optional
+      database: "default_db"  # Optional
+```
+
 ### Configuration File (config.yaml)
 
 The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq) and embedders. Edit `config.yaml` to configure:
 
 ```yaml
+server:
+  transport: "http"  # Default. Options: stdio, http
+
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
-  model: "gpt-4o"
-  
+  model: "gpt-4.1"  # Default model
+
 database:
-  provider: "neo4j"  # or "falkordb" (requires additional setup)
+  provider: "kuzu"  # Default. Options: "neo4j", "falkordb"
 ```
 
 ### Using Ollama for Local LLM
@@ -135,27 +209,85 @@ You can set these variables in a `.env` file in the project directory.
 
 ## Running the Server
 
-To run the Graphiti MCP server directly using `uv`:
+### Default Setup (Kuzu Database)
+
+To run the Graphiti MCP server with the default Kuzu in-memory database:
 
 ```bash
 uv run graphiti_mcp_server.py
 ```
 
-With options:
+This starts the server with:
+- HTTP transport on `http://localhost:8000/mcp/`
+- Kuzu in-memory database (no external dependencies)
+- OpenAI LLM with gpt-4.1 model
+
+### Running with Neo4j
+
+#### Option 1: Using Docker Compose
+
+The easiest way to run with Neo4j is using the provided Docker Compose configuration:
 
 ```bash
-uv run graphiti_mcp_server.py --model gpt-4.1-mini --transport sse
+# This starts both Neo4j and the MCP server
+docker compose -f docker/docker-compose.neo4j.yaml up
 ```
 
-Available arguments:
+#### Option 2: Direct Execution with Existing Neo4j
+
+If you have Neo4j already running:
+
+```bash
+# Set environment variables
+export NEO4J_URI="bolt://localhost:7687"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="your_password"
+
+# Run with Neo4j
+uv run graphiti_mcp_server.py --database-provider neo4j
+```
+
+Or use the Neo4j configuration file:
+
+```bash
+uv run graphiti_mcp_server.py --config config/config-docker-neo4j.yaml
+```
+
+### Running with FalkorDB
+
+#### Option 1: Using Docker Compose
+
+```bash
+# This starts both FalkorDB (Redis-based) and the MCP server
+docker compose -f docker/docker-compose.falkordb.yaml up
+```
+
+#### Option 2: Direct Execution with Existing FalkorDB
+
+```bash
+# Set environment variables
+export FALKORDB_URI="redis://localhost:6379"
+export FALKORDB_PASSWORD=""  # If password protected
+
+# Run with FalkorDB
+uv run graphiti_mcp_server.py --database-provider falkordb
+```
+
+Or use the FalkorDB configuration file:
+
+```bash
+uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
+```
+
+### Available Command-Line Arguments
 
 - `--config`: Path to YAML configuration file (default: config.yaml)
 - `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
-- `--database-provider`: Database provider to use (neo4j, falkordb)
+- `--database-provider`: Database provider to use (kuzu, neo4j, falkordb) - default: kuzu
 - `--model`: Model name to use with the LLM client
 - `--temperature`: Temperature setting for the LLM (0.0-2.0)
-- `--transport`: Choose the transport method (sse or stdio, default: sse)
+- `--transport`: Choose the transport method (http or stdio, default: http)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup
 - `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
@@ -169,8 +301,7 @@ If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT
 
 ### Docker Deployment
 
-The Graphiti MCP server can be deployed using Docker. The Dockerfile uses `uv` for package management, ensuring
-consistent dependency installation.
+The Graphiti MCP server can be deployed using Docker with your choice of database backend. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
 
 #### Environment Configuration
 
@@ -186,7 +317,7 @@ Before running the Docker Compose setup, you need to configure the environment v
      ```
      # Required for LLM operations
      OPENAI_API_KEY=your_openai_api_key_here
-     MODEL_NAME=gpt-4.1-mini
+     MODEL_NAME=gpt-4.1
      # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
      # OPENAI_BASE_URL=https://api.openai.com/v1
      ```
@@ -195,41 +326,57 @@ Before running the Docker Compose setup, you need to configure the environment v
 2. **Using environment variables directly**:
    - You can also set the environment variables when running the Docker Compose command:
      ```bash
-     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1-mini docker compose up
+     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1 docker compose up
      ```
 
-#### Neo4j Configuration
+#### Database Options with Docker Compose
 
-The Docker Compose setup includes a Neo4j container with the following default configuration:
+A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`.
 
-- Username: `neo4j`
-- Password: `demodemo`
-- URI: `bolt://neo4j:7687` (from within the Docker network)
-- Memory settings optimized for development use
+##### Default: Kuzu Database
 
-#### Running with Docker Compose
-
-A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`. The latest build of this container is used by the Compose setup below.
-
-Start the services using Docker Compose:
+The default `docker-compose.yml` uses Kuzu (in-memory database):
 
 ```bash
 docker compose up
 ```
 
-Or if you're using an older version of Docker Compose:
+This runs the MCP server with Kuzu, requiring no external database container.
+
+##### Neo4j Configuration
+
+For Neo4j, use the dedicated compose file:
 
 ```bash
-docker-compose up
+docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
-This will start both the Neo4j database and the Graphiti MCP server. The Docker setup:
+This includes a Neo4j container with:
+- Username: `neo4j`
+- Password: `demodemo`
+- URI: `bolt://neo4j:7687` (from within the Docker network)
+- Memory settings optimized for development use
+
+##### FalkorDB Configuration
+
+For FalkorDB (Redis-based graph database):
+
+```bash
+docker compose -f docker/docker-compose-falkordb.yml up
+```
+
+This includes a FalkorDB container configured for graph operations.
+
+#### What the Docker Setup Provides
+
+The Docker deployment:
 
 - Uses `uv` for package management and running the server
 - Installs dependencies from the `pyproject.toml` file
-- Connects to the Neo4j container using the environment variables
-- Exposes the server on port 8000 for HTTP-based SSE transport
-- Includes a healthcheck for Neo4j to ensure it's fully operational before starting the MCP server
+- Automatically configures database connections based on the compose file used
+- Exposes the server on port 8000 with HTTP transport (access at `http://localhost:8000/mcp/`)
+- Includes healthchecks to ensure databases are operational before starting the MCP server
+- Supports all Graphiti features including custom entity types and multiple LLM providers
 
 ## Integrating with MCP Clients
 
@@ -241,9 +388,9 @@ VS Code with GitHub Copilot Chat extension supports MCP servers. Add to your VS 
 {
   "mcpServers": {
     "graphiti": {
-      "uri": "http://localhost:8000/sse",
+      "uri": "http://localhost:8000/mcp/",
       "transport": {
-        "type": "sse"
+        "type": "http"
       }
     }
   }
@@ -288,14 +435,14 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
 }
 ```
 
-For SSE transport (HTTP-based), you can use this configuration:
+For HTTP transport (default), you can use this configuration:
 
 ```json
 {
   "mcpServers": {
     "graphiti-memory": {
-      "transport": "sse",
-      "url": "http://localhost:8000/sse"
+      "transport": "http",
+      "url": "http://localhost:8000/mcp/"
     }
   }
 }
@@ -335,13 +482,13 @@ source_description="CRM data"
 
 To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 
-1. Run the Graphiti MCP server using the SSE transport:
+1. Run the Graphiti MCP server using the default HTTP transport:
 
 ```bash
-python graphiti_mcp_server.py --transport sse --use-custom-entities --group-id <your_group_id>
+uv run graphiti_mcp_server.py --use-custom-entities --group-id <your_group_id>
 ```
 
-Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "default" as the group_id.
+Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "main" as the group_id.
 
 or
 
@@ -355,7 +502,7 @@ docker compose up
 {
   "mcpServers": {
     "graphiti-memory": {
-      "url": "http://localhost:8000/sse"
+      "url": "http://localhost:8000/mcp/"
     }
   }
 }
@@ -370,12 +517,14 @@ capabilities.
 
 ## Integrating with Claude Desktop (Docker MCP Server)
 
-The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop does not natively support SSE, so you'll need to use a gateway like `mcp-remote`.
+The Graphiti MCP Server uses HTTP transport by default (at endpoint `/mcp/`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote`.
 
-1.  **Run the Graphiti MCP server using SSE transport**:
+1.  **Run the Graphiti MCP server**:
 
     ```bash
     docker compose up
+    # Or run directly with uv:
+    uv run graphiti_mcp_server.py
     ```
 
 2.  **(Optional) Install `mcp-remote` globally**:
@@ -396,7 +545,7 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
           "command": "npx", // Or the full path to mcp-remote if npx is not in your PATH
           "args": [
             "mcp-remote",
-            "http://localhost:8000/sse" // Ensure this matches your Graphiti server's SSE endpoint
+            "http://localhost:8000/mcp/" // The Graphiti server's HTTP endpoint
           ]
         }
       }
@@ -410,9 +559,9 @@ The Graphiti MCP Server container uses the SSE MCP transport. Claude Desktop doe
 ## Requirements
 
 - Python 3.10 or higher
-- Neo4j database (version 5.26 or later required)
-- OpenAI API key (for LLM operations and embeddings)
+- OpenAI API key (for LLM operations and embeddings) or other LLM provider API keys
 - MCP-compatible client
+- (Optional) Neo4j database (version 5.26 or later) or FalkorDB if not using default Kuzu
 
 ## Telemetry
 
