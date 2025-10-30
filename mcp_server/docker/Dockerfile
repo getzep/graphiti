@@ -29,9 +29,13 @@ RUN groupadd -r app && useradd -r -d /app -g app app
 # Copy project files for dependency installation (better caching)
 COPY pyproject.toml uv.lock ./
 
+# Remove the local path override for graphiti-core in Docker builds
+# This allows uv to use the published package from PyPI
+RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml
+
 # Install dependencies first (better layer caching)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --no-dev
 
 # Copy application code and configuration
 COPY main.py ./
