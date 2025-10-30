@@ -114,11 +114,7 @@ The MCP server comes with sensible defaults:
 
 #### Kuzu (Default)
 
-The server defaults to using Kuzu, an embedded graph database that runs in-memory without requiring any external services. While the Kuzu project has been archived by its original authors, we continue to use it as the default because:
-- It requires no external dependencies or containers
-- It runs entirely in-memory, making it perfect for development and testing
-- It's fully self-contained within the Python environment
-- We're hopeful the community will continue maintaining this excellent project
+Kuzu is an embedded in-memory graph database requiring no external services. While archived by its original authors, we use it as the default for its simplicity and zero-dependency setup. We hope the community continues to maintain this project.
 
 ```yaml
 database:
@@ -181,7 +177,7 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 ```yaml
 llm:
   provider: "openai"
-  model: "llama3.2"  # or your preferred Ollama model
+  model: "gpt-oss:120b"  # or your preferred Ollama model
   api_base: "http://localhost:11434/v1"
   api_key: "ollama"  # dummy key required
 
@@ -203,6 +199,13 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
 - `GOOGLE_API_KEY`: Google API key (for Gemini models)
 - `GROQ_API_KEY`: Groq API key (for Groq models)
+- `AZURE_OPENAI_API_KEY`: Azure OpenAI API key
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint URL
+- `AZURE_OPENAI_DEPLOYMENT`: Azure OpenAI deployment name
+- `AZURE_OPENAI_EMBEDDINGS_ENDPOINT`: Optional Azure OpenAI embeddings endpoint URL
+- `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT`: Optional Azure OpenAI embeddings deployment name
+- `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
+- `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
@@ -367,16 +370,7 @@ docker compose -f docker/docker-compose-falkordb.yml up
 
 This includes a FalkorDB container configured for graph operations.
 
-#### What the Docker Setup Provides
-
-The Docker deployment:
-
-- Uses `uv` for package management and running the server
-- Installs dependencies from the `pyproject.toml` file
-- Automatically configures database connections based on the compose file used
-- Exposes the server on port 8000 with HTTP transport (access at `http://localhost:8000/mcp/`)
-- Includes healthchecks to ensure databases are operational before starting the MCP server
-- Supports all Graphiti features including custom entity types and multiple LLM providers
+The MCP server is exposed on port 8000 with HTTP transport at `http://localhost:8000/mcp/`.
 
 ## Integrating with MCP Clients
 
@@ -517,7 +511,7 @@ capabilities.
 
 ## Integrating with Claude Desktop (Docker MCP Server)
 
-The Graphiti MCP Server uses HTTP transport by default (at endpoint `/mcp/`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote`.
+The Graphiti MCP Server uses HTTP transport by default (at endpoint `/mcp/`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote` which supports both HTTP and SSE transports.
 
 1.  **Run the Graphiti MCP server**:
 
