@@ -305,71 +305,98 @@ If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT
 
 The Graphiti MCP server can be deployed using Docker with your choice of database backend. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
 
+A pre-built Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`
+
 #### Environment Configuration
 
-Before running the Docker Compose setup, you need to configure the environment variables. You have two options:
+Before running Docker Compose, configure your API keys using a `.env` file (recommended):
 
-1. **Using a .env file** (recommended):
+1. **Create a .env file in the mcp_server directory**:
+   ```bash
+   cd graphiti/mcp_server
+   cp .env.example .env
+   ```
 
-   - Copy the provided `.env.example` file to create a `.env` file:
-     ```bash
-     cp .env.example .env
-     ```
-   - Edit the `.env` file to set your OpenAI API key and other configuration options:
-     ```
-     # Required for LLM operations
-     OPENAI_API_KEY=your_openai_api_key_here
-     MODEL_NAME=gpt-4.1
-     # Optional: OPENAI_BASE_URL only needed for non-standard OpenAI endpoints
-     # OPENAI_BASE_URL=https://api.openai.com/v1
-     ```
-   - The Docker Compose setup is configured to use this file if it exists (it's optional)
+2. **Edit the .env file** to set your API keys:
+   ```bash
+   # Required - at least one LLM provider API key
+   OPENAI_API_KEY=your_openai_api_key_here
 
-2. **Using environment variables directly**:
-   - You can also set the environment variables when running the Docker Compose command:
-     ```bash
-     OPENAI_API_KEY=your_key MODEL_NAME=gpt-4.1 docker compose up
-     ```
+   # Optional - other LLM providers
+   ANTHROPIC_API_KEY=your_anthropic_key
+   GOOGLE_API_KEY=your_google_key
+   GROQ_API_KEY=your_groq_key
 
-#### Database Options with Docker Compose
+   # Optional - embedder providers
+   VOYAGE_API_KEY=your_voyage_key
+   ```
 
-A Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`.
+**Important**: The `.env` file must be in the `mcp_server/` directory (the parent of the `docker/` subdirectory).
 
-##### Default: Kuzu Database
+#### Running with Docker Compose
 
-The default `docker-compose.yml` uses Kuzu (in-memory database):
+**All commands must be run from the `mcp_server` directory** to ensure the `.env` file is loaded correctly:
 
 ```bash
-docker compose up
+cd graphiti/mcp_server
 ```
 
-This runs the MCP server with Kuzu, requiring no external database container.
+##### Option 1: Kuzu Database (Default, No External Database)
 
-##### Neo4j Configuration
+Uses Kuzu in-memory database - fastest and simplest option:
 
-For Neo4j, use the dedicated compose file:
+```bash
+docker compose -f docker/docker-compose.yml up
+```
+
+##### Option 2: Neo4j Database
+
+Includes a Neo4j container with persistent storage:
 
 ```bash
 docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
-This includes a Neo4j container with:
+Default Neo4j credentials:
 - Username: `neo4j`
 - Password: `demodemo`
-- URI: `bolt://neo4j:7687` (from within the Docker network)
-- Memory settings optimized for development use
+- Bolt URI: `bolt://neo4j:7687`
+- Browser UI: `http://localhost:7474`
 
-##### FalkorDB Configuration
+##### Option 3: FalkorDB Database
 
-For FalkorDB (Redis-based graph database):
+Includes a FalkorDB container (Redis-based graph database):
 
 ```bash
 docker compose -f docker/docker-compose-falkordb.yml up
 ```
 
-This includes a FalkorDB container configured for graph operations.
+FalkorDB configuration:
+- Redis port: `6379`
+- Web UI: `http://localhost:3000`
+- Connection: `redis://falkordb:6379`
 
-The MCP server is exposed on port 8000 with HTTP transport at `http://localhost:8000/mcp/`.
+#### Accessing the MCP Server
+
+Once running, the MCP server is available at:
+- **HTTP endpoint**: `http://localhost:8000/mcp/`
+- **Health check**: `http://localhost:8000/health`
+
+#### Running Docker Compose from a Different Directory
+
+If you run Docker Compose from the `docker/` subdirectory instead of `mcp_server/`, you'll need to modify the `.env` file path in the compose file:
+
+```yaml
+# Change this line in the docker-compose file:
+env_file:
+  - path: ../.env    # When running from mcp_server/
+
+# To this:
+env_file:
+  - path: .env       # When running from mcp_server/docker/
+```
+
+However, **running from the `mcp_server/` directory is recommended** to avoid confusion.
 
 ## Integrating with MCP Clients
 
