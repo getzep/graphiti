@@ -2,8 +2,8 @@ services:
   graphiti-mcp:
     image: zepai/knowledge-graph-mcp:latest
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     env_file:
       - path: .env
         required: false # Makes the file optional. Default value is 'true'
