@@ -33,7 +33,7 @@ class Requirement(BaseModel):
 
 class Preference(BaseModel):
     """
-    IMPORTANT: Prioritize this classification over ALL other classifications except User and Assistant.
+    IMPORTANT: Prioritize this classification over ALL other classifications.
 
     Represents entities mentioned in contexts expressing user preferences, choices, opinions, or selections. Use LOW THRESHOLD for sensitivity.
 
