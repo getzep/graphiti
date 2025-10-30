@@ -51,10 +51,11 @@ else:
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
 
 
-# Configure logging to match uvicorn format
+# Configure structured logging with timestamps
 logging.basicConfig(
     level=logging.INFO,
-    format='%(levelname)-8s %(message)s',  # Match uvicorn's default format
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
     stream=sys.stderr,
 )
 
