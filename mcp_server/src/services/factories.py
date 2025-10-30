@@ -94,9 +94,22 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
+                # Determine appropriate small model based on main model type
+                small_model = None
+                is_reasoning_model = (
+                    config.model.startswith('gpt-5')
+                    or config.model.startswith('o1')
+                    or config.model.startswith('o3')
+                )
+                if is_reasoning_model:
+                    small_model = 'gpt-5-nano'  # Use reasoning model for small tasks too
+                else:
+                    small_model = 'gpt-4.1-mini'  # Use non-reasoning model for small tasks
+
                 llm_config = CoreLLMConfig(
                     api_key=config.providers.openai.api_key,
                     model=config.model,
+                    small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
