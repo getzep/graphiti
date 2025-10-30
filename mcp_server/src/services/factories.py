@@ -73,8 +73,8 @@ except ImportError:
 from utils.utils import create_azure_credential_token_provider
 
 
-def _validate_and_mask_api_key(provider_name: str, api_key: str | None, logger) -> str:
-    """Validate API key is present and return masked version for logging.
+def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
+    """Validate API key is present.
 
     Args:
         provider_name: Name of the provider (e.g., 'OpenAI', 'Anthropic')
@@ -82,7 +82,7 @@ def _validate_and_mask_api_key(provider_name: str, api_key: str | None, logger) 
         logger: Logger instance for output
 
     Returns:
-        Masked API key for logging
+        The validated API key
 
     Raises:
         ValueError: If API key is None or empty
@@ -92,11 +92,9 @@ def _validate_and_mask_api_key(provider_name: str, api_key: str | None, logger) 
             f'{provider_name} API key is not configured. Please set the appropriate environment variable.'
         )
 
-    # Log masked API key for debugging (only show first 4 characters)
-    masked_key = f'{api_key[:4]}...' if len(api_key) > 4 else '***'
-    logger.info(f'Creating {provider_name} client with API key: {masked_key}')
+    logger.info(f'Creating {provider_name} client')
 
-    return masked_key
+    return api_key
 
 
 class LLMClientFactory:
@@ -117,7 +115,7 @@ class LLMClientFactory:
                     raise ValueError('OpenAI provider configuration not found')
 
                 api_key = config.providers.openai.api_key
-                _validate_and_mask_api_key('OpenAI', api_key, logger)
+                _validate_api_key('OpenAI', api_key, logger)
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
@@ -172,7 +170,7 @@ class LLMClientFactory:
                     azure_ad_token_provider = create_azure_credential_token_provider()
                 else:
                     api_key = azure_config.api_key
-                    _validate_and_mask_api_key('Azure OpenAI', api_key, logger)
+                    _validate_api_key('Azure OpenAI', api_key, logger)
 
                 # Create the Azure OpenAI client first
                 azure_client = AsyncAzureOpenAI(
@@ -209,7 +207,7 @@ class LLMClientFactory:
                     raise ValueError('Anthropic provider configuration not found')
 
                 api_key = config.providers.anthropic.api_key
-                _validate_and_mask_api_key('Anthropic', api_key, logger)
+                _validate_api_key('Anthropic', api_key, logger)
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
@@ -226,7 +224,7 @@ class LLMClientFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_and_mask_api_key('Gemini', api_key, logger)
+                _validate_api_key('Gemini', api_key, logger)
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
@@ -243,7 +241,7 @@ class LLMClientFactory:
                     raise ValueError('Groq provider configuration not found')
 
                 api_key = config.providers.groq.api_key
-                _validate_and_mask_api_key('Groq', api_key, logger)
+                _validate_api_key('Groq', api_key, logger)
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
@@ -276,7 +274,7 @@ class EmbedderFactory:
                     raise ValueError('OpenAI provider configuration not found')
 
                 api_key = config.providers.openai.api_key
-                _validate_and_mask_api_key('OpenAI Embedder', api_key, logger)
+                _validate_api_key('OpenAI Embedder', api_key, logger)
 
                 from graphiti_core.embedder.openai import OpenAIEmbedderConfig
 
@@ -308,7 +306,7 @@ class EmbedderFactory:
                     azure_ad_token_provider = create_azure_credential_token_provider()
                 else:
                     api_key = azure_config.api_key
-                    _validate_and_mask_api_key('Azure OpenAI Embedder', api_key, logger)
+                    _validate_api_key('Azure OpenAI Embedder', api_key, logger)
 
                 # Create the Azure OpenAI client first
                 azure_client = AsyncAzureOpenAI(
@@ -333,7 +331,7 @@ class EmbedderFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_and_mask_api_key('Gemini Embedder', api_key, logger)
+                _validate_api_key('Gemini Embedder', api_key, logger)
 
                 from graphiti_core.embedder.gemini import GeminiEmbedderConfig
 
@@ -353,7 +351,7 @@ class EmbedderFactory:
                     raise ValueError('Voyage provider configuration not found')
 
                 api_key = config.providers.voyage.api_key
-                _validate_and_mask_api_key('Voyage Embedder', api_key, logger)
+                _validate_api_key('Voyage Embedder', api_key, logger)
 
                 from graphiti_core.embedder.voyage import VoyageAIEmbedderConfig
 
