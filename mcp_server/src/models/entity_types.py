@@ -40,10 +40,7 @@ class Preference(BaseModel):
     Trigger patterns: "I want/like/prefer/choose X", "I don't want/dislike/avoid/reject Y", "X is better/worse", "rather have X than Y", "no X please", "skip X", "go with X instead", etc. Here, X or Y should be classified as Preference.
     """
 
-    name: str = Field(..., description='The name or identifier of the preference')
-    description: str = Field(
-        ..., description='Brief description of the preference and its context.'
-    )
+    ...
 
 
 class Procedure(BaseModel):
