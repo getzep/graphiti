@@ -133,7 +133,7 @@ docker-compose up
 
 The codebase supports multiple LLM providers but works best with services supporting structured output (OpenAI, Gemini). Other providers may cause schema validation issues, especially with smaller models.
 
-#### Current LLM Models (as of January 2025)
+#### Current LLM Models (as of November 2025)
 
 **OpenAI Models:**
 - **GPT-5 Family** (Reasoning models, require temperature=0):
@@ -148,17 +148,16 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `gpt-4o-mini` - Previous generation efficient
 
 **Anthropic Models:**
-- **Claude 3.7 Family** (Latest):
-  - `claude-3-7-sonnet-latest` - Recommended, auto-updates
-  - `claude-3-7-sonnet-20250219` - Pinned version
+- **Claude Sonnet 4.5 Family** (Latest):
+  - `claude-sonnet-4-5-latest` - Recommended, auto-updates
+  - `claude-sonnet-4-5-20250929` - Pinned version from September 2025
+- **Claude 3.7 Family**:
+  - `claude-3-7-sonnet-latest` - Auto-updates
+  - `claude-3-7-sonnet-20250219` - Pinned version from February 2025
 - **Claude 3.5 Family**:
   - `claude-3-5-sonnet-latest` - Auto-updates
-  - `claude-3-5-sonnet-20241022` - Recent pinned version
+  - `claude-3-5-sonnet-20241022` - Pinned version from October 2024
   - `claude-3-5-haiku-latest` - Fast model
-- **Legacy Models**:
-  - `claude-3-opus-latest` - Older flagship
-  - `claude-3-sonnet-20240229` - Older standard
-  - `claude-3-haiku-20240307` - Older fast
 
 **Google Gemini Models:**
 - **Gemini 2.5 Family** (Latest):
