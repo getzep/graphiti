@@ -38,8 +38,8 @@ COPY main.py ./
 COPY src/ ./src/
 COPY config/ ./config/
 
-# Change ownership to app user
-RUN chown -Rv app:app /app
+# Set execute permissions on main.py and change ownership to app user
+RUN chmod +x /app/main.py && chown -Rv app:app /app
 
 # Switch to non-root user
 USER app
