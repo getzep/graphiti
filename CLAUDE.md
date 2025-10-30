@@ -148,9 +148,10 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `gpt-4o-mini` - Previous generation efficient
 
 **Anthropic Models:**
-- **Claude Sonnet 4.5 Family** (Latest):
-  - `claude-sonnet-4-5-latest` - Recommended, auto-updates
-  - `claude-sonnet-4-5-20250929` - Pinned version from September 2025
+- **Claude 4.5 Family** (Latest):
+  - `claude-sonnet-4-5-latest` - Flagship model, auto-updates
+  - `claude-sonnet-4-5-20250929` - Pinned Sonnet version from September 2025
+  - `claude-haiku-4-5-latest` - Fast model, auto-updates
 - **Claude 3.7 Family**:
   - `claude-3-7-sonnet-latest` - Auto-updates
   - `claude-3-7-sonnet-20250219` - Pinned version from February 2025
