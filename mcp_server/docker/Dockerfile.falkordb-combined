@@ -56,21 +56,21 @@ COPY main.py ./
 COPY src/ ./src/
 COPY config/ ./config/
 
-# Copy FalkorDB-specific config as default
-COPY config/config-docker-falkordb.yaml /app/mcp/config/config.yaml
+# Copy FalkorDB combined config (uses localhost since both services in same container)
+COPY config/config-docker-falkordb-combined.yaml /app/mcp/config/config.yaml
 
-# Create log directory
-RUN mkdir -p /var/log/graphiti
+# Create log and data directories
+RUN mkdir -p /var/log/graphiti /var/lib/falkordb/data
 
 # Create startup script that runs both services
 RUN cat > /start-services.sh <<'EOF'
 #!/bin/bash
 set -e
 
-# Start FalkorDB in background
+# Start FalkorDB in background using the correct module path
 echo "Starting FalkorDB..."
 redis-server \
-  --loadmodule /FalkorDB/bin/linux-x64-release/src/falkordb.so \
+  --loadmodule /var/lib/falkordb/bin/falkordb.so \
   --protected-mode no \
   --bind 0.0.0.0 \
   --port 6379 \
@@ -113,5 +113,6 @@ EXPOSE 6379 3000 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
     CMD redis-cli -p 6379 ping && curl -f http://localhost:8000/health || exit 1
 
-# Run the startup script
-CMD ["/start-services.sh"]
+# Override the FalkorDB entrypoint and use our startup script
+ENTRYPOINT ["/start-services.sh"]
+CMD []
