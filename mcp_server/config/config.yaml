@@ -1,5 +1,9 @@
 # Graphiti MCP Server Configuration
 # This file supports environment variable expansion using ${VAR_NAME} or ${VAR_NAME:default_value}
+#
+# IMPORTANT: Set SEMAPHORE_LIMIT environment variable to control episode processing concurrency
+# Default: 10 (suitable for OpenAI Tier 3, mid-tier Anthropic)
+# See README.md "Concurrency and LLM Provider 429 Rate Limit Errors" section for tuning guidance
 
 server:
   transport: "http"  # Options: stdio, sse (deprecated), http

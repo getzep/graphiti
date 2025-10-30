@@ -328,10 +328,46 @@ uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
 
-Graphiti's ingestion pipelines are designed for high concurrency, controlled by the `SEMAPHORE_LIMIT` environment variable.
-By default, `SEMAPHORE_LIMIT` is set to `10` concurrent operations to help prevent `429` rate limit errors from your LLM provider. If you encounter such errors, try lowering this value.
+Graphiti's ingestion pipelines are designed for high concurrency, controlled by the `SEMAPHORE_LIMIT` environment variable. This setting determines how many episodes can be processed simultaneously. Since each episode involves multiple LLM calls (entity extraction, deduplication, summarization), the actual number of concurrent LLM requests will be several times higher.
 
-If your LLM provider allows higher throughput, you can increase `SEMAPHORE_LIMIT` to boost episode ingestion performance.
+**Default:** `SEMAPHORE_LIMIT=10` (suitable for OpenAI Tier 3, mid-tier Anthropic)
+
+#### Tuning Guidelines by LLM Provider
+
+**OpenAI:**
+- Tier 1 (free): 3 RPM → `SEMAPHORE_LIMIT=1-2`
+- Tier 2: 60 RPM → `SEMAPHORE_LIMIT=5-8`
+- Tier 3: 500 RPM → `SEMAPHORE_LIMIT=10-15`
+- Tier 4: 5,000 RPM → `SEMAPHORE_LIMIT=20-50`
+
+**Anthropic:**
+- Default tier: 50 RPM → `SEMAPHORE_LIMIT=5-8`
+- High tier: 1,000 RPM → `SEMAPHORE_LIMIT=15-30`
+
+**Azure OpenAI:**
+- Consult your quota in Azure Portal and adjust accordingly
+- Start conservative and increase gradually
+
+**Ollama (local):**
+- Hardware dependent → `SEMAPHORE_LIMIT=1-5`
+- Monitor CPU/GPU usage and adjust
+
+#### Symptoms
+
+- **Too high**: 429 rate limit errors, increased API costs from parallel processing
+- **Too low**: Slow episode throughput, underutilized API quota
+
+#### Monitoring
+
+- Watch logs for `429` rate limit errors
+- Monitor episode processing times in server logs
+- Check your LLM provider's dashboard for actual request rates
+- Track token usage and costs
+
+Set this in your `.env` file:
+```bash
+SEMAPHORE_LIMIT=10  # Adjust based on your LLM provider tier
+```
 
 ### Docker Deployment
 

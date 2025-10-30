@@ -45,8 +45,32 @@ else:
 
 
 # Semaphore limit for concurrent Graphiti operations.
-# Decrease this if you're experiencing 429 rate limit errors from your LLM provider.
-# Increase if you have high rate limits.
+#
+# This controls how many episodes can be processed simultaneously. Each episode
+# processing involves multiple LLM calls (entity extraction, deduplication, etc.),
+# so the actual number of concurrent LLM requests will be higher.
+#
+# TUNING GUIDELINES:
+#
+# LLM Provider Rate Limits (requests per minute):
+# - OpenAI Tier 1 (free):     3 RPM   -> SEMAPHORE_LIMIT=1-2
+# - OpenAI Tier 2:            60 RPM   -> SEMAPHORE_LIMIT=5-8
+# - OpenAI Tier 3:           500 RPM   -> SEMAPHORE_LIMIT=10-15
+# - OpenAI Tier 4:         5,000 RPM   -> SEMAPHORE_LIMIT=20-50
+# - Anthropic (default):     50 RPM   -> SEMAPHORE_LIMIT=5-8
+# - Anthropic (high tier): 1,000 RPM   -> SEMAPHORE_LIMIT=15-30
+# - Azure OpenAI (varies):  Consult your quota -> adjust accordingly
+#
+# SYMPTOMS:
+# - Too high: 429 rate limit errors, increased costs from parallel processing
+# - Too low: Slow throughput, underutilized API quota
+#
+# MONITORING:
+# - Watch logs for rate limit errors (429)
+# - Monitor episode processing times
+# - Check LLM provider dashboard for actual request rates
+#
+# DEFAULT: 10 (suitable for OpenAI Tier 3, mid-tier Anthropic)
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
 
 
