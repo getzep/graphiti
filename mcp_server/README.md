@@ -107,7 +107,7 @@ The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
 - **Database**: Kuzu (in-memory, no external dependencies required)
 - **LLM**: OpenAI with model gpt-4.1
-- **Embedder**: OpenAI text-embedding-ada-002
+- **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
 
