@@ -8,7 +8,7 @@ server:
   
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4.1"
+  model: "gpt-5-mini"
   temperature: 0.0
   max_tokens: 4096
   
@@ -41,7 +41,7 @@ llm:
 
 embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-ada-002"
+  model: "text-embedding-3-small"
   dimensions: 1536
   
   providers:
