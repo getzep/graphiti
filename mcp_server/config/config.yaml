@@ -67,24 +67,20 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "kuzu"  # Options: neo4j, falkordb, kuzu
-  
+  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+
   providers:
+    falkordb:
+      uri: ${FALKORDB_URI:redis://localhost:6379}
+      password: ${FALKORDB_PASSWORD:}
+      database: ${FALKORDB_DATABASE:default_db}
+
     neo4j:
       uri: ${NEO4J_URI:bolt://localhost:7687}
       username: ${NEO4J_USER:neo4j}
       password: ${NEO4J_PASSWORD}
       database: ${NEO4J_DATABASE:neo4j}
       use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
-      
-    falkordb:
-      uri: ${FALKORDB_URI:redis://localhost:6379}
-      password: ${FALKORDB_PASSWORD:}
-      database: ${FALKORDB_DATABASE:default_db}
-      
-    kuzu:
-      db: ${KUZU_DB::memory:}
-      max_concurrent_queries: ${KUZU_MAX_CONCURRENT_QUERIES:1}
 
 graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}

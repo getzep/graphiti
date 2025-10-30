@@ -20,7 +20,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Search Capabilities**: Search for facts (edges) and node summaries using semantic and hybrid search
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
-- **Graph Database Support**: Multiple backend options including Kuzu (default), Neo4j, and FalkorDB
+- **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
@@ -59,16 +59,17 @@ cd graphiti && pwd
 
 `cd graphiti/mcp_server`
 
-2. Option A: Run with default Kuzu database (no Docker required)
+2. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
 
 ```bash
-uv run graphiti_mcp_server.py
+docker compose up
 ```
 
-3. Option B: Run with Neo4j using Docker Compose
+This starts both FalkorDB and the MCP server in a single container.
 
+**Alternative**: Run with separate containers using Neo4j:
 ```bash
-docker compose up  # or docker compose -f docker/docker-compose-neo4j.yml up
+docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
 4. Point your MCP client to `http://localhost:8000/mcp/`
@@ -77,9 +78,9 @@ docker compose up  # or docker compose -f docker/docker-compose-neo4j.yml up
 
 ### Prerequisites
 
-1. Ensure you have Python 3.10 or higher installed.
+1. Docker and Docker Compose (for the default FalkorDB setup)
 2. OpenAI API key for LLM operations (or API keys for other supported LLM providers)
-3. (Optional) A running Neo4j or FalkorDB instance if you prefer not to use the default Kuzu database
+3. (Optional) Python 3.10+ if running the MCP server standalone with an external FalkorDB instance
 
 ### Setup
 
@@ -105,23 +106,24 @@ The server can be configured using a `config.yaml` file, environment variables, 
 
 The MCP server comes with sensible defaults:
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
-- **Database**: Kuzu (in-memory, no external dependencies required)
-- **LLM**: OpenAI with model gpt-4.1
+- **Database**: FalkorDB (combined in single container with MCP server)
+- **LLM**: OpenAI with model gpt-5-mini
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
 
-#### Kuzu (Default)
+#### FalkorDB (Default)
 
-Kuzu is an embedded in-memory graph database requiring no external services. While archived by its original authors, we use it as the default for its simplicity and zero-dependency setup. We hope the community continues to maintain this project.
+FalkorDB is a Redis-based graph database that comes bundled with the MCP server in a single Docker container. This is the default and recommended setup.
 
 ```yaml
 database:
-  provider: "kuzu"  # Default - no additional setup required
+  provider: "falkordb"  # Default
   providers:
-    kuzu:
-      db: ":memory:"  # In-memory database (default)
-      # Or use a persistent file: db: "/path/to/database.kuzu"
+    falkordb:
+      uri: "redis://localhost:6379"
+      password: ""  # Optional
+      database: "default_db"  # Optional
 ```
 
 #### Neo4j
@@ -166,7 +168,7 @@ llm:
   model: "gpt-4.1"  # Default model
 
 database:
-  provider: "kuzu"  # Default. Options: "neo4j", "falkordb"
+  provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
 
 ### Using Ollama for Local LLM
@@ -241,18 +243,19 @@ You can set these variables in a `.env` file in the project directory.
 
 ## Running the Server
 
-### Default Setup (Kuzu Database)
+### Default Setup (FalkorDB Combined Container)
 
-To run the Graphiti MCP server with the default Kuzu in-memory database:
+To run the Graphiti MCP server with the default FalkorDB setup:
 
 ```bash
-uv run graphiti_mcp_server.py
+docker compose up
 ```
 
-This starts the server with:
+This starts a single container with:
 - HTTP transport on `http://localhost:8000/mcp/`
-- Kuzu in-memory database (no external dependencies)
-- OpenAI LLM with gpt-4.1 model
+- FalkorDB graph database on `localhost:6379`
+- FalkorDB web UI on `http://localhost:3000`
+- OpenAI LLM with gpt-5-mini model
 
 ### Running with Neo4j
 
@@ -316,7 +319,7 @@ uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
 - `--config`: Path to YAML configuration file (default: config.yaml)
 - `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
-- `--database-provider`: Database provider to use (kuzu, neo4j, falkordb) - default: kuzu
+- `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
 - `--model`: Model name to use with the LLM client
 - `--temperature`: Temperature setting for the LLM (0.0-2.0)
 - `--transport`: Choose the transport method (http or stdio, default: http)
@@ -370,17 +373,17 @@ Before running Docker Compose, configure your API keys using a `.env` file (reco
 cd graphiti/mcp_server
 ```
 
-##### Option 1: Kuzu Database (Default, No External Database)
+##### Option 1: FalkorDB Combined Container (Default)
 
-Uses Kuzu in-memory database - fastest and simplest option:
+Single container with both FalkorDB and MCP server - simplest option:
 
 ```bash
-docker compose -f docker/docker-compose.yml up
+docker compose up
 ```
 
 ##### Option 2: Neo4j Database
 
-Includes a Neo4j container with persistent storage:
+Separate containers with Neo4j and MCP server:
 
 ```bash
 docker compose -f docker/docker-compose-neo4j.yml up
@@ -392,9 +395,9 @@ Default Neo4j credentials:
 - Bolt URI: `bolt://neo4j:7687`
 - Browser UI: `http://localhost:7474`
 
-##### Option 3: FalkorDB Database (Separate Containers)
+##### Option 3: FalkorDB with Separate Containers
 
-Includes separate FalkorDB and MCP server containers:
+Alternative setup with separate FalkorDB and MCP server containers:
 
 ```bash
 docker compose -f docker/docker-compose-falkordb.yml up
@@ -404,22 +407,6 @@ FalkorDB configuration:
 - Redis port: `6379`
 - Web UI: `http://localhost:3000`
 - Connection: `redis://falkordb:6379`
-
-##### Option 4: FalkorDB + MCP Server (Combined Image)
-
-Single container with both FalkorDB and MCP server bundled together:
-
-```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml up
-```
-
-This combined setup offers:
-- Simplified deployment (one container to manage)
-- Reduced network latency (localhost communication)
-- Easier development workflow
-- Unified logging via Supervisor
-
-See [docker/README-falkordb-combined.md](docker/README-falkordb-combined.md) for detailed documentation.
 
 #### Accessing the MCP Server
 
@@ -626,7 +613,8 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
 - Python 3.10 or higher
 - OpenAI API key (for LLM operations and embeddings) or other LLM provider API keys
 - MCP-compatible client
-- (Optional) Neo4j database (version 5.26 or later) or FalkorDB if not using default Kuzu
+- Docker and Docker Compose (for the default FalkorDB combined container)
+- (Optional) Neo4j database (version 5.26 or later) if not using the default FalkorDB setup
 
 ## Telemetry
 
