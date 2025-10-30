@@ -14,7 +14,6 @@ echo "Latest graphiti-core version: ${GRAPHITI_CORE_VERSION}"
 
 # Get build metadata
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Build the image with explicit graphiti-core version
 echo "Building Docker image..."
@@ -22,7 +21,7 @@ docker build \
   --build-arg MCP_SERVER_VERSION="${MCP_VERSION}" \
   --build-arg GRAPHITI_CORE_VERSION="${GRAPHITI_CORE_VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
-  --build-arg VCS_REF="${VCS_REF}" \
+  --build-arg VCS_REF="${MCP_VERSION}" \
   -f Dockerfile \
   -t "zepai/graphiti-mcp:${MCP_VERSION}" \
   -t "zepai/graphiti-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}" \
@@ -33,7 +32,6 @@ echo ""
 echo "Build complete!"
 echo "  MCP Server Version: ${MCP_VERSION}"
 echo "  Graphiti Core Version: ${GRAPHITI_CORE_VERSION}"
-echo "  VCS Ref: ${VCS_REF}"
 echo "  Build Date: ${BUILD_DATE}"
 echo ""
 echo "Image tags:"

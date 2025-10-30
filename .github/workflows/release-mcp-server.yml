@@ -65,9 +65,8 @@ jobs:
       - name: Extract metadata
         id: meta
         run: |
-          # Get build date and git ref
+          # Get build date
           echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
-          echo "vcs_ref=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
       - name: Generate Docker metadata
         id: docker_meta
@@ -98,7 +97,7 @@ jobs:
             MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
             GRAPHITI_CORE_VERSION=${{ steps.graphiti.outputs.graphiti_version }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
-            VCS_REF=${{ steps.meta.outputs.vcs_ref }}
+            VCS_REF=${{ steps.version.outputs.version }}
 
       - name: Create release summary
         run: |
@@ -106,7 +105,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**MCP Server Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**VCS Ref:** ${{ steps.meta.outputs.vcs_ref }}" >> $GITHUB_STEP_SUMMARY
           echo "**Build Date:** ${{ steps.meta.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Docker Image Tags" >> $GITHUB_STEP_SUMMARY
