@@ -94,7 +94,9 @@ def _validate_and_mask_api_key(provider_name: str, api_key: str | None, logger) 
         ValueError: If API key is None or empty
     """
     if not api_key:
-        raise ValueError(f'{provider_name} API key is not configured. Please set the appropriate environment variable.')
+        raise ValueError(
+            f'{provider_name} API key is not configured. Please set the appropriate environment variable.'
+        )
 
     # Log masked API key for debugging
     masked_key = f'{api_key[:7]}...{api_key[-4:]}' if len(api_key) > 11 else '***'
@@ -110,6 +112,7 @@ class LLMClientFactory:
     def create(config: LLMConfig) -> LLMClient:
         """Create an LLM client based on the configured provider."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         provider = config.provider.lower()
@@ -125,16 +128,14 @@ class LLMClientFactory:
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
                 # Determine appropriate small model based on main model type
-                small_model = None
                 is_reasoning_model = (
                     config.model.startswith('gpt-5')
                     or config.model.startswith('o1')
                     or config.model.startswith('o3')
                 )
-                if is_reasoning_model:
-                    small_model = 'gpt-5-nano'  # Use reasoning model for small tasks too
-                else:
-                    small_model = 'gpt-4.1-mini'  # Use non-reasoning model for small tasks
+                small_model = (
+                    'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
+                )  # Use reasoning model for small tasks if main model is reasoning
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
@@ -152,18 +153,10 @@ class LLMClientFactory:
                 )
 
                 if is_reasoning_model:
-                    return OpenAIClient(
-                        config=llm_config,
-                        reasoning='minimal',
-                        verbosity='low'
-                    )
+                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
                 else:
                     # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(
-                        config=llm_config,
-                        reasoning=None,
-                        verbosity=None
-                    )
+                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
@@ -278,6 +271,7 @@ class EmbedderFactory:
     def create(config: EmbedderConfig) -> EmbedderClient:
         """Create an Embedder client based on the configured provider."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         provider = config.provider.lower()
@@ -314,7 +308,9 @@ class EmbedderFactory:
                 api_key: str | None = None
                 azure_ad_token_provider = None
                 if azure_config.use_azure_ad:
-                    logger.info('Creating Azure OpenAI Embedder client with Azure AD authentication')
+                    logger.info(
+                        'Creating Azure OpenAI Embedder client with Azure AD authentication'
+                    )
                     azure_ad_token_provider = create_azure_credential_token_provider()
                 else:
                     api_key = azure_config.api_key

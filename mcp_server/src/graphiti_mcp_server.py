@@ -21,7 +21,6 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
 from config.schema import GraphitiConfig, ServerConfig
-from models.entity_types import ENTITY_TYPES
 from models.response_types import (
     EpisodeSearchResponse,
     ErrorResponse,
@@ -81,6 +80,7 @@ def configure_uvicorn_logging():
         handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
         uvicorn_logger.addHandler(handler)
         uvicorn_logger.propagate = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ class GraphitiService:
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
-            # Build custom entity types if configured
+            # Build entity types from configuration
             custom_types = None
             if self.config.graphiti.entity_types:
                 custom_types = {}
@@ -180,13 +180,6 @@ class GraphitiService:
                         },
                     )
                     custom_types[entity_type.name] = entity_model
-            # Also support the existing ENTITY_TYPES if use_custom_entities is set
-            elif hasattr(self.config, 'use_custom_entities') and self.config.use_custom_entities:
-                # Convert ENTITY_TYPES list to dict if needed
-                if isinstance(ENTITY_TYPES, list):
-                    custom_types = {et.__name__: et for et in ENTITY_TYPES}
-                else:
-                    custom_types = ENTITY_TYPES
 
             # Store entity types for later use
             self.entity_types = custom_types
@@ -678,7 +671,8 @@ async def get_status() -> StatusResponse:
         if config.database.provider.lower() == 'kuzu':
             provider_info = f'{config.database.provider} database (in-memory)'
             return StatusResponse(
-                status='ok', message=f'Graphiti MCP server is running and connected to {provider_info}'
+                status='ok',
+                message=f'Graphiti MCP server is running and connected to {provider_info}',
             )
 
         # For Neo4j and FalkorDB, test connection with a simple query
@@ -776,11 +770,6 @@ async def initialize_server() -> ServerConfig:
         action='store_true',
         help='Destroy all Graphiti graphs on startup',
     )
-    parser.add_argument(
-        '--use-custom-entities',
-        action='store_true',
-        help='Enable entity extraction using the predefined ENTITY_TYPES',
-    )
 
     args = parser.parse_args()
 
@@ -795,8 +784,6 @@ async def initialize_server() -> ServerConfig:
     config.apply_cli_overrides(args)
 
     # Also apply legacy CLI args for backward compatibility
-    if hasattr(args, 'use_custom_entities'):
-        config.use_custom_entities = args.use_custom_entities
     if hasattr(args, 'destroy_graph'):
         config.destroy_graph = args.destroy_graph
 
@@ -811,6 +798,7 @@ async def initialize_server() -> ServerConfig:
     # Log graphiti-core version
     try:
         import graphiti_core
+
         graphiti_version = getattr(graphiti_core, '__version__', 'unknown')
         logger.info(f'  - Graphiti Core: {graphiti_version}')
     except Exception:

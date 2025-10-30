@@ -76,8 +76,162 @@ class Procedure(BaseModel):
     )
 
 
+class Location(BaseModel):
+    """A Location represents a physical or virtual place where activities occur or entities exist.
+
+    IMPORTANT: Before using this classification, first check if the entity is a:
+    User, Assistant, Preference, Organization, Document, Event - if so, use those instead.
+
+    Instructions for identifying and extracting locations:
+    1. Look for mentions of physical places (cities, buildings, rooms, addresses)
+    2. Identify virtual locations (websites, online platforms, virtual meeting rooms)
+    3. Extract specific location names rather than generic references
+    4. Include relevant context about the location's purpose or significance
+    5. Pay attention to location hierarchies (e.g., "conference room in Building A")
+    6. Capture both permanent locations and temporary venues
+    7. Note any significant activities or events associated with the location
+    """
+
+    name: str = Field(
+        ...,
+        description='The name or identifier of the location',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the location and its significance. Only use information mentioned in the context.',
+    )
+
+
+class Event(BaseModel):
+    """An Event represents a time-bound activity, occurrence, or experience.
+
+    Instructions for identifying and extracting events:
+    1. Look for activities with specific time frames (meetings, appointments, deadlines)
+    2. Identify planned or scheduled occurrences (vacations, projects, celebrations)
+    3. Extract unplanned occurrences (accidents, interruptions, discoveries)
+    4. Capture the purpose or nature of the event
+    5. Include temporal information when available (past, present, future, duration)
+    6. Note participants or stakeholders involved in the event
+    7. Identify outcomes or consequences of the event when mentioned
+    8. Extract both recurring events and one-time occurrences
+    """
+
+    name: str = Field(
+        ...,
+        description='The name or title of the event',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the event. Only use information mentioned in the context.',
+    )
+
+
+class Object(BaseModel):
+    """An Object represents a physical item, tool, device, or possession.
+
+    IMPORTANT: Use this classification ONLY as a last resort. First check if entity fits into:
+    User, Assistant, Preference, Organization, Document, Event, Location, Topic - if so, use those instead.
+
+    Instructions for identifying and extracting objects:
+    1. Look for mentions of physical items or possessions (car, phone, equipment)
+    2. Identify tools or devices used for specific purposes
+    3. Extract items that are owned, used, or maintained by entities
+    4. Include relevant attributes (brand, model, condition) when mentioned
+    5. Note the object's purpose or function when specified
+    6. Capture relationships between objects and their owners or users
+    7. Avoid extracting objects that are better classified as Documents or other types
+    """
+
+    name: str = Field(
+        ...,
+        description='The name or identifier of the object',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the object. Only use information mentioned in the context.',
+    )
+
+
+class Topic(BaseModel):
+    """A Topic represents a subject of conversation, interest, or knowledge domain.
+
+    IMPORTANT: Use this classification ONLY as a last resort. First check if entity fits into:
+    User, Assistant, Preference, Organization, Document, Event, Location - if so, use those instead.
+
+    Instructions for identifying and extracting topics:
+    1. Look for subjects being discussed or areas of interest (health, technology, sports)
+    2. Identify knowledge domains or fields of study
+    3. Extract themes that span multiple conversations or contexts
+    4. Include specific subtopics when mentioned (e.g., "machine learning" rather than just "AI")
+    5. Capture topics associated with projects, work, or hobbies
+    6. Note the context in which the topic appears
+    7. Avoid extracting topics that are better classified as Events, Documents, or Organizations
+    """
+
+    name: str = Field(
+        ...,
+        description='The name or identifier of the topic',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the topic and its context. Only use information mentioned in the context.',
+    )
+
+
+class Organization(BaseModel):
+    """An Organization represents a company, institution, group, or formal entity.
+
+    Instructions for identifying and extracting organizations:
+    1. Look for company names, employers, and business entities
+    2. Identify institutions (schools, hospitals, government agencies)
+    3. Extract formal groups (clubs, teams, associations)
+    4. Include organizational type when mentioned (company, nonprofit, agency)
+    5. Capture relationships between people and organizations (employer, member)
+    6. Note the organization's industry or domain when specified
+    7. Extract both large entities and small groups if formally organized
+    """
+
+    name: str = Field(
+        ...,
+        description='The name of the organization',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the organization. Only use information mentioned in the context.',
+    )
+
+
+class Document(BaseModel):
+    """A Document represents information content in various forms.
+
+    Instructions for identifying and extracting documents:
+    1. Look for references to written or recorded content (books, articles, reports)
+    2. Identify digital content (emails, videos, podcasts, presentations)
+    3. Extract specific document titles or identifiers when available
+    4. Include document type (report, article, video) when mentioned
+    5. Capture the document's purpose or subject matter
+    6. Note relationships to authors, creators, or sources
+    7. Include document status (draft, published, archived) when mentioned
+    """
+
+    title: str = Field(
+        ...,
+        description='The title or identifier of the document',
+    )
+    description: str = Field(
+        ...,
+        description='Brief description of the document and its content. Only use information mentioned in the context.',
+    )
+
+
 ENTITY_TYPES: dict[str, BaseModel] = {
     'Requirement': Requirement,  # type: ignore
     'Preference': Preference,  # type: ignore
     'Procedure': Procedure,  # type: ignore
+    'Location': Location,  # type: ignore
+    'Event': Event,  # type: ignore
+    'Object': Object,  # type: ignore
+    'Topic': Topic,  # type: ignore
+    'Organization': Organization,  # type: ignore
+    'Document': Document,  # type: ignore
 }

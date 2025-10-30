@@ -23,7 +23,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Graph Database Support**: Multiple backend options including Kuzu (default), Neo4j, and FalkorDB
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
-- **Custom Entity Types**: Define and use custom entity types for domain-specific knowledge extraction
+- **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
 
@@ -187,6 +187,36 @@ embedder:
 
 Make sure Ollama is running locally with: `ollama serve`
 
+### Entity Types
+
+Graphiti MCP Server includes built-in entity types for structured knowledge extraction. These entity types are always enabled and configured via the `entity_types` section in your `config.yaml`:
+
+**Available Entity Types:**
+
+- **Preference**: User preferences, choices, opinions, or selections (prioritized for user-specific information)
+- **Requirement**: Specific needs, features, or functionality that must be fulfilled
+- **Procedure**: Standard operating procedures and sequential instructions
+- **Location**: Physical or virtual places where activities occur
+- **Event**: Time-bound activities, occurrences, or experiences
+- **Organization**: Companies, institutions, groups, or formal entities
+- **Document**: Information content in various forms (books, articles, reports, videos, etc.)
+- **Topic**: Subject of conversation, interest, or knowledge domain (used as a fallback)
+- **Object**: Physical items, tools, devices, or possessions (used as a fallback)
+
+These entity types are defined in `config.yaml` and can be customized by modifying the descriptions:
+
+```yaml
+graphiti:
+  entity_types:
+    - name: "Preference"
+      description: "User preferences, choices, opinions, or selections"
+    - name: "Requirement"
+      description: "Specific needs, features, or functionality"
+    # ... additional entity types
+```
+
+The MCP server automatically uses these entity types during episode ingestion to extract and structure information from conversations and documents.
+
 ### Environment Variables
 
 The `config.yaml` file supports environment variable expansion using `${VAR_NAME}` or `${VAR_NAME:default}` syntax. Key variables:
@@ -292,7 +322,6 @@ uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
 - `--transport`: Choose the transport method (http or stdio, default: http)
 - `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup
-- `--use-custom-entities`: Enable entity extraction using the predefined ENTITY_TYPES
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
 
@@ -505,7 +534,7 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 1. Run the Graphiti MCP server using the default HTTP transport:
 
 ```bash
-uv run graphiti_mcp_server.py --use-custom-entities --group-id <your_group_id>
+uv run graphiti_mcp_server.py --group-id <your_group_id>
 ```
 
 Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "main" as the group_id.
