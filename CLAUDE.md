@@ -133,6 +133,45 @@ docker-compose up
 
 The codebase supports multiple LLM providers but works best with services supporting structured output (OpenAI, Gemini). Other providers may cause schema validation issues, especially with smaller models.
 
+#### Current LLM Models (as of January 2025)
+
+**OpenAI Models:**
+- **GPT-5 Family** (Reasoning models, require temperature=0):
+  - `gpt-5-mini` - Fast reasoning model
+  - `gpt-5-nano` - Smallest reasoning model
+- **GPT-4.1 Family** (Standard models):
+  - `gpt-4.1` - Full capability model
+  - `gpt-4.1-mini` - Efficient model for most tasks
+  - `gpt-4.1-nano` - Lightweight model
+- **Legacy Models** (Still supported):
+  - `gpt-4o` - Previous generation flagship
+  - `gpt-4o-mini` - Previous generation efficient
+
+**Anthropic Models:**
+- **Claude 3.7 Family** (Latest):
+  - `claude-3-7-sonnet-latest` - Recommended, auto-updates
+  - `claude-3-7-sonnet-20250219` - Pinned version
+- **Claude 3.5 Family**:
+  - `claude-3-5-sonnet-latest` - Auto-updates
+  - `claude-3-5-sonnet-20241022` - Recent pinned version
+  - `claude-3-5-haiku-latest` - Fast model
+- **Legacy Models**:
+  - `claude-3-opus-latest` - Older flagship
+  - `claude-3-sonnet-20240229` - Older standard
+  - `claude-3-haiku-20240307` - Older fast
+
+**Google Gemini Models:**
+- **Gemini 2.5 Family** (Latest):
+  - `gemini-2.5-pro` - Flagship reasoning and multimodal
+  - `gemini-2.5-flash` - Fast, efficient
+- **Gemini 2.0 Family**:
+  - `gemini-2.0-flash` - Experimental fast model
+- **Gemini 1.5 Family** (Stable):
+  - `gemini-1.5-pro` - Production-stable flagship
+  - `gemini-1.5-flash` - Production-stable efficient
+
+**Note**: Model names like `gpt-5-mini`, `gpt-4.1`, and `gpt-4.1-mini` used in this codebase are valid OpenAI model identifiers. The GPT-5 family are reasoning models that require `temperature=0` (automatically handled in the code).
+
 ### MCP Server Usage Guidelines
 
 When working with the MCP server, follow the patterns established in `mcp_server/cursor_rules.md`:
