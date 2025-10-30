@@ -165,8 +165,16 @@ class BaseOpenAIClient(LLMClient):
             raise Exception(f'Output length exceeded max tokens {self.max_tokens}: {e}') from e
         except openai.RateLimitError as e:
             raise RateLimitError from e
+        except openai.AuthenticationError as e:
+            logger.error(f'OpenAI Authentication Error: {e}. Please verify your API key is correct.')
+            raise
         except Exception as e:
-            logger.error(f'Error in generating LLM response: {e}')
+            # Provide more context for connection errors
+            error_msg = str(e)
+            if 'Connection error' in error_msg or 'connection' in error_msg.lower():
+                logger.error(f'Connection error communicating with OpenAI API. Please check your network connection and API key. Error: {e}')
+            else:
+                logger.error(f'Error in generating LLM response: {e}')
             raise
 
     async def generate_response(

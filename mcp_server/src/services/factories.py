@@ -85,12 +85,23 @@ class LLMClientFactory:
     @staticmethod
     def create(config: LLMConfig) -> LLMClient:
         """Create an LLM client based on the configured provider."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         provider = config.provider.lower()
 
         match provider:
             case 'openai':
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found')
+
+                api_key = config.providers.openai.api_key
+                if not api_key:
+                    raise ValueError('OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable.')
+
+                # Log masked API key for debugging
+                masked_key = f'{api_key[:7]}...{api_key[-4:]}' if len(api_key) > 11 else 'sk-***'
+                logger.info(f'Creating OpenAI client with API key: {masked_key}')
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
@@ -107,7 +118,7 @@ class LLMClientFactory:
                     small_model = 'gpt-4.1-mini'  # Use non-reasoning model for small tasks
 
                 llm_config = CoreLLMConfig(
-                    api_key=config.providers.openai.api_key,
+                    api_key=api_key,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,

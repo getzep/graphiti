@@ -26,7 +26,7 @@ services:
       dockerfile: docker/Dockerfile
     env_file:
       - path: ../.env
-        required: false # Makes the file optional. Default value is 'true'
+        required: false
     depends_on:
       neo4j:
         condition: service_healthy
@@ -36,18 +36,6 @@ services:
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-demodemo}
       - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
-      # LLM provider configurations
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
-      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
-      # Embedder provider configurations
-      - VOYAGE_API_KEY=${VOYAGE_API_KEY:-}
-      - AZURE_OPENAI_EMBEDDINGS_ENDPOINT=${AZURE_OPENAI_EMBEDDINGS_ENDPOINT:-}
-      - AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT:-}
       # Application configuration
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
