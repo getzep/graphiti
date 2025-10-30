@@ -154,11 +154,11 @@ class GraphitiService:
                 custom_types = {}
                 for entity_type in self.config.graphiti.entity_types:
                     # Create a dynamic Pydantic model for each entity type
+                    # Note: Don't use 'name' as it's a protected Pydantic attribute
                     entity_model = type(
                         entity_type.name,
                         (BaseModel,),
                         {
-                            '__annotations__': {'name': str},
                             '__doc__': entity_type.description,
                         },
                     )
