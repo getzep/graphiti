@@ -100,7 +100,27 @@ class LLMClientFactory:
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
-                return OpenAIClient(config=llm_config)
+
+                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
+                is_reasoning_model = (
+                    config.model.startswith('gpt-5')
+                    or config.model.startswith('o1')
+                    or config.model.startswith('o3')
+                )
+
+                if is_reasoning_model:
+                    return OpenAIClient(
+                        config=llm_config,
+                        reasoning='minimal',
+                        verbosity='low'
+                    )
+                else:
+                    # For non-reasoning models, explicitly pass None to disable these parameters
+                    return OpenAIClient(
+                        config=llm_config,
+                        reasoning=None,
+                        verbosity=None
+                    )
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
