@@ -5,6 +5,7 @@ Tests concurrent operations, queue management, and async patterns.
 """
 
 import asyncio
+import contextlib
 import json
 import time
 
@@ -246,7 +247,7 @@ class TestAsyncErrorHandling:
             # Create a very large episode that might timeout
             large_content = 'x' * 1000000  # 1MB of data
 
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(
                     session.call_tool(
                         'add_memory',
@@ -258,11 +259,8 @@ class TestAsyncErrorHandling:
                             'group_id': group_id,
                         },
                     ),
-                    timeout=2.0,  # Short timeout
+                    timeout=2.0,  # Short timeout - expected to timeout
                 )
-            except asyncio.TimeoutError:
-                # Expected timeout
-                pass
 
             # Verify server is still responsive after timeout
             status_result = await session.call_tool('get_status', {})

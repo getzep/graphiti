@@ -3,6 +3,7 @@ Shared test fixtures and utilities for Graphiti MCP integration tests.
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import random
@@ -203,10 +204,8 @@ async def graphiti_test_client(
             yield session, test_group_id
         finally:
             # Cleanup: Clear test data
-            try:
+            with contextlib.suppress(Exception):
                 await session.call_tool('clear_graph', {'group_id': test_group_id})
-            except Exception:
-                pass  # Ignore cleanup errors
 
             await session.close()
 
