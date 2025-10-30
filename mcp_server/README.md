@@ -26,7 +26,6 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Custom Entity Types**: Define and use custom entity types for domain-specific knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
-- **Telemetry**: Optional anonymous usage statistics to help improve the framework
 
 ## Quick Start
 
