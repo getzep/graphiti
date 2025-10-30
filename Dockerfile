@@ -35,32 +35,28 @@ ENV UV_COMPILE_BYTECODE=1 \
 # Create non-root user
 RUN groupadd -r app && useradd -r -d /app -g app app
 
-# Install graphiti-core from PyPI
-# If GRAPHITI_VERSION is provided, install that specific version; otherwise install latest
-RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -n "$GRAPHITI_VERSION" ]; then \
-        uv pip install --system "graphiti-core==$GRAPHITI_VERSION"; \
-    else \
-        uv pip install --system graphiti-core; \
-    fi
-
-# Set up the server application
+# Set up the server application first
 WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
 
-# Install server dependencies and application
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# Install falkordb if requested
+# Install server dependencies (without graphiti-core from lockfile)
+# Then install graphiti-core from PyPI at the desired version
+# This prevents the stale lockfile from pinning an old graphiti-core version
 ARG INSTALL_FALKORDB=false
 RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ "$INSTALL_FALKORDB" = "true" ]; then \
-        if [ -n "$GRAPHITI_VERSION" ]; then \
-            uv pip install --system "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+    uv sync --frozen --no-dev && \
+    if [ -n "$GRAPHITI_VERSION" ]; then \
+        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+            uv pip install --system --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
         else \
-            uv pip install --system "graphiti-core[falkordb]"; \
+            uv pip install --system --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
+        fi; \
+    else \
+        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+            uv pip install --system --upgrade "graphiti-core[falkordb]"; \
+        else \
+            uv pip install --system --upgrade graphiti-core; \
         fi; \
     fi
 
