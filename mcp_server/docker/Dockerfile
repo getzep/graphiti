@@ -37,6 +37,9 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev
 
+# Extract graphiti-core version and store it in a file for runtime access
+RUN uv pip freeze | grep graphiti-core | cut -d'=' -f3 > /app/.graphiti-core-version
+
 # Copy application code and configuration
 COPY main.py ./
 COPY src/ ./src/
@@ -44,6 +47,19 @@ COPY config/ ./config/
 
 # Set execute permissions on main.py and change ownership to app user
 RUN chmod +x /app/main.py && chown -Rv app:app /app
+
+# Add Docker labels with version information
+ARG MCP_SERVER_VERSION=1.0.0rc0
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.title="Graphiti MCP Server" \
+      org.opencontainers.image.description="MCP server for Graphiti knowledge graph" \
+      org.opencontainers.image.version="${MCP_SERVER_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="Zep AI" \
+      org.opencontainers.image.source="https://github.com/zep-ai/graphiti" \
+      graphiti.core.version="$(cat /app/.graphiti-core-version)"
 
 # Switch to non-root user
 USER app

@@ -812,6 +812,20 @@ async def initialize_server() -> ServerConfig:
     logger.info(f'  - Group ID: {config.graphiti.group_id}')
     logger.info(f'  - Transport: {config.server.transport}')
 
+    # Log graphiti-core version
+    try:
+        import graphiti_core
+        graphiti_version = getattr(graphiti_core, '__version__', 'unknown')
+        logger.info(f'  - Graphiti Core: {graphiti_version}')
+    except Exception:
+        # Check for Docker-stored version file
+        version_file = Path('/app/.graphiti-core-version')
+        if version_file.exists():
+            graphiti_version = version_file.read_text().strip()
+            logger.info(f'  - Graphiti Core: {graphiti_version}')
+        else:
+            logger.info('  - Graphiti Core: version unavailable')
+
     # Handle graph destruction if requested
     if hasattr(config, 'destroy_graph') and config.destroy_graph:
         logger.warning('Destroying all Graphiti graphs as requested...')
