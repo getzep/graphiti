@@ -214,15 +214,22 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
-            result = await self.client.messages.create(
-                system=system_message.content,
-                max_tokens=max_creation_tokens,
-                temperature=self.temperature,
-                messages=user_messages_cast,
-                model=self.model,
-                tools=tools,
-                tool_choice=tool_choice,
-            )
+
+            # Build the message creation parameters
+            create_params: dict[str, typing.Any] = {
+                'system': system_message.content,
+                'max_tokens': max_creation_tokens,
+                'messages': user_messages_cast,
+                'model': self.model,
+                'tools': tools,
+                'tool_choice': tool_choice,
+            }
+
+            # Only include temperature if it's not None
+            if self.temperature is not None:
+                create_params['temperature'] = self.temperature
+
+            result = await self.client.messages.create(**create_params)
 
             # Extract the tool output from the response
             for content_item in result.content:
