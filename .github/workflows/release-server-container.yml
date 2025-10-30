@@ -27,6 +27,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -45,17 +48,27 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
             echo "Using manual input version: $VERSION"
           else
-            # Extract from the triggering tag
-            VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+            # When triggered by workflow_run, get the tag that triggered the PyPI release
+            # The PyPI workflow is triggered by tags matching v*.*.*
+            VERSION=$(git tag --points-at HEAD | grep '^v[0-9]' | head -1 | sed 's/^v//')
+
             if [ -z "$VERSION" ]; then
-              echo "Could not determine version from git tags"
+              # Fallback: check pyproject.toml version
+              VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+              echo "Version from pyproject.toml: $VERSION"
+            else
+              echo "Version from git tag: $VERSION"
+            fi
+
+            if [ -z "$VERSION" ]; then
+              echo "Could not determine version"
               exit 1
             fi
-            echo "Extracted version from tag: $VERSION"
           fi
 
-          # Validate it's a stable release (no pre, rc, alpha, beta)
-          if [[ $VERSION =~ (pre|rc|alpha|beta) ]]; then
+          # Validate it's a stable release - catch all Python pre-release patterns
+          # Matches: pre, rc, alpha, beta, a1, b2, dev0, etc.
+          if [[ $VERSION =~ (pre|rc|alpha|beta|a[0-9]+|b[0-9]+|\.dev[0-9]*) ]]; then
             echo "Skipping pre-release version: $VERSION"
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
@@ -132,6 +145,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GRAPHITI_VERSION=${{ steps.version.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
 
       - name: Summary
         if: steps.version.outputs.skip != 'true'
