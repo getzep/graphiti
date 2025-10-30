@@ -5,14 +5,10 @@ Provides various test execution modes and reporting options.
 """
 
 import argparse
-import asyncio
-import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pytest
 from dotenv import load_dotenv
@@ -34,7 +30,7 @@ class TestRunner:
         self.test_dir = Path(__file__).parent
         self.results = {}
 
-    def check_prerequisites(self) -> Dict[str, bool]:
+    def check_prerequisites(self) -> dict[str, bool]:
         """Check if required services and dependencies are available."""
         checks = {}
 
@@ -46,7 +42,9 @@ class TestRunner:
                 # Check if .env file exists for helpful message
                 env_path = Path(__file__).parent.parent / '.env'
                 if not env_path.exists():
-                    checks['openai_api_key_hint'] = 'Set OPENAI_API_KEY in environment or create mcp_server/.env file'
+                    checks['openai_api_key_hint'] = (
+                        'Set OPENAI_API_KEY in environment or create mcp_server/.env file'
+                    )
         else:
             checks['openai_api_key'] = True
 
@@ -69,6 +67,7 @@ class TestRunner:
         """Check if Neo4j is available."""
         try:
             import neo4j
+
             # Try to connect
             uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
             user = os.environ.get('NEO4J_USER', 'neo4j')
@@ -76,21 +75,22 @@ class TestRunner:
 
             driver = neo4j.GraphDatabase.driver(uri, auth=(user, password))
             with driver.session() as session:
-                session.run("RETURN 1")
+                session.run('RETURN 1')
             driver.close()
             return True
-        except:
+        except Exception:
             return False
 
     def _check_falkordb(self) -> bool:
         """Check if FalkorDB is available."""
         try:
             import redis
+
             uri = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
             r = redis.from_url(uri)
             r.ping()
             return True
-        except:
+        except Exception:
             return False
 
     def _check_python_package(self, package: str) -> bool:
@@ -124,10 +124,12 @@ class TestRunner:
             pytest_args.extend(['-m', 'slow', 'test_stress_load.py'])
         elif suite == 'smoke':
             # Quick smoke test - just basic operations
-            pytest_args.extend([
-                'test_comprehensive_integration.py::TestCoreOperations::test_server_initialization',
-                'test_comprehensive_integration.py::TestCoreOperations::test_add_text_memory'
-            ])
+            pytest_args.extend(
+                [
+                    'test_comprehensive_integration.py::TestCoreOperations::test_server_initialization',
+                    'test_comprehensive_integration.py::TestCoreOperations::test_add_text_memory',
+                ]
+            )
         elif suite == 'all':
             pytest_args.append('.')
         else:
@@ -161,7 +163,7 @@ class TestRunner:
             env['DATABASE_PROVIDER'] = self.args.database
 
         # Run tests from the test directory
-        print(f"Running {suite} tests with pytest args: {' '.join(pytest_args)}")
+        print(f'Running {suite} tests with pytest args: {" ".join(pytest_args)}')
 
         # Change to test directory to run tests
         original_dir = os.getcwd()
@@ -176,52 +178,52 @@ class TestRunner:
 
     def run_performance_benchmark(self):
         """Run performance benchmarking suite."""
-        print("Running performance benchmarks...")
+        print('Running performance benchmarks...')
 
         # Import test modules
-        from test_comprehensive_integration import TestPerformance
-        from test_async_operations import TestAsyncPerformance
 
         # Run performance tests
-        result = pytest.main([
-            '-v',
-            'test_comprehensive_integration.py::TestPerformance',
-            'test_async_operations.py::TestAsyncPerformance',
-            '--benchmark-only' if self.args.benchmark_only else '',
-        ])
+        result = pytest.main(
+            [
+                '-v',
+                'test_comprehensive_integration.py::TestPerformance',
+                'test_async_operations.py::TestAsyncPerformance',
+                '--benchmark-only' if self.args.benchmark_only else '',
+            ]
+        )
 
         return result
 
     def generate_report(self):
         """Generate test execution report."""
         report = []
-        report.append("\n" + "=" * 60)
-        report.append("GRAPHITI MCP TEST EXECUTION REPORT")
-        report.append("=" * 60)
+        report.append('\n' + '=' * 60)
+        report.append('GRAPHITI MCP TEST EXECUTION REPORT')
+        report.append('=' * 60)
 
         # Prerequisites check
         checks = self.check_prerequisites()
-        report.append("\nPrerequisites:")
+        report.append('\nPrerequisites:')
         for check, passed in checks.items():
-            status = "✅" if passed else "❌"
-            report.append(f"  {status} {check}")
+            status = '✅' if passed else '❌'
+            report.append(f'  {status} {check}')
 
         # Test configuration
-        report.append(f"\nConfiguration:")
-        report.append(f"  Database: {self.args.database}")
-        report.append(f"  Mock LLM: {self.args.mock_llm}")
-        report.append(f"  Parallel: {self.args.parallel or 'No'}")
-        report.append(f"  Timeout: {self.args.timeout}s")
+        report.append('\nConfiguration:')
+        report.append(f'  Database: {self.args.database}')
+        report.append(f'  Mock LLM: {self.args.mock_llm}')
+        report.append(f'  Parallel: {self.args.parallel or "No"}')
+        report.append(f'  Timeout: {self.args.timeout}s')
 
         # Results summary (if available)
         if self.results:
-            report.append(f"\nResults:")
+            report.append('\nResults:')
             for suite, result in self.results.items():
-                status = "✅ Passed" if result == 0 else f"❌ Failed ({result})"
-                report.append(f"  {suite}: {status}")
+                status = '✅ Passed' if result == 0 else f'❌ Failed ({result})'
+                report.append(f'  {suite}: {status}')
 
-        report.append("=" * 60)
-        return "\n".join(report)
+        report.append('=' * 60)
+        return '\n'.join(report)
 
 
 def main():
@@ -244,70 +246,42 @@ Examples:
   python run_tests.py integration --parallel 4 # Run integration tests in parallel
   python run_tests.py stress --database neo4j  # Run stress tests with Neo4j
   python run_tests.py all --coverage          # Run all tests with coverage
-        """
+        """,
     )
 
     parser.add_argument(
         'suite',
         choices=['unit', 'integration', 'comprehensive', 'async', 'stress', 'smoke', 'all'],
-        help='Test suite to run'
+        help='Test suite to run',
     )
 
     parser.add_argument(
         '--database',
         choices=['neo4j', 'falkordb', 'kuzu'],
         default='kuzu',
-        help='Database backend to test (default: kuzu)'
+        help='Database backend to test (default: kuzu)',
     )
 
-    parser.add_argument(
-        '--mock-llm',
-        action='store_true',
-        help='Use mock LLM for faster testing'
-    )
+    parser.add_argument('--mock-llm', action='store_true', help='Use mock LLM for faster testing')
 
     parser.add_argument(
-        '--parallel',
-        type=int,
-        metavar='N',
-        help='Run tests in parallel with N workers'
+        '--parallel', type=int, metavar='N', help='Run tests in parallel with N workers'
     )
 
-    parser.add_argument(
-        '--coverage',
-        action='store_true',
-        help='Generate coverage report'
-    )
+    parser.add_argument('--coverage', action='store_true', help='Generate coverage report')
+
+    parser.add_argument('--verbose', action='store_true', help='Verbose output')
+
+    parser.add_argument('--skip-slow', action='store_true', help='Skip slow tests')
 
     parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Verbose output'
+        '--timeout', type=int, default=300, help='Test timeout in seconds (default: 300)'
     )
 
-    parser.add_argument(
-        '--skip-slow',
-        action='store_true',
-        help='Skip slow tests'
-    )
+    parser.add_argument('--benchmark-only', action='store_true', help='Run only benchmark tests')
 
     parser.add_argument(
-        '--timeout',
-        type=int,
-        default=300,
-        help='Test timeout in seconds (default: 300)'
-    )
-
-    parser.add_argument(
-        '--benchmark-only',
-        action='store_true',
-        help='Run only benchmark tests'
-    )
-
-    parser.add_argument(
-        '--check-only',
-        action='store_true',
-        help='Only check prerequisites without running tests'
+        '--check-only', action='store_true', help='Only check prerequisites without running tests'
     )
 
     args = parser.parse_args()
@@ -326,26 +300,26 @@ Examples:
     validation_checks = {k: v for k, v in checks.items() if not k.endswith('_hint')}
 
     if not all(validation_checks.values()):
-        print("⚠️  Some prerequisites are not met:")
+        print('⚠️  Some prerequisites are not met:')
         for check, passed in checks.items():
             if check.endswith('_hint'):
                 continue  # Skip hint entries
             if not passed:
-                print(f"  ❌ {check}")
+                print(f'  ❌ {check}')
                 # Show hint if available
-                hint_key = f"{check}_hint"
+                hint_key = f'{check}_hint'
                 if hint_key in checks:
-                    print(f"     💡 {checks[hint_key]}")
+                    print(f'     💡 {checks[hint_key]}')
 
         if not args.mock_llm and not checks.get('openai_api_key'):
-            print("\n💡 Tip: Use --mock-llm to run tests without OpenAI API key")
+            print('\n💡 Tip: Use --mock-llm to run tests without OpenAI API key')
 
-        response = input("\nContinue anyway? (y/N): ")
+        response = input('\nContinue anyway? (y/N): ')
         if response.lower() != 'y':
             sys.exit(1)
 
     # Run tests
-    print(f"\n🚀 Starting test execution: {args.suite}")
+    print(f'\n🚀 Starting test execution: {args.suite}')
     start_time = time.time()
 
     if args.benchmark_only:
@@ -360,11 +334,11 @@ Examples:
 
     # Generate and print report
     print(runner.generate_report())
-    print(f"\n⏱️  Test execution completed in {duration:.2f} seconds")
+    print(f'\n⏱️  Test execution completed in {duration:.2f} seconds')
 
     # Exit with test result code
     sys.exit(result)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

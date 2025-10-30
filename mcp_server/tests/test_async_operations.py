@@ -7,15 +7,11 @@ Tests concurrent operations, queue management, and async patterns.
 import asyncio
 import json
 import time
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from test_fixtures import (
     TestDataGenerator,
     graphiti_test_client,
-    performance_benchmark,
-    test_data_generator,
 )
 
 
@@ -38,7 +34,7 @@ class TestAsyncQueueManagement:
                         'source_description': 'sequential test',
                         'group_id': group_id,
                         'reference_id': f'seq_{i}',  # Add reference for tracking
-                    }
+                    },
                 )
                 episodes.append(result)
 
@@ -46,19 +42,18 @@ class TestAsyncQueueManagement:
             await asyncio.sleep(10)  # Allow time for sequential processing
 
             # Retrieve episodes and verify order
-            result = await session.call_tool(
-                'get_episodes',
-                {'group_id': group_id, 'last_n': 10}
-            )
+            result = await session.call_tool('get_episodes', {'group_id': group_id, 'last_n': 10})
 
             processed_episodes = json.loads(result.content[0].text)['episodes']
 
             # Verify all episodes were processed
-            assert len(processed_episodes) >= 5, f"Expected at least 5 episodes, got {len(processed_episodes)}"
+            assert len(processed_episodes) >= 5, (
+                f'Expected at least 5 episodes, got {len(processed_episodes)}'
+            )
 
             # Verify sequential processing (timestamps should be ordered)
             timestamps = [ep.get('created_at') for ep in processed_episodes]
-            assert timestamps == sorted(timestamps), "Episodes not processed in order"
+            assert timestamps == sorted(timestamps), 'Episodes not processed in order'
 
     @pytest.mark.asyncio
     async def test_concurrent_group_processing(self):
@@ -78,7 +73,7 @@ class TestAsyncQueueManagement:
                             'source': 'text',
                             'source_description': 'concurrent test',
                             'group_id': group_id,
-                        }
+                        },
                     )
                     tasks.append(task)
 
@@ -89,11 +84,11 @@ class TestAsyncQueueManagement:
 
             # Verify all succeeded
             failures = [r for r in results if isinstance(r, Exception)]
-            assert not failures, f"Concurrent operations failed: {failures}"
+            assert not failures, f'Concurrent operations failed: {failures}'
 
             # Check that execution was actually concurrent (should be faster than sequential)
             # Sequential would take at least 6 * processing_time
-            assert execution_time < 30, f"Concurrent execution too slow: {execution_time}s"
+            assert execution_time < 30, f'Concurrent execution too slow: {execution_time}s'
 
     @pytest.mark.asyncio
     async def test_queue_overflow_handling(self):
@@ -110,7 +105,7 @@ class TestAsyncQueueManagement:
                         'source': 'text',
                         'source_description': 'overflow test',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 tasks.append(task)
 
@@ -121,11 +116,11 @@ class TestAsyncQueueManagement:
             successful = sum(1 for r in results if not isinstance(r, Exception))
 
             # Should handle overflow gracefully
-            assert successful > 0, "No episodes were queued successfully"
+            assert successful > 0, 'No episodes were queued successfully'
 
             # Log overflow behavior
             if successful < 100:
-                print(f"Queue overflow: {successful}/100 episodes queued")
+                print(f'Queue overflow: {successful}/100 episodes queued')
 
 
 class TestConcurrentOperations:
@@ -148,7 +143,7 @@ class TestConcurrentOperations:
                         'source': 'text',
                         'source_description': 'search test',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 add_tasks.append(task)
 
@@ -172,7 +167,7 @@ class TestConcurrentOperations:
                         'query': query,
                         'group_id': group_id,
                         'limit': 10,
-                    }
+                    },
                 )
                 search_tasks.append(task)
 
@@ -182,10 +177,10 @@ class TestConcurrentOperations:
 
             # Verify all searches completed
             failures = [r for r in results if isinstance(r, Exception)]
-            assert not failures, f"Search operations failed: {failures}"
+            assert not failures, f'Search operations failed: {failures}'
 
             # Verify concurrent execution efficiency
-            assert search_time < len(search_queries) * 2, "Searches not executing concurrently"
+            assert search_time < len(search_queries) * 2, 'Searches not executing concurrently'
 
     @pytest.mark.asyncio
     async def test_mixed_operation_concurrency(self):
@@ -194,48 +189,51 @@ class TestConcurrentOperations:
             operations = []
 
             # Add memory operation
-            operations.append(session.call_tool(
-                'add_memory',
-                {
-                    'name': 'Mixed Op Test',
-                    'episode_body': 'Testing mixed operations',
-                    'source': 'text',
-                    'source_description': 'test',
-                    'group_id': group_id,
-                }
-            ))
+            operations.append(
+                session.call_tool(
+                    'add_memory',
+                    {
+                        'name': 'Mixed Op Test',
+                        'episode_body': 'Testing mixed operations',
+                        'source': 'text',
+                        'source_description': 'test',
+                        'group_id': group_id,
+                    },
+                )
+            )
 
             # Search operation
-            operations.append(session.call_tool(
-                'search_memory_nodes',
-                {
-                    'query': 'test',
-                    'group_id': group_id,
-                    'limit': 5,
-                }
-            ))
+            operations.append(
+                session.call_tool(
+                    'search_memory_nodes',
+                    {
+                        'query': 'test',
+                        'group_id': group_id,
+                        'limit': 5,
+                    },
+                )
+            )
 
             # Get episodes operation
-            operations.append(session.call_tool(
-                'get_episodes',
-                {
-                    'group_id': group_id,
-                    'last_n': 10,
-                }
-            ))
+            operations.append(
+                session.call_tool(
+                    'get_episodes',
+                    {
+                        'group_id': group_id,
+                        'last_n': 10,
+                    },
+                )
+            )
 
             # Get status operation
-            operations.append(session.call_tool(
-                'get_status',
-                {}
-            ))
+            operations.append(session.call_tool('get_status', {}))
 
             # Execute all concurrently
             results = await asyncio.gather(*operations, return_exceptions=True)
 
             # Check results
             for i, result in enumerate(results):
-                assert not isinstance(result, Exception), f"Operation {i} failed: {result}"
+                assert not isinstance(result, Exception), f'Operation {i} failed: {result}'
 
 
 class TestAsyncErrorHandling:
@@ -246,10 +244,10 @@ class TestAsyncErrorHandling:
         """Test recovery from operation timeouts."""
         async with graphiti_test_client() as (session, group_id):
             # Create a very large episode that might timeout
-            large_content = "x" * 1000000  # 1MB of data
+            large_content = 'x' * 1000000  # 1MB of data
 
             try:
-                result = await asyncio.wait_for(
+                await asyncio.wait_for(
                     session.call_tool(
                         'add_memory',
                         {
@@ -258,9 +256,9 @@ class TestAsyncErrorHandling:
                             'source': 'text',
                             'source_description': 'timeout test',
                             'group_id': group_id,
-                        }
+                        },
                     ),
-                    timeout=2.0  # Short timeout
+                    timeout=2.0,  # Short timeout
                 )
             except asyncio.TimeoutError:
                 # Expected timeout
@@ -268,7 +266,7 @@ class TestAsyncErrorHandling:
 
             # Verify server is still responsive after timeout
             status_result = await session.call_tool('get_status', {})
-            assert status_result is not None, "Server unresponsive after timeout"
+            assert status_result is not None, 'Server unresponsive after timeout'
 
     @pytest.mark.asyncio
     async def test_cancellation_handling(self):
@@ -284,7 +282,7 @@ class TestAsyncErrorHandling:
                         'source': 'text',
                         'source_description': 'cancel test',
                         'group_id': group_id,
-                    }
+                    },
                 )
             )
 
@@ -305,13 +303,13 @@ class TestAsyncErrorHandling:
         """Test that exceptions are properly propagated in async context."""
         async with graphiti_test_client() as (session, group_id):
             # Call with invalid arguments
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError):
                 await session.call_tool(
                     'add_memory',
                     {
                         # Missing required fields
                         'group_id': group_id,
-                    }
+                    },
                 )
 
             # Server should remain operational
@@ -340,7 +338,7 @@ class TestAsyncPerformance:
                         'source': 'text',
                         'source_description': 'throughput test',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 tasks.append(task)
 
@@ -355,14 +353,14 @@ class TestAsyncPerformance:
             performance_benchmark.record('async_throughput', throughput)
 
             # Log results
-            print(f"\nAsync Throughput Test:")
-            print(f"  Operations: {num_operations}")
-            print(f"  Successful: {successful}")
-            print(f"  Total time: {total_time:.2f}s")
-            print(f"  Throughput: {throughput:.2f} ops/s")
+            print('\nAsync Throughput Test:')
+            print(f'  Operations: {num_operations}')
+            print(f'  Successful: {successful}')
+            print(f'  Total time: {total_time:.2f}s')
+            print(f'  Throughput: {throughput:.2f} ops/s')
 
             # Assert minimum throughput
-            assert throughput > 1.0, f"Throughput too low: {throughput:.2f} ops/s"
+            assert throughput > 1.0, f'Throughput too low: {throughput:.2f} ops/s'
 
     @pytest.mark.asyncio
     async def test_latency_under_load(self, performance_benchmark):
@@ -380,7 +378,7 @@ class TestAsyncPerformance:
                             'source': 'text',
                             'source_description': 'background',
                             'group_id': f'background_{group_id}',
-                        }
+                        },
                     )
                 )
                 background_tasks.append(task)
@@ -389,10 +387,7 @@ class TestAsyncPerformance:
             latencies = []
             for _ in range(5):
                 start = time.time()
-                await session.call_tool(
-                    'get_status',
-                    {}
-                )
+                await session.call_tool('get_status', {})
                 latency = time.time() - start
                 latencies.append(latency)
                 performance_benchmark.record('latency_under_load', latency)
@@ -405,13 +400,13 @@ class TestAsyncPerformance:
             avg_latency = sum(latencies) / len(latencies)
             max_latency = max(latencies)
 
-            print(f"\nLatency Under Load:")
-            print(f"  Average: {avg_latency:.3f}s")
-            print(f"  Max: {max_latency:.3f}s")
+            print('\nLatency Under Load:')
+            print(f'  Average: {avg_latency:.3f}s')
+            print(f'  Max: {max_latency:.3f}s')
 
             # Assert acceptable latency
-            assert avg_latency < 2.0, f"Average latency too high: {avg_latency:.3f}s"
-            assert max_latency < 5.0, f"Max latency too high: {max_latency:.3f}s"
+            assert avg_latency < 2.0, f'Average latency too high: {avg_latency:.3f}s'
+            assert max_latency < 5.0, f'Max latency too high: {max_latency:.3f}s'
 
 
 class TestAsyncStreamHandling:
@@ -431,7 +426,7 @@ class TestAsyncStreamHandling:
                         'source': 'text',
                         'source_description': 'stream test',
                         'group_id': group_id,
-                    }
+                    },
                 )
 
             # Wait for processing
@@ -443,12 +438,12 @@ class TestAsyncStreamHandling:
                 {
                     'group_id': group_id,
                     'last_n': 100,  # Request all
-                }
+                },
             )
 
             # Verify response handling
             episodes = json.loads(result.content[0].text)['episodes']
-            assert len(episodes) >= 20, f"Expected at least 20 episodes, got {len(episodes)}"
+            assert len(episodes) >= 20, f'Expected at least 20 episodes, got {len(episodes)}'
 
     @pytest.mark.asyncio
     async def test_incremental_processing(self):
@@ -466,7 +461,7 @@ class TestAsyncStreamHandling:
                             'source': 'text',
                             'source_description': 'incremental test',
                             'group_id': group_id,
-                        }
+                        },
                     )
                     batch_tasks.append(task)
 
@@ -482,13 +477,15 @@ class TestAsyncStreamHandling:
                     {
                         'group_id': group_id,
                         'last_n': 100,
-                    }
+                    },
                 )
 
                 episodes = json.loads(result.content[0].text)['episodes']
                 expected_min = (batch + 1) * 5
-                assert len(episodes) >= expected_min, f"Batch {batch}: Expected at least {expected_min} episodes"
+                assert len(episodes) >= expected_min, (
+                    f'Batch {batch}: Expected at least {expected_min} episodes'
+                )
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--asyncio-mode=auto"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v', '--asyncio-mode=auto'])

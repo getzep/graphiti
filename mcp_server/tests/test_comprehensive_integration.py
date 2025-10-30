@@ -9,9 +9,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 from mcp import ClientSession, StdioServerParameters
@@ -26,7 +24,7 @@ class TestMetrics:
     start_time: float
     end_time: float
     success: bool
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
     @property
     def duration(self) -> float:
@@ -37,10 +35,10 @@ class TestMetrics:
 class GraphitiTestClient:
     """Enhanced test client for comprehensive Graphiti MCP testing."""
 
-    def __init__(self, test_group_id: Optional[str] = None):
+    def __init__(self, test_group_id: str | None = None):
         self.test_group_id = test_group_id or f'test_{int(time.time())}'
         self.session = None
-        self.metrics: List[TestMetrics] = []
+        self.metrics: list[TestMetrics] = []
         self.default_timeout = 30  # seconds
 
     async def __aenter__(self):
@@ -76,7 +74,7 @@ class GraphitiTestClient:
             await self.client_context.__aexit__(exc_type, exc_val, exc_tb)
 
     async def call_tool_with_metrics(
-        self, tool_name: str, arguments: Dict[str, Any], timeout: Optional[float] = None
+        self, tool_name: str, arguments: dict[str, Any], timeout: float | None = None
     ) -> tuple[Any, TestMetrics]:
         """Call a tool and capture performance metrics."""
         start_time = time.time()
@@ -84,8 +82,7 @@ class GraphitiTestClient:
 
         try:
             result = await asyncio.wait_for(
-                self.session.call_tool(tool_name, arguments),
-                timeout=timeout
+                self.session.call_tool(tool_name, arguments), timeout=timeout
             )
 
             content = result.content[0].text if result.content else None
@@ -108,7 +105,7 @@ class GraphitiTestClient:
             start_time=start_time,
             end_time=end_time,
             success=success,
-            details=details
+            details=details,
         )
         self.metrics.append(metric)
 
@@ -132,8 +129,7 @@ class GraphitiTestClient:
 
         while (time.time() - start_time) < max_wait:
             result, _ = await self.call_tool_with_metrics(
-                'get_episodes',
-                {'group_id': self.test_group_id, 'last_n': 100}
+                'get_episodes', {'group_id': self.test_group_id, 'last_n': 100}
             )
 
             if result:
@@ -168,11 +164,11 @@ class TestCoreOperations:
                 'delete_entity_edge',
                 'get_entity_edge',
                 'clear_graph',
-                'get_status'
+                'get_status',
             }
 
             missing_tools = required_tools - tools
-            assert not missing_tools, f"Missing required tools: {missing_tools}"
+            assert not missing_tools, f'Missing required tools: {missing_tools}'
 
     @pytest.mark.asyncio
     async def test_add_text_memory(self):
@@ -187,15 +183,15 @@ class TestCoreOperations:
                     'source': 'text',
                     'source_description': 'conference notes',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
-            assert metric.success, f"Failed to add memory: {metric.details}"
+            assert metric.success, f'Failed to add memory: {metric.details}'
             assert 'queued' in str(result).lower()
 
             # Wait for processing
             processed = await client.wait_for_episode_processing(expected_count=1)
-            assert processed, "Episode was not processed within timeout"
+            assert processed, 'Episode was not processed within timeout'
 
     @pytest.mark.asyncio
     async def test_add_json_memory(self):
@@ -205,12 +201,9 @@ class TestCoreOperations:
                 'project': {
                     'name': 'GraphitiDB',
                     'version': '2.0.0',
-                    'features': ['temporal-awareness', 'hybrid-search', 'custom-entities']
+                    'features': ['temporal-awareness', 'hybrid-search', 'custom-entities'],
                 },
-                'team': {
-                    'size': 5,
-                    'roles': ['engineering', 'product', 'research']
-                }
+                'team': {'size': 5, 'roles': ['engineering', 'product', 'research']},
             }
 
             result, metric = await client.call_tool_with_metrics(
@@ -221,7 +214,7 @@ class TestCoreOperations:
                     'source': 'json',
                     'source_description': 'project database',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             assert metric.success
@@ -246,11 +239,11 @@ class TestCoreOperations:
                     'source': 'message',
                     'source_description': 'support chat',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             assert metric.success
-            assert metric.duration < 5, f"Add memory took too long: {metric.duration}s"
+            assert metric.duration < 5, f'Add memory took too long: {metric.duration}s'
 
 
 class TestSearchOperations:
@@ -269,7 +262,7 @@ class TestSearchOperations:
                     'source': 'text',
                     'source_description': 'product roadmap',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             # Wait for processing
@@ -278,11 +271,7 @@ class TestSearchOperations:
             # Search for nodes
             result, metric = await client.call_tool_with_metrics(
                 'search_memory_nodes',
-                {
-                    'query': 'AI product features',
-                    'group_id': client.test_group_id,
-                    'limit': 10
-                }
+                {'query': 'AI product features', 'group_id': client.test_group_id, 'limit': 10},
             )
 
             assert metric.success
@@ -301,7 +290,7 @@ class TestSearchOperations:
                     'source': 'text',
                     'source_description': 'company profile',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             await client.wait_for_episode_processing()
@@ -313,8 +302,8 @@ class TestSearchOperations:
                     'query': 'company information',
                     'group_id': client.test_group_id,
                     'created_after': '2020-01-01T00:00:00Z',
-                    'limit': 20
-                }
+                    'limit': 20,
+                },
             )
 
             assert metric.success
@@ -328,13 +317,13 @@ class TestSearchOperations:
                 {
                     'name': 'Technical Doc',
                     'episode_body': 'GraphQL API endpoints support pagination, filtering, and real-time subscriptions.',
-                    'source': 'text'
+                    'source': 'text',
                 },
                 {
                     'name': 'Architecture',
                     'episode_body': 'The system uses Neo4j for graph storage and OpenAI embeddings for semantic search.',
-                    'source': 'text'
-                }
+                    'source': 'text',
+                },
             ]
 
             for memory in test_memories:
@@ -347,11 +336,7 @@ class TestSearchOperations:
             # Test semantic + keyword search
             result, metric = await client.call_tool_with_metrics(
                 'search_memory_nodes',
-                {
-                    'query': 'Neo4j graph database',
-                    'group_id': client.test_group_id,
-                    'limit': 10
-                }
+                {'query': 'Neo4j graph database', 'group_id': client.test_group_id, 'limit': 10},
             )
 
             assert metric.success
@@ -374,18 +359,14 @@ class TestEpisodeManagement:
                         'source': 'text',
                         'source_description': 'test',
                         'group_id': client.test_group_id,
-                    }
+                    },
                 )
 
             await client.wait_for_episode_processing(expected_count=5)
 
             # Test pagination
             result, metric = await client.call_tool_with_metrics(
-                'get_episodes',
-                {
-                    'group_id': client.test_group_id,
-                    'last_n': 3
-                }
+                'get_episodes', {'group_id': client.test_group_id, 'last_n': 3}
             )
 
             assert metric.success
@@ -405,15 +386,14 @@ class TestEpisodeManagement:
                     'source': 'text',
                     'source_description': 'test',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             await client.wait_for_episode_processing()
 
             # Get episode UUID
             result, _ = await client.call_tool_with_metrics(
-                'get_episodes',
-                {'group_id': client.test_group_id, 'last_n': 1}
+                'get_episodes', {'group_id': client.test_group_id, 'last_n': 1}
             )
 
             episodes = json.loads(result) if isinstance(result, str) else result
@@ -421,8 +401,7 @@ class TestEpisodeManagement:
 
             # Delete the episode
             result, metric = await client.call_tool_with_metrics(
-                'delete_episode',
-                {'episode_uuid': episode_uuid}
+                'delete_episode', {'episode_uuid': episode_uuid}
             )
 
             assert metric.success
@@ -445,7 +424,7 @@ class TestEntityAndEdgeOperations:
                     'source': 'text',
                     'source_description': 'org chart',
                     'group_id': client.test_group_id,
-                }
+                },
             )
 
             await client.wait_for_episode_processing()
@@ -453,11 +432,7 @@ class TestEntityAndEdgeOperations:
             # Search for nodes to get UUIDs
             result, _ = await client.call_tool_with_metrics(
                 'search_memory_nodes',
-                {
-                    'query': 'TechCorp',
-                    'group_id': client.test_group_id,
-                    'limit': 5
-                }
+                {'query': 'TechCorp', 'group_id': client.test_group_id, 'limit': 5},
             )
 
             # Note: This test assumes edges are created between entities
@@ -480,7 +455,7 @@ class TestErrorHandling:
             # Missing required arguments
             result, metric = await client.call_tool_with_metrics(
                 'add_memory',
-                {'name': 'Incomplete'}  # Missing required fields
+                {'name': 'Incomplete'},  # Missing required fields
             )
 
             assert not metric.success
@@ -491,7 +466,7 @@ class TestErrorHandling:
         """Test timeout handling for long operations."""
         async with GraphitiTestClient() as client:
             # Simulate a very large episode that might timeout
-            large_text = "Large document content. " * 10000
+            large_text = 'Large document content. ' * 10000
 
             result, metric = await client.call_tool_with_metrics(
                 'add_memory',
@@ -502,7 +477,7 @@ class TestErrorHandling:
                     'source_description': 'large file',
                     'group_id': client.test_group_id,
                 },
-                timeout=5  # Short timeout
+                timeout=5,  # Short timeout
             )
 
             # Check if timeout was handled gracefully
@@ -524,7 +499,7 @@ class TestErrorHandling:
                         'source': 'text',
                         'source_description': 'concurrent test',
                         'group_id': client.test_group_id,
-                    }
+                    },
                 )
                 tasks.append(task)
 
@@ -543,35 +518,34 @@ class TestPerformance:
         """Measure and validate operation latencies."""
         async with GraphitiTestClient() as client:
             operations = [
-                ('add_memory', {
-                    'name': 'Perf Test',
-                    'episode_body': 'Simple text',
-                    'source': 'text',
-                    'source_description': 'test',
-                    'group_id': client.test_group_id,
-                }),
-                ('search_memory_nodes', {
-                    'query': 'test',
-                    'group_id': client.test_group_id,
-                    'limit': 10
-                }),
-                ('get_episodes', {
-                    'group_id': client.test_group_id,
-                    'last_n': 10
-                })
+                (
+                    'add_memory',
+                    {
+                        'name': 'Perf Test',
+                        'episode_body': 'Simple text',
+                        'source': 'text',
+                        'source_description': 'test',
+                        'group_id': client.test_group_id,
+                    },
+                ),
+                (
+                    'search_memory_nodes',
+                    {'query': 'test', 'group_id': client.test_group_id, 'limit': 10},
+                ),
+                ('get_episodes', {'group_id': client.test_group_id, 'last_n': 10}),
             ]
 
             for tool_name, args in operations:
                 _, metric = await client.call_tool_with_metrics(tool_name, args)
 
                 # Log performance metrics
-                print(f"{tool_name}: {metric.duration:.2f}s")
+                print(f'{tool_name}: {metric.duration:.2f}s')
 
                 # Basic latency assertions
                 if tool_name == 'get_episodes':
-                    assert metric.duration < 2, f"{tool_name} too slow"
+                    assert metric.duration < 2, f'{tool_name} too slow'
                 elif tool_name == 'search_memory_nodes':
-                    assert metric.duration < 10, f"{tool_name} too slow"
+                    assert metric.duration < 10, f'{tool_name} too slow'
 
     @pytest.mark.asyncio
     async def test_batch_processing_efficiency(self):
@@ -590,33 +564,35 @@ class TestPerformance:
                         'source': 'text',
                         'source_description': 'batch test',
                         'group_id': client.test_group_id,
-                    }
+                    },
                 )
 
             # Wait for all to process
             processed = await client.wait_for_episode_processing(
                 expected_count=batch_size,
-                max_wait=120  # Allow more time for batch
+                max_wait=120,  # Allow more time for batch
             )
 
             total_time = time.time() - start_time
             avg_time_per_item = total_time / batch_size
 
-            assert processed, f"Failed to process {batch_size} items"
-            assert avg_time_per_item < 15, f"Batch processing too slow: {avg_time_per_item:.2f}s per item"
+            assert processed, f'Failed to process {batch_size} items'
+            assert avg_time_per_item < 15, (
+                f'Batch processing too slow: {avg_time_per_item:.2f}s per item'
+            )
 
             # Generate performance report
-            print(f"\nBatch Performance Report:")
-            print(f"  Total items: {batch_size}")
-            print(f"  Total time: {total_time:.2f}s")
-            print(f"  Avg per item: {avg_time_per_item:.2f}s")
+            print('\nBatch Performance Report:')
+            print(f'  Total items: {batch_size}')
+            print(f'  Total time: {total_time:.2f}s')
+            print(f'  Avg per item: {avg_time_per_item:.2f}s')
 
 
 class TestDatabaseBackends:
     """Test different database backend configurations."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("database", ["neo4j", "falkordb", "kuzu"])
+    @pytest.mark.parametrize('database', ['neo4j', 'falkordb', 'kuzu'])
     async def test_database_operations(self, database):
         """Test operations with different database backends."""
         env_vars = {
@@ -625,53 +601,50 @@ class TestDatabaseBackends:
         }
 
         if database == 'neo4j':
-            env_vars.update({
-                'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
-                'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
-                'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
-            })
+            env_vars.update(
+                {
+                    'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
+                    'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
+                    'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
+                }
+            )
         elif database == 'falkordb':
             env_vars['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
         elif database == 'kuzu':
-            env_vars['KUZU_PATH'] = os.environ.get('KUZU_PATH', f'./test_kuzu_{int(time.time())}.db')
+            env_vars['KUZU_PATH'] = os.environ.get(
+                'KUZU_PATH', f'./test_kuzu_{int(time.time())}.db'
+            )
 
-        server_params = StdioServerParameters(
-            command='uv',
-            args=['run', 'main.py', '--transport', 'stdio', '--database', database],
-            env=env_vars
-        )
-
-        # Test basic operations with each backend
+        # This test would require setting up server with specific database
         # Implementation depends on database availability
+        pass  # Placeholder for database-specific tests
 
 
 def generate_test_report(client: GraphitiTestClient) -> str:
     """Generate a comprehensive test report from metrics."""
     if not client.metrics:
-        return "No metrics collected"
+        return 'No metrics collected'
 
     report = []
-    report.append("\n" + "="*60)
-    report.append("GRAPHITI MCP TEST REPORT")
-    report.append("="*60)
+    report.append('\n' + '=' * 60)
+    report.append('GRAPHITI MCP TEST REPORT')
+    report.append('=' * 60)
 
     # Summary statistics
     total_ops = len(client.metrics)
     successful_ops = sum(1 for m in client.metrics if m.success)
     avg_duration = sum(m.duration for m in client.metrics) / total_ops
 
-    report.append(f"\nTotal Operations: {total_ops}")
-    report.append(f"Successful: {successful_ops} ({successful_ops/total_ops*100:.1f}%)")
-    report.append(f"Average Duration: {avg_duration:.2f}s")
+    report.append(f'\nTotal Operations: {total_ops}')
+    report.append(f'Successful: {successful_ops} ({successful_ops / total_ops * 100:.1f}%)')
+    report.append(f'Average Duration: {avg_duration:.2f}s')
 
     # Operation breakdown
-    report.append("\nOperation Breakdown:")
+    report.append('\nOperation Breakdown:')
     operation_stats = {}
     for metric in client.metrics:
         if metric.operation not in operation_stats:
-            operation_stats[metric.operation] = {
-                'count': 0, 'success': 0, 'total_duration': 0
-            }
+            operation_stats[metric.operation] = {'count': 0, 'success': 0, 'total_duration': 0}
         stats = operation_stats[metric.operation]
         stats['count'] += 1
         stats['success'] += 1 if metric.success else 0
@@ -681,20 +654,19 @@ def generate_test_report(client: GraphitiTestClient) -> str:
         avg_dur = stats['total_duration'] / stats['count']
         success_rate = stats['success'] / stats['count'] * 100
         report.append(
-            f"  {op}: {stats['count']} calls, "
-            f"{success_rate:.0f}% success, {avg_dur:.2f}s avg"
+            f'  {op}: {stats["count"]} calls, {success_rate:.0f}% success, {avg_dur:.2f}s avg'
         )
 
     # Slowest operations
     slowest = sorted(client.metrics, key=lambda m: m.duration, reverse=True)[:5]
-    report.append("\nSlowest Operations:")
+    report.append('\nSlowest Operations:')
     for metric in slowest:
-        report.append(f"  {metric.operation}: {metric.duration:.2f}s")
+        report.append(f'  {metric.operation}: {metric.duration:.2f}s')
 
-    report.append("="*60)
-    return "\n".join(report)
+    report.append('=' * 60)
+    return '\n'.join(report)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     # Run tests with pytest
-    pytest.main([__file__, "-v", "--asyncio-mode=auto"])
+    pytest.main([__file__, '-v', '--asyncio-mode=auto'])

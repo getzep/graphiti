@@ -6,16 +6,13 @@ Tests system behavior under high load, resource constraints, and edge conditions
 
 import asyncio
 import gc
-import json
-import os
-import psutil
 import random
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
+import psutil
 import pytest
-from test_fixtures import TestDataGenerator, graphiti_test_client, PerformanceBenchmark
+from test_fixtures import TestDataGenerator, graphiti_test_client
 
 
 @dataclass
@@ -26,7 +23,7 @@ class LoadTestConfig:
     operations_per_client: int = 100
     ramp_up_time: float = 5.0  # seconds
     test_duration: float = 60.0  # seconds
-    target_throughput: Optional[float] = None  # ops/sec
+    target_throughput: float | None = None  # ops/sec
     think_time: float = 0.1  # seconds between ops
 
 
@@ -44,8 +41,8 @@ class LoadTestResult:
     p95_latency: float
     p99_latency: float
     max_latency: float
-    errors: Dict[str, int]
-    resource_usage: Dict[str, float]
+    errors: dict[str, int]
+    resource_usage: dict[str, float]
 
 
 class LoadTester:
@@ -53,16 +50,11 @@ class LoadTester:
 
     def __init__(self, config: LoadTestConfig):
         self.config = config
-        self.metrics: List[Tuple[float, float, bool]] = []  # (start, duration, success)
-        self.errors: Dict[str, int] = {}
-        self.start_time: Optional[float] = None
+        self.metrics: list[tuple[float, float, bool]] = []  # (start, duration, success)
+        self.errors: dict[str, int] = {}
+        self.start_time: float | None = None
 
-    async def run_client_workload(
-        self,
-        client_id: int,
-        session,
-        group_id: str
-    ) -> Dict[str, int]:
+    async def run_client_workload(self, client_id: int, session, group_id: str) -> dict[str, int]:
         """Run workload for a single simulated client."""
         stats = {'success': 0, 'failure': 0}
         data_gen = TestDataGenerator()
@@ -76,11 +68,13 @@ class LoadTester:
 
             try:
                 # Randomly select operation type
-                operation = random.choice([
-                    'add_memory',
-                    'search_memory_nodes',
-                    'get_episodes',
-                ])
+                operation = random.choice(
+                    [
+                        'add_memory',
+                        'search_memory_nodes',
+                        'get_episodes',
+                    ]
+                )
 
                 if operation == 'add_memory':
                     args = {
@@ -103,10 +97,7 @@ class LoadTester:
                     }
 
                 # Execute operation with timeout
-                result = await asyncio.wait_for(
-                    session.call_tool(operation, args),
-                    timeout=30.0
-                )
+                await asyncio.wait_for(session.call_tool(operation, args), timeout=30.0)
 
                 duration = time.time() - operation_start
                 self.metrics.append((operation_start, duration, True))
@@ -146,7 +137,7 @@ class LoadTester:
         duration = max([m[0] + m[1] for m in self.metrics]) - min([m[0] for m in self.metrics])
 
         # Calculate percentiles
-        def percentile(data: List[float], p: float) -> float:
+        def percentile(data: list[float], p: float) -> float:
             if not data:
                 return 0.0
             idx = int(len(data) * p / 100)
@@ -209,16 +200,20 @@ class TestLoadScenarios:
 
             # Assertions
             assert results.successful_operations > results.failed_operations
-            assert results.average_latency < 5.0, f"Average latency too high: {results.average_latency:.2f}s"
-            assert results.p95_latency < 10.0, f"P95 latency too high: {results.p95_latency:.2f}s"
+            assert results.average_latency < 5.0, (
+                f'Average latency too high: {results.average_latency:.2f}s'
+            )
+            assert results.p95_latency < 10.0, f'P95 latency too high: {results.p95_latency:.2f}s'
 
             # Report results
-            print(f"\nSustained Load Test Results:")
-            print(f"  Total operations: {results.total_operations}")
-            print(f"  Success rate: {results.successful_operations / results.total_operations * 100:.1f}%")
-            print(f"  Throughput: {results.throughput:.2f} ops/s")
-            print(f"  Avg latency: {results.average_latency:.2f}s")
-            print(f"  P95 latency: {results.p95_latency:.2f}s")
+            print('\nSustained Load Test Results:')
+            print(f'  Total operations: {results.total_operations}')
+            print(
+                f'  Success rate: {results.successful_operations / results.total_operations * 100:.1f}%'
+            )
+            print(f'  Throughput: {results.throughput:.2f} ops/s')
+            print(f'  Avg latency: {results.average_latency:.2f}s')
+            print(f'  P95 latency: {results.p95_latency:.2f}s')
 
     @pytest.mark.asyncio
     @pytest.mark.slow
@@ -236,7 +231,7 @@ class TestLoadScenarios:
                         'source': 'text',
                         'source_description': 'normal',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 normal_tasks.append(task)
                 await asyncio.sleep(0.5)
@@ -255,7 +250,7 @@ class TestLoadScenarios:
                         'source': 'text',
                         'source_description': 'spike',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 spike_tasks.append(task)
 
@@ -267,14 +262,14 @@ class TestLoadScenarios:
             spike_failures = sum(1 for r in spike_results if isinstance(r, Exception))
             spike_success_rate = (len(spike_results) - spike_failures) / len(spike_results)
 
-            print(f"\nSpike Load Test Results:")
-            print(f"  Spike size: {len(spike_tasks)} operations")
-            print(f"  Duration: {spike_duration:.2f}s")
-            print(f"  Success rate: {spike_success_rate * 100:.1f}%")
-            print(f"  Throughput: {len(spike_tasks) / spike_duration:.2f} ops/s")
+            print('\nSpike Load Test Results:')
+            print(f'  Spike size: {len(spike_tasks)} operations')
+            print(f'  Duration: {spike_duration:.2f}s')
+            print(f'  Success rate: {spike_success_rate * 100:.1f}%')
+            print(f'  Throughput: {len(spike_tasks) / spike_duration:.2f} ops/s')
 
             # System should handle at least 80% of spike
-            assert spike_success_rate > 0.8, f"Too many failures during spike: {spike_failures}"
+            assert spike_success_rate > 0.8, f'Too many failures during spike: {spike_failures}'
 
     @pytest.mark.asyncio
     @pytest.mark.slow
@@ -297,7 +292,7 @@ class TestLoadScenarios:
                             'source': 'text',
                             'source_description': 'memory test',
                             'group_id': group_id,
-                        }
+                        },
                     )
                     batch_tasks.append(task)
 
@@ -312,15 +307,15 @@ class TestLoadScenarios:
             final_memory = process.memory_info().rss / 1024 / 1024  # MB
             memory_growth = final_memory - initial_memory
 
-            print(f"\nMemory Leak Test:")
-            print(f"  Initial memory: {initial_memory:.1f} MB")
-            print(f"  Final memory: {final_memory:.1f} MB")
-            print(f"  Growth: {memory_growth:.1f} MB")
+            print('\nMemory Leak Test:')
+            print(f'  Initial memory: {initial_memory:.1f} MB')
+            print(f'  Final memory: {final_memory:.1f} MB')
+            print(f'  Growth: {memory_growth:.1f} MB')
 
             # Allow for some memory growth but flag potential leaks
             # This is a soft check - actual threshold depends on system
             if memory_growth > 100:  # More than 100MB growth
-                print(f"  ⚠️  Potential memory leak detected: {memory_growth:.1f} MB growth")
+                print(f'  ⚠️  Potential memory leak detected: {memory_growth:.1f} MB growth')
 
     @pytest.mark.asyncio
     @pytest.mark.slow
@@ -333,32 +328,33 @@ class TestLoadScenarios:
                 task = session.call_tool(
                     'search_memory_nodes',
                     {
-                        'query': f'complex query {i} ' + ' '.join([TestDataGenerator.fake.word() for _ in range(10)]),
+                        'query': f'complex query {i} '
+                        + ' '.join([TestDataGenerator.fake.word() for _ in range(10)]),
                         'group_id': group_id,
                         'limit': 100,
-                    }
+                    },
                 )
                 long_tasks.append(task)
 
             # Execute with timeout
             try:
                 results = await asyncio.wait_for(
-                    asyncio.gather(*long_tasks, return_exceptions=True),
-                    timeout=60.0
+                    asyncio.gather(*long_tasks, return_exceptions=True), timeout=60.0
                 )
 
                 # Count connection-related errors
                 connection_errors = sum(
-                    1 for r in results
+                    1
+                    for r in results
                     if isinstance(r, Exception) and 'connection' in str(r).lower()
                 )
 
-                print(f"\nConnection Pool Test:")
-                print(f"  Total requests: {len(long_tasks)}")
-                print(f"  Connection errors: {connection_errors}")
+                print('\nConnection Pool Test:')
+                print(f'  Total requests: {len(long_tasks)}')
+                print(f'  Connection errors: {connection_errors}')
 
             except asyncio.TimeoutError:
-                print("  Test timed out - possible deadlock or exhaustion")
+                print('  Test timed out - possible deadlock or exhaustion')
 
     @pytest.mark.asyncio
     @pytest.mark.slow
@@ -381,7 +377,7 @@ class TestLoadScenarios:
                             'source': 'text',
                             'source_description': 'degradation test',
                             'group_id': group_id,
-                        }
+                        },
                     )
                     tasks.append(task)
 
@@ -400,10 +396,10 @@ class TestLoadScenarios:
                     'duration': level_duration,
                 }
 
-                print(f"\nLoad Level {level}:")
-                print(f"  Success rate: {success_rate:.1f}%")
-                print(f"  Throughput: {throughput:.2f} ops/s")
-                print(f"  Duration: {level_duration:.2f}s")
+                print(f'\nLoad Level {level}:')
+                print(f'  Success rate: {success_rate:.1f}%')
+                print(f'  Throughput: {throughput:.2f} ops/s')
+                print(f'  Duration: {level_duration:.2f}s')
 
                 # Brief pause between levels
                 await asyncio.sleep(2)
@@ -411,7 +407,7 @@ class TestLoadScenarios:
             # Verify graceful degradation
             # Success rate should not drop below 50% even at high load
             for level, metrics in results_by_level.items():
-                assert metrics['success_rate'] > 50, f"Poor performance at load level {level}"
+                assert metrics['success_rate'] > 50, f'Poor performance at load level {level}'
 
 
 class TestResourceLimits:
@@ -422,18 +418,18 @@ class TestResourceLimits:
         """Test handling of very large payloads."""
         async with graphiti_test_client() as (session, group_id):
             payload_sizes = [
-                (1_000, "1KB"),
-                (10_000, "10KB"),
-                (100_000, "100KB"),
-                (1_000_000, "1MB"),
+                (1_000, '1KB'),
+                (10_000, '10KB'),
+                (100_000, '100KB'),
+                (1_000_000, '1MB'),
             ]
 
             for size, label in payload_sizes:
-                content = "x" * size
+                content = 'x' * size
 
                 start_time = time.time()
                 try:
-                    result = await asyncio.wait_for(
+                    await asyncio.wait_for(
                         session.call_tool(
                             'add_memory',
                             {
@@ -442,22 +438,22 @@ class TestResourceLimits:
                                 'source': 'text',
                                 'source_description': 'payload test',
                                 'group_id': group_id,
-                            }
+                            },
                         ),
-                        timeout=30.0
+                        timeout=30.0,
                     )
                     duration = time.time() - start_time
-                    status = "✅ Success"
+                    status = '✅ Success'
 
                 except asyncio.TimeoutError:
                     duration = 30.0
-                    status = "⏱️  Timeout"
+                    status = '⏱️  Timeout'
 
                 except Exception as e:
                     duration = time.time() - start_time
-                    status = f"❌ Error: {type(e).__name__}"
+                    status = f'❌ Error: {type(e).__name__}'
 
-                print(f"Payload {label}: {status} ({duration:.2f}s)")
+                print(f'Payload {label}: {status} ({duration:.2f}s)')
 
     @pytest.mark.asyncio
     async def test_rate_limit_handling(self):
@@ -474,7 +470,7 @@ class TestResourceLimits:
                         'source': 'text',
                         'source_description': 'rate test',
                         'group_id': group_id,
-                    }
+                    },
                 )
                 rapid_tasks.append(task)
 
@@ -483,42 +479,49 @@ class TestResourceLimits:
 
             # Count rate limit errors
             rate_limit_errors = sum(
-                1 for r in results
+                1
+                for r in results
                 if isinstance(r, Exception) and ('rate' in str(r).lower() or '429' in str(r))
             )
 
-            print(f"\nRate Limit Test:")
-            print(f"  Total requests: {len(rapid_tasks)}")
-            print(f"  Rate limit errors: {rate_limit_errors}")
-            print(f"  Success rate: {(len(rapid_tasks) - rate_limit_errors) / len(rapid_tasks) * 100:.1f}%")
+            print('\nRate Limit Test:')
+            print(f'  Total requests: {len(rapid_tasks)}')
+            print(f'  Rate limit errors: {rate_limit_errors}')
+            print(
+                f'  Success rate: {(len(rapid_tasks) - rate_limit_errors) / len(rapid_tasks) * 100:.1f}%'
+            )
 
 
-def generate_load_test_report(results: List[LoadTestResult]) -> str:
+def generate_load_test_report(results: list[LoadTestResult]) -> str:
     """Generate comprehensive load test report."""
     report = []
-    report.append("\n" + "=" * 60)
-    report.append("LOAD TEST REPORT")
-    report.append("=" * 60)
+    report.append('\n' + '=' * 60)
+    report.append('LOAD TEST REPORT')
+    report.append('=' * 60)
 
     for i, result in enumerate(results):
-        report.append(f"\nTest Run {i + 1}:")
-        report.append(f"  Total Operations: {result.total_operations}")
-        report.append(f"  Success Rate: {result.successful_operations / result.total_operations * 100:.1f}%")
-        report.append(f"  Throughput: {result.throughput:.2f} ops/s")
-        report.append(f"  Latency (avg/p50/p95/p99/max): {result.average_latency:.2f}/{result.p50_latency:.2f}/{result.p95_latency:.2f}/{result.p99_latency:.2f}/{result.max_latency:.2f}s")
+        report.append(f'\nTest Run {i + 1}:')
+        report.append(f'  Total Operations: {result.total_operations}')
+        report.append(
+            f'  Success Rate: {result.successful_operations / result.total_operations * 100:.1f}%'
+        )
+        report.append(f'  Throughput: {result.throughput:.2f} ops/s')
+        report.append(
+            f'  Latency (avg/p50/p95/p99/max): {result.average_latency:.2f}/{result.p50_latency:.2f}/{result.p95_latency:.2f}/{result.p99_latency:.2f}/{result.max_latency:.2f}s'
+        )
 
         if result.errors:
-            report.append("  Errors:")
+            report.append('  Errors:')
             for error_type, count in result.errors.items():
-                report.append(f"    {error_type}: {count}")
+                report.append(f'    {error_type}: {count}')
 
-        report.append("  Resource Usage:")
+        report.append('  Resource Usage:')
         for metric, value in result.resource_usage.items():
-            report.append(f"    {metric}: {value:.2f}")
+            report.append(f'    {metric}: {value:.2f}')
 
-    report.append("=" * 60)
-    return "\n".join(report)
+    report.append('=' * 60)
+    return '\n'.join(report)
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--asyncio-mode=auto", "-m", "slow"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v', '--asyncio-mode=auto', '-m', 'slow'])

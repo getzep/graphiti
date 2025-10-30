@@ -8,7 +8,7 @@ import os
 import random
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 from faker import Faker
@@ -22,7 +22,7 @@ class TestDataGenerator:
     """Generate realistic test data for various scenarios."""
 
     @staticmethod
-    def generate_company_profile() -> Dict[str, Any]:
+    def generate_company_profile() -> dict[str, Any]:
         """Generate a realistic company profile."""
         return {
             'company': {
@@ -30,7 +30,7 @@ class TestDataGenerator:
                 'founded': random.randint(1990, 2023),
                 'industry': random.choice(['Tech', 'Finance', 'Healthcare', 'Retail']),
                 'employees': random.randint(10, 10000),
-                'revenue': f"${random.randint(1, 1000)}M",
+                'revenue': f'${random.randint(1, 1000)}M',
                 'headquarters': fake.city(),
             },
             'products': [
@@ -46,41 +46,41 @@ class TestDataGenerator:
                 'ceo': fake.name(),
                 'cto': fake.name(),
                 'cfo': fake.name(),
-            }
+            },
         }
 
     @staticmethod
     def generate_conversation(turns: int = 3) -> str:
         """Generate a realistic conversation."""
         topics = [
-            "product features",
-            "pricing",
-            "technical support",
-            "integration",
-            "documentation",
-            "performance",
+            'product features',
+            'pricing',
+            'technical support',
+            'integration',
+            'documentation',
+            'performance',
         ]
 
         conversation = []
         for _ in range(turns):
             topic = random.choice(topics)
-            user_msg = f"user: {fake.sentence()} about {topic}?"
-            assistant_msg = f"assistant: {fake.paragraph(nb_sentences=2)}"
+            user_msg = f'user: {fake.sentence()} about {topic}?'
+            assistant_msg = f'assistant: {fake.paragraph(nb_sentences=2)}'
             conversation.extend([user_msg, assistant_msg])
 
-        return "\n".join(conversation)
+        return '\n'.join(conversation)
 
     @staticmethod
     def generate_technical_document() -> str:
         """Generate technical documentation content."""
         sections = [
-            f"# {fake.catch_phrase()}\n\n{fake.paragraph()}",
-            f"## Architecture\n{fake.paragraph()}",
-            f"## Implementation\n{fake.paragraph()}",
-            f"## Performance\n- Latency: {random.randint(1, 100)}ms\n- Throughput: {random.randint(100, 10000)} req/s",
-            f"## Dependencies\n- {fake.word()}\n- {fake.word()}\n- {fake.word()}",
+            f'# {fake.catch_phrase()}\n\n{fake.paragraph()}',
+            f'## Architecture\n{fake.paragraph()}',
+            f'## Implementation\n{fake.paragraph()}',
+            f'## Performance\n- Latency: {random.randint(1, 100)}ms\n- Throughput: {random.randint(100, 10000)} req/s',
+            f'## Dependencies\n- {fake.word()}\n- {fake.word()}\n- {fake.word()}',
         ]
-        return "\n\n".join(sections)
+        return '\n\n'.join(sections)
 
     @staticmethod
     def generate_news_article() -> str:
@@ -100,7 +100,7 @@ class TestDataGenerator:
         """
 
     @staticmethod
-    def generate_user_profile() -> Dict[str, Any]:
+    def generate_user_profile() -> dict[str, Any]:
         """Generate a user profile."""
         return {
             'user_id': fake.uuid4(),
@@ -115,8 +115,8 @@ class TestDataGenerator:
             'activity': {
                 'last_login': fake.date_time_this_month().isoformat(),
                 'total_sessions': random.randint(1, 1000),
-                'average_duration': f"{random.randint(1, 60)} minutes",
-            }
+                'average_duration': f'{random.randint(1, 60)} minutes',
+            },
         }
 
 
@@ -131,25 +131,27 @@ class MockLLMProvider:
         await asyncio.sleep(self.delay)
 
         # Return deterministic responses based on prompt patterns
-        if "extract entities" in prompt.lower():
-            return json.dumps({
-                'entities': [
-                    {'name': 'TestEntity1', 'type': 'PERSON'},
-                    {'name': 'TestEntity2', 'type': 'ORGANIZATION'},
-                ]
-            })
-        elif "summarize" in prompt.lower():
-            return "This is a test summary of the provided content."
+        if 'extract entities' in prompt.lower():
+            return json.dumps(
+                {
+                    'entities': [
+                        {'name': 'TestEntity1', 'type': 'PERSON'},
+                        {'name': 'TestEntity2', 'type': 'ORGANIZATION'},
+                    ]
+                }
+            )
+        elif 'summarize' in prompt.lower():
+            return 'This is a test summary of the provided content.'
         else:
-            return "Mock LLM response"
+            return 'Mock LLM response'
 
 
 @asynccontextmanager
 async def graphiti_test_client(
-    group_id: Optional[str] = None,
-    database: str = "kuzu",
+    group_id: str | None = None,
+    database: str = 'kuzu',
     use_mock_llm: bool = False,
-    config_overrides: Optional[Dict[str, Any]] = None
+    config_overrides: dict[str, Any] | None = None,
 ):
     """
     Context manager for creating test clients with various configurations.
@@ -169,11 +171,13 @@ async def graphiti_test_client(
 
     # Database-specific configuration
     if database == 'neo4j':
-        env.update({
-            'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
-            'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
-            'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
-        })
+        env.update(
+            {
+                'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
+                'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
+                'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
+            }
+        )
     elif database == 'falkordb':
         env['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
     elif database == 'kuzu':
@@ -188,9 +192,7 @@ async def graphiti_test_client(
         env['USE_MOCK_LLM'] = 'true'
 
     server_params = StdioServerParameters(
-        command='uv',
-        args=['run', 'main.py', '--transport', 'stdio'],
-        env=env
+        command='uv', args=['run', 'main.py', '--transport', 'stdio'], env=env
     )
 
     async with stdio_client(server_params) as (read, write):
@@ -203,7 +205,7 @@ async def graphiti_test_client(
             # Cleanup: Clear test data
             try:
                 await session.call_tool('clear_graph', {'group_id': test_group_id})
-            except:
+            except Exception:
                 pass  # Ignore cleanup errors
 
             await session.close()
@@ -213,7 +215,7 @@ class PerformanceBenchmark:
     """Track and analyze performance benchmarks."""
 
     def __init__(self):
-        self.measurements: Dict[str, List[float]] = {}
+        self.measurements: dict[str, list[float]] = {}
 
     def record(self, operation: str, duration: float):
         """Record a performance measurement."""
@@ -221,7 +223,7 @@ class PerformanceBenchmark:
             self.measurements[operation] = []
         self.measurements[operation].append(duration)
 
-    def get_stats(self, operation: str) -> Dict[str, float]:
+    def get_stats(self, operation: str) -> dict[str, float]:
         """Get statistics for an operation."""
         if operation not in self.measurements or not self.measurements[operation]:
             return {}
@@ -237,18 +239,18 @@ class PerformanceBenchmark:
 
     def report(self) -> str:
         """Generate a performance report."""
-        lines = ["Performance Benchmark Report", "=" * 40]
+        lines = ['Performance Benchmark Report', '=' * 40]
 
         for operation in sorted(self.measurements.keys()):
             stats = self.get_stats(operation)
-            lines.append(f"\n{operation}:")
-            lines.append(f"  Samples: {stats['count']}")
-            lines.append(f"  Mean: {stats['mean']:.3f}s")
-            lines.append(f"  Median: {stats['median']:.3f}s")
-            lines.append(f"  Min: {stats['min']:.3f}s")
-            lines.append(f"  Max: {stats['max']:.3f}s")
+            lines.append(f'\n{operation}:')
+            lines.append(f'  Samples: {stats["count"]}')
+            lines.append(f'  Mean: {stats["mean"]:.3f}s')
+            lines.append(f'  Median: {stats["median"]:.3f}s')
+            lines.append(f'  Min: {stats["min"]:.3f}s')
+            lines.append(f'  Max: {stats["max"]:.3f}s')
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
 
 # Pytest fixtures

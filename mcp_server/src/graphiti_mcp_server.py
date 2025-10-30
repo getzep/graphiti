@@ -61,7 +61,9 @@ logging.basicConfig(
 # Configure specific loggers
 logging.getLogger('uvicorn').setLevel(logging.INFO)
 logging.getLogger('uvicorn.access').setLevel(logging.WARNING)  # Reduce access log noise
-logging.getLogger('mcp.server.streamable_http_manager').setLevel(logging.WARNING)  # Reduce MCP noise
+logging.getLogger('mcp.server.streamable_http_manager').setLevel(
+    logging.WARNING
+)  # Reduce MCP noise
 
 logger = logging.getLogger(__name__)
 
