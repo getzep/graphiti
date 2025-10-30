@@ -26,7 +26,6 @@ Tests are organized with pytest markers:
 - `slow` - Long-running tests (stress/load tests)
 - `requires_neo4j` - Tests requiring Neo4j
 - `requires_falkordb` - Tests requiring FalkorDB
-- `requires_kuzu` - Tests requiring KuzuDB
 - `requires_openai` - Tests requiring OpenAI API key
 
 ## Installation
@@ -69,7 +68,7 @@ Suites:
   all           - All tests
 
 Options:
-  --database    - Database backend (neo4j, falkordb, kuzu)
+  --database    - Database backend (neo4j, falkordb)
   --mock-llm    - Use mock LLM for faster testing
   --parallel N  - Run tests in parallel with N workers
   --coverage    - Generate coverage report
@@ -81,8 +80,8 @@ Options:
 ### Examples
 
 ```bash
-# Quick smoke test with KuzuDB
-python tests/run_tests.py smoke --database kuzu
+# Quick smoke test with FalkorDB (default)
+python tests/run_tests.py smoke
 
 # Full integration test with Neo4j
 python tests/run_tests.py integration --database neo4j
@@ -132,12 +131,11 @@ python tests/run_tests.py all --check-only
 
 ```bash
 # Database configuration
-export DATABASE_PROVIDER=kuzu  # or neo4j, falkordb
+export DATABASE_PROVIDER=falkordb  # or neo4j
 export NEO4J_URI=bolt://localhost:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASSWORD=graphiti
 export FALKORDB_URI=redis://localhost:6379
-export KUZU_PATH=./test_kuzu.db
 
 # LLM configuration
 export OPENAI_API_KEY=your_key_here  # or use --mock-llm
@@ -178,7 +176,7 @@ Simplified client creation:
 ```python
 from test_fixtures import graphiti_test_client
 
-async with graphiti_test_client(database="kuzu") as (session, group_id):
+async with graphiti_test_client(database="falkordb") as (session, group_id):
     # Use session for testing
     result = await session.call_tool('add_memory', {...})
 ```

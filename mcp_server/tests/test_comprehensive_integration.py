@@ -51,7 +51,6 @@ class GraphitiTestClient:
                 'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
                 'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
                 'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'test_key_for_mock'),
-                'KUZU_PATH': os.environ.get('KUZU_PATH', './test_kuzu.db'),
                 'FALKORDB_URI': os.environ.get('FALKORDB_URI', 'redis://localhost:6379'),
             },
         )
@@ -592,7 +591,7 @@ class TestDatabaseBackends:
     """Test different database backend configurations."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize('database', ['neo4j', 'falkordb', 'kuzu'])
+    @pytest.mark.parametrize('database', ['neo4j', 'falkordb'])
     async def test_database_operations(self, database):
         """Test operations with different database backends."""
         env_vars = {
@@ -610,10 +609,6 @@ class TestDatabaseBackends:
             )
         elif database == 'falkordb':
             env_vars['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
-        elif database == 'kuzu':
-            env_vars['KUZU_PATH'] = os.environ.get(
-                'KUZU_PATH', f'./test_kuzu_{int(time.time())}.db'
-            )
 
         # This test would require setting up server with specific database
         # Implementation depends on database availability

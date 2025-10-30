@@ -185,22 +185,7 @@ class GraphitiService:
             self.entity_types = custom_types
 
             # Initialize Graphiti client with appropriate driver
-            if self.config.database.provider.lower() == 'kuzu':
-                # For KuzuDB, create a KuzuDriver instance directly
-                from graphiti_core.driver.kuzu_driver import KuzuDriver
-
-                kuzu_driver = KuzuDriver(
-                    db=db_config['db'],
-                    max_concurrent_queries=db_config['max_concurrent_queries'],
-                )
-
-                self.client = Graphiti(
-                    graph_driver=kuzu_driver,
-                    llm_client=llm_client,
-                    embedder=embedder_client,
-                    max_coroutines=self.semaphore_limit,
-                )
-            elif self.config.database.provider.lower() == 'falkordb':
+            if self.config.database.provider.lower() == 'falkordb':
                 # For FalkorDB, create a FalkorDriver instance directly
                 from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -742,7 +727,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb', 'kuzu'],
+        choices=['neo4j', 'falkordb'],
         help='Database provider to use',
     )
 

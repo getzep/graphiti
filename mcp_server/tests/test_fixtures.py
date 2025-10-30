@@ -150,7 +150,7 @@ class MockLLMProvider:
 @asynccontextmanager
 async def graphiti_test_client(
     group_id: str | None = None,
-    database: str = 'kuzu',
+    database: str = 'falkordb',
     use_mock_llm: bool = False,
     config_overrides: dict[str, Any] | None = None,
 ):
@@ -159,7 +159,7 @@ async def graphiti_test_client(
 
     Args:
         group_id: Test group identifier
-        database: Database backend (neo4j, falkordb, kuzu)
+        database: Database backend (neo4j, falkordb)
         use_mock_llm: Whether to use mock LLM for faster tests
         config_overrides: Additional config overrides
     """
@@ -181,8 +181,6 @@ async def graphiti_test_client(
         )
     elif database == 'falkordb':
         env['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
-    elif database == 'kuzu':
-        env['KUZU_PATH'] = os.environ.get('KUZU_PATH', f'./test_kuzu_{test_group_id}.db')
 
     # Apply config overrides
     if config_overrides:

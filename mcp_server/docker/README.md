@@ -1,18 +1,15 @@
 # Docker Deployment for Graphiti MCP Server
 
-This directory contains Docker Compose configurations for running the Graphiti MCP server with different graph database backends: KuzuDB, Neo4j, and FalkorDB.
+This directory contains Docker Compose configurations for running the Graphiti MCP server with graph database backends: FalkorDB (combined image) and Neo4j.
 
 ## Quick Start
 
 ```bash
-# Default configuration (KuzuDB)
+# Default configuration (FalkorDB combined image)
 docker-compose up
 
-# Neo4j
+# Neo4j (separate containers)
 docker-compose -f docker-compose-neo4j.yml up
-
-# FalkorDB
-docker-compose -f docker-compose-falkordb.yml up
 ```
 
 ## Environment Variables
@@ -32,56 +29,55 @@ SEMAPHORE_LIMIT=10
 
 ## Database Configurations
 
-### KuzuDB
+### FalkorDB (Combined Image)
 
 **File:** `docker-compose.yml` (default)
 
-KuzuDB is an embedded graph database that runs within the application container.
+The default configuration uses a combined Docker image that bundles both FalkorDB and the MCP server together for simplified deployment.
 
 #### Configuration
 
 ```bash
 # Environment variables
-KUZU_DB=/data/graphiti.kuzu  # Database file path (default: /data/graphiti.kuzu)
-KUZU_MAX_CONCURRENT_QUERIES=10  # Maximum concurrent queries (default: 10)
+FALKORDB_URI=redis://localhost:6379  # Connection URI (services run in same container)
+FALKORDB_PASSWORD=  # Password (default: empty)
+FALKORDB_DATABASE=default_db  # Database name (default: default_db)
 ```
 
-#### Storage Options
+#### Accessing Services
 
-**Persistent Storage (default):**
-Data is stored in the `kuzu_data` Docker volume at `/data/graphiti.kuzu`.
-
-**In-Memory Mode:**
-```bash
-KUZU_DB=:memory:
-```
-Note: Data will be lost when the container stops.
+- **FalkorDB (Redis):** redis://localhost:6379
+- **FalkorDB Web UI:** http://localhost:3000
+- **MCP Server:** http://localhost:8000
 
 #### Data Management
 
 **Backup:**
 ```bash
-docker run --rm -v docker_kuzu_data:/data -v $(pwd):/backup alpine \
-  tar czf /backup/kuzu-backup.tar.gz -C /data .
+docker run --rm -v mcp_server_falkordb_data:/var/lib/falkordb/data -v $(pwd):/backup alpine \
+  tar czf /backup/falkordb-backup.tar.gz -C /var/lib/falkordb/data .
 ```
 
 **Restore:**
 ```bash
-docker run --rm -v docker_kuzu_data:/data -v $(pwd):/backup alpine \
-  tar xzf /backup/kuzu-backup.tar.gz -C /data
+docker run --rm -v mcp_server_falkordb_data:/var/lib/falkordb/data -v $(pwd):/backup alpine \
+  tar xzf /backup/falkordb-backup.tar.gz -C /var/lib/falkordb/data
 ```
 
 **Clear Data:**
 ```bash
 docker-compose down
-docker volume rm docker_kuzu_data
-docker-compose up  # Creates fresh volume
+docker volume rm mcp_server_falkordb_data
+docker-compose up
 ```
 
 #### Gotchas
-- KuzuDB data is stored in a single file/directory
-- The database file can grow large with extensive data
-- In-memory mode provides faster performance but no persistence
+- Both FalkorDB and MCP server run in the same container
+- FalkorDB uses Redis persistence mechanisms (AOF/RDB)
+- Default configuration has no password - add one for production
+- Health check only monitors FalkorDB; MCP server startup visible in logs
+
+See [README-falkordb-combined.md](README-falkordb-combined.md) for detailed information about the combined image.
 
 ### Neo4j
 
@@ -142,66 +138,22 @@ docker-compose -f docker-compose-neo4j.yml up
 - Page cache is set to 512MB
 - Enterprise features like parallel runtime require a license
 
-### FalkorDB
-
-**File:** `docker-compose-falkordb.yml`
-
-FalkorDB is a Redis-based graph database that runs as a separate container.
-
-#### Configuration
-
-```bash
-# Environment variables
-FALKORDB_URI=redis://falkordb:6379  # Connection URI (default: redis://falkordb:6379)
-FALKORDB_PASSWORD=  # Password (default: empty)
-FALKORDB_DATABASE=default_db  # Database name (default: default_db)
-```
-
-#### Accessing FalkorDB
-
-- **Redis Protocol:** redis://localhost:6379
-- **MCP Server:** http://localhost:8000
-
-#### Data Management
-
-**Backup:**
-```bash
-docker run --rm -v docker_falkordb_data:/data -v $(pwd):/backup alpine \
-  tar czf /backup/falkordb-backup.tar.gz -C /data .
-```
-
-**Restore:**
-```bash
-docker run --rm -v docker_falkordb_data:/data -v $(pwd):/backup alpine \
-  tar xzf /backup/falkordb-backup.tar.gz -C /data
-```
-
-**Clear Data:**
-```bash
-docker-compose -f docker-compose-falkordb.yml down
-docker volume rm docker_falkordb_data
-docker-compose -f docker-compose-falkordb.yml up
-```
-
-#### Gotchas
-- FalkorDB uses Redis persistence mechanisms (AOF/RDB)
-- Default configuration has no password - add one for production
-- Database name is created automatically if it doesn't exist
-- Redis commands can be used for debugging: `redis-cli -h localhost`
-
 ## Switching Between Databases
 
-To switch from one database to another:
+To switch from FalkorDB to Neo4j (or vice versa):
 
 1. **Stop current setup:**
    ```bash
-   docker-compose down  # or docker-compose -f docker-compose-[db].yml down
+   docker-compose down  # Stop FalkorDB combined image
+   # or
+   docker-compose -f docker-compose-neo4j.yml down  # Stop Neo4j
    ```
 
 2. **Start new database:**
    ```bash
-   docker-compose -f docker-compose-[neo4j|falkordb].yml up
-   # or just docker-compose up for KuzuDB
+   docker-compose up  # Start FalkorDB combined image
+   # or
+   docker-compose -f docker-compose-neo4j.yml up  # Start Neo4j
    ```
 
 Note: Data is not automatically migrated between different database types. You'll need to export from one and import to another using the MCP API.
@@ -235,9 +187,10 @@ lsof -i :8000
 
 ### Database Connection Issues
 
-**KuzuDB:**
-- Check volume permissions: `docker exec graphiti-mcp ls -la /data`
-- Verify database file isn't corrupted
+**FalkorDB:**
+- Test Redis connectivity: `docker compose exec graphiti-falkordb redis-cli ping`
+- Check FalkorDB logs: `docker compose logs graphiti-falkordb`
+- Verify both services started: Look for "FalkorDB is ready!" and "Starting MCP server..." in logs
 
 **Neo4j:**
 - Wait for health check to pass (can take 30+ seconds)
@@ -246,7 +199,6 @@ lsof -i :8000
 
 **FalkorDB:**
 - Test Redis connectivity: `redis-cli -h localhost ping`
-- Check FalkorDB logs: `docker-compose -f docker-compose-falkordb.yml logs falkordb`
 
 ### Data Not Persisting
 
@@ -267,29 +219,23 @@ lsof -i :8000
 
 ### Performance Issues
 
-**KuzuDB:**
-- Increase `KUZU_MAX_CONCURRENT_QUERIES`
-- Consider using SSD for database file storage
-- Monitor with: `docker stats graphiti-mcp`
+**FalkorDB:**
+- Adjust `SEMAPHORE_LIMIT` environment variable
+- Monitor with: `docker stats graphiti-falkordb`
+- Check Redis memory: `docker compose exec graphiti-falkordb redis-cli info memory`
 
 **Neo4j:**
 - Increase heap memory in docker-compose-neo4j.yml
 - Adjust page cache size based on data size
 - Check query performance in Neo4j browser
 
-**FalkorDB:**
-- Adjust Redis max memory policy
-- Monitor with: `redis-cli -h localhost info memory`
-- Consider Redis persistence settings (AOF vs RDB)
-
 ## Docker Resources
 
 ### Volumes
 
 Each database configuration uses named volumes for data persistence:
-- KuzuDB: `kuzu_data`
+- FalkorDB (combined): `falkordb_data`
 - Neo4j: `neo4j_data`, `neo4j_logs`
-- FalkorDB: `falkordb_data`
 
 ### Networks
 
@@ -312,8 +258,7 @@ services:
 ## Configuration Files
 
 Each database has a dedicated configuration file in `../config/`:
-- `config-docker-kuzu.yaml` - KuzuDB configuration
+- `config-docker-falkordb-combined.yaml` - FalkorDB combined image configuration
 - `config-docker-neo4j.yaml` - Neo4j configuration
-- `config-docker-falkordb.yaml` - FalkorDB configuration
 
-These files are mounted read-only into the container at `/app/config/config.yaml`.
+These files are mounted read-only into the container at `/app/mcp/config/config.yaml` (for combined image) or `/app/config/config.yaml` (for Neo4j).

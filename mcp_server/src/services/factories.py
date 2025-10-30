@@ -16,13 +16,7 @@ try:
 except ImportError:
     HAS_FALKOR = False
 
-# Try to import KuzuDriver if available
-try:
-    from graphiti_core.driver.kuzu_driver import KuzuDriver  # noqa: F401
-
-    HAS_KUZU = True
-except ImportError:
-    HAS_KUZU = False
+# Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
@@ -445,35 +439,6 @@ class DatabaseDriverFactory:
                     'port': port,
                     'password': password,
                     'database': falkor_config.database,
-                }
-
-            case 'kuzu':
-                if not HAS_KUZU:
-                    raise ValueError('KuzuDB driver not available in current graphiti-core version')
-
-                # Use KuzuDB config if provided, otherwise use defaults
-                if config.providers.kuzu:
-                    kuzu_config = config.providers.kuzu
-                else:
-                    # Create default KuzuDB configuration
-                    from config.schema import KuzuProviderConfig
-
-                    kuzu_config = KuzuProviderConfig()
-
-                # Check for environment variable overrides (for CI/CD compatibility)
-                import os
-
-                db = os.environ.get('KUZU_DB', kuzu_config.db)
-                max_concurrent_queries = int(
-                    os.environ.get(
-                        'KUZU_MAX_CONCURRENT_QUERIES', kuzu_config.max_concurrent_queries
-                    )
-                )
-
-                return {
-                    'driver': 'kuzu',
-                    'db': db,
-                    'max_concurrent_queries': max_concurrent_queries,
                 }
 
             case _:

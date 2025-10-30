@@ -53,8 +53,6 @@ class TestRunner:
             checks['neo4j'] = self._check_neo4j()
         elif self.args.database == 'falkordb':
             checks['falkordb'] = self._check_falkordb()
-        elif self.args.database == 'kuzu':
-            checks['kuzu'] = True  # KuzuDB is embedded
 
         # Check Python dependencies
         checks['mcp'] = self._check_python_package('mcp')
@@ -107,7 +105,7 @@ class TestRunner:
 
         # Add database marker
         if self.args.database:
-            for db in ['neo4j', 'falkordb', 'kuzu']:
+            for db in ['neo4j', 'falkordb']:
                 if db != self.args.database:
                     pytest_args.extend(['-m', f'not requires_{db}'])
 
@@ -257,9 +255,9 @@ Examples:
 
     parser.add_argument(
         '--database',
-        choices=['neo4j', 'falkordb', 'kuzu'],
-        default='kuzu',
-        help='Database backend to test (default: kuzu)',
+        choices=['neo4j', 'falkordb'],
+        default='falkordb',
+        help='Database backend to test (default: falkordb)',
     )
 
     parser.add_argument('--mock-llm', action='store_true', help='Use mock LLM for faster testing')
