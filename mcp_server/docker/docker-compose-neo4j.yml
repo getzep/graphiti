@@ -39,10 +39,10 @@ services:
       # Application configuration
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
-      - CONFIG_PATH=/app/config/config.yaml
+      - CONFIG_PATH=/app/mcp/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:
-      - ../config/config-docker-neo4j.yaml:/app/config/config.yaml:ro
+      - ../config/config-docker-neo4j.yaml:/app/mcp/config/config.yaml:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP transport
     command: ["uv", "run", "main.py"]
