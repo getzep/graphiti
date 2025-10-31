@@ -716,24 +716,18 @@ async def get_status() -> StatusResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # For KuzuDB, just check if the client exists (it's in-memory)
-        if config.database.provider.lower() == 'kuzu':
-            provider_info = f'{config.database.provider} database (in-memory)'
-            return StatusResponse(
-                status='ok',
-                message=f'Graphiti MCP server is running and connected to {provider_info}',
-            )
-
-        # For Neo4j and FalkorDB, test connection with a simple query
+        # Test database connection with a simple query
         async with client.driver.session() as session:
             result = await session.run('MATCH (n) RETURN count(n) as count')
             # Consume the result to verify query execution
             if result:
                 _ = [record async for record in result]
 
-        provider_info = f'{config.database.provider} database'
+        # Use the actual configured provider from the global config
+        provider_name = config.database.provider
         return StatusResponse(
-            status='ok', message=f'Graphiti MCP server is running and connected to {provider_info}'
+            status='ok',
+            message=f'Graphiti MCP server is running and connected to {provider_name} database',
         )
     except Exception as e:
         error_msg = str(e)
