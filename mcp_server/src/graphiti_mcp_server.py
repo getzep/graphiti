@@ -253,6 +253,18 @@ class GraphitiService:
                             f"  - Or run FalkorDB manually: docker run -p 6379:6379 falkordb/falkordb\n\n"
                             f"{'='*70}\n"
                         ) from db_error
+                    elif db_provider.lower() == 'neo4j':
+                        raise RuntimeError(
+                            f"\n{'='*70}\n"
+                            f"Database Connection Error: Neo4j is not running\n"
+                            f"{'='*70}\n\n"
+                            f"Neo4j at {db_config.get('uri', 'unknown')} is not accessible.\n\n"
+                            f"To start Neo4j:\n"
+                            f"  - Using Docker Compose: cd mcp_server && docker compose -f docker/docker-compose-neo4j.yml up\n"
+                            f"  - Or install Neo4j Desktop from: https://neo4j.com/download/\n"
+                            f"  - Or run Neo4j manually: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n\n"
+                            f"{'='*70}\n"
+                        ) from db_error
                     else:
                         raise RuntimeError(
                             f"\n{'='*70}\n"
