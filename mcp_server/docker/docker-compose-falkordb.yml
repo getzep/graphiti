@@ -17,8 +17,9 @@ services:
 
   graphiti-mcp:
     image: zepai/knowledge-graph-mcp:standalone
-    # Note: When building locally, this will use the local build.
-    # For production, pull from registry with the version tag you need
+    # For specific versions, replace 'standalone' with a version tag:
+    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
+    # When building locally, the build section below will be used.
     build:
       context: ..
       dockerfile: docker/Dockerfile.standalone

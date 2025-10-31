@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g., mcp-v1.0.0)'
+        description: 'Existing tag to release (e.g., mcp-v1.0.0) - tag must exist in repo'
         required: true
         type: string
 
@@ -41,7 +41,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -51,29 +51,26 @@ jobs:
       - name: Extract and validate version
         id: version
         run: |
-          # Get tag from either push event or manual workflow_dispatch input
+          # Extract tag from either push event or manual workflow_dispatch input
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             TAG_FULL="${{ inputs.tag }}"
-            # Validate tag format for manual triggers
-            if [[ ! $TAG_FULL =~ ^mcp-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Error: Tag must follow format: mcp-vX.Y.Z (e.g., mcp-v1.0.0)"
-              echo "Received: $TAG_FULL"
-              exit 1
-            fi
             TAG_VERSION=${TAG_FULL#mcp-v}
           else
             TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
           fi
 
+          # Validate semantic versioning format
           if ! [[ $TAG_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Tag must follow semantic versioning: mcp-vX.Y.Z"
+            echo "Error: Tag must follow semantic versioning: mcp-vX.Y.Z (e.g., mcp-v1.0.0)"
+            echo "Received: mcp-v$TAG_VERSION"
             exit 1
           fi
 
+          # Validate against pyproject.toml version
           PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('mcp_server/pyproject.toml', 'rb'))['project']['version'])")
 
           if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
-            echo "Tag version mcp-v$TAG_VERSION does not match mcp_server/pyproject.toml version $PROJECT_VERSION"
+            echo "Error: Tag version mcp-v$TAG_VERSION does not match mcp_server/pyproject.toml version $PROJECT_VERSION"
             exit 1
           fi
 
@@ -92,8 +89,15 @@ jobs:
       - name: Get latest graphiti-core version from PyPI
         id: graphiti
         run: |
-          # Query PyPI for the latest graphiti-core version
-          GRAPHITI_VERSION=$(curl -s https://pypi.org/pypi/graphiti-core/json | python -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          # Query PyPI for the latest graphiti-core version with error handling
+          set -e
+          GRAPHITI_VERSION=$(curl -sf https://pypi.org/pypi/graphiti-core/json | python -c "import sys, json; data=json.load(sys.stdin); print(data['info']['version'])" 2>&1)
+
+          if [ -z "$GRAPHITI_VERSION" ] || [ "$?" -ne 0 ]; then
+            echo "Error: Failed to fetch graphiti-core version from PyPI"
+            exit 1
+          fi
+
           echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
           echo "Latest Graphiti Core version from PyPI: ${GRAPHITI_VERSION}"
 
