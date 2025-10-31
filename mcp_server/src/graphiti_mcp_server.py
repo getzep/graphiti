@@ -458,16 +458,24 @@ async def search_nodes(
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
         # Format the results
-        node_results = [
-            NodeResult(
-                uuid=node.uuid,
-                name=node.name,
-                type=node.labels[0] if node.labels else 'Unknown',
-                created_at=node.created_at.isoformat() if node.created_at else None,
-                summary=node.summary,
+        node_results = []
+        for node in nodes:
+            # Get attributes and ensure no embeddings are included
+            attrs = node.attributes if hasattr(node, 'attributes') else {}
+            # Remove any embedding keys that might be in attributes
+            attrs = {k: v for k, v in attrs.items() if 'embedding' not in k.lower()}
+
+            node_results.append(
+                NodeResult(
+                    uuid=node.uuid,
+                    name=node.name,
+                    labels=node.labels if node.labels else [],
+                    created_at=node.created_at.isoformat() if node.created_at else None,
+                    summary=node.summary,
+                    group_id=node.group_id,
+                    attributes=attrs,
+                )
             )
-            for node in nodes
-        ]
 
         return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
     except Exception as e:
