@@ -3,6 +3,12 @@ name: Release MCP Server
 on:
   push:
     tags: ["mcp-v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., mcp-v1.0.0)'
+        required: true
+        type: string
 
 env:
   REGISTRY: docker.io
@@ -43,7 +49,13 @@ jobs:
       - name: Extract and validate version
         id: version
         run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
+          # Get tag from either push event or manual workflow_dispatch input
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG_FULL="${{ inputs.tag }}"
+            TAG_VERSION=${TAG_FULL#mcp-v}
+          else
+            TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
+          fi
 
           if ! [[ $TAG_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag must follow semantic versioning: mcp-vX.Y.Z"
