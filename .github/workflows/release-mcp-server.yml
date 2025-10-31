@@ -27,19 +27,21 @@ jobs:
         variant:
           - name: standalone
             dockerfile: docker/Dockerfile.standalone
-            image_suffix: ":standalone"
-            tag_latest: ":standalone"
+            image_suffix: "-standalone"
+            tag_latest: "standalone"
             title: "Graphiti MCP Server (Standalone)"
             description: "Standalone Graphiti MCP server for external Neo4j or FalkorDB"
           - name: combined
             dockerfile: docker/Dockerfile
             image_suffix: ""
-            tag_latest: ":latest"
+            tag_latest: "latest"
             title: "FalkorDB + Graphiti MCP Server"
             description: "Combined FalkorDB graph database with Graphiti MCP server"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -52,6 +54,12 @@ jobs:
           # Get tag from either push event or manual workflow_dispatch input
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             TAG_FULL="${{ inputs.tag }}"
+            # Validate tag format for manual triggers
+            if [[ ! $TAG_FULL =~ ^mcp-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Error: Tag must follow format: mcp-vX.Y.Z (e.g., mcp-v1.0.0)"
+              echo "Received: $TAG_FULL"
+              exit 1
+            fi
             TAG_VERSION=${TAG_FULL#mcp-v}
           else
             TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
@@ -103,7 +111,7 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}${{ matrix.variant.image_suffix }}
             type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}${{ matrix.variant.image_suffix }}
-            type=raw,value=latest${{ matrix.variant.tag_latest }}
+            type=raw,value=${{ matrix.variant.tag_latest }}
           labels: |
             org.opencontainers.image.title=${{ matrix.variant.title }}
             org.opencontainers.image.description=${{ matrix.variant.description }}
@@ -129,12 +137,14 @@ jobs:
 
       - name: Create release summary
         run: |
-          echo "## MCP Server Release Summary (${{ matrix.variant.name }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Variant:** ${{ matrix.variant.title }}" >> $GITHUB_STEP_SUMMARY
-          echo "**MCP Server Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Date:** ${{ steps.meta.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Docker Image Tags" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.docker_meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## MCP Server Release Summary - ${{ matrix.variant.title }}"
+            echo ""
+            echo "**MCP Server Version:** ${{ steps.version.outputs.version }}"
+            echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}"
+            echo "**Build Date:** ${{ steps.meta.outputs.build_date }}"
+            echo ""
+            echo "### Docker Image Tags"
+            echo "${{ steps.docker_meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/- /'
+            echo ""
+          } >> $GITHUB_STEP_SUMMARY
