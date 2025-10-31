@@ -21,12 +21,14 @@ jobs:
         variant:
           - name: standalone
             dockerfile: docker/Dockerfile.standalone
-            image_suffix: ""
+            image_suffix: ":standalone"
+            tag_latest: ":standalone"
             title: "Graphiti MCP Server (Standalone)"
             description: "Standalone Graphiti MCP server for external Neo4j or FalkorDB"
-          - name: falkordb
+          - name: combined
             dockerfile: docker/Dockerfile
-            image_suffix: "-falkordb"
+            image_suffix: ""
+            tag_latest: ":latest"
             title: "FalkorDB + Graphiti MCP Server"
             description: "Combined FalkorDB graph database with Graphiti MCP server"
     steps:
@@ -89,7 +91,7 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}${{ matrix.variant.image_suffix }}
             type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}${{ matrix.variant.image_suffix }}
-            type=raw,value=latest${{ matrix.variant.image_suffix }}
+            type=raw,value=latest${{ matrix.variant.tag_latest }}
           labels: |
             org.opencontainers.image.title=${{ matrix.variant.title }}
             org.opencontainers.image.description=${{ matrix.variant.description }}
