@@ -738,6 +738,12 @@ async def get_status() -> StatusResponse:
         )
 
 
+@mcp.custom_route('/health', methods=['GET'])
+async def health_check(request) -> dict:
+    """Health check endpoint for Docker and load balancers."""
+    return {'status': 'healthy', 'service': 'graphiti-mcp'}
+
+
 async def initialize_server() -> ServerConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
     global config, graphiti_service, queue_service, graphiti_client, semaphore
