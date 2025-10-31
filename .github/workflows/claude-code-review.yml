@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: write
     outputs:
       is_fork: ${{ steps.check.outputs.is_fork }}
     steps:
