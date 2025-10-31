@@ -16,10 +16,12 @@ services:
       start_period: 10s
 
   graphiti-mcp:
-    image: zepai/knowledge-graph-mcp:latest
+    image: zepai/knowledge-graph-mcp:standalone-falkordb
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.standalone
+      args:
+        DATABASE_PROVIDER: falkordb
     env_file:
       - path: ../.env
         required: false

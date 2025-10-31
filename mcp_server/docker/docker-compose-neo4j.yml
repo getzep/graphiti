@@ -20,10 +20,12 @@ services:
       start_period: 30s
 
   graphiti-mcp:
-    image: zepai/knowledge-graph-mcp:latest
+    image: zepai/knowledge-graph-mcp:standalone-neo4j
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.standalone
+      args:
+        DATABASE_PROVIDER: neo4j
     env_file:
       - path: ../.env
         required: false
