@@ -74,8 +74,8 @@ class ServerConfig(BaseModel):
     """Server configuration."""
 
     transport: str = Field(
-        default='sse',
-        description='Transport type: sse (default), stdio, or http (streamable HTTP)',
+        default='http',
+        description='Transport type: http (default, recommended), stdio, or sse (deprecated)',
     )
     host: str = Field(default='0.0.0.0', description='Server host')
     port: int = Field(default=8000, description='Server port')

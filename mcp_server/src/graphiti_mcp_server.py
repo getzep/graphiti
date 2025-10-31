@@ -726,7 +726,7 @@ async def initialize_server() -> ServerConfig:
     parser.add_argument(
         '--transport',
         choices=['sse', 'stdio', 'http'],
-        help='Transport to use: sse (Server-Sent Events), stdio (standard I/O), or http (streamable HTTP)',
+        help='Transport to use: http (recommended, default), stdio (standard I/O), or sse (deprecated)',
     )
     parser.add_argument(
         '--host',
