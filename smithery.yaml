@@ -1,5 +1,6 @@
 # Smithery Configuration for Graphiti MCP Server
 # Graphiti is a temporally-aware knowledge graph framework for AI agents
+# Docker Hub: zepai/knowledge-graph-mcp
 
 runtime: "container"
 
@@ -8,255 +9,60 @@ startCommand:
 
   configSchema:
     type: "object"
-    required: []
+    required: ["openai_api_key"]
     properties:
-      # LLM Configuration
-      llm_provider:
-        type: "string"
-        title: "LLM Provider"
-        description: "LLM provider to use for knowledge extraction"
-        default: "openai"
-        enum: ["openai", "azure_openai", "anthropic", "gemini", "groq"]
-
-      llm_model:
-        type: "string"
-        title: "LLM Model"
-        description: "Model name to use with the LLM provider"
-        default: "gpt-5-mini"
-
-      llm_temperature:
-        type: "number"
-        title: "LLM Temperature"
-        description: "Temperature setting for LLM (0.0-2.0, leave empty for reasoning models)"
-        minimum: 0
-        maximum: 2
-
-      llm_max_tokens:
-        type: "integer"
-        title: "Max Tokens"
-        description: "Maximum tokens for LLM responses"
-        default: 4096
-        minimum: 1
-
-      # OpenAI Provider
+      # LLM Provider (required)
       openai_api_key:
         type: "string"
         title: "OpenAI API Key"
         description: "OpenAI API key for LLM and embeddings"
 
-      openai_api_url:
+      # Optional: LLM Configuration
+      llm_model:
         type: "string"
-        title: "OpenAI API URL"
-        description: "OpenAI API URL (use for custom endpoints like Ollama)"
-        default: "https://api.openai.com/v1"
+        title: "LLM Model"
+        description: "Model name to use"
+        default: "gpt-5-mini"
 
-      openai_organization_id:
+      # Optional: Advanced LLM Settings
+      llm_provider:
         type: "string"
-        title: "OpenAI Organization ID"
-        description: "OpenAI organization ID (optional)"
+        title: "LLM Provider"
+        description: "LLM provider to use"
+        default: "openai"
+        enum: ["openai", "anthropic", "gemini"]
 
-      # Azure OpenAI Provider
-      azure_openai_api_key:
-        type: "string"
-        title: "Azure OpenAI API Key"
-        description: "Azure OpenAI API key"
-
-      azure_openai_endpoint:
-        type: "string"
-        title: "Azure OpenAI Endpoint"
-        description: "Azure OpenAI endpoint URL"
-
-      azure_openai_deployment:
-        type: "string"
-        title: "Azure OpenAI Deployment"
-        description: "Azure OpenAI deployment name"
-
-      azure_openai_api_version:
-        type: "string"
-        title: "Azure OpenAI API Version"
-        description: "Azure OpenAI API version"
-        default: "2024-10-21"
-
-      use_azure_ad:
-        type: "boolean"
-        title: "Use Azure AD"
-        description: "Use Azure Managed Identities for authentication"
-        default: false
-
-      # Anthropic Provider
+      # Optional: Alternative Provider Keys
       anthropic_api_key:
         type: "string"
         title: "Anthropic API Key"
-        description: "Anthropic API key for Claude models"
+        description: "Anthropic API key for Claude models (if using Anthropic provider)"
 
-      anthropic_api_url:
-        type: "string"
-        title: "Anthropic API URL"
-        description: "Anthropic API URL"
-        default: "https://api.anthropic.com"
-
-      # Google Gemini Provider
       google_api_key:
         type: "string"
         title: "Google API Key"
-        description: "Google API key for Gemini models"
+        description: "Google API key for Gemini models (if using Gemini provider)"
 
-      google_project_id:
-        type: "string"
-        title: "Google Project ID"
-        description: "Google Cloud project ID"
-
-      google_location:
-        type: "string"
-        title: "Google Location"
-        description: "Google Cloud location"
-        default: "us-central1"
-
-      # Groq Provider
-      groq_api_key:
-        type: "string"
-        title: "Groq API Key"
-        description: "Groq API key"
-
-      groq_api_url:
-        type: "string"
-        title: "Groq API URL"
-        description: "Groq API URL"
-        default: "https://api.groq.com/openai/v1"
-
-      # Embedder Configuration
-      embedder_provider:
-        type: "string"
-        title: "Embedder Provider"
-        description: "Embedder provider for generating embeddings"
-        default: "openai"
-        enum: ["openai", "azure_openai", "gemini", "voyage"]
-
-      embedder_model:
-        type: "string"
-        title: "Embedder Model"
-        description: "Embedding model name"
-        default: "text-embedding-3-small"
-
-      embedder_dimensions:
-        type: "integer"
-        title: "Embedding Dimensions"
-        description: "Embedding vector dimensions"
-        default: 1536
-        minimum: 1
-
-      # Voyage AI Embeddings
-      voyage_api_key:
-        type: "string"
-        title: "Voyage AI API Key"
-        description: "Voyage AI API key for embeddings"
-
-      voyage_api_url:
-        type: "string"
-        title: "Voyage AI API URL"
-        description: "Voyage AI API URL"
-        default: "https://api.voyageai.com/v1"
-
-      # Database Configuration
-      database_provider:
-        type: "string"
-        title: "Database Provider"
-        description: "Graph database provider (FalkorDB is built-in)"
-        default: "falkordb"
-        enum: ["falkordb", "neo4j"]
-
-      falkordb_uri:
-        type: "string"
-        title: "FalkorDB URI"
-        description: "FalkorDB connection URI"
-        default: "redis://localhost:6379"
-
-      falkordb_password:
-        type: "string"
-        title: "FalkorDB Password"
-        description: "FalkorDB password (optional)"
-
-      falkordb_database:
-        type: "string"
-        title: "FalkorDB Database"
-        description: "FalkorDB database name"
-        default: "default_db"
-
-      neo4j_uri:
-        type: "string"
-        title: "Neo4j URI"
-        description: "Neo4j connection URI"
-        default: "bolt://localhost:7687"
-
-      neo4j_username:
-        type: "string"
-        title: "Neo4j Username"
-        description: "Neo4j username"
-        default: "neo4j"
-
-      neo4j_password:
-        type: "string"
-        title: "Neo4j Password"
-        description: "Neo4j password"
-
-      neo4j_database:
-        type: "string"
-        title: "Neo4j Database"
-        description: "Neo4j database name"
-        default: "neo4j"
-
-      use_parallel_runtime:
-        type: "boolean"
-        title: "Use Parallel Runtime"
-        description: "Use Neo4j parallel runtime (enterprise only)"
-        default: false
-
-      # Graphiti Configuration
+      # Optional: Graphiti Configuration
       graphiti_group_id:
         type: "string"
         title: "Group ID"
-        description: "Group ID for namespacing graph data"
+        description: "Namespace for organizing graph data"
         default: "main"
 
-      episode_id_prefix:
-        type: "string"
-        title: "Episode ID Prefix"
-        description: "Prefix for episode IDs (optional)"
-
-      user_id:
-        type: "string"
-        title: "User ID"
-        description: "User ID for tracking operations"
-        default: "mcp_user"
-
-      # Server Configuration
+      # Optional: Performance Tuning
       semaphore_limit:
         type: "integer"
-        title: "Semaphore Limit"
-        description: "Concurrent episode processing limit (adjust based on LLM provider rate limits)"
+        title: "Concurrency Limit"
+        description: "Concurrent episode processing limit (adjust based on LLM rate limits)"
         default: 10
         minimum: 1
-        maximum: 100
-
-      destroy_graph:
-        type: "boolean"
-        title: "Destroy Graph on Startup"
-        description: "Clear all graph data on startup (warning: destructive)"
-        default: false
+        maximum: 50
 
   exampleConfig:
-    llm_provider: "openai"
-    llm_model: "gpt-5-mini"
-    llm_max_tokens: 4096
     openai_api_key: "sk-proj-..."
-    embedder_provider: "openai"
-    embedder_model: "text-embedding-3-small"
-    embedder_dimensions: 1536
-    database_provider: "falkordb"
-    falkordb_uri: "redis://localhost:6379"
-    falkordb_database: "default_db"
+    llm_model: "gpt-5-mini"
     graphiti_group_id: "main"
-    user_id: "mcp_user"
     semaphore_limit: 10
 
 build:
