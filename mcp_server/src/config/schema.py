@@ -216,9 +216,14 @@ class GraphitiAppConfig(BaseModel):
     """Graphiti-specific configuration."""
 
     group_id: str = Field(default='main', description='Group ID')
-    episode_id_prefix: str = Field(default='', description='Episode ID prefix')
+    episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
     user_id: str = Field(default='mcp_user', description='User ID')
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
+
+    def model_post_init(self, __context) -> None:
+        """Convert None to empty string for episode_id_prefix."""
+        if self.episode_id_prefix is None:
+            self.episode_id_prefix = ''
 
 
 class GraphitiConfig(BaseSettings):
