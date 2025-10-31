@@ -42,8 +42,11 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
                     lower_result = result.lower().strip()
                     if lower_result in ('true', '1', 'yes', 'on'):
                         return True
-                    elif lower_result in ('false', '0', 'no', 'off', ''):
+                    elif lower_result in ('false', '0', 'no', 'off'):
                         return False
+                    elif lower_result == '':
+                        # Empty string means env var not set - return None for optional fields
+                        return None
                 return result
             else:
                 # Otherwise, do string substitution (keep as strings for partial replacements)
@@ -247,7 +250,7 @@ class GraphitiConfig(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Customize settings sources to include YAML."""
-        config_path = Path(os.environ.get('CONFIG_PATH', 'config.yaml'))
+        config_path = Path(os.environ.get('CONFIG_PATH', 'config/config.yaml'))
         yaml_settings = YamlSettingsSource(settings_cls, config_path)
         # Priority: CLI args (init) > env vars > yaml > defaults
         return (init_settings, env_settings, yaml_settings, dotenv_settings)
