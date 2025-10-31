@@ -19,6 +19,7 @@ from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
+from starlette.responses import JSONResponse
 
 from config.schema import GraphitiConfig, ServerConfig
 from models.response_types import (
@@ -745,9 +746,9 @@ async def get_status() -> StatusResponse:
 
 
 @mcp.custom_route('/health', methods=['GET'])
-async def health_check(request) -> dict:
+async def health_check(request) -> JSONResponse:
     """Health check endpoint for Docker and load balancers."""
-    return {'status': 'healthy', 'service': 'graphiti-mcp'}
+    return JSONResponse({'status': 'healthy', 'service': 'graphiti-mcp'})
 
 
 async def initialize_server() -> ServerConfig:
