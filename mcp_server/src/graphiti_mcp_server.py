@@ -209,33 +209,61 @@ class GraphitiService:
             self.entity_types = custom_types
 
             # Initialize Graphiti client with appropriate driver
-            if self.config.database.provider.lower() == 'falkordb':
-                # For FalkorDB, create a FalkorDriver instance directly
-                from graphiti_core.driver.falkordb_driver import FalkorDriver
+            try:
+                if self.config.database.provider.lower() == 'falkordb':
+                    # For FalkorDB, create a FalkorDriver instance directly
+                    from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-                falkor_driver = FalkorDriver(
-                    host=db_config['host'],
-                    port=db_config['port'],
-                    password=db_config['password'],
-                    database=db_config['database'],
-                )
+                    falkor_driver = FalkorDriver(
+                        host=db_config['host'],
+                        port=db_config['port'],
+                        password=db_config['password'],
+                        database=db_config['database'],
+                    )
 
-                self.client = Graphiti(
-                    graph_driver=falkor_driver,
-                    llm_client=llm_client,
-                    embedder=embedder_client,
-                    max_coroutines=self.semaphore_limit,
-                )
-            else:
-                # For Neo4j (default), use the original approach
-                self.client = Graphiti(
-                    uri=db_config['uri'],
-                    user=db_config['user'],
-                    password=db_config['password'],
-                    llm_client=llm_client,
-                    embedder=embedder_client,
-                    max_coroutines=self.semaphore_limit,
-                )
+                    self.client = Graphiti(
+                        graph_driver=falkor_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                else:
+                    # For Neo4j (default), use the original approach
+                    self.client = Graphiti(
+                        uri=db_config['uri'],
+                        user=db_config['user'],
+                        password=db_config['password'],
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+            except Exception as db_error:
+                # Check for connection errors
+                error_msg = str(db_error).lower()
+                if 'connection refused' in error_msg or 'could not connect' in error_msg:
+                    db_provider = self.config.database.provider
+                    if db_provider.lower() == 'falkordb':
+                        raise RuntimeError(
+                            f"\n{'='*70}\n"
+                            f"Database Connection Error: FalkorDB is not running\n"
+                            f"{'='*70}\n\n"
+                            f"FalkorDB at {db_config['host']}:{db_config['port']} is not accessible.\n\n"
+                            f"To start FalkorDB:\n"
+                            f"  - Using Docker Compose: cd mcp_server && docker compose up\n"
+                            f"  - Or run FalkorDB manually: docker run -p 6379:6379 falkordb/falkordb\n\n"
+                            f"{'='*70}\n"
+                        ) from db_error
+                    else:
+                        raise RuntimeError(
+                            f"\n{'='*70}\n"
+                            f"Database Connection Error: {db_provider} is not running\n"
+                            f"{'='*70}\n\n"
+                            f"{db_provider} at {db_config.get('uri', 'unknown')} is not accessible.\n\n"
+                            f"Please ensure {db_provider} is running and accessible.\n\n"
+                            f"{'='*70}\n"
+                        ) from db_error
+                # Re-raise other errors
+                raise
 
             # Build indices
             await self.client.build_indices_and_constraints()
