@@ -723,8 +723,8 @@ async def get_status() -> StatusResponse:
             if result:
                 _ = [record async for record in result]
 
-        # Use the actual configured provider from the global config
-        provider_name = config.database.provider
+        # Use the provider from the service's config, not the global
+        provider_name = graphiti_service.config.database.provider
         return StatusResponse(
             status='ok',
             message=f'Graphiti MCP server is running and connected to {provider_name} database',
