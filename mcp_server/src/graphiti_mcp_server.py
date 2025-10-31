@@ -292,6 +292,10 @@ class GraphitiService:
 
             if embedder_client:
                 logger.info(f'Using Embedder provider: {self.config.embedder.provider}')
+
+            if self.entity_types:
+                entity_type_names = list(self.entity_types.keys())
+                logger.info(f'Using custom entity types: {", ".join(entity_type_names)}')
             else:
                 logger.info('No Embedder client configured - search will be limited')
 
