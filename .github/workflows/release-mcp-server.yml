@@ -16,6 +16,19 @@ jobs:
       id-token: write
     environment:
       name: release
+    strategy:
+      matrix:
+        variant:
+          - name: standalone
+            dockerfile: docker/Dockerfile.standalone
+            image_suffix: ""
+            title: "Graphiti MCP Server (Standalone)"
+            description: "Standalone Graphiti MCP server for external Neo4j or FalkorDB"
+          - name: falkordb
+            dockerfile: docker/Dockerfile
+            image_suffix: "-falkordb"
+            title: "FalkorDB + Graphiti MCP Server"
+            description: "Combined FalkorDB graph database with Graphiti MCP server"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -74,21 +87,22 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}
-            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}${{ matrix.variant.image_suffix }}
+            type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}${{ matrix.variant.image_suffix }}
+            type=raw,value=latest${{ matrix.variant.image_suffix }}
           labels: |
-            org.opencontainers.image.title=Graphiti MCP Server
-            org.opencontainers.image.description=MCP server for Graphiti knowledge graph
+            org.opencontainers.image.title=${{ matrix.variant.title }}
+            org.opencontainers.image.description=${{ matrix.variant.description }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.vendor=Zep AI
             graphiti.core.version=${{ steps.graphiti.outputs.graphiti_version }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (${{ matrix.variant.name }})
         uses: depot/build-push-action@v1
         with:
           project: v9jv1mlpwc
           context: ./mcp_server
+          file: ./mcp_server/${{ matrix.variant.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
@@ -101,8 +115,9 @@ jobs:
 
       - name: Create release summary
         run: |
-          echo "## MCP Server Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## MCP Server Release Summary (${{ matrix.variant.name }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Variant:** ${{ matrix.variant.title }}" >> $GITHUB_STEP_SUMMARY
           echo "**MCP Server Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Build Date:** ${{ steps.meta.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
