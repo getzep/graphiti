@@ -54,14 +54,35 @@ jobs:
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
 
+      - name: Get latest graphiti-core version from PyPI
+        id: graphiti
+        run: |
+          # Query PyPI for the latest graphiti-core version
+          GRAPHITI_VERSION=$(curl -s https://pypi.org/pypi/graphiti-core/json | python -c "import sys, json; print(json.load(sys.stdin)['info']['version'])")
+          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest Graphiti Core version from PyPI: ${GRAPHITI_VERSION}"
+
       - name: Extract metadata
         id: meta
+        run: |
+          # Get build date
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker metadata
+        id: docker_meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}
             type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=Graphiti MCP Server
+            org.opencontainers.image.description=MCP server for Graphiti knowledge graph
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.vendor=Zep AI
+            graphiti.core.version=${{ steps.graphiti.outputs.graphiti_version }}
 
       - name: Build and push Docker image
         uses: depot/build-push-action@v1
@@ -70,5 +91,21 @@ jobs:
           context: ./mcp_server
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
+            GRAPHITI_CORE_VERSION=${{ steps.graphiti.outputs.graphiti_version }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            VCS_REF=${{ steps.version.outputs.version }}
+
+      - name: Create release summary
+        run: |
+          echo "## MCP Server Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**MCP Server Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Date:** ${{ steps.meta.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Image Tags" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.docker_meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
