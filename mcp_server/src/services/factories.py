@@ -138,12 +138,6 @@ class LLMClientFactory:
                 )
 
                 # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                is_reasoning_model = (
-                    config.model.startswith('gpt-5')
-                    or config.model.startswith('o1')
-                    or config.model.startswith('o3')
-                )
-
                 if is_reasoning_model:
                     return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
                 else:
