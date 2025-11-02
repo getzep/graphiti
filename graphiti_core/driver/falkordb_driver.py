@@ -18,6 +18,7 @@ import asyncio
 import datetime
 import logging
 from typing import TYPE_CHECKING, Any
+import inspect
 
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
@@ -101,12 +102,11 @@ class FalkorDriverSession(GraphDriverSession):
         if isinstance(query, list):
             for cypher, params in query:
                 params = convert_datetimes_to_strings(params)
-                await self.graph.query(str(cypher), params)  # type: ignore[reportUnknownArgumentType]
+                await _await_graph_query(self.graph, str(cypher), params)  # type: ignore[reportUnknownArgumentType]
         else:
             params = dict(kwargs)
             params = convert_datetimes_to_strings(params)
-            await self.graph.query(str(query), params)  # type: ignore[reportUnknownArgumentType]
-        # Assuming `graph.query` is async (ideal); otherwise, wrap in executor
+            await _await_graph_query(self.graph, str(query), params)  # type: ignore[reportUnknownArgumentType]
         return None
 
 
@@ -122,6 +122,9 @@ class FalkorDriver(GraphDriver):
         password: str | None = None,
         falkor_db: FalkorDB | None = None,
         database: str = 'default_db',
+        *,
+        lite: bool = False,
+        lite_db_path: str | None = None,
     ):
         """
         Initialize the FalkorDB driver.
@@ -137,7 +140,23 @@ class FalkorDriver(GraphDriver):
             # If a FalkorDB instance is provided, use it directly
             self.client = falkor_db
         else:
-            self.client = FalkorDB(host=host, port=port, username=username, password=password)
+            if lite:
+                # Lazy import to avoid mandatory dependency when not using Lite
+                try:
+                    from redislite.falkordb_client import FalkorDB as LiteFalkorDB  # type: ignore
+                except Exception as e:  # broad to surface helpful message
+                    raise ImportError(
+                        'falkordblite is required for FalkorDB Lite. Install it with: '\
+                        'pip install falkordblite'
+                    ) from e
+
+                db_path = lite_db_path or '/tmp/falkordb.db'
+                lite_client = LiteFalkorDB(db_path)
+                self.client = _AsyncLiteClientAdapter(lite_client)
+                self._is_lite = True
+            else:
+                self.client = FalkorDB(host=host, port=port, username=username, password=password)
+                self._is_lite = False
 
         self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
 
@@ -154,7 +173,7 @@ class FalkorDriver(GraphDriver):
         params = convert_datetimes_to_strings(dict(kwargs))
 
         try:
-            result = await graph.query(cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
+            result = await _await_graph_query(graph, cypher_query_, params)  # type: ignore[reportUnknownArgumentType]
         except Exception as e:
             if 'already indexed' in str(e):
                 # check if index already exists
@@ -191,6 +210,9 @@ class FalkorDriver(GraphDriver):
             await self.client.connection.aclose()
         elif hasattr(self.client.connection, 'close'):
             await self.client.connection.close()
+        else:
+            # Lite adapter exposes no-op aclose; nothing to do otherwise
+            pass
 
     async def delete_all_indexes(self) -> None:
         result = await self.execute_query('CALL db.indexes()')
@@ -329,3 +351,45 @@ class FalkorDriver(GraphDriver):
         full_query = group_filter + ' (' + sanitized_query + ')'
 
         return full_query
+
+
+# -----------------
+# Internal helpers
+# -----------------
+
+async def _await_graph_query(graph: Any, cypher: str, params: dict[str, Any] | None):
+    """
+    Await a graph.query call whether it's native-async or sync (Lite).
+    """
+    query_callable = getattr(graph, 'query')
+    result = query_callable(cypher, params)
+    if inspect.isawaitable(result):
+        return await result
+    # Sync path: run in a thread to avoid blocking the event loop
+    return await asyncio.to_thread(query_callable, cypher, params)
+
+
+class _AsyncLiteGraphAdapter:
+    def __init__(self, sync_graph: Any):
+        self._sync_graph = sync_graph
+
+    async def query(self, cypher: str, params: dict[str, Any] | None = None):
+        return await asyncio.to_thread(self._sync_graph.query, cypher, params)
+
+    async def ro_query(self, cypher: str, params: dict[str, Any] | None = None):
+        return await asyncio.to_thread(self._sync_graph.ro_query, cypher, params)
+
+    async def delete(self):
+        return await asyncio.to_thread(self._sync_graph.delete)
+
+
+class _AsyncLiteClientAdapter:
+    def __init__(self, sync_db: Any):
+        self._sync_db = sync_db
+
+    def select_graph(self, name: str):
+        return _AsyncLiteGraphAdapter(self._sync_db.select_graph(name))
+
+    async def aclose(self):
+        # redislite does not expose explicit close; rely on GC. No-op.
+        return None
