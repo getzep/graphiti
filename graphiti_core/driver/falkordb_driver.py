@@ -34,6 +34,7 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
+    default_group_id: str = '\\_'
+    fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
     def __init__(
@@ -129,9 +132,16 @@ class FalkorDriver(GraphDriver):
         FalkorDB is a multi-tenant graph database.
         To connect, provide the host and port.
         The default parameters assume a local (on-premises) FalkorDB instance.
+
+        Args:
+        host (str): The host where FalkorDB is running.
+        port (int): The port on which FalkorDB is listening.
+        username (str | None): The username for authentication (if required).
+        password (str | None): The password for authentication (if required).
+        falkor_db (FalkorDB | None): An existing FalkorDB instance to use instead of creating a new one.
+        database (str): The name of the database to connect to. Defaults to 'default_db'.
         """
         super().__init__()
-
         self._database = database
         if falkor_db is not None:
             # If a FalkorDB instance is provided, use it directly
@@ -139,7 +149,15 @@ class FalkorDriver(GraphDriver):
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
 
-        self.fulltext_syntax = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries see https://redis.io/docs/latest/develop/ai/search-and-query/query/full-text/
+        # Schedule the indices and constraints to be built
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_running_loop()
+            # Schedule the build_indices_and_constraints to run
+            loop.create_task(self.build_indices_and_constraints())
+        except RuntimeError:
+            # No event loop running, this will be handled later
+            pass
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
@@ -224,12 +242,25 @@ class FalkorDriver(GraphDriver):
         if drop_tasks:
             await asyncio.gather(*drop_tasks)
 
+    async def build_indices_and_constraints(self, delete_existing=False):
+        if delete_existing:
+            await self.delete_all_indexes()
+        index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
+        for query in index_queries:
+            await self.execute_query(query)
+
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
         """
-        cloned = FalkorDriver(falkor_db=self.client, database=database)
+        if database == self._database:
+            cloned = self
+        elif database == self.default_group_id:
+            cloned = FalkorDriver(falkor_db=self.client)
+        else:
+            # Create a new instance of FalkorDriver with the same connection but a different database
+            cloned = FalkorDriver(falkor_db=self.client, database=database)
 
         return cloned
 
