@@ -66,8 +66,11 @@ DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
 
 # Maximum output tokens for different Anthropic models
 # Based on official Anthropic documentation (as of 2025)
+# Note: These represent standard limits without beta headers.
+# Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
+# 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
 ANTHROPIC_MODEL_MAX_TOKENS = {
-    # Claude 3.7 models - 64K tokens (128K with beta header)
+    # Claude 3.7 models - standard 64K tokens
     'claude-3-7-sonnet-latest': 65536,
     'claude-3-7-sonnet-20250219': 65536,
     # Claude 3.5 models
