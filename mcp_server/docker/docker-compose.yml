@@ -15,6 +15,7 @@ services:
     environment:
       # FalkorDB configuration
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
       # MCP Server configuration
       - FALKORDB_URI=redis://localhost:6379
       - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}

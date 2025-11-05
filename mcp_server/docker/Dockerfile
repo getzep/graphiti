@@ -85,6 +85,20 @@ until redis-cli -h localhost -p 6379 ping > /dev/null 2>&1; do
 done
 echo "FalkorDB is ready!"
 
+# Start FalkorDB Browser if enabled (default: enabled)
+if [ "${BROWSER:-1}" = "1" ]; then
+  if [ -d "/var/lib/falkordb/browser" ] && [ -f "/var/lib/falkordb/browser/server.js" ]; then
+    echo "Starting FalkorDB Browser on port 3000..."
+    cd /var/lib/falkordb/browser
+    HOSTNAME="0.0.0.0" node server.js > /var/log/graphiti/browser.log 2>&1 &
+    echo "FalkorDB Browser started in background"
+  else
+    echo "Warning: FalkorDB Browser files not found, skipping browser startup"
+  fi
+else
+  echo "FalkorDB Browser disabled (BROWSER=${BROWSER})"
+fi
+
 # Start MCP server in foreground
 echo "Starting MCP server..."
 cd /app/mcp

@@ -83,6 +83,7 @@ All environment variables from the standard MCP server are supported:
 - `OPENAI_API_KEY`: OpenAI API key for LLM operations
 
 **Optional:**
+- `BROWSER`: Enable FalkorDB Browser web UI on port 3000 (default: "1", set to "0" to disable)
 - `GRAPHITI_GROUP_ID`: Namespace for graph data (default: "main")
 - `SEMAPHORE_LIMIT`: Concurrency limit for episode processing (default: 10)
 - `FALKORDB_PASSWORD`: Password for FalkorDB (optional)
@@ -96,7 +97,7 @@ All environment variables from the standard MCP server are supported:
 ### Volumes
 
 - `/var/lib/falkordb/data`: Persistent storage for graph data
-- `/var/log/graphiti`: MCP server logs
+- `/var/log/graphiti`: MCP server and FalkorDB Browser logs
 
 ## Service Management
 
@@ -123,6 +124,26 @@ docker compose -f docker/docker-compose-falkordb-combined.yml exec graphiti-falk
 curl http://localhost:8000/health
 ```
 
+### Disabling the FalkorDB Browser
+
+To disable the FalkorDB Browser web UI (port 3000), set the `BROWSER` environment variable to `0`:
+
+```bash
+# Using docker run
+docker run -d \
+  -p 6379:6379 \
+  -p 8000:8000 \
+  -e BROWSER=0 \
+  -e OPENAI_API_KEY=your_key \
+  zepai/graphiti-falkordb:latest
+
+# Using docker-compose
+# Add to your .env file:
+BROWSER=0
+```
+
+When disabled, only FalkorDB (port 6379) and the MCP server (port 8000) will run.
+
 ## Health Checks
 
 The container includes a health check that verifies:
@@ -140,10 +161,11 @@ docker compose -f docker/docker-compose-falkordb-combined.yml ps
 ```
 start-services.sh (PID 1)
 ├── redis-server (FalkorDB daemon)
+├── node server.js (FalkorDB Browser - background, if BROWSER=1)
 └── uv run main.py (MCP server - foreground)
 ```
 
-The startup script launches FalkorDB as a background daemon, waits for it to be ready, then starts the MCP server in the foreground. When the MCP server stops, the container exits.
+The startup script launches FalkorDB as a background daemon, waits for it to be ready, optionally starts the FalkorDB Browser (if `BROWSER=1`), then starts the MCP server in the foreground. When the MCP server stops, the container exits.
 
 ### Directory Structure
 ```
@@ -155,7 +177,8 @@ The startup script launches FalkorDB as a background daemon, waits for it to be 
 └── .graphiti-core-version   # Installed version info
 
 /var/lib/falkordb/data/      # Persistent graph storage
-/var/log/graphiti/           # MCP server logs
+/var/lib/falkordb/browser/   # FalkorDB Browser web UI
+/var/log/graphiti/           # MCP server and Browser logs
 /start-services.sh           # Startup script
 ```
 
