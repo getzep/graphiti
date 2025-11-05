@@ -149,7 +149,7 @@ class KuzuDriver(GraphDriver):
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         if delete_existing:
-            self.delete_all_indexes()
+            await self.delete_all_indexes(self._database)
 
         range_indices: list[LiteralString] = get_range_indices(self.provider)
 
