@@ -18,7 +18,7 @@ import asyncio
 import datetime
 import logging
 from collections.abc import Coroutine
-from typing import Any, LiteralString
+from typing import Any
 
 import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
@@ -273,9 +273,9 @@ class NeptuneDriver(GraphDriver):
         if delete_existing:
             await self.delete_all_indexes()
 
-        range_indices: list[LiteralString] = get_range_indices(self.provider)
+        range_indices: list = get_range_indices(self.provider)
 
-        index_queries: list[LiteralString] = range_indices
+        index_queries: list = range_indices
 
         await semaphore_gather(
             *[

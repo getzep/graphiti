@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import logging
-from typing import Any, LiteralString
+from typing import Any
 
 import kuzu
 
@@ -151,7 +151,7 @@ class KuzuDriver(GraphDriver):
         if delete_existing:
             await self.delete_all_indexes(self._database)
 
-        range_indices: list[LiteralString] = get_range_indices(self.provider)
+        range_indices: list = get_range_indices(self.provider)
 
         # Skip creating fulltext indices if they already exist. Need to do this manually
         # until Kuzu supports `IF NOT EXISTS` for indices.
@@ -169,7 +169,7 @@ class KuzuDriver(GraphDriver):
                 """,
             )
 
-        index_queries: list[LiteralString] = range_indices + fulltext_indices
+        index_queries: list = range_indices + fulltext_indices
 
         await semaphore_gather(
             *[
