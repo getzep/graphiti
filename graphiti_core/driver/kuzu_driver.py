@@ -15,11 +15,13 @@ limitations under the License.
 """
 
 import logging
-from typing import Any
+from typing import Any, LiteralString
 
 import kuzu
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 
@@ -174,3 +176,37 @@ class KuzuDriverSession(GraphDriverSession):
         else:
             await self.driver.execute_query(query, **kwargs)
         return None
+
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        if delete_existing:
+            await self.delete_all_indexes()
+
+        range_indices: list[LiteralString] = get_range_indices(self.provider)
+
+        # Skip creating fulltext indices if they already exist. Need to do this manually
+        # until Kuzu supports `IF NOT EXISTS` for indices.
+        result, _, _ = await self.execute_query('CALL SHOW_INDEXES() RETURN *;')
+        if len(result) > 0:
+            fulltext_indices = []
+
+        # Only load the `fts` extension if it's not already loaded, otherwise throw an error.
+        result, _, _ = await self.execute_query('CALL SHOW_LOADED_EXTENSIONS() RETURN *;')
+        if len(result) == 0:
+            fulltext_indices.insert(
+                0,
+                """
+                INSTALL fts;
+                LOAD fts;
+                """,
+            )
+
+        index_queries: list[LiteralString] = range_indices + fulltext_indices
+
+        await semaphore_gather(
+            *[
+                self.execute_query(
+                    query,
+                )
+                for query in index_queries
+            ]
+        )

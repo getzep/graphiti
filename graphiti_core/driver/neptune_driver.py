@@ -18,13 +18,15 @@ import asyncio
 import datetime
 import logging
 from collections.abc import Coroutine
-from typing import Any
+from typing import Any, LiteralString
 
 import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
@@ -266,6 +268,23 @@ class NeptuneDriver(GraphDriver):
                 return success
 
         return 0
+
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        if delete_existing:
+            await self.delete_all_indexes()
+
+        range_indices: list[LiteralString] = get_range_indices(self.provider)
+
+        index_queries: list[LiteralString] = range_indices
+
+        await semaphore_gather(
+            *[
+                self.execute_query(
+                    query,
+                )
+                for query in index_queries
+            ]
+        )
 
 
 class NeptuneDriverSession(GraphDriverSession):
