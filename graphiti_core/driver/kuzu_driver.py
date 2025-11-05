@@ -160,7 +160,7 @@ class KuzuDriver(GraphDriver):
 
         # Only load the `fts` extension if it's not already loaded, otherwise throw an error.
         result, _, _ = await self.execute_query('CALL SHOW_LOADED_EXTENSIONS() RETURN *;')
-        if len(result) == 0:
+        if not any('fts' in str(ext).lower() for ext in result):
             fulltext_indices.insert(
                 0,
                 """
