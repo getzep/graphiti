@@ -25,7 +25,7 @@ from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.graph_queries import get_range_indices
 from graphiti_core.helpers import semaphore_gather
 
 logger = logging.getLogger(__name__)
