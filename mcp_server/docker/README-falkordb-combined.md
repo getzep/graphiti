@@ -132,6 +132,7 @@ To disable the FalkorDB Browser web UI (port 3000), set the `BROWSER` environmen
 # Using docker run
 docker run -d \
   -p 6379:6379 \
+  -p 3000:3000 \
   -p 8000:8000 \
   -e BROWSER=0 \
   -e OPENAI_API_KEY=your_key \
