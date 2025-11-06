@@ -81,7 +81,7 @@ We're excited to open-source Graphiti, believing its potential reaches far beyon
 
 | Aspect | Zep | Graphiti |
 |--------|-----|----------|
-| **What they are** | Complete managed platform for AI memory | Open-source graph framework |
+| **What they are** | Fully managed platform for context engineering and AI memory | Open-source graph framework |
 | **User & conversation management** | Built-in users, threads, and message storage | Build your own |
 | **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
 | **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
