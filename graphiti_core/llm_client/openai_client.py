@@ -116,7 +116,7 @@ class OpenAIClient(BaseOpenAIClient):
             # Some providers require a schema name; use model class name by default
             schema_name = getattr(response_model, '__name__', 'structured_response')
 
-            print(f'Falling back to chat.completions with JSON schema for model {model}...')
+            # Falling back to chat.completions with JSON schema for model
             completion = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
