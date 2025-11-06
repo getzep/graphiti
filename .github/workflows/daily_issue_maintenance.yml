@@ -1,0 +1,123 @@
+name: Daily Issue Maintenance
+on:
+  schedule:
+    - cron: "0 0 * * *" # Every day at midnight
+  workflow_dispatch: # Manual trigger option
+
+jobs:
+  find-legacy-duplicates:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            Find potential duplicate issues in the repository:
+
+            1. Use `gh issue list --state open --limit 1000 --json number,title,body,createdAt` to get all open issues
+            2. For each issue, search for potential duplicates using `gh search issues` with keywords from the title and body
+            3. Compare issues to identify true duplicates using these criteria:
+               - Same bug or error being reported
+               - Same feature request (even if worded differently)
+               - Same question being asked
+               - Issues describing the same root problem
+
+            For each duplicate found:
+            - Add a comment linking to the original issue
+            - Apply the "duplicate" label using `gh issue edit`
+            - Be polite and explain why it's a duplicate
+
+            Focus on finding true duplicates, not just similar issues.
+
+          claude_args: |
+            --allowedTools "Bash(gh issue:*),Bash(gh search:*)"
+            --model claude-sonnet-4-5-20250929
+
+  check-stale-issues:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            Review stale issues and request confirmation:
+
+            1. Use `gh issue list --state open --limit 1000 --json number,title,updatedAt,comments` to get all open issues
+            2. Identify issues that are:
+               - Older than 60 days (based on updatedAt)
+               - Have no comments with "stale-check" label
+               - Are not labeled as "enhancement" or "documentation"
+            3. For each stale issue:
+               - Add a polite comment asking the issue originator if this is still relevant
+               - Apply a "stale-check" label to track that we've asked
+               - Use format: "@{author} Is this still an issue? Please confirm within 14 days or this issue will be closed."
+
+            Use:
+            - `gh issue view` to check issue details and labels
+            - `gh issue comment` to add comments
+            - `gh issue edit` to add the "stale-check" label
+
+          claude_args: |
+            --allowedTools "Bash(gh issue:*)"
+            --model claude-sonnet-4-5-20250929
+
+  close-unconfirmed-issues:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: check-stale-issues
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            Close unconfirmed stale issues:
+
+            1. Use `gh issue list --state open --label "stale-check" --limit 1000 --json number,title,comments,updatedAt` to get issues with stale-check label
+            2. For each issue, check if:
+               - The "stale-check" comment was added 14+ days ago
+               - There has been no response from the issue author or activity since the comment
+            3. For issues meeting the criteria:
+               - Add a polite closing comment
+               - Close the issue using `gh issue close`
+               - Use format: "Closing due to inactivity. Feel free to reopen if this is still relevant."
+
+            Use:
+            - `gh issue view` to check issue comments and activity
+            - `gh issue comment` to add closing comment
+            - `gh issue close` to close the issue
+
+          claude_args: |
+            --allowedTools "Bash(gh issue:*)"
+            --model claude-sonnet-4-5-20250929

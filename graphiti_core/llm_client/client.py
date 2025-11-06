@@ -26,15 +26,30 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
+from ..tracer import NoOpTracer, Tracer
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
 
-MULTILINGUAL_EXTRACTION_RESPONSES = (
-    '\n\nAny extracted information should be returned in the same language as it was written in.'
-)
+
+def get_extraction_language_instruction(group_id: str | None = None) -> str:
+    """Returns instruction for language extraction behavior.
+
+    Override this function to customize language extraction:
+    - Return empty string to disable multilingual instructions
+    - Return custom instructions for specific language requirements
+    - Use group_id to provide different instructions per group/partition
+
+    Args:
+        group_id: Optional partition identifier for the graph
+
+    Returns:
+        str: Language instruction to append to system messages
+    """
+    return '\n\nAny extracted information should be returned in the same language as it was written in.'
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +75,15 @@ class LLMClient(ABC):
         self.max_tokens = config.max_tokens
         self.cache_enabled = cache
         self.cache_dir = None
+        self.tracer: Tracer = NoOpTracer()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
             self.cache_dir = Cache(DEFAULT_CACHE_DIR)
+
+    def set_tracer(self, tracer: Tracer) -> None:
+        """Set the tracer for this LLM client."""
+        self.tracer = tracer
 
     def _clean_input(self, input: str) -> str:
         """Clean input string of invalid unicode and control characters.
@@ -132,6 +152,8 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -145,28 +167,64 @@ class LLMClient(ABC):
             )
 
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
-
-        if self.cache_enabled and self.cache_dir is not None:
-            cache_key = self._get_cache_key(messages)
-
-            cached_response = self.cache_dir.get(cache_key)
-            if cached_response is not None:
-                logger.debug(f'Cache hit for {cache_key}')
-                return cached_response
+        messages[0].content += get_extraction_language_instruction(group_id)
 
         for message in messages:
             message.content = self._clean_input(message.content)
 
-        response = await self._generate_response_with_retry(
-            messages, response_model, max_tokens, model_size
-        )
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            attributes = {
+                'llm.provider': self._get_provider_type(),
+                'model.size': model_size.value,
+                'max_tokens': max_tokens,
+                'cache.enabled': self.cache_enabled,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
-        if self.cache_enabled and self.cache_dir is not None:
-            cache_key = self._get_cache_key(messages)
-            self.cache_dir.set(cache_key, response)
+            # Check cache first
+            if self.cache_enabled and self.cache_dir is not None:
+                cache_key = self._get_cache_key(messages)
+                cached_response = self.cache_dir.get(cache_key)
+                if cached_response is not None:
+                    logger.debug(f'Cache hit for {cache_key}')
+                    span.add_attributes({'cache.hit': True})
+                    return cached_response
 
-        return response
+            span.add_attributes({'cache.hit': False})
+
+            # Execute LLM call
+            try:
+                response = await self._generate_response_with_retry(
+                    messages, response_model, max_tokens, model_size
+                )
+            except Exception as e:
+                span.set_status('error', str(e))
+                span.record_exception(e)
+                raise
+
+            # Cache response if enabled
+            if self.cache_enabled and self.cache_dir is not None:
+                cache_key = self._get_cache_key(messages)
+                self.cache_dir.set(cache_key, response)
+
+            return response
+
+    def _get_provider_type(self) -> str:
+        """Get provider type from class name."""
+        class_name = self.__class__.__name__.lower()
+        if 'openai' in class_name:
+            return 'openai'
+        elif 'anthropic' in class_name:
+            return 'anthropic'
+        elif 'gemini' in class_name:
+            return 'gemini'
+        elif 'groq' in class_name:
+            return 'groq'
+        else:
+            return 'unknown'
 
     def _get_failed_generation_log(self, messages: list[Message], output: str | None) -> str:
         """

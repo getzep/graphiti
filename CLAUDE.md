@@ -12,6 +12,7 @@ Key features:
 - Hybrid retrieval combining semantic embeddings, keyword search (BM25), and graph traversal
 - Support for custom entity definitions via Pydantic models
 - Integration with Neo4j and FalkorDB as graph storage backends
+- Optional OpenTelemetry distributed tracing support
 
 ## Development Commands
 
@@ -131,6 +132,45 @@ docker-compose up
 ### LLM Provider Support
 
 The codebase supports multiple LLM providers but works best with services supporting structured output (OpenAI, Gemini). Other providers may cause schema validation issues, especially with smaller models.
+
+#### Current LLM Models (as of November 2025)
+
+**OpenAI Models:**
+- **GPT-5 Family** (Reasoning models, require temperature=0):
+  - `gpt-5-mini` - Fast reasoning model
+  - `gpt-5-nano` - Smallest reasoning model
+- **GPT-4.1 Family** (Standard models):
+  - `gpt-4.1` - Full capability model
+  - `gpt-4.1-mini` - Efficient model for most tasks
+  - `gpt-4.1-nano` - Lightweight model
+- **Legacy Models** (Still supported):
+  - `gpt-4o` - Previous generation flagship
+  - `gpt-4o-mini` - Previous generation efficient
+
+**Anthropic Models:**
+- **Claude 4.5 Family** (Latest):
+  - `claude-sonnet-4-5-latest` - Flagship model, auto-updates
+  - `claude-sonnet-4-5-20250929` - Pinned Sonnet version from September 2025
+  - `claude-haiku-4-5-latest` - Fast model, auto-updates
+- **Claude 3.7 Family**:
+  - `claude-3-7-sonnet-latest` - Auto-updates
+  - `claude-3-7-sonnet-20250219` - Pinned version from February 2025
+- **Claude 3.5 Family**:
+  - `claude-3-5-sonnet-latest` - Auto-updates
+  - `claude-3-5-sonnet-20241022` - Pinned version from October 2024
+  - `claude-3-5-haiku-latest` - Fast model
+
+**Google Gemini Models:**
+- **Gemini 2.5 Family** (Latest):
+  - `gemini-2.5-pro` - Flagship reasoning and multimodal
+  - `gemini-2.5-flash` - Fast, efficient
+- **Gemini 2.0 Family**:
+  - `gemini-2.0-flash` - Experimental fast model
+- **Gemini 1.5 Family** (Stable):
+  - `gemini-1.5-pro` - Production-stable flagship
+  - `gemini-1.5-flash` - Production-stable efficient
+
+**Note**: Model names like `gpt-5-mini`, `gpt-4.1`, and `gpt-4.1-mini` used in this codebase are valid OpenAI model identifiers. The GPT-5 family are reasoning models that require `temperature=0` (automatically handled in the code).
 
 ### MCP Server Usage Guidelines
 

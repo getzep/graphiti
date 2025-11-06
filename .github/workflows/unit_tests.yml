@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Tests
 
 on:
   push:
@@ -10,10 +10,42 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  unit-tests:
     runs-on: depot-ubuntu-22.04
-    environment:
-      name: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Run unit tests (no external dependencies)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DISABLE_NEPTUNE: 1
+          DISABLE_NEO4J: 1
+          DISABLE_FALKORDB: 1
+          DISABLE_KUZU: 1
+        run: |
+          uv run pytest tests/ -m "not integration" \
+            --ignore=tests/test_graphiti_int.py \
+            --ignore=tests/test_graphiti_mock.py \
+            --ignore=tests/test_node_int.py \
+            --ignore=tests/test_edge_int.py \
+            --ignore=tests/test_entity_exclusion_int.py \
+            --ignore=tests/driver/ \
+            --ignore=tests/llm_client/test_anthropic_client_int.py \
+            --ignore=tests/utils/maintenance/test_temporal_operations_int.py \
+            --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
+            --ignore=tests/evals/
+
+  database-integration-tests:
+    runs-on: depot-ubuntu-22.04
     services:
       falkordb:
         image: falkordb/falkordb:latest
@@ -43,30 +75,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y redis-tools
       - name: Install dependencies
         run: uv sync --all-extras
-      - name: Run non-integration tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          NEO4J_URI: bolt://localhost:7687
-          NEO4J_USER: neo4j
-          NEO4J_PASSWORD: testpass
-          DISABLE_NEPTUNE: 1
-        run: |
-          uv run pytest -m "not integration"
       - name: Wait for FalkorDB
         run: |
           timeout 60 bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
       - name: Wait for Neo4j
         run: |
           timeout 60 bash -c 'until wget -O /dev/null http://localhost:7474 >/dev/null 2>&1; do sleep 1; done'
-      - name: Run FalkorDB integration tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          FALKORDB_HOST: localhost
-          FALKORDB_PORT: 6379
-          DISABLE_NEO4J: 1
-        run: |
-          uv run pytest tests/driver/test_falkordb_driver.py
-      - name: Run Neo4j integration tests
+      - name: Run database integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
           NEO4J_URI: bolt://localhost:7687
@@ -74,6 +89,12 @@ jobs:
           NEO4J_PASSWORD: testpass
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DISABLE_NEPTUNE: 1
         run: |
-          uv run pytest tests/test_*_int.py -k "neo4j"
+          uv run pytest \
+            tests/test_graphiti_mock.py \
+            tests/test_node_int.py \
+            tests/test_edge_int.py \
+            tests/cross_encoder/test_bge_reranker_client_int.py \
+            tests/driver/test_falkordb_driver.py \
+            -m "not integration"

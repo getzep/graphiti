@@ -1,0 +1,164 @@
+name: Release Server Container
+
+on:
+  workflow_run:
+    workflows: ["Release to PyPI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Graphiti core version to build (e.g., 0.22.1)'
+        required: false
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: zepai/graphiti
+
+jobs:
+  build-and-push:
+    runs-on: depot-ubuntu-24.04-small
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "Using manual input version: $VERSION"
+          else
+            # When triggered by workflow_run, get the tag that triggered the PyPI release
+            # The PyPI workflow is triggered by tags matching v*.*.*
+            VERSION=$(git tag --points-at HEAD | grep '^v[0-9]' | head -1 | sed 's/^v//')
+
+            if [ -z "$VERSION" ]; then
+              # Fallback: check pyproject.toml version
+              VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+              echo "Version from pyproject.toml: $VERSION"
+            else
+              echo "Version from git tag: $VERSION"
+            fi
+
+            if [ -z "$VERSION" ]; then
+              echo "Could not determine version"
+              exit 1
+            fi
+          fi
+
+          # Validate it's a stable release - catch all Python pre-release patterns
+          # Matches: pre, rc, alpha, beta, a1, b2, dev0, etc.
+          if [[ $VERSION =~ (pre|rc|alpha|beta|a[0-9]+|b[0-9]+|\.dev[0-9]*) ]]; then
+            echo "Skipping pre-release version: $VERSION"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Wait for PyPI availability
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Checking PyPI for graphiti-core version $VERSION..."
+
+          MAX_ATTEMPTS=10
+          SLEEP_TIME=30
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/graphiti-core/$VERSION/json")
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "✓ graphiti-core $VERSION is available on PyPI"
+              exit 0
+            fi
+
+            echo "Attempt $i/$MAX_ATTEMPTS: graphiti-core $VERSION not yet available (HTTP $HTTP_CODE)"
+
+            if [ $i -lt $MAX_ATTEMPTS ]; then
+              echo "Waiting ${SLEEP_TIME}s before retry..."
+              sleep $SLEEP_TIME
+            fi
+          done
+
+          echo "ERROR: graphiti-core $VERSION not available on PyPI after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      - name: Log in to Docker Hub
+        if: steps.version.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Depot CLI
+        if: steps.version.outputs.skip != 'true'
+        uses: depot/setup-action@v1
+
+      - name: Extract metadata
+        if: steps.version.outputs.skip != 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=Graphiti FastAPI Server
+            org.opencontainers.image.description=FastAPI server for Graphiti temporal knowledge graphs
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            io.graphiti.core.version=${{ steps.version.outputs.version }}
+
+      - name: Build and push Docker image
+        if: steps.version.outputs.skip != 'true'
+        uses: depot/build-push-action@v1
+        with:
+          project: v9jv1mlpwc
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GRAPHITI_VERSION=${{ steps.version.outputs.version }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Summary
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          echo "## 🚀 Server Container Released" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags**: ${{ steps.version.outputs.version }}, latest" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull the image:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

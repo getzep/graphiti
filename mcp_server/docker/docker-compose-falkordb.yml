@@ -1,0 +1,51 @@
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379" # Redis/FalkorDB port
+      - "3000:3000" # FalkorDB web UI
+    environment:
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  graphiti-mcp:
+    image: zepai/knowledge-graph-mcp:standalone
+    # For specific versions, replace 'standalone' with a version tag:
+    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
+    # When building locally, the build section below will be used.
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.standalone
+    env_file:
+      - path: ../.env
+        required: false
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      - FALKORDB_URI=${FALKORDB_URI:-redis://falkordb:6379}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
+      # Application configuration
+      - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+      - PATH=/root/.local/bin:${PATH}
+    volumes:
+      - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
+    ports:
+      - "8000:8000" # Expose the MCP server via HTTP transport
+    command: ["uv", "run", "main.py"]
+
+volumes:
+  falkordb_data:
+    driver: local

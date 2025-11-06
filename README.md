@@ -77,6 +77,23 @@ We're excited to open-source Graphiti, believing its potential reaches far beyon
     <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
 </p>
 
+## Zep vs Graphiti
+
+| Aspect | Zep | Graphiti |
+|--------|-----|----------|
+| **What they are** | Complete managed platform for AI memory | Open-source graph framework |
+| **User & conversation management** | Built-in users, threads, and message storage | Build your own |
+| **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
+| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
+| **Enterprise features** | SLAs, support, security guarantees | Self-managed |
+| **Deployment** | Fully managed or in your cloud | Self-hosted only |
+
+### When to choose which
+
+**Choose Zep** if you want a turnkey, enterprise-grade platform with security, performance, and support baked in.
+
+**Choose Graphiti** if you want a flexible OSS core and you're comfortable building/operating the surrounding system.
+
 ## Why Graphiti?
 
 Traditional RAG approaches often rely on batch processing and static data summarization, making them inefficient for
@@ -241,6 +258,22 @@ The quickstart demonstrates:
 
 The example is fully documented with clear explanations of each functionality and includes a comprehensive README with
 setup instructions and next steps.
+
+### Running with Docker Compose
+
+You can use Docker Compose to quickly start the required services:
+
+- **Neo4j Docker:**
+  ```sh
+  docker compose up
+  ```
+  This will start the Neo4j Docker service and related components.
+
+- **FalkorDB Docker:**
+  ```sh
+  docker compose --profile falkordb up
+  ```
+  This will start the FalkorDB Docker service and related components.
 
 ## MCP Server
 

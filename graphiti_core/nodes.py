@@ -26,7 +26,10 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import (
+    GraphDriver,
+    GraphProvider,
+)
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
@@ -92,15 +95,23 @@ class Node(BaseModel, ABC):
     async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.node_delete(self, driver)
+
         match driver.provider:
             case GraphProvider.NEO4J:
-                await driver.execute_query(
+                records, _, _ = await driver.execute_query(
                     """
-                    MATCH (n:Entity|Episodic|Community {uuid: $uuid})
+                    MATCH (n {uuid: $uuid})
+                    WHERE n:Entity OR n:Episodic OR n:Community
+                    OPTIONAL MATCH (n)-[r]-()
+                    WITH collect(r.uuid) AS edge_uuids, n
                     DETACH DELETE n
+                    RETURN edge_uuids
                     """,
                     uuid=self.uuid,
                 )
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -148,20 +159,25 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_group_id(cls, driver: GraphDriver, group_id: str, batch_size: int = 100):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.node_delete_by_group_id(
+                cls, driver, group_id, batch_size
+            )
+
         match driver.provider:
             case GraphProvider.NEO4J:
                 async with driver.session() as session:
                     await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community {group_id: $group_id})
-                        CALL {
-                            WITH n
+                        CALL (n) {
                             DETACH DELETE n
                         } IN TRANSACTIONS OF $batch_size ROWS
                         """,
                         group_id=group_id,
                         batch_size=batch_size,
                     )
+
             case GraphProvider.KUZU:
                 for label in ['Episodic', 'Community']:
                     await driver.execute_query(
@@ -199,6 +215,11 @@ class Node(BaseModel, ABC):
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.node_delete_by_uuids(
+                cls, driver, uuids, group_id=None, batch_size=batch_size
+            )
+
         match driver.provider:
             case GraphProvider.FALKORDB:
                 for label in ['Entity', 'Episodic', 'Community']:
@@ -240,12 +261,23 @@ class Node(BaseModel, ABC):
                 )
             case _:  # Neo4J, Neptune
                 async with driver.session() as session:
+                    # Collect all edge UUIDs before deleting nodes
                     await session.run(
                         """
                         MATCH (n:Entity|Episodic|Community)
                         WHERE n.uuid IN $uuids
-                        CALL {
-                            WITH n
+                        MATCH (n)-[r]-()
+                        RETURN collect(r.uuid) AS edge_uuids
+                        """,
+                        uuids=uuids,
+                    )
+
+                    # Now delete the nodes in batches
+                    await session.run(
+                        """
+                        MATCH (n:Entity|Episodic|Community)
+                        WHERE n.uuid IN $uuids
+                        CALL (n) {
                             DETACH DELETE n
                         } IN TRANSACTIONS OF $batch_size ROWS
                         """,
@@ -273,19 +305,8 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'episode_content',
-                [
-                    {
-                        'uuid': self.uuid,
-                        'group_id': self.group_id,
-                        'source': self.source.value,
-                        'content': self.content,
-                        'source_description': self.source_description,
-                    }
-                ],
-            )
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.episodic_node_save(self, driver)
 
         episode_args = {
             'uuid': self.uuid,
@@ -428,11 +449,15 @@ class EntityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.node_load_embeddings(self, driver)
+
         if driver.provider == GraphProvider.NEPTUNE:
             query: LiteralString = """
                 MATCH (n:Entity {uuid: $uuid})
                 RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
+
         else:
             query: LiteralString = """
                 MATCH (n:Entity {uuid: $uuid})
@@ -450,6 +475,9 @@ class EntityNode(Node):
         self.name_embedding = records[0]['name_embedding']
 
     async def save(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            return await driver.graph_operations_interface.node_save(self, driver)
+
         entity_data: dict[str, Any] = {
             'uuid': self.uuid,
             'name': self.name,
@@ -469,9 +497,6 @@ class EntityNode(Node):
         else:
             entity_data.update(self.attributes or {})
             labels = ':'.join(self.labels + ['Entity'])
-
-            if driver.provider == GraphProvider.NEPTUNE:
-                driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels),
@@ -569,8 +594,8 @@ class CommunityNode(Node):
 
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
-            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'community_name',
+            await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(
@@ -770,9 +795,12 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
 
 
 async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[EntityNode]):
-    if not nodes:  # Handle empty list case
+    # filter out falsey values from nodes
+    filtered_nodes = [node for node in nodes if node.name]
+
+    if not filtered_nodes:
         return
 
-    name_embeddings = await embedder.create_batch([node.name for node in nodes])
-    for node, name_embedding in zip(nodes, name_embeddings, strict=True):
+    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
+    for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding

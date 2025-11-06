@@ -78,9 +78,6 @@ async def main():
     graphiti = Graphiti(graph_driver=falkor_driver)
 
     try:
-        # Initialize the graph database with graphiti's indices. This only needs to be done once.
-        await graphiti.build_indices_and_constraints()
-
         #################################################
         # ADDING EPISODES
         #################################################

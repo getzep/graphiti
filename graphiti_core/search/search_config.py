@@ -127,3 +127,34 @@ class SearchResults(BaseModel):
     episode_reranker_scores: list[float] = Field(default_factory=list)
     communities: list[CommunityNode] = Field(default_factory=list)
     community_reranker_scores: list[float] = Field(default_factory=list)
+
+    @classmethod
+    def merge(cls, results_list: list['SearchResults']) -> 'SearchResults':
+        """
+        Merge multiple SearchResults objects into a single SearchResults object.
+
+        Parameters
+        ----------
+        results_list : list[SearchResults]
+            List of SearchResults objects to merge
+
+        Returns
+        -------
+        SearchResults
+            A single SearchResults object containing all results
+        """
+        if not results_list:
+            return cls()
+
+        merged = cls()
+        for result in results_list:
+            merged.edges.extend(result.edges)
+            merged.edge_reranker_scores.extend(result.edge_reranker_scores)
+            merged.nodes.extend(result.nodes)
+            merged.node_reranker_scores.extend(result.node_reranker_scores)
+            merged.episodes.extend(result.episodes)
+            merged.episode_reranker_scores.extend(result.episode_reranker_scores)
+            merged.communities.extend(result.communities)
+            merged.community_reranker_scores.extend(result.community_reranker_scores)
+
+        return merged
