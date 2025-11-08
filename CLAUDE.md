@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: NO CHANGES TO graphiti_core/
+
+**DO NOT modify any files in the `graphiti_core/` directory.**
+
+Why:
+- We use the **official graphiti-core from PyPI** in our Docker builds
+- Changes to `graphiti_core/` will break upstream compatibility
+- Our custom Docker image only includes **MCP server changes**, not core changes
+- Modifying `graphiti_core/` will cause merge conflicts when syncing with upstream
+
+**What you CAN modify:**
+- ✅ `mcp_server/` - Our custom MCP server implementation
+- ✅ `DOCS/` - Documentation for our setup
+- ✅ `.github/workflows/build-custom-mcp.yml` - Our custom build workflow
+
+**What you CANNOT modify:**
+- ❌ `graphiti_core/` - Core library (use upstream version)
+- ❌ `server/` - REST API server (use upstream version)
+- ❌ Root-level files like `pyproject.toml` (unless necessary for build)
+
 ## Project Overview
 
 Graphiti is a Python framework for building temporally-aware knowledge graphs designed for AI agents. It enables real-time incremental updates to knowledge graphs without batch recomputation, making it suitable for dynamic environments.
