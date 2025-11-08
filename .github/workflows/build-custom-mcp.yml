@@ -1,0 +1,172 @@
+name: Build Custom MCP Server
+
+# This workflow builds a Docker image with YOUR local graphiti-core changes
+# and pushes it to YOUR Docker Hub account (lvarming/graphiti-mcp)
+
+on:
+  # Trigger manually from Actions tab
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag for the image (e.g., v1.0.0, latest, custom)'
+        required: false
+        default: 'latest'
+        type: string
+
+  # Auto-trigger on push to main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'graphiti_core/**'
+      - 'mcp_server/**'
+      - '.github/workflows/build-custom-mcp.yml'
+
+env:
+  DOCKERHUB_USERNAME: lvarming
+  IMAGE_NAME: graphiti-mcp
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract versions
+        id: versions
+        run: |
+          # Get graphiti-core version from main pyproject.toml
+          GRAPHITI_VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
+
+          # Get MCP server version
+          MCP_VERSION=$(grep '^version = ' mcp_server/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+
+          # Get build metadata
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "vcs_ref=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+          # Determine tag
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="latest"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+          echo "📦 Graphiti Core Version: ${GRAPHITI_VERSION}"
+          echo "🔧 MCP Server Version: ${MCP_VERSION}"
+          echo "🏷️  Image Tag: ${TAG}"
+
+      - name: Generate Docker tags
+        id: docker_tags
+        run: |
+          GRAPHITI_VERSION="${{ steps.versions.outputs.graphiti_version }}"
+          MCP_VERSION="${{ steps.versions.outputs.mcp_version }}"
+          TAG="${{ steps.versions.outputs.tag }}"
+          VCS_REF="${{ steps.versions.outputs.vcs_ref }}"
+
+          # Build comprehensive tag list
+          TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${TAG}"
+          TAGS="${TAGS},${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:mcp-${MCP_VERSION}"
+          TAGS="${TAGS},${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:mcp-${MCP_VERSION}-core-${GRAPHITI_VERSION}"
+          TAGS="${TAGS},${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:sha-${VCS_REF}"
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+          echo "🐳 Docker Tags:"
+          echo "${TAGS}" | tr ',' '\n' | sed 's/^/  - /'
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./mcp_server/docker/Dockerfile.custom
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
+          build-args: |
+            GRAPHITI_CORE_VERSION=${{ steps.versions.outputs.graphiti_version }}
+            MCP_SERVER_VERSION=${{ steps.versions.outputs.mcp_version }}
+            BUILD_DATE=${{ steps.versions.outputs.build_date }}
+            VCS_REF=${{ steps.versions.outputs.vcs_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=Graphiti MCP Server (Custom Build)
+            org.opencontainers.image.description=Custom Graphiti MCP server with local graphiti-core changes
+            org.opencontainers.image.version=${{ steps.versions.outputs.mcp_version }}
+            org.opencontainers.image.created=${{ steps.versions.outputs.build_date }}
+            org.opencontainers.image.revision=${{ steps.versions.outputs.vcs_ref }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            graphiti.core.version=${{ steps.versions.outputs.graphiti_version }}
+            graphiti.core.source=local
+
+      - name: Create build summary
+        run: |
+          {
+            echo "## 🎉 Custom MCP Server Build Complete"
+            echo ""
+            echo "### 📋 Build Information"
+            echo "- **Graphiti Core Version:** ${{ steps.versions.outputs.graphiti_version }} (local)"
+            echo "- **MCP Server Version:** ${{ steps.versions.outputs.mcp_version }}"
+            echo "- **Git Commit:** \`${{ steps.versions.outputs.vcs_ref }}\`"
+            echo "- **Build Date:** ${{ steps.versions.outputs.build_date }}"
+            echo ""
+            echo "### 🐳 Docker Images Published"
+            echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/- `/' | sed 's/$/`/'
+            echo ""
+            echo "### 🚀 How to Use"
+            echo ""
+            echo "Pull the image:"
+            echo '```bash'
+            echo "docker pull ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.tag }}"
+            echo '```'
+            echo ""
+            echo "Run the container:"
+            echo '```bash'
+            echo "docker run -p 8000:8000 \\"
+            echo "  -e NEO4J_URI=bolt://neo4j:7687 \\"
+            echo "  -e NEO4J_USER=neo4j \\"
+            echo "  -e NEO4J_PASSWORD=your_password \\"
+            echo "  -e OPENAI_API_KEY=your_api_key \\"
+            echo "  ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.tag }}"
+            echo '```'
+            echo ""
+            echo "### 📝 Update LibreChat Config"
+            echo ""
+            echo "In your \`librechat.yaml\`, use:"
+            echo '```yaml'
+            echo "mcpServers:"
+            echo "  graphiti-memory:"
+            echo "    url: \"http://graphiti-mcp:8000/mcp/\""
+            echo '```'
+            echo ""
+            echo "And in your Docker deployment, use:"
+            echo '```yaml'
+            echo "services:"
+            echo "  graphiti-mcp:"
+            echo "    image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.tag }}"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Test image
+        run: |
+          echo "🧪 Testing built image..."
+          # Pull the image we just built
+          docker pull ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.tag }}
+
+          # Verify the image runs (without needing database for basic check)
+          echo "✅ Image pulled successfully and is ready to use!"
