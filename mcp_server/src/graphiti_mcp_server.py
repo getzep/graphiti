@@ -931,6 +931,11 @@ async def run_mcp_server():
         logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
         logger.info(f'  MCP Endpoint: http://{display_host}:{mcp.settings.port}/mcp/')
         logger.info('  Transport: HTTP (streamable)')
+
+        # Show FalkorDB Browser UI access if enabled
+        if os.environ.get('BROWSER', '1') == '1':
+            logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
+
         logger.info('=' * 60)
         logger.info('For MCP clients, connect to the /mcp/ endpoint above')
 

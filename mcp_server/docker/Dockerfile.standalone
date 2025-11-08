@@ -28,15 +28,19 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.22.0
+ARG GRAPHITI_CORE_VERSION=0.23.0
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
 
 # Remove the local path override for graphiti-core in Docker builds
 # Install with BOTH neo4j and falkordb extras for maximum flexibility
+# and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\]>=0\.16\.0/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml
+    sed -i "s/graphiti-core\[falkordb\]>=0\.23\.0/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    echo "Regenerating lock file for PyPI graphiti-core..." && \
+    rm -f uv.lock && \
+    uv lock
 
 # Install Python dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
