@@ -1,21 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
-name = "mcp-server"
+name = "graphiti-mcp-varming"
 version = "1.0.0"
-description = "Graphiti MCP Server"
+description = "Graphiti MCP Server - Enhanced fork with additional tools by Varming"
 readme = "README.md"
 requires-python = ">=3.10,<4"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Varming", email = "varming@example.com"}
+]
+keywords = ["mcp", "graphiti", "knowledge-graph", "llm", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "mcp>=1.21.0",
     "openai>=1.91.0",
-    "graphiti-core[falkordb]>=0.16.0",
+    "graphiti-core>=0.16.0",  # Includes neo4j driver by default
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
 ]
 
+[project.scripts]
+graphiti-mcp-varming = "src.graphiti_mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/Varming73/graphiti"
+Repository = "https://github.com/Varming73/graphiti"
+Issues = "https://github.com/Varming73/graphiti/issues"
+
 [project.optional-dependencies]
+# FalkorDB support (Neo4j is included in graphiti-core by default)
+falkordb = ["graphiti-core[falkordb]>=0.16.0"]
+
+# Azure support
 azure = [
     "azure-identity>=1.21.0",
 ]
+
+# LLM/Embedder providers
 providers = [
     "google-genai>=1.8.0",
     "anthropic>=0.49.0",
@@ -23,6 +61,18 @@ providers = [
     "voyageai>=0.2.3",
     "sentence-transformers>=2.0.0",
 ]
+
+# All optional features
+all = [
+    "graphiti-core[falkordb]>=0.16.0",
+    "azure-identity>=1.21.0",
+    "google-genai>=1.8.0",
+    "anthropic>=0.49.0",
+    "groq>=0.2.0",
+    "voyageai>=0.2.3",
+    "sentence-transformers>=2.0.0",
+]
+
 dev = [
     "graphiti-core>=0.16.0",
     "httpx>=0.28.1",
@@ -63,8 +113,9 @@ quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
-[tool.uv.sources]
-graphiti-core = { path = "../", editable = true }
+# Note: For local development, you can override graphiti-core source:
+# [tool.uv.sources]
+# graphiti-core = { path = "../", editable = true }
 
 [dependency-groups]
 dev = [

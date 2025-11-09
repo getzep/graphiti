@@ -21,8 +21,8 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
-from config.schema import GraphitiConfig, ServerConfig
-from models.response_types import (
+from .config.schema import GraphitiConfig, ServerConfig
+from .models.response_types import (
     EpisodeSearchResponse,
     ErrorResponse,
     FactSearchResponse,
@@ -31,9 +31,9 @@ from models.response_types import (
     StatusResponse,
     SuccessResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
-from services.queue_service import QueueService
-from utils.formatting import format_fact_result
+from .services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from .services.queue_service import QueueService
+from .utils.formatting import format_fact_result
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -326,12 +326,6 @@ class GraphitiService:
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'write', 'memory', 'ingestion', 'core'},
-    meta={
-        'version': '1.0',
-        'category': 'core',
-        'priority': 0.9,
-    },
 )
 async def add_memory(
     name: str,
@@ -439,12 +433,6 @@ async def add_memory(
         'destructiveHint': False,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'search', 'entities', 'memory', 'core'},
-    meta={
-        'version': '1.0',
-        'category': 'core',
-        'priority': 0.8,
     },
 )
 async def search_nodes(
@@ -566,12 +554,6 @@ async def search_nodes(
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'search', 'entities', 'legacy', 'compatibility'},
-    meta={
-        'version': '1.0',
-        'category': 'compatibility',
-        'priority': 0.7,
-    },
 )
 async def search_memory_nodes(
     query: str,
@@ -617,12 +599,6 @@ async def search_memory_nodes(
         'destructiveHint': False,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'search', 'entities', 'browse', 'classification'},
-    meta={
-        'version': '1.0',
-        'category': 'discovery',
-        'priority': 0.75,
     },
 )
 async def get_entities_by_type(
@@ -748,12 +724,6 @@ async def get_entities_by_type(
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'search', 'facts', 'relationships', 'memory', 'core'},
-    meta={
-        'version': '1.0',
-        'category': 'core',
-        'priority': 0.85,
-    },
 )
 async def search_memory_facts(
     query: str,
@@ -848,12 +818,6 @@ async def search_memory_facts(
         'destructiveHint': False,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'search', 'facts', 'temporal', 'analysis', 'evolution'},
-    meta={
-        'version': '1.0',
-        'category': 'analytics',
-        'priority': 0.6,
     },
 )
 async def compare_facts_over_time(
@@ -1076,12 +1040,6 @@ async def compare_facts_over_time(
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'delete', 'destructive', 'facts', 'admin'},
-    meta={
-        'version': '1.0',
-        'category': 'maintenance',
-        'priority': 0.3,
-    },
 )
 async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     """Delete a specific relationship/fact. **DESTRUCTIVE - Cannot be undone.**
@@ -1136,12 +1094,6 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
         'destructiveHint': True,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'delete', 'destructive', 'episodes', 'admin'},
-    meta={
-        'version': '1.0',
-        'category': 'maintenance',
-        'priority': 0.3,
     },
 )
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
@@ -1199,12 +1151,6 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'retrieval', 'facts', 'uuid', 'direct-access'},
-    meta={
-        'version': '1.0',
-        'category': 'direct-access',
-        'priority': 0.5,
-    },
 )
 async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     """Retrieve a specific relationship/fact by its UUID. **Direct lookup only.**
@@ -1253,12 +1199,6 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
         'destructiveHint': False,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'retrieval', 'episodes', 'history', 'changelog'},
-    meta={
-        'version': '1.0',
-        'category': 'direct-access',
-        'priority': 0.5,
     },
 )
 async def get_episodes(
@@ -1368,12 +1308,6 @@ async def get_episodes(
         'idempotentHint': True,
         'openWorldHint': True,
     },
-    tags={'delete', 'destructive', 'admin', 'bulk', 'danger'},
-    meta={
-        'version': '1.0',
-        'category': 'admin',
-        'priority': 0.1,
-    },
 )
 async def clear_graph(
     group_id: str | None = None,
@@ -1452,12 +1386,6 @@ async def clear_graph(
         'destructiveHint': False,
         'idempotentHint': True,
         'openWorldHint': True,
-    },
-    tags={'admin', 'health', 'status', 'diagnostics'},
-    meta={
-        'version': '1.0',
-        'category': 'admin',
-        'priority': 0.4,
     },
 )
 async def get_status() -> StatusResponse:

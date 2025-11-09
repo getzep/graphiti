@@ -1,0 +1,50 @@
+name: Publish MCP Server to PyPI
+
+on:
+  push:
+    tags:
+      - 'mcp-v*.*.*'  # Triggers on tags like mcp-v1.0.0
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build package
+        working-directory: mcp_server
+        run: |
+          # Remove local graphiti-core override for PyPI build
+          sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml
+          
+          # Build the package
+          uv build
+
+      - name: Publish to PyPI
+        working-directory: mcp_server
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: mcp_server/dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

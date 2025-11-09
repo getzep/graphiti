@@ -2,7 +2,7 @@
 
 from openai import AsyncAzureOpenAI
 
-from config.schema import (
+from ..config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
@@ -70,7 +70,7 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
-from utils.utils import create_azure_credential_token_provider
+from ..utils.utils import create_azure_credential_token_provider
 
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
