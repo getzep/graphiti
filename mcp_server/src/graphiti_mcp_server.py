@@ -1541,6 +1541,7 @@ async def initialize_server() -> ServerConfig:
     logger.info(f'  - Database: {config.database.provider}')
     logger.info(f'  - Group ID: {config.graphiti.group_id}')
     logger.info(f'  - Transport: {config.server.transport}')
+    logger.info(f'  - Semaphore Limit: {SEMAPHORE_LIMIT}')
 
     # Log graphiti-core version
     try:
