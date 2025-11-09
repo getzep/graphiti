@@ -42,7 +42,7 @@ COPY pyproject.toml uv.lock ./
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
-      sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
+      sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
     fi && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
@@ -112,7 +112,7 @@ EOF
 RUN chmod +x /start-services.sh
 
 # Add Docker labels with version information
-ARG MCP_SERVER_VERSION=1.0.0rc0
+ARG MCP_SERVER_VERSION=1.0.1
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.title="FalkorDB + Graphiti MCP Server" \
