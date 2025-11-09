@@ -10,7 +10,7 @@ allow-direct-references = true
 
 [project]
 name = "graphiti-mcp-varming"
-version = "1.0.1"
+version = "1.0.2"
 description = "Graphiti MCP Server - Enhanced fork with additional tools by Varming"
 readme = "README.md"
 requires-python = ">=3.10,<4"
@@ -53,7 +53,15 @@ azure = [
     "azure-identity>=1.21.0",
 ]
 
-# LLM/Embedder providers
+# LLM/Embedder providers (lightweight - no sentence-transformers)
+api-providers = [
+    "google-genai>=1.8.0",
+    "anthropic>=0.49.0",
+    "groq>=0.2.0",
+    "voyageai>=0.2.3",
+]
+
+# LLM/Embedder providers (includes heavy sentence-transformers for local embeddings)
 providers = [
     "google-genai>=1.8.0",
     "anthropic>=0.49.0",
