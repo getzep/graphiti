@@ -648,7 +648,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.22.1rc2"
+version = "0.23.1"
 source = { editable = "../" }
 dependencies = [
     { name = "diskcache" },
@@ -1074,7 +1074,7 @@ wheels = [
 
 [[package]]
 name = "mcp-server"
-version = "1.0.0"
+version = "1.0.1"
 source = { virtual = "." }
 dependencies = [
     { name = "graphiti-core", extra = ["falkordb"] },
@@ -1089,15 +1089,6 @@ dependencies = [
 azure = [
     { name = "azure-identity" },
 ]
-dev = [
-    { name = "graphiti-core" },
-    { name = "httpx" },
-    { name = "mcp" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
 providers = [
     { name = "anthropic" },
     { name = "google-genai" },
@@ -1109,9 +1100,14 @@ providers = [
 [package.dev-dependencies]
 dev = [
     { name = "faker" },
+    { name = "httpx" },
     { name = "psutil" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1119,31 +1115,29 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.49.0" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.8.0" },
-    { name = "graphiti-core", marker = "extra == 'dev'", editable = "../" },
     { name = "graphiti-core", extras = ["falkordb"], editable = "../" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
     { name = "mcp", specifier = ">=1.9.4" },
-    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.9.4" },
     { name = "openai", specifier = ">=1.91.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.404" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
     { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["azure", "providers", "dev"]
+provides-extras = ["azure", "providers"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "faker", specifier = ">=37.12.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "psutil", specifier = ">=7.1.2" },
+    { name = "pyright", specifier = ">=1.1.404" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.7.1" },
 ]
 
 [[package]]

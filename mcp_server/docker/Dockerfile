@@ -33,7 +33,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.23.0
+ARG GRAPHITI_CORE_VERSION=0.23.1
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
@@ -42,7 +42,7 @@ COPY pyproject.toml uv.lock ./
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
-      sed -i "s/graphiti-core\[falkordb\]>=0\.23\.0/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
+      sed -i "s/graphiti-core\[falkordb\]>=0\.23\.1/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
     fi && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \

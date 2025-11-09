@@ -7,7 +7,7 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "mcp>=1.9.4",
     "openai>=1.91.0",
-    "graphiti-core[falkordb]>=0.23.0",
+    "graphiti-core[falkordb]>=0.23.1",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
     "typing-extensions>=4.0.0",
@@ -23,15 +23,6 @@ providers = [
     "groq>=0.2.0",
     "voyageai>=0.2.3",
     "sentence-transformers>=2.0.0",
-]
-dev = [
-    "graphiti-core>=0.23.0",
-    "httpx>=0.28.1",
-    "mcp>=1.9.4",
-    "pyright>=1.1.404",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.21.0",
-    "ruff>=0.7.1",
 ]
 
 [tool.pyright]
@@ -74,7 +65,12 @@ graphiti-core = { path = "../", editable = true }
 [dependency-groups]
 dev = [
     "faker>=37.12.0",
+    "httpx>=0.28.1",
     "psutil>=7.1.2",
+    "pyright>=1.1.404",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.7.1",
 ]
