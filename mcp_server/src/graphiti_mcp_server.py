@@ -318,7 +318,21 @@ class GraphitiService:
         return self.client
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Add Memory',
+        'readOnlyHint': False,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'write', 'memory', 'ingestion', 'core'},
+    meta={
+        'version': '1.0',
+        'category': 'core',
+        'priority': 0.9,
+    },
+)
 async def add_memory(
     name: str,
     episode_body: str,
@@ -327,42 +341,56 @@ async def add_memory(
     source_description: str = '',
     uuid: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
-    """Add an episode to memory. This is the primary way to add information to the graph.
+    """Add information to memory. **This is the PRIMARY method for storing information.**
 
-    This function returns immediately and processes the episode addition in the background.
-    Episodes for the same group_id are processed sequentially to avoid race conditions.
+    **PRIORITY: Use this tool FIRST when storing any information.**
+
+    Processes content asynchronously, automatically extracting entities, relationships,
+    and deduplicating similar information. Returns immediately while processing continues
+    in background.
+
+    WHEN TO USE THIS TOOL:
+    - Storing information → add_memory (this tool) **USE THIS FIRST**
+    - Searching information → use search_nodes or search_memory_facts
+    - Deleting information → use delete_episode or delete_entity_edge
+
+    Use Cases:
+    - Recording conversation context, insights, or observations
+    - Storing user preferences, requirements, or procedures
+    - Capturing information about people, organizations, events, topics
+    - Importing structured data (JSON format)
+    - Updating existing information (provide uuid parameter)
 
     Args:
-        name (str): Name of the episode
-        episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
-                           properly escaped JSON string, not a raw Python dictionary. The JSON data will be
-                           automatically processed to extract entities and relationships.
-        group_id (str, optional): A unique ID for this graph. If not provided, uses the default group_id from CLI
-                                 or a generated one.
-        source (str, optional): Source type, must be one of:
-                               - 'text': For plain text content (default)
-                               - 'json': For structured data
-                               - 'message': For conversation-style content
-        source_description (str, optional): Description of the source
-        uuid (str, optional): NEVER provide a UUID for new episodes - UUIDs are auto-generated. This parameter
-                             can ONLY be used for updating an existing episode by providing its existing UUID.
-                             Providing a UUID will update/replace the episode with that UUID if it exists.
+        name: Brief descriptive title for this memory episode
+        episode_body: Content to store. For JSON source, must be properly escaped JSON string
+        group_id: Optional namespace for organizing memories (uses default if not provided)
+        source: Content format - 'text', 'json', or 'message' (default: 'text')
+        source_description: Optional context about where this information came from
+        uuid: ONLY for updates - provide existing episode UUID. DO NOT provide for new memories
+
+    Returns:
+        SuccessResponse confirming episode was queued for processing
 
     Examples:
-        # Adding plain text content (NEW episode - no UUID)
+        # Store plain text observation
         add_memory(
-            name="Company News",
-            episode_body="Acme Corp announced a new product line today.",
-            source="text",
-            source_description="news article"
+            name="Customer preference",
+            episode_body="Acme Corp prefers email communication over phone calls"
         )
 
-        # Adding structured JSON data (NEW episode - no UUID)
+        # Store structured data
         add_memory(
-            name="Customer Profile",
-            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}, {"id": "P002", "name": "DataMiner"}]}',
-            source="json",
-            source_description="CRM data"
+            name="Product catalog",
+            episode_body='{"company": "Acme", "products": [{"id": "P001", "name": "Widget"}]}',
+            source="json"
+        )
+
+        # Update existing episode
+        add_memory(
+            name="Customer preference",
+            episode_body="Acme Corp prefers Slack communication",
+            uuid="abc-123-def-456"  # UUID from previous get_episodes or search
         )
     """
     global graphiti_service, queue_service
@@ -404,20 +432,66 @@ async def add_memory(
         return ErrorResponse(error=f'Error queuing episode: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Search Memory Entities',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'search', 'entities', 'memory', 'core'},
+    meta={
+        'version': '1.0',
+        'category': 'core',
+        'priority': 0.8,
+    },
+)
 async def search_nodes(
     query: str,
     group_ids: list[str] | None = None,
     max_nodes: int = 10,
     entity_types: list[str] | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search for nodes in the graph memory.
+    """Search for entities by name or content. **PRIMARY method for finding entities.**
+
+    **PRIORITY: Use this tool for entity searches (people, organizations, concepts).**
+
+    Searches entity names, summaries, and attributes using hybrid semantic + keyword matching.
+    Returns the entities themselves (nodes), not relationships or conversation content.
+
+    WHEN TO USE THIS TOOL:
+    - Finding specific entities by name/content → search_nodes (this tool) **USE THIS**
+    - Listing ALL entities of a type → use get_entities_by_type
+    - Searching conversation content or relationships → use search_memory_facts
+
+    Use Cases:
+    - "Find information about Acme Corporation"
+    - "Search for entities related to Python programming"
+    - "What entities exist about productivity?"
+    - Retrieving entities before adding related information
 
     Args:
-        query: The search query
-        group_ids: Optional list of group IDs to filter results
-        max_nodes: Maximum number of nodes to return (default: 10)
-        entity_types: Optional list of entity type names to filter by
+        query: Search keywords or semantic description
+        group_ids: Optional list of memory namespaces to search within
+        max_nodes: Maximum number of results to return (default: 10)
+        entity_types: Optional filter by entity types (e.g., ["Organization", "Person"])
+
+    Returns:
+        NodeSearchResponse containing matching entities with names, summaries, and metadata
+
+    Examples:
+        # Find entities by name
+        search_nodes(query="Acme")
+
+        # Semantic search
+        search_nodes(query="companies in the technology sector")
+
+        # Filter by entity type
+        search_nodes(
+            query="productivity",
+            entity_types=["Insight", "Pattern"]
+        )
     """
     global graphiti_service
 
@@ -484,25 +558,48 @@ async def search_nodes(
         return ErrorResponse(error=f'Error searching nodes: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Search Memory Nodes',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'search', 'entities', 'legacy', 'compatibility'},
+    meta={
+        'version': '1.0',
+        'category': 'compatibility',
+        'priority': 0.7,
+    },
+)
 async def search_memory_nodes(
     query: str,
-    group_id: str | None = None,  # Backward compat: singular
-    group_ids: list[str] | None = None,  # New: plural list
+    group_id: str | None = None,
+    group_ids: list[str] | None = None,
     max_nodes: int = 10,
     entity_types: list[str] | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
-    """Search for nodes in the graph memory (compatibility wrapper).
+    """Search for entities. **Legacy compatibility alias for search_nodes.**
 
-    This is an alias for search_nodes that maintains backward compatibility
-    with existing clients expecting the 'search_memory_nodes' tool name.
+    **For new code, prefer using search_nodes instead.**
+
+    This tool provides backward compatibility with older clients. It delegates to
+    search_nodes with identical functionality.
 
     Args:
-        query: The search query
-        group_id: Single group ID (backward compatibility)
-        group_ids: List of group IDs (preferred)
-        max_nodes: Maximum number of nodes to return
-        entity_types: Optional list of entity types to filter by
+        query: Search query for finding entities
+        group_id: Single namespace (legacy parameter)
+        group_ids: List of namespaces (preferred)
+        max_nodes: Maximum results (default: 10)
+        entity_types: Optional type filter
+
+    Returns:
+        NodeSearchResponse (delegates to search_nodes)
+
+    Examples:
+        # Works identically to search_nodes
+        search_memory_nodes(query="Acme")
     """
     # Convert singular to plural if needed
     effective_group_ids = group_ids
@@ -513,32 +610,62 @@ async def search_memory_nodes(
     return await search_nodes(query, effective_group_ids, max_nodes, entity_types)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Get Entities by Type',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'search', 'entities', 'browse', 'classification'},
+    meta={
+        'version': '1.0',
+        'category': 'discovery',
+        'priority': 0.75,
+    },
+)
 async def get_entities_by_type(
     entity_types: list[str],
     group_ids: list[str] | None = None,
     max_entities: int = 20,
     query: str | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
-    """Retrieve entities by their type classification.
+    """Retrieve ALL entities of specified type(s), optionally filtered by query.
 
-    Useful for browsing entities by type (e.g., Pattern, Insight, Preference)
-    in personal knowledge management workflows.
+    **Use this to browse/list entities by their classification type.**
+
+    WHEN TO USE THIS TOOL:
+    - Listing ALL entities of a type → get_entities_by_type (this tool) **USE THIS**
+    - Searching entities by content → use search_nodes
+    - Searching relationships/content → use search_memory_facts
+
+    Use Cases:
+    - "Show me all Preferences"
+    - "List all Insights and Patterns"
+    - "Get all Organizations" (optionally filtered by keyword)
+    - Browsing knowledge organized by entity classification
 
     Args:
-        entity_types: List of entity type names to retrieve (e.g., ["Pattern", "Insight"])
-        group_ids: Optional list of group IDs to filter results
-        max_entities: Maximum number of entities to return (default: 20)
-        query: Optional search query to filter entities
+        entity_types: REQUIRED. Type(s) to retrieve (e.g., ["Insight"], ["Preference", "Requirement"])
+        group_ids: Optional list of memory namespaces to search within
+        max_entities: Maximum results (default: 20, higher than search tools)
+        query: Optional keyword filter within the type(s). Omit to get ALL entities of type
+
+    Returns:
+        NodeSearchResponse containing all entities of the specified type(s)
 
     Examples:
-        # Get all preferences
+        # Get ALL entities of a type
         get_entities_by_type(entity_types=["Preference"])
 
-        # Get insights and patterns related to productivity
+        # Get multiple types
+        get_entities_by_type(entity_types=["Insight", "Pattern"])
+
+        # Filter within a type
         get_entities_by_type(
-            entity_types=["Insight", "Pattern"],
-            query="productivity"
+            entity_types=["Organization"],
+            query="technology"
         )
     """
     global graphiti_service
@@ -613,20 +740,67 @@ async def get_entities_by_type(
         return ErrorResponse(error=f'Error getting entities by type: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Search Memory Facts',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'search', 'facts', 'relationships', 'memory', 'core'},
+    meta={
+        'version': '1.0',
+        'category': 'core',
+        'priority': 0.85,
+    },
+)
 async def search_memory_facts(
     query: str,
     group_ids: list[str] | None = None,
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
-    """Search the graph memory for relevant facts.
+    """Search conversation content and relationships. **PRIMARY method for content search.**
+
+    **PRIORITY: Use this tool for searching conversation/episode content and entity relationships.**
+
+    "Facts" in this context means relationships/connections between entities, not factual
+    statements. Searches the actual conversation content and how entities are connected.
+
+    WHEN TO USE THIS TOOL:
+    - Searching conversation/episode content → search_memory_facts (this tool) **USE THIS**
+    - Finding entity relationships → search_memory_facts (this tool) **USE THIS**
+    - Finding entities by name → use search_nodes
+    - Listing entities by type → use get_entities_by_type
+
+    Use Cases:
+    - "What conversations mentioned pricing?"
+    - "How is Acme Corp related to our products?"
+    - "Find relationships between User and productivity patterns"
+    - Searching what was actually said in conversations
 
     Args:
-        query: The search query
-        group_ids: Optional list of group IDs to filter results
-        max_facts: Maximum number of facts to return (default: 10)
-        center_node_uuid: Optional UUID of a node to center the search around
+        query: Search query for conversation content or relationships
+        group_ids: Optional list of memory namespaces to search within
+        max_facts: Maximum number of results to return (default: 10)
+        center_node_uuid: Optional entity UUID to center search around (find relationships)
+
+    Returns:
+        FactSearchResponse containing matching relationships with source, target, and context
+
+    Examples:
+        # Search conversation content
+        search_memory_facts(query="discussions about budget")
+
+        # Find entity relationships
+        search_memory_facts(
+            query="collaboration",
+            center_node_uuid="entity-uuid-123"
+        )
+
+        # Broad relationship search
+        search_memory_facts(query="how does Acme relate to pricing")
     """
     global graphiti_service
 
@@ -667,7 +841,21 @@ async def search_memory_facts(
         return ErrorResponse(error=f'Error searching facts: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Compare Facts Over Time',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'search', 'facts', 'temporal', 'analysis', 'evolution'},
+    meta={
+        'version': '1.0',
+        'category': 'analytics',
+        'priority': 0.6,
+    },
+)
 async def compare_facts_over_time(
     query: str,
     start_time: str,
@@ -675,24 +863,46 @@ async def compare_facts_over_time(
     group_ids: list[str] | None = None,
     max_facts_per_period: int = 10,
 ) -> dict[str, Any] | ErrorResponse:
-    """Compare facts between two time periods.
+    """Compare relationships/facts between two time periods to track knowledge evolution.
 
-    Track how understanding evolved by comparing facts valid at different times.
-    Returns facts at start, facts at end, facts invalidated, and facts added.
+    **Use for temporal analysis - how information changed over time.**
+
+    Returns four categories: facts at start, facts at end, facts invalidated, facts added.
+    Useful for understanding how knowledge evolved or changed during a specific time window.
+
+    WHEN TO USE THIS TOOL:
+    - Analyzing how information changed over time → compare_facts_over_time (this tool)
+    - Current/recent information → use search_memory_facts
+    - Single point-in-time search → use search_memory_facts
+
+    Use Cases:
+    - "How did our understanding of Acme Corp change this month?"
+    - "What information was added/updated between Jan-Feb?"
+    - "Track evolution of productivity insights over Q1"
 
     Args:
-        query: The search query
+        query: Search query for facts to track over time
         start_time: Start timestamp in ISO 8601 format (e.g., "2024-01-01" or "2024-01-01T10:30:00Z")
         end_time: End timestamp in ISO 8601 format
-        group_ids: Optional list of group IDs to filter results
-        max_facts_per_period: Maximum number of facts to return per period (default: 10)
+        group_ids: Optional list of memory namespaces to analyze
+        max_facts_per_period: Maximum facts per category (default: 10)
+
+    Returns:
+        Dictionary with: facts_from_start, facts_at_end, facts_invalidated, facts_added
 
     Examples:
-        # Track how understanding evolved
+        # Track changes over a month
+        compare_facts_over_time(
+            query="customer requirements",
+            start_time="2024-01-01",
+            end_time="2024-01-31"
+        )
+
+        # Analyze knowledge evolution
         compare_facts_over_time(
             query="productivity patterns",
-            start_time="2024-01-01",
-            end_time="2024-03-01"
+            start_time="2024-01-01T00:00:00Z",
+            end_time="2024-03-31T23:59:59Z"
         )
     """
     global graphiti_service
@@ -858,12 +1068,47 @@ async def compare_facts_over_time(
         return ErrorResponse(error=f'Error comparing facts over time: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Delete Entity Edge',
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'delete', 'destructive', 'facts', 'admin'},
+    meta={
+        'version': '1.0',
+        'category': 'maintenance',
+        'priority': 0.3,
+    },
+)
 async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an entity edge from the graph memory.
+    """Delete a specific relationship/fact. **DESTRUCTIVE - Cannot be undone.**
+
+    **WARNING: This operation is permanent and irreversible.**
+
+    WHEN TO USE THIS TOOL:
+    - User explicitly confirms deletion → delete_entity_edge (this tool)
+    - Removing verified incorrect relationship → delete_entity_edge (this tool)
+    - Updating information → use add_memory (preferred)
+    - Marking as outdated → system handles automatically
+
+    Safety Requirements:
+    - Only use after explicit user confirmation
+    - Verify UUID is correct before deleting
+    - Cannot be undone - ensure user understands
+    - Idempotent (safe to retry if operation fails)
 
     Args:
-        uuid: UUID of the entity edge to delete
+        uuid: UUID of the relationship to permanently delete
+
+    Returns:
+        SuccessResponse confirming deletion
+
+    Examples:
+        # Delete after user confirmation
+        delete_entity_edge(uuid="abc-123-def-456")
     """
     global graphiti_service
 
@@ -884,12 +1129,48 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
         return ErrorResponse(error=f'Error deleting entity edge: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Delete Episode',
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'delete', 'destructive', 'episodes', 'admin'},
+    meta={
+        'version': '1.0',
+        'category': 'maintenance',
+        'priority': 0.3,
+    },
+)
 async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
-    """Delete an episode from the graph memory.
+    """Delete a specific episode. **DESTRUCTIVE - Cannot be undone.**
+
+    **WARNING: This operation is permanent and irreversible.**
+
+    WHEN TO USE THIS TOOL:
+    - User explicitly confirms deletion → delete_episode (this tool)
+    - Removing incorrect, outdated, or sensitive information → delete_episode (this tool)
+    - Updating episode → use add_memory with uuid parameter (preferred)
+    - Clearing all data → use clear_graph
+
+    Safety Requirements:
+    - Only use after explicit user confirmation
+    - Verify UUID is correct before deleting
+    - Cannot be undone - ensure user understands
+    - May affect related entities and relationships
+    - Idempotent (safe to retry if operation fails)
 
     Args:
-        uuid: UUID of the episode to delete
+        uuid: UUID of the episode to permanently delete
+
+    Returns:
+        SuccessResponse confirming deletion
+
+    Examples:
+        # Delete after user confirmation
+        delete_episode(uuid="episode-abc-123")
     """
     global graphiti_service
 
@@ -910,12 +1191,40 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
         return ErrorResponse(error=f'Error deleting episode: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Get Entity Edge by UUID',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'retrieval', 'facts', 'uuid', 'direct-access'},
+    meta={
+        'version': '1.0',
+        'category': 'direct-access',
+        'priority': 0.5,
+    },
+)
 async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
-    """Get an entity edge from the graph memory by its UUID.
+    """Retrieve a specific relationship/fact by its UUID. **Direct lookup only.**
+
+    **Use ONLY when you already have the exact UUID from a previous search.**
+
+    WHEN TO USE THIS TOOL:
+    - You have a UUID from previous search → get_entity_edge (this tool)
+    - Searching for facts → use search_memory_facts
+    - Don't have a UUID → use search_memory_facts
 
     Args:
-        uuid: UUID of the entity edge to retrieve
+        uuid: UUID of the relationship to retrieve
+
+    Returns:
+        Dictionary with fact details (source entity, target entity, relationship, timestamps)
+
+    Examples:
+        # Retrieve specific relationship
+        get_entity_edge(uuid="abc-123-def-456")
     """
     global graphiti_service
 
@@ -937,20 +1246,59 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
         return ErrorResponse(error=f'Error getting entity edge: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Get Recent Episodes',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'retrieval', 'episodes', 'history', 'changelog'},
+    meta={
+        'version': '1.0',
+        'category': 'direct-access',
+        'priority': 0.5,
+    },
+)
 async def get_episodes(
-    group_id: str | None = None,  # Backward compat: singular
-    group_ids: list[str] | None = None,  # New: plural list
-    last_n: int | None = None,  # Backward compat parameter name
-    max_episodes: int = 10,  # New parameter name
+    group_id: str | None = None,
+    group_ids: list[str] | None = None,
+    last_n: int | None = None,
+    max_episodes: int = 10,
 ) -> EpisodeSearchResponse | ErrorResponse:
-    """Get episodes from the graph memory.
+    """Retrieve recent episodes by recency. **Like 'git log' for memory.**
+
+    **Use for listing what was added recently, NOT for searching content.**
+
+    Think: "git log" (this tool) vs "git grep" (search_memory_facts)
+
+    WHEN TO USE THIS TOOL:
+    - List recent additions to memory → get_episodes (this tool)
+    - Audit what was added recently → get_episodes (this tool)
+    - Search episode CONTENT → use search_memory_facts
+    - Find episodes by keywords → use search_memory_facts
+
+    Use Cases:
+    - "What was added to memory recently?"
+    - "Show me the last 10 episodes"
+    - "List recent memory additions as a changelog"
 
     Args:
-        group_id: Single group ID (backward compatibility)
-        group_ids: List of group IDs (preferred)
-        last_n: Maximum episodes to return (backward compatibility)
-        max_episodes: Maximum episodes to return (preferred)
+        group_id: Single memory namespace (legacy parameter)
+        group_ids: List of memory namespaces (preferred)
+        last_n: Maximum episodes (legacy parameter, use max_episodes instead)
+        max_episodes: Maximum episodes to return (default: 10)
+
+    Returns:
+        EpisodeSearchResponse with episodes sorted by recency (newest first)
+
+    Examples:
+        # Get recent episodes
+        get_episodes(max_episodes=10)
+
+        # Get recent episodes from specific namespace
+        get_episodes(group_ids=["my-project"], max_episodes=20)
     """
     global graphiti_service
 
@@ -1012,16 +1360,58 @@ async def get_episodes(
         return ErrorResponse(error=f'Error getting episodes: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Clear Graph - DANGER',
+        'readOnlyHint': False,
+        'destructiveHint': True,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'delete', 'destructive', 'admin', 'bulk', 'danger'},
+    meta={
+        'version': '1.0',
+        'category': 'admin',
+        'priority': 0.1,
+    },
+)
 async def clear_graph(
-    group_id: str | None = None,  # Backward compat: singular
-    group_ids: list[str] | None = None,  # New: plural list
+    group_id: str | None = None,
+    group_ids: list[str] | None = None,
 ) -> SuccessResponse | ErrorResponse:
-    """Clear all data from the graph for specified group IDs.
+    """Delete ALL data for specified memory namespaces. **EXTREMELY DESTRUCTIVE.**
+
+    **DANGER: Destroys ALL episodes, entities, and relationships. NO UNDO POSSIBLE.**
+
+    MANDATORY SAFETY PROTOCOL FOR LLMs:
+    1. Confirm user understands ALL DATA will be PERMANENTLY DELETED
+    2. Ask user to type the exact group_id to confirm intent
+    3. Only proceed after EXPLICIT confirmation with typed group_id
+    4. If user shows ANY hesitation, DO NOT proceed
+
+    WHEN TO USE THIS TOOL:
+    - ONLY after explicit multi-step confirmation
+    - Resetting test/development environments
+    - Starting completely fresh after catastrophic errors
+    - NEVER use for removing specific items (use delete_episode or delete_entity_edge)
+
+    Critical Warnings:
+    - Destroys ALL data for specified namespace(s)
+    - NO backup is created automatically
+    - NO undo is possible
+    - Affects all users sharing the group_id
+    - Cannot recover deleted data
 
     Args:
-        group_id: Single group ID to clear (backward compatibility)
-        group_ids: List of group IDs to clear (preferred)
+        group_id: Single namespace to clear (legacy parameter)
+        group_ids: List of namespaces to clear (preferred)
+
+    Returns:
+        SuccessResponse confirming all data was destroyed
+
+    Examples:
+        # ONLY after explicit confirmation protocol
+        clear_graph(group_id="test-environment")
     """
     global graphiti_service
 
@@ -1055,9 +1445,39 @@ async def clear_graph(
         return ErrorResponse(error=f'Error clearing graph: {error_msg}')
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        'title': 'Get Server Status',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+    tags={'admin', 'health', 'status', 'diagnostics'},
+    meta={
+        'version': '1.0',
+        'category': 'admin',
+        'priority': 0.4,
+    },
+)
 async def get_status() -> StatusResponse:
-    """Get the status of the Graphiti MCP server and database connection."""
+    """Check server health and database connectivity.
+
+    **Use for diagnostics and health checks.**
+
+    WHEN TO USE THIS TOOL:
+    - Verifying server is operational → get_status (this tool)
+    - Diagnosing connection issues → get_status (this tool)
+    - Pre-flight health check → get_status (this tool)
+    - Retrieving data → use search tools (not this)
+
+    Returns:
+        StatusResponse with status ('ok' or 'error') and connection details
+
+    Examples:
+        # Check server health
+        get_status()
+    """
     global graphiti_service
 
     if graphiti_service is None:
