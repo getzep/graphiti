@@ -485,6 +485,35 @@ async def search_nodes(
 
 
 @mcp.tool()
+async def search_memory_nodes(
+    query: str,
+    group_id: str | None = None,  # Backward compat: singular
+    group_ids: list[str] | None = None,  # New: plural list
+    max_nodes: int = 10,
+    entity_types: list[str] | None = None,
+) -> NodeSearchResponse | ErrorResponse:
+    """Search for nodes in the graph memory (compatibility wrapper).
+
+    This is an alias for search_nodes that maintains backward compatibility
+    with existing clients expecting the 'search_memory_nodes' tool name.
+
+    Args:
+        query: The search query
+        group_id: Single group ID (backward compatibility)
+        group_ids: List of group IDs (preferred)
+        max_nodes: Maximum number of nodes to return
+        entity_types: Optional list of entity types to filter by
+    """
+    # Convert singular to plural if needed
+    effective_group_ids = group_ids
+    if group_id is not None and group_ids is None:
+        effective_group_ids = [group_id]
+
+    # Delegate to the actual implementation
+    return await search_nodes(query, effective_group_ids, max_nodes, entity_types)
+
+
+@mcp.tool()
 async def get_entities_by_type(
     entity_types: list[str],
     group_ids: list[str] | None = None,
@@ -910,14 +939,18 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 @mcp.tool()
 async def get_episodes(
-    group_ids: list[str] | None = None,
-    max_episodes: int = 10,
+    group_id: str | None = None,  # Backward compat: singular
+    group_ids: list[str] | None = None,  # New: plural list
+    last_n: int | None = None,  # Backward compat parameter name
+    max_episodes: int = 10,  # New parameter name
 ) -> EpisodeSearchResponse | ErrorResponse:
     """Get episodes from the graph memory.
 
     Args:
-        group_ids: Optional list of group IDs to filter results
-        max_episodes: Maximum number of episodes to return (default: 10)
+        group_id: Single group ID (backward compatibility)
+        group_ids: List of group IDs (preferred)
+        last_n: Maximum episodes to return (backward compatibility)
+        max_episodes: Maximum episodes to return (preferred)
     """
     global graphiti_service
 
@@ -927,21 +960,24 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Handle parameter compatibility
+        effective_group_ids = group_ids
+        if group_id is not None and group_ids is None:
+            effective_group_ids = [group_id]
+
+        # Use provided group_ids or fall back to default
+        if effective_group_ids is None:
+            effective_group_ids = [config.graphiti.group_id] if config.graphiti.group_id else []
+
+        # Handle max_episodes / last_n compatibility
+        limit = last_n if last_n is not None else max_episodes
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
 
         if effective_group_ids:
             episodes = await EpisodicNode.get_by_group_ids(
-                client.driver, effective_group_ids, limit=max_episodes
+                client.driver, effective_group_ids, limit=limit
             )
         else:
             # If no group IDs, we need to use a different approach
@@ -977,11 +1013,15 @@ async def get_episodes(
 
 
 @mcp.tool()
-async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | ErrorResponse:
+async def clear_graph(
+    group_id: str | None = None,  # Backward compat: singular
+    group_ids: list[str] | None = None,  # New: plural list
+) -> SuccessResponse | ErrorResponse:
     """Clear all data from the graph for specified group IDs.
 
     Args:
-        group_ids: Optional list of group IDs to clear. If not provided, clears the default group.
+        group_id: Single group ID to clear (backward compatibility)
+        group_ids: List of group IDs to clear (preferred)
     """
     global graphiti_service
 
@@ -991,10 +1031,14 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
-        )
+        # Handle parameter compatibility
+        effective_group_ids = group_ids
+        if group_id is not None and group_ids is None:
+            effective_group_ids = [group_id]
+
+        # Use provided group_ids or fall back to default
+        if effective_group_ids is None:
+            effective_group_ids = [config.graphiti.group_id] if config.graphiti.group_id else []
 
         if not effective_group_ids:
             return ErrorResponse(error='No group IDs specified for clearing')
@@ -1212,27 +1256,31 @@ async def run_mcp_server():
         logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
         await mcp.run_sse_async()
     elif mcp_config.transport == 'http':
-        # Use localhost for display if binding to 0.0.0.0
+        # HTTP/streamable-http is not yet supported in the current FastMCP version
+        # Fall back to SSE which provides similar functionality for remote connections
         display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
+        logger.warning(
+            'HTTP transport requested but not yet supported in FastMCP. '
+            'Using SSE transport instead for remote connections.'
+        )
         logger.info(
-            f'Running MCP server with streamable HTTP transport on {mcp.settings.host}:{mcp.settings.port}'
+            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
         )
         logger.info('=' * 60)
         logger.info('MCP Server Access Information:')
         logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
-        logger.info(f'  MCP Endpoint: http://{display_host}:{mcp.settings.port}/mcp/')
-        logger.info('  Transport: HTTP (streamable)')
+        logger.info(f'  SSE Endpoint: http://{display_host}:{mcp.settings.port}/sse')
+        logger.info('  Transport: SSE (Server-Sent Events)')
         logger.info('=' * 60)
-        logger.info('For MCP clients, connect to the /mcp/ endpoint above')
+        logger.info('For MCP clients, connect to the /sse endpoint above')
 
         # Configure uvicorn logging to match our format
         configure_uvicorn_logging()
 
-        await mcp.run_streamable_http_async()
+        # Use SSE transport as fallback
+        await mcp.run_sse_async()
     else:
-        raise ValueError(
-            f'Unsupported transport: {mcp_config.transport}. Use "sse", "stdio", or "http"'
-        )
+        raise ValueError(f'Unsupported transport: {mcp_config.transport}. Use "sse" or "stdio"')
 
 
 def main():

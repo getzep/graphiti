@@ -105,7 +105,7 @@ The server can be configured using a `config.yaml` file, environment variables, 
 ### Default Configuration
 
 The MCP server comes with sensible defaults:
-- **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
+- **Transport**: stdio (for Claude Desktop/Cursor) or sse/http (for web clients like LibreChat)
 - **Database**: FalkorDB (combined in single container with MCP server)
 - **LLM**: OpenAI with model gpt-5-mini
 - **Embedder**: OpenAI text-embedding-3-small
@@ -161,7 +161,9 @@ The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq) and
 
 ```yaml
 server:
-  transport: "http"  # Default. Options: stdio, http
+  transport: "stdio"  # Default. Options: stdio, sse, http
+  # For Claude Desktop/Cursor: use "stdio"
+  # For web clients (LibreChat, etc.): use "sse" or "http" (http falls back to sse)
 
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
@@ -240,6 +242,13 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
+
+### Tool Compatibility
+
+The MCP server provides backward compatibility for tool names and parameters:
+- **Tool names**: `search_nodes` is also available as `search_memory_nodes`
+- **Parameters**: Tools accept both singular (`group_id`) and plural (`group_ids`) parameter names
+- **Backward compatibility**: Existing clients using `group_id`, `last_n` parameters will continue to work
 
 ## Running the Server
 
@@ -373,7 +382,14 @@ SEMAPHORE_LIMIT=10  # Adjust based on your LLM provider tier
 
 The Graphiti MCP server can be deployed using Docker with your choice of database backend. The Dockerfile uses `uv` for package management, ensuring consistent dependency installation.
 
-A pre-built Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`
+**Pre-built Docker Images:**
+
+- **Official**: `zepai/knowledge-graph-mcp` - Official Graphiti MCP server image
+- **Custom with Enhanced Tools**: `lvarming/graphiti-mcp` - Community fork with additional MCP tools for advanced knowledge management
+  - Includes `get_entities_by_type` for browsing entities by classification
+  - Includes `compare_facts_over_time` for tracking knowledge evolution
+  - Automated builds from [Varming73/graphiti](https://github.com/Varming73/graphiti)
+  - Uses official graphiti-core from PyPI with custom MCP server enhancements
 
 #### Environment Configuration
 
@@ -540,6 +556,8 @@ For HTTP transport (default), you can use this configuration:
 
 The Graphiti MCP server exposes the following tools:
 
+### Core Tools
+
 - `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
 - `search_nodes`: Search the knowledge graph for relevant node summaries
 - `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
@@ -549,6 +567,22 @@ The Graphiti MCP server exposes the following tools:
 - `get_episodes`: Get the most recent episodes for a specific group
 - `clear_graph`: Clear all data from the knowledge graph and rebuild indices
 - `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
+
+### Enhanced Knowledge Management Tools
+
+> **Note**: These tools are available in the custom Docker image `lvarming/graphiti-mcp` or when using the [community fork](https://github.com/Varming73/graphiti).
+
+- **`get_entities_by_type`**: Retrieve entities by their type classification
+  - Essential for personal knowledge management (PKM) workflows
+  - Browse entities by type (e.g., Pattern, Insight, Preference, Procedure)
+  - Filter by group IDs and search query
+  - Example: `get_entities_by_type(entity_types=["Preference", "Requirement"])`
+
+- **`compare_facts_over_time`**: Track knowledge evolution between time periods
+  - Compare facts valid at different points in time
+  - Returns facts added, facts invalidated, and facts that remained valid
+  - Useful for understanding how your knowledge base evolved
+  - Example: `compare_facts_over_time(query="productivity", start_time="2024-01-01", end_time="2024-03-01")`
 
 ## Working with JSON Data
 

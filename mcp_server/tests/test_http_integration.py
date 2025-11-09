@@ -15,12 +15,16 @@ from mcp.client.session import ClientSession
 async def test_http_transport(base_url: str = 'http://localhost:8000'):
     """Test MCP server with HTTP streaming transport."""
 
-    # Import the streamable http client
+    # Import the streamable http client (falls back to SSE if unavailable)
     try:
         from mcp.client.streamable_http import streamablehttp_client as http_client
     except ImportError:
-        print('❌ Streamable HTTP client not available in MCP SDK')
-        return False
+        print('⚠️  Streamable HTTP client not available in MCP SDK, using SSE fallback')
+        try:
+            from mcp.client.sse import sse_client as http_client
+        except ImportError:
+            print('❌ Neither streamable HTTP nor SSE client available in MCP SDK')
+            return False
 
     test_group_id = f'test_http_{int(time.time())}'
 
