@@ -42,7 +42,7 @@ COPY pyproject.toml uv.lock ./
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
-      sed -i "s/graphiti-core\[falkordb\]>=0\.23\.1/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
+      sed -i "s/graphiti-core\[falkordb\]>=[0-9.]\+/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
     fi && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \

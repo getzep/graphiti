@@ -37,7 +37,7 @@ COPY pyproject.toml uv.lock ./
 # Install with BOTH neo4j and falkordb extras for maximum flexibility
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\]>=0\.23\.1/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    sed -i "s/graphiti-core\[falkordb\]>=[0-9.]\+/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
     uv lock
