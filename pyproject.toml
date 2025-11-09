@@ -90,6 +90,10 @@ select = [
 ]
 ignore = ["E501"]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Required by Pydantic on Python < 3.12
+"typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
+
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"

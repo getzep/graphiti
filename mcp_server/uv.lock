@@ -1082,6 +1082,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -1132,6 +1133,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
     { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
+    { name = "typing-extensions", specifier = ">=4.0.0" },
     { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
 ]
 provides-extras = ["azure", "providers", "dev"]
