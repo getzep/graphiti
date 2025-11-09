@@ -245,35 +245,35 @@ class GraphitiService:
                     db_provider = self.config.database.provider
                     if db_provider.lower() == 'falkordb':
                         raise RuntimeError(
-                            f"\n{'='*70}\n"
-                            f"Database Connection Error: FalkorDB is not running\n"
-                            f"{'='*70}\n\n"
-                            f"FalkorDB at {db_config['host']}:{db_config['port']} is not accessible.\n\n"
-                            f"To start FalkorDB:\n"
-                            f"  - Using Docker Compose: cd mcp_server && docker compose up\n"
-                            f"  - Or run FalkorDB manually: docker run -p 6379:6379 falkordb/falkordb\n\n"
-                            f"{'='*70}\n"
+                            f'\n{"=" * 70}\n'
+                            f'Database Connection Error: FalkorDB is not running\n'
+                            f'{"=" * 70}\n\n'
+                            f'FalkorDB at {db_config["host"]}:{db_config["port"]} is not accessible.\n\n'
+                            f'To start FalkorDB:\n'
+                            f'  - Using Docker Compose: cd mcp_server && docker compose up\n'
+                            f'  - Or run FalkorDB manually: docker run -p 6379:6379 falkordb/falkordb\n\n'
+                            f'{"=" * 70}\n'
                         ) from db_error
                     elif db_provider.lower() == 'neo4j':
                         raise RuntimeError(
-                            f"\n{'='*70}\n"
-                            f"Database Connection Error: Neo4j is not running\n"
-                            f"{'='*70}\n\n"
-                            f"Neo4j at {db_config.get('uri', 'unknown')} is not accessible.\n\n"
-                            f"To start Neo4j:\n"
-                            f"  - Using Docker Compose: cd mcp_server && docker compose -f docker/docker-compose-neo4j.yml up\n"
-                            f"  - Or install Neo4j Desktop from: https://neo4j.com/download/\n"
-                            f"  - Or run Neo4j manually: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n\n"
-                            f"{'='*70}\n"
+                            f'\n{"=" * 70}\n'
+                            f'Database Connection Error: Neo4j is not running\n'
+                            f'{"=" * 70}\n\n'
+                            f'Neo4j at {db_config.get("uri", "unknown")} is not accessible.\n\n'
+                            f'To start Neo4j:\n'
+                            f'  - Using Docker Compose: cd mcp_server && docker compose -f docker/docker-compose-neo4j.yml up\n'
+                            f'  - Or install Neo4j Desktop from: https://neo4j.com/download/\n'
+                            f'  - Or run Neo4j manually: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n\n'
+                            f'{"=" * 70}\n'
                         ) from db_error
                     else:
                         raise RuntimeError(
-                            f"\n{'='*70}\n"
-                            f"Database Connection Error: {db_provider} is not running\n"
-                            f"{'='*70}\n\n"
-                            f"{db_provider} at {db_config.get('uri', 'unknown')} is not accessible.\n\n"
-                            f"Please ensure {db_provider} is running and accessible.\n\n"
-                            f"{'='*70}\n"
+                            f'\n{"=" * 70}\n'
+                            f'Database Connection Error: {db_provider} is not running\n'
+                            f'{"=" * 70}\n\n'
+                            f'{db_provider} at {db_config.get("uri", "unknown")} is not accessible.\n\n'
+                            f'Please ensure {db_provider} is running and accessible.\n\n'
+                            f'{"=" * 70}\n'
                         ) from db_error
                 # Re-raise other errors
                 raise
@@ -931,6 +931,11 @@ async def run_mcp_server():
         logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
         logger.info(f'  MCP Endpoint: http://{display_host}:{mcp.settings.port}/mcp/')
         logger.info('  Transport: HTTP (streamable)')
+
+        # Show FalkorDB Browser UI access if enabled
+        if os.environ.get('BROWSER', '1') == '1':
+            logger.info(f'  FalkorDB Browser UI: http://{display_host}:3000/')
+
         logger.info('=' * 60)
         logger.info('For MCP clients, connect to the /mcp/ endpoint above')
 

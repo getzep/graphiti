@@ -1,15 +1,16 @@
 [project]
 name = "mcp-server"
-version = "1.0.0"
+version = "1.0.1"
 description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
     "mcp>=1.9.4",
     "openai>=1.91.0",
-    "graphiti-core[falkordb]>=0.16.0",
+    "graphiti-core[falkordb]>=0.23.0",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
+    "typing-extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +25,7 @@ providers = [
     "sentence-transformers>=2.0.0",
 ]
 dev = [
-    "graphiti-core>=0.16.0",
+    "graphiti-core>=0.23.0",
     "httpx>=0.28.1",
     "mcp>=1.9.4",
     "pyright>=1.1.404",
@@ -57,6 +58,10 @@ select = [
     "I",
 ]
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Required by Pydantic on Python < 3.12
+"typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
 
 [tool.ruff.format]
 quote-style = "single"
