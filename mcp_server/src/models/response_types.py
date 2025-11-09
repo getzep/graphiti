@@ -1,8 +1,6 @@
 """Response type definitions for Graphiti MCP Server."""
 
-from typing import Any
-
-from typing_extensions import TypedDict
+from typing import Any, TypedDict
 
 
 class ErrorResponse(TypedDict):
