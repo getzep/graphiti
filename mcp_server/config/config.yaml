@@ -6,72 +6,72 @@
 # See README.md "Concurrency and LLM Provider 429 Rate Limit Errors" section for tuning guidance
 
 server:
-  transport: "stdio"  # Options: stdio, sse, http (http falls back to sse)
-  host: "0.0.0.0"
-  port: 8000
-  
+  transport: "${TRANSPORT:stdio}"  # Options: stdio, sse, http (http falls back to sse)
+  host: "${MCP_SERVER_HOST:0.0.0.0}"
+  port: ${MCP_SERVER_PORT:8000}
+
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-5-mini"
-  max_tokens: 4096
-  
+  provider: "${LLM_PROVIDER:openai}"  # Options: openai, azure_openai, anthropic, gemini, groq
+  model: "${MODEL_NAME:gpt-4.1-mini}"
+  max_tokens: ${MAX_TOKENS:4096}
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     anthropic:
       api_key: ${ANTHROPIC_API_KEY}
       api_url: ${ANTHROPIC_API_URL:https://api.anthropic.com}
       max_retries: 3
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     groq:
       api_key: ${GROQ_API_KEY}
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
 
 embedder:
-  provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
-  dimensions: 1536
-  
+  provider: "${EMBEDDER_PROVIDER:voyage}"  # Options: openai, azure_openai, gemini, voyage
+  model: "${EMBEDDER_MODEL:voyage-3}"
+  dimensions: ${EMBEDDER_DIMENSIONS:1024}
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_EMBEDDINGS_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     voyage:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
-      model: "voyage-3"
+      model: "${EMBEDDER_MODEL:voyage-3}"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: "${DATABASE_PROVIDER:neo4j}"  # Options: neo4j, falkordb
 
   providers:
     falkordb:
@@ -91,21 +91,52 @@ graphiti:
   episode_id_prefix: ${EPISODE_ID_PREFIX:}
   user_id: ${USER_ID:mcp_user}
   entity_types:
+    # ============================================
+    # BUILT-IN TYPES (Keep all 9 defaults)
+    # ============================================
+
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
+
     - name: "Requirement"
-      description: "Specific needs, features, or functionality that must be fulfilled"
+      description: "Represents a specific need, necessity, goal, or something the user is seeking to fulfill or address. Requirements capture what the user has expressed they need, want, or are working toward. Instructions for identifying and extracting requirements: 1. Look for explicit statements of needs or desires (I need X, I want Y, I'm looking for Z, I'm lacking A). 2. Identify personal needs across life domains (need more time, better sleep, financial stability, social support, career growth). 3. Extract challenges framed as needs or goals (need to address procrastination, must manage stress better, want to improve focus). 4. Include resource gaps or shortfalls the user mentions (need more expertise, lacking equipment, insufficient time, missing support). 5. Capture goals and aspirations the user shares (want to learn X, hoping to achieve Y, trying to build Z). 6. Focus on what the user has expressed needing or wanting, not prescribing solutions. 7. Note priority or urgency level when the user mentions it (critical, urgent, important, nice-to-have)."
+
     - name: "Procedure"
-      description: "Standard operating procedures and sequential instructions"
+      description: "A Procedure represents a method, workflow, routine, or step-by-step approach that the user has shared, follows, or has found effective. Procedures are typically composed of several steps and serve as remembered strategies or protocols. Instructions for identifying and extracting procedures: 1. Look for descriptions of sequential methods or workflows (I do X, then Y, then Z). 2. Identify routines or protocols the user mentions following (my morning routine is..., I use this process...). 3. Extract strategies the user has found effective (what works for me is..., I've learned to...). 4. Capture step-by-step approaches the user describes using (when I need to X, I first Y...). 5. Focus on actionable methods the user shares as part of their knowledge. 6. Preserve the sequence and relationships between steps as described. 7. Include any mentioned conditions, triggers, or contexts for when the procedure is used. 8. Capture the purpose or goal of the procedure as stated by the user. 9. Extract both formal protocols and informal personal strategies the user has developed."
+
     - name: "Location"
-      description: "Physical or virtual places where activities occur"
+      description: "A Location represents a physical or virtual place where activities occur or entities exist. IMPORTANT: Before using this classification, first check if the entity is a User, Assistant, Preference, Organization, Document, Event - if so, use those instead. Instructions for identifying and extracting locations: 1. Look for mentions of physical places (cities, buildings, rooms, addresses). 2. Identify virtual locations (websites, online platforms, virtual meeting rooms). 3. Extract specific location names rather than generic references. 4. Include relevant context about the location's purpose or significance. 5. Pay attention to location hierarchies (e.g., conference room in Building A). 6. Capture both permanent locations and temporary venues. 7. Note any significant activities or events associated with the location."
+
     - name: "Event"
-      description: "Time-bound activities, occurrences, or experiences"
+      description: "An Event represents a time-bound activity, occurrence, or experience. Instructions for identifying and extracting events: 1. Look for activities with specific time frames (meetings, appointments, deadlines). 2. Identify planned or scheduled occurrences (vacations, projects, celebrations). 3. Extract unplanned occurrences (accidents, interruptions, discoveries). 4. Capture the purpose or nature of the event. 5. Include temporal information when available (past, present, future, duration). 6. Note participants or stakeholders involved in the event. 7. Identify outcomes or consequences of the event when mentioned. 8. Extract both recurring events and one-time occurrences."
+
     - name: "Organization"
-      description: "Companies, institutions, groups, or formal entities"
+      description: "An Organization represents a company, institution, group, or formal entity. Instructions for identifying and extracting organizations: 1. Look for company names, employers, and business entities. 2. Identify institutions (schools, hospitals, government agencies). 3. Extract formal groups (clubs, teams, associations). 4. Include organizational type when mentioned (company, nonprofit, agency). 5. Capture relationships between people and organizations (employer, member). 6. Note the organization's industry or domain when specified. 7. Extract both large entities and small groups if formally organized."
+
     - name: "Document"
-      description: "Information content in various forms (books, articles, reports, etc.)"
+      description: "A Document represents information content in various forms. Instructions for identifying and extracting documents: 1. Look for references to written or recorded content (books, articles, reports). 2. Identify digital content (emails, videos, podcasts, presentations). 3. Extract specific document titles or identifiers when available. 4. Include document type (report, article, video) when mentioned. 5. Capture the document's purpose or subject matter. 6. Note relationships to authors, creators, or sources. 7. Include document status (draft, published, archived) when mentioned."
+
     - name: "Topic"
-      description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
+      description: "A Topic represents a subject of conversation, interest, or knowledge domain. IMPORTANT: Use this classification ONLY as a last resort. First check if entity fits into User, Assistant, Preference, Organization, Document, Event, Location - if so, use those instead. Instructions for identifying and extracting topics: 1. Look for subjects being discussed or areas of interest (health, technology, sports). 2. Identify knowledge domains or fields of study. 3. Extract themes that span multiple conversations or contexts. 4. Include specific subtopics when mentioned (e.g., machine learning rather than just AI). 5. Capture topics associated with projects, work, or hobbies. 6. Note the context in which the topic appears. 7. Avoid extracting topics that are better classified as Events, Documents, or Organizations."
+
     - name: "Object"
-      description: "Physical items, tools, devices, or possessions (use as last resort)"
+      description: "An Object represents a physical item, tool, device, or possession. IMPORTANT: Use this classification ONLY as a last resort. First check if entity fits into User, Assistant, Preference, Organization, Document, Event, Location, Topic - if so, use those instead. Instructions for identifying and extracting objects: 1. Look for mentions of physical items or possessions (car, phone, equipment). 2. Identify tools or devices used for specific purposes. 3. Extract items that are owned, used, or maintained by entities. 4. Include relevant attributes (brand, model, condition) when mentioned. 5. Note the object's purpose or function when specified. 6. Capture relationships between objects and their owners or users. 7. Avoid extracting objects that are better classified as Documents or other types."
+
+    # ============================================
+    # UNIVERSAL PERSONAL KNOWLEDGE TYPES
+    # ============================================
+
+    - name: "State"
+      description: "Represents an internal experience or condition that the user has described experiencing. States are moments or periods of emotional, cognitive, energetic, or physical experience that the user shares. Instructions for identifying and extracting states: 1. Look for descriptions of emotional states the user experiences (feeling anxious, experiencing joy, sense of frustration, feeling calm, moments of contentment). 2. Identify cognitive states the user mentions (in focus, experiencing hyperfocus, having brain fog, mental clarity, feeling confused, in flow state). 3. Extract energy levels the user describes (feeling energized, exhausted, depleted, recharged, fatigued, restless). 4. Capture physical sensations or conditions the user shares (experiencing tension, feeling pain, sense of relaxation, discomfort, physical restlessness, wellness). 5. Focus on the state itself as an entity, not the broader experience description (extract 'anxiety' from 'I'm feeling anxious about the meeting'). 6. Include both temporary states (today I felt...) and persistent states (I often experience...). 7. Extract states even from implicit mentions (user says 'struggling to start tasks' implies difficulty/resistance state)."
+
+    - name: "Pattern"
+      description: "Represents a recurring cycle, tendency, or regularity that the user has observed or noticed in their own behavior, experience, or outcomes. Patterns are things the user recognizes as happening repeatedly, not deliberate routines. Instructions for identifying and extracting patterns: 1. Look for user descriptions of behavioral tendencies they notice (I tend to procrastinate on..., I have a habit of perfecting things, I often avoid..., I go through hyperfocus cycles). 2. Identify energy fluctuations the user has observed (I'm always low in the morning, afternoons are my peak time, I crash in the evening, I'm depleted after social events). 3. Extract emotional cycles the user recognizes (my mood swings, I spiral into anxiety when..., I notice emotional dysregulation). 4. Capture cognitive patterns the user has identified (I overthink everything, I tend toward black-and-white thinking, I catastrophize, I get stuck in analysis paralysis). 5. Focus on patterns the user has noticed emerging, not procedures they deliberately follow. 6. Extract the pattern concept even when mentioned just once if recurrence is implied (user says 'I always...' or 'whenever X happens, Y follows'). 7. Include language indicating recurrence or recognition (tends to, always, keeps happening, cycle, pattern, I notice that...)."
+
+    - name: "Insight"
+      description: "Represents a realization, discovery, or understanding that the user has gained and shared. Insights are moments of learning or clarity about oneself, strategies, relationships, or life systems. Instructions for identifying and extracting insights: 1. Look for user expressions of learning moments or self-discoveries (I realized, I discovered, I learned, I noticed, I understand now, it clicked that...). 2. Identify self-awareness gains the user describes (recognized my triggers, identified a pattern, discovered a strength, accepted a limitation). 3. Extract strategy discoveries the user shares (figured out what works, realized the best timing for X, validated that method Y helps, learned that tool Z is effective). 4. Capture relational understanding the user expresses (understood my communication style, became aware of my boundaries, articulated what I need, recognized who provides support). 5. Include system-level understanding the user shares (optimized my workflow, realized how environment impacts me, discovered how my schedule affects me, understood how resources connect). 6. Focus on metacognitive awareness when expressed (thinking about my thinking, awareness of my awareness, understanding how I understand). 7. Extract the insight concept itself, not just the act of realizing (from 'I realized hyperfocus happens when...' extract the insight about hyperfocus conditions)."
+
+    - name: "Factor"
+      description: "Represents an influence on the user's experience, performance, or well-being that the user has identified or mentioned. Factors are elements the user recognizes as affecting them positively or negatively. Instructions for identifying and extracting factors: 1. Look for causal or correlational statements the user makes (medication affects my..., sleep impacts..., environment influences..., timing makes a difference in...). 2. Identify contextual influences the user mentions (biological factors like hormones or health, environmental factors like noise or lighting, social factors like support or conflict, temporal factors like time of day or season). 3. Extract both positive and negative influences the user describes (what helps vs. what hinders, what energizes vs. what drains). 4. Include both controllable factors the user can adjust (nutrition, workspace setup, schedule) and uncontrollable factors they've noticed (weather, day of week, external circumstances). 5. Note the factor type when the user makes it clear (mentions physical/biological, environmental/situational, social/interpersonal, or temporal/time-based influences). 6. Focus on factors the user has connected to outcomes, not just random mentions of things in their life."
+
+    - name: "Role"
+      description: "Represents a person categorized by their relationship or role in the user's life. Instructions for identifying and extracting roles: 1. Extract role types not specific individuals (therapist, colleague, partner). 2. Include professional roles (manager, client, mentor, doctor). 3. Include personal relationships (friend, family member, partner). 4. Include support providers (coach, therapist, counselor, specialist). 5. Avoid extracting specific names - focus on the role category. 6. Use generic role terms that could apply to multiple people."
