@@ -34,9 +34,11 @@ ARG GRAPHITI_CORE_VERSION=0.22.0
 COPY pyproject.toml uv.lock ./
 
 # Remove the local path override for graphiti-core in Docker builds
-# Install with BOTH neo4j and falkordb extras for maximum flexibility
+# Install with database drivers and all lightweight API client extras for maximum flexibility
+# Includes: neo4j, falkordb (databases), voyageai, anthropic, google-genai, groq (API clients)
+# Excludes: sentence-transformers (huge), neptune, kuzu (rarely used)
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\]>=0\.16\.0/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml
+    sed -i "s/graphiti-core\[falkordb\]>=0\.16\.0/graphiti-core[neo4j,falkordb,voyageai,anthropic,google-genai,groq]==${GRAPHITI_CORE_VERSION}/" pyproject.toml
 
 # Install Python dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
