@@ -106,7 +106,7 @@ fi
 # Start MCP server in foreground
 echo "Starting MCP server..."
 cd /app/mcp
-exec /root/.local/bin/uv run main.py
+exec /root/.local/bin/uv run --no-sync main.py
 EOF
 
 RUN chmod +x /start-services.sh
