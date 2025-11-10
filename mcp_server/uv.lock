@@ -649,7 +649,7 @@ wheels = [
 [[package]]
 name = "graphiti-core"
 version = "0.23.0"
-source = { editable = "../" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
     { name = "neo4j" },
@@ -660,62 +660,117 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/5d/1a/393d4d03202448e339abc698f20f8a74fa12ee7e8f810c8344af1e4415d7/graphiti_core-0.23.0.tar.gz", hash = "sha256:cf5c1f403e3b28f996a339f9eca445ad3f47e80ec9e4bc7672e73a6461db48c6", size = 6623570, upload-time = "2025-11-08T19:10:23.897Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/71/e4e70af3727bbcd5c1ee127a856960273b265e42318d71d1b4c9cf3ed9c2/graphiti_core-0.23.0-py3-none-any.whl", hash = "sha256:83235a83f87fd13e93fb9872e02c7702564ce8c11a8562dc8e683c302053dd46", size = 176125, upload-time = "2025-11-08T19:10:21.797Z" },
+]
 
 [package.optional-dependencies]
 falkordb = [
     { name = "falkordb" },
 ]
 
+[[package]]
+name = "graphiti-mcp-varming"
+version = "1.0.4"
+source = { editable = "." }
+dependencies = [
+    { name = "graphiti-core" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic" },
+    { name = "azure-identity" },
+    { name = "google-genai" },
+    { name = "graphiti-core", extra = ["falkordb"] },
+    { name = "groq" },
+    { name = "sentence-transformers" },
+    { name = "voyageai" },
+]
+api-providers = [
+    { name = "anthropic" },
+    { name = "google-genai" },
+    { name = "groq" },
+    { name = "voyageai" },
+]
+azure = [
+    { name = "azure-identity" },
+]
+dev = [
+    { name = "graphiti-core" },
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+falkordb = [
+    { name = "graphiti-core", extra = ["falkordb"] },
+]
+providers = [
+    { name = "anthropic" },
+    { name = "google-genai" },
+    { name = "groq" },
+    { name = "sentence-transformers" },
+    { name = "voyageai" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "faker" },
+    { name = "psutil" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
-    { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.49.0" },
-    { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.39.16" },
-    { name = "boto3", marker = "extra == 'neo4j-opensearch'", specifier = ">=1.39.16" },
-    { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
-    { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
-    { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
-    { name = "falkordb", marker = "extra == 'falkordb'", specifier = ">=1.1.2,<2.0.0" },
-    { name = "google-genai", marker = "extra == 'dev'", specifier = ">=1.8.0" },
-    { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.8.0" },
-    { name = "groq", marker = "extra == 'dev'", specifier = ">=0.2.0" },
-    { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
-    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
-    { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.2.4" },
-    { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.3" },
-    { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.3" },
-    { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
-    { name = "langchain-aws", marker = "extra == 'dev'", specifier = ">=0.2.29" },
-    { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
-    { name = "langchain-openai", marker = "extra == 'dev'", specifier = ">=0.2.6" },
-    { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2.15" },
-    { name = "langsmith", marker = "extra == 'dev'", specifier = ">=0.1.108" },
-    { name = "neo4j", specifier = ">=5.26.0" },
-    { name = "numpy", specifier = ">=1.0.0" },
+    { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.49.0" },
+    { name = "anthropic", marker = "extra == 'api-providers'", specifier = ">=0.49.0" },
+    { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.49.0" },
+    { name = "azure-identity", marker = "extra == 'all'", specifier = ">=1.21.0" },
+    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
+    { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.8.0" },
+    { name = "google-genai", marker = "extra == 'api-providers'", specifier = ">=1.8.0" },
+    { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.8.0" },
+    { name = "graphiti-core", specifier = ">=0.16.0" },
+    { name = "graphiti-core", marker = "extra == 'dev'", specifier = ">=0.16.0" },
+    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'all'", specifier = ">=0.16.0" },
+    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'falkordb'", specifier = ">=0.16.0" },
+    { name = "groq", marker = "extra == 'all'", specifier = ">=0.2.0" },
+    { name = "groq", marker = "extra == 'api-providers'", specifier = ">=0.2.0" },
+    { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
+    { name = "mcp", specifier = ">=1.21.0" },
+    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.21.0" },
     { name = "openai", specifier = ">=1.91.0" },
-    { name = "opensearch-py", marker = "extra == 'dev'", specifier = ">=3.0.0" },
-    { name = "opensearch-py", marker = "extra == 'neo4j-opensearch'", specifier = ">=3.0.0" },
-    { name = "opensearch-py", marker = "extra == 'neptune'", specifier = ">=3.0.0" },
-    { name = "opentelemetry-api", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.20.0" },
-    { name = "posthog", specifier = ">=3.0.0" },
-    { name = "pydantic", specifier = ">=2.11.5" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.404" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
-    { name = "sentence-transformers", marker = "extra == 'dev'", specifier = ">=3.2.1" },
-    { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=3.2.1" },
-    { name = "tenacity", specifier = ">=9.0.0" },
-    { name = "transformers", marker = "extra == 'dev'", specifier = ">=4.45.2" },
-    { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
-    { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
+    { name = "sentence-transformers", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
+    { name = "voyageai", marker = "extra == 'all'", specifier = ">=0.2.3" },
+    { name = "voyageai", marker = "extra == 'api-providers'", specifier = ">=0.2.3" },
+    { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
+provides-extras = ["falkordb", "azure", "api-providers", "providers", "all", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "faker", specifier = ">=37.12.0" },
+    { name = "psutil", specifier = ">=7.1.2" },
+    { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+]
 
 [[package]]
 name = "groq"
@@ -1100,78 +1155,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/33/54/dd2330ef4611c27ae59124820863c34e1d3edb1133c58e6375e2d938c9c5/mcp-1.21.0.tar.gz", hash = "sha256:bab0a38e8f8c48080d787233343f8d301b0e1e95846ae7dead251b2421d99855", size = 452697, upload-time = "2025-11-06T23:19:58.432Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/47/850b6edc96c03bd44b00de9a0ca3c1cc71e0ba1cd5822955bc9e4eb3fad3/mcp-1.21.0-py3-none-any.whl", hash = "sha256:598619e53eb0b7a6513db38c426b28a4bdf57496fed04332100d2c56acade98b", size = 173672, upload-time = "2025-11-06T23:19:56.508Z" },
-]
-
-[[package]]
-name = "mcp-server"
-version = "1.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "graphiti-core", extra = ["falkordb"] },
-    { name = "mcp" },
-    { name = "openai" },
-    { name = "pydantic-settings" },
-    { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-azure = [
-    { name = "azure-identity" },
-]
-dev = [
-    { name = "graphiti-core" },
-    { name = "httpx" },
-    { name = "mcp" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-providers = [
-    { name = "anthropic" },
-    { name = "google-genai" },
-    { name = "groq" },
-    { name = "sentence-transformers" },
-    { name = "voyageai" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "faker" },
-    { name = "psutil" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.49.0" },
-    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
-    { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.8.0" },
-    { name = "graphiti-core", marker = "extra == 'dev'", editable = "../" },
-    { name = "graphiti-core", extras = ["falkordb"], editable = "../" },
-    { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
-    { name = "mcp", specifier = ">=1.21.0" },
-    { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.21.0" },
-    { name = "openai", specifier = ">=1.91.0" },
-    { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.404" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.1" },
-    { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
-    { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
-]
-provides-extras = ["azure", "providers", "dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "faker", specifier = ">=37.12.0" },
-    { name = "psutil", specifier = ">=7.1.2" },
-    { name = "pytest-timeout", specifier = ">=2.4.0" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
 ]
 
 [[package]]

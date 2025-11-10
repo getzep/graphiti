@@ -284,8 +284,26 @@ class GraphitiService:
                 # Re-raise other errors
                 raise
 
-            # Build indices
-            await self.client.build_indices_and_constraints()
+            # Build indices and constraints
+            # Note: Neo4j has a known bug where CREATE INDEX IF NOT EXISTS can throw
+            # EquivalentSchemaRuleAlreadyExists errors for fulltext and relationship indices
+            # instead of being idempotent. This is safe to ignore as it means the indices
+            # already exist.
+            try:
+                await self.client.build_indices_and_constraints()
+            except Exception as index_error:
+                error_str = str(index_error)
+                # Check if this is the known "equivalent index already exists" error
+                if 'EquivalentSchemaRuleAlreadyExists' in error_str:
+                    logger.warning(
+                        'Some indices already exist (Neo4j IF NOT EXISTS bug - safe to ignore). '
+                        'Continuing with initialization...'
+                    )
+                    logger.debug(f'Index creation details: {index_error}')
+                else:
+                    # Re-raise if it's a different error
+                    logger.error(f'Failed to build indices and constraints: {index_error}')
+                    raise
 
             logger.info('Successfully initialized Graphiti client')
 

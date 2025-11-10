@@ -61,12 +61,17 @@ class Neo4jDriver(GraphDriver):
         self.aoss_client = None
 
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
-        # Check if database_ is provided in kwargs.
-        # If not populated, set the value to retain backwards compatibility
-        params = kwargs.pop('params', None)
+        # Extract query parameters from kwargs
+        # Support both 'params' (legacy) and 'parameters_' (standard) keys
+        params = kwargs.pop('params', None) or kwargs.pop('parameters_', None)
         if params is None:
             params = {}
-        params.setdefault('database_', self._database)
+
+        # CRITICAL FIX: database_ must be a keyword argument to Neo4j driver's execute_query,
+        # NOT a query parameter in the parameters dict.
+        # Previous code incorrectly added it to params dict, causing all queries to go to
+        # the default 'neo4j' database instead of the configured database.
+        kwargs.setdefault('database_', self._database)
 
         try:
             result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)

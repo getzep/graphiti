@@ -1,5 +1,27 @@
 # Graphiti Project Overview
 
+## ⚠️ CRITICAL CONSTRAINT: Fork-Specific Rules
+
+**DO NOT MODIFY `graphiti_core/` DIRECTORY**
+
+This is a fork that maintains custom MCP server changes while using the official graphiti-core from PyPI.
+
+**Allowed modifications:**
+- ✅ `mcp_server/` - Custom MCP server implementation
+- ✅ `DOCS/` - Documentation
+- ✅ `.github/workflows/build-custom-mcp.yml` - Build workflow
+
+**Forbidden modifications:**
+- ❌ `graphiti_core/` - Use official PyPI version
+- ❌ `server/` - Use upstream version
+- ❌ Root `pyproject.toml` (unless critical for build)
+
+**Why this matters:**
+- Docker builds use graphiti-core from PyPI, not local source
+- Local changes break upstream compatibility
+- Causes merge conflicts when syncing upstream
+- Custom image only includes MCP server changes
+
 ## Purpose
 Graphiti is a Python framework for building and querying temporally-aware knowledge graphs, specifically designed for AI agents operating in dynamic environments. It continuously integrates user interactions, structured/unstructured data, and external information into a coherent, queryable graph with incremental updates and efficient retrieval.
 
@@ -46,7 +68,15 @@ Graphiti powers the core of Zep, a turn-key context engineering platform for AI 
   - Pytest (testing framework with pytest-asyncio and pytest-xdist)
 
 ## Project Version
-Current version: 0.22.1pre2 (pre-release)
+Current version: 0.23.0 (latest upstream)
+Fork MCP Server version: 1.0.0
 
-## Repository
-https://github.com/getzep/graphiti
+## Repositories
+- **Upstream**: https://github.com/getzep/graphiti
+- **This Fork**: https://github.com/Varming73/graphiti
+
+## Custom Docker Image
+- **Docker Hub**: lvarming/graphiti-mcp
+- **Automated builds**: Via GitHub Actions
+- **Contains**: Official graphiti-core + custom MCP server
+- **See**: `docker_build_setup` memory for details

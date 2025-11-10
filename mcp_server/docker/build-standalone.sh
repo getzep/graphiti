@@ -24,9 +24,9 @@ docker build \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
   -f Dockerfile.standalone \
-  -t "zepai/knowledge-graph-mcp:standalone" \
-  -t "zepai/knowledge-graph-mcp:${MCP_VERSION}-standalone" \
-  -t "zepai/knowledge-graph-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone" \
+  -t "lvarming/graphiti-mcp:standalone" \
+  -t "lvarming/graphiti-mcp:${MCP_VERSION}-standalone" \
+  -t "lvarming/graphiti-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone" \
   ..
 
 echo ""
@@ -37,14 +37,14 @@ echo "  Build Date: ${BUILD_DATE}"
 echo "  VCS Ref: ${VCS_REF}"
 echo ""
 echo "Image tags:"
-echo "  - zepai/knowledge-graph-mcp:standalone"
-echo "  - zepai/knowledge-graph-mcp:${MCP_VERSION}-standalone"
-echo "  - zepai/knowledge-graph-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone"
+echo "  - lvarming/graphiti-mcp:standalone"
+echo "  - lvarming/graphiti-mcp:${MCP_VERSION}-standalone"
+echo "  - lvarming/graphiti-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone"
 echo ""
 echo "To push to DockerHub:"
-echo "  docker push zepai/knowledge-graph-mcp:standalone"
-echo "  docker push zepai/knowledge-graph-mcp:${MCP_VERSION}-standalone"
-echo "  docker push zepai/knowledge-graph-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone"
+echo "  docker push lvarming/graphiti-mcp:standalone"
+echo "  docker push lvarming/graphiti-mcp:${MCP_VERSION}-standalone"
+echo "  docker push lvarming/graphiti-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone"
 echo ""
 echo "Or push all tags:"
-echo "  docker push --all-tags zepai/knowledge-graph-mcp"
+echo "  docker push --all-tags lvarming/graphiti-mcp"

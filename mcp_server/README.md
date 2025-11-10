@@ -11,6 +11,8 @@ This is an experimental Model Context Protocol (MCP) server implementation for G
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
 
+> **📦 PyPI Package Available:** This enhanced fork is published as [`graphiti-mcp-varming`](https://pypi.org/project/graphiti-mcp-varming/) with additional tools for advanced knowledge management. Install with: `uvx graphiti-mcp-varming`
+
 ## Features
 
 The Graphiti MCP server provides comprehensive knowledge graph capabilities:

@@ -22,6 +22,11 @@ Why:
 - ❌ `server/` - REST API server (use upstream version)
 - ❌ Root-level files like `pyproject.toml` (unless necessary for build)
 
+**NEVER START IMPLEMENTING WITHOUT THE USERS ACCEPTANCE.**
+
+**NEVER CREATE DOCUMENTATION WITHOUT THE USERS ACCEPTANCE. ALL DOCUMENTATION HAS TO BE PLACED IN THE DOCS FOLDER. PREFIX FILENAME WITH RELEVANT TAG (for example Backlog, Investigation, etc)**
+
+
 ## Project Overview
 
 Graphiti is a Python framework for building temporally-aware knowledge graphs designed for AI agents. It enables real-time incremental updates to knowledge graphs without batch recomputation, making it suitable for dynamic environments.
