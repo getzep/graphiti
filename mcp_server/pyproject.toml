@@ -10,7 +10,7 @@ allow-direct-references = true
 
 [project]
 name = "graphiti-mcp-varming"
-version = "1.0.3"
+version = "1.0.4"
 description = "Graphiti MCP Server - Enhanced fork with additional tools by Varming"
 readme = "README.md"
 requires-python = ">=3.10,<4"
