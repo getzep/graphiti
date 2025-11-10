@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
+from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -229,11 +230,16 @@ class GraphitiService:
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
-                    # For Neo4j (default), use the original approach
-                    self.client = Graphiti(
+                    # For Neo4j (default), create a Neo4jDriver instance with database parameter
+                    neo4j_driver = Neo4jDriver(
                         uri=db_config['uri'],
                         user=db_config['user'],
                         password=db_config['password'],
+                        database=db_config.get('database', 'neo4j'),
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=neo4j_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
