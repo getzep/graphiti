@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core-varming"
 description = "A temporal graph building library (Varming fork with database parameter fix)"
-version = "0.23.1-varming.1"
+version = "0.23.1+varming.1"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },

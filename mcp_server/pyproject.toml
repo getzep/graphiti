@@ -31,7 +31,7 @@ classifiers = [
 dependencies = [
     "mcp>=1.21.0",
     "openai>=1.91.0",
-    "graphiti-core-varming>=0.23.1-varming.1",  # Varming fork with database parameter fix
+    "graphiti-core-varming>=0.23.1",  # Varming fork with database parameter fix (0.23.1+varming.1)
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
 ]
@@ -46,7 +46,7 @@ Issues = "https://github.com/Varming73/graphiti/issues"
 
 [project.optional-dependencies]
 # FalkorDB support (Neo4j is included in graphiti-core-varming by default)
-falkordb = ["graphiti-core-varming[falkordb]>=0.23.1-varming.1"]
+falkordb = ["graphiti-core-varming[falkordb]>=0.23.1"]
 
 # Azure support
 azure = [
@@ -72,7 +72,7 @@ providers = [
 
 # All optional features
 all = [
-    "graphiti-core-varming[falkordb]>=0.23.1-varming.1",
+    "graphiti-core-varming[falkordb]>=0.23.1",
     "azure-identity>=1.21.0",
     "google-genai>=1.8.0",
     "anthropic>=0.49.0",
@@ -82,7 +82,7 @@ all = [
 ]
 
 dev = [
-    "graphiti-core-varming>=0.23.1-varming.1",
+    "graphiti-core-varming>=0.23.1",
     "httpx>=0.28.1",
     "mcp>=1.21.0",
     "pyright>=1.1.404",
