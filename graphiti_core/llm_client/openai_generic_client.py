@@ -17,7 +17,7 @@ limitations under the License.
 import json
 import logging
 import typing
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import openai
 from openai import AsyncOpenAI
@@ -100,7 +100,7 @@ class OpenAIGenericClient(LLMClient):
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
             # Prepare response format
-            response_format = {'type': 'json_object'}
+            response_format: dict[str, Any] = {'type': 'json_object'}
             if response_model is not None:
                 schema_name = getattr(response_model, '__name__', 'structured_response')
                 json_schema = response_model.model_json_schema()
@@ -117,7 +117,7 @@ class OpenAIGenericClient(LLMClient):
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format=response_format,
+                response_format=response_format,  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
