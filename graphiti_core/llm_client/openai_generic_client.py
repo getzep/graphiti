@@ -99,12 +99,25 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
+            # Prepare response format
+            response_format = {'type': 'json_object'}
+            if response_model is not None:
+                schema_name = getattr(response_model, '__name__', 'structured_response')
+                json_schema = response_model.model_json_schema()
+                response_format = {
+                    'type': 'json_schema',
+                    'json_schema': {
+                        'name': schema_name,
+                        'schema': json_schema,
+                    },
+                }
+
             response = await self.client.chat.completions.create(
                 model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format={'type': 'json_object'},
+                response_format=response_format,
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
@@ -125,14 +138,6 @@ class OpenAIGenericClient(LLMClient):
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
-
-        if response_model is not None:
-            serialized_model = json.dumps(response_model.model_json_schema())
-            messages[
-                -1
-            ].content += (
-                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
-            )
 
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
