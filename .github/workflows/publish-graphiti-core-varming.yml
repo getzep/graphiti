@@ -1,0 +1,69 @@
+name: Publish graphiti-core-varming to PyPI
+
+on:
+  push:
+    tags:
+      - 'core-v*.*.*-varming.*'  # Triggers on tags like core-v0.23.1-varming.1
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  publish:
+    name: Publish graphiti-core-varming to PyPI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build package
+        run: |
+          # Build graphiti-core-varming from root
+          uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## graphiti-core-varming Release
+
+            This is a fork of graphiti-core with critical bug fixes.
+
+            ### Changes in this fork:
+            - **Fixed database parameter bug**: Neo4j `database_` parameter now correctly passed as keyword argument
+            - All queries now execute in the configured database instead of default 'neo4j'
+
+            ### Upstream Version
+            Based on graphiti-core 0.23.0 from https://github.com/getzep/graphiti
+
+            ### Installation
+            ```bash
+            pip install graphiti-core-varming
+            ```
+
+            ### Usage
+            Drop-in replacement for graphiti-core:
+            ```python
+            # Instead of: from graphiti_core import Graphiti
+            # Use the same import (package name is different, module name is same):
+            from graphiti_core import Graphiti
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -31,7 +31,7 @@ classifiers = [
 dependencies = [
     "mcp>=1.21.0",
     "openai>=1.91.0",
-    "graphiti-core>=0.16.0",  # Includes neo4j driver by default
+    "graphiti-core-varming>=0.23.1-varming.1",  # Varming fork with database parameter fix
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
 ]
@@ -45,8 +45,8 @@ Repository = "https://github.com/Varming73/graphiti"
 Issues = "https://github.com/Varming73/graphiti/issues"
 
 [project.optional-dependencies]
-# FalkorDB support (Neo4j is included in graphiti-core by default)
-falkordb = ["graphiti-core[falkordb]>=0.16.0"]
+# FalkorDB support (Neo4j is included in graphiti-core-varming by default)
+falkordb = ["graphiti-core-varming[falkordb]>=0.23.1-varming.1"]
 
 # Azure support
 azure = [
@@ -72,7 +72,7 @@ providers = [
 
 # All optional features
 all = [
-    "graphiti-core[falkordb]>=0.16.0",
+    "graphiti-core-varming[falkordb]>=0.23.1-varming.1",
     "azure-identity>=1.21.0",
     "google-genai>=1.8.0",
     "anthropic>=0.49.0",
@@ -82,7 +82,7 @@ all = [
 ]
 
 dev = [
-    "graphiti-core>=0.16.0",
+    "graphiti-core-varming>=0.23.1-varming.1",
     "httpx>=0.28.1",
     "mcp>=1.21.0",
     "pyright>=1.1.404",
@@ -121,9 +121,9 @@ quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
-# Note: For local development, you can override graphiti-core source:
+# Note: For local development, you can override graphiti-core-varming source:
 # [tool.uv.sources]
-# graphiti-core = { path = "../", editable = true }
+# graphiti-core-varming = { path = "../", editable = true }
 
 [dependency-groups]
 dev = [
