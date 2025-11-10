@@ -3,7 +3,7 @@ name: Publish graphiti-core-varming to PyPI
 on:
   push:
     tags:
-      - 'core-v*.*.*-varming.*'  # Triggers on tags like core-v0.23.1-varming.1
+      - 'core-v*.*.*'  # Triggers on tags like core-v0.23.1
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
