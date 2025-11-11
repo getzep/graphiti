@@ -59,15 +59,20 @@ class OpenAIGenericClient(LLMClient):
     MAX_RETRIES: ClassVar[int] = 2
 
     def __init__(
-        self, config: LLMConfig | None = None, cache: bool = False, client: typing.Any = None
+        self,
+        config: LLMConfig | None = None,
+        cache: bool = False,
+        client: typing.Any = None,
+        max_tokens: int = 16384,
     ):
         """
-        Initialize the OpenAIClient with the provided configuration, cache setting, and client.
+        Initialize the OpenAIGenericClient with the provided configuration, cache setting, and client.
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+            max_tokens (int): The maximum number of tokens to generate. Defaults to 16384 (16K) for better compatibility with local models.
 
         """
         # removed caching to simplify the `generate_response` override
@@ -77,11 +82,10 @@ class OpenAIGenericClient(LLMClient):
         if config is None:
             config = LLMConfig()
 
-        # Override max_tokens default to 16K for better compatibility with local models
-        if config.max_tokens == DEFAULT_MAX_TOKENS:
-            config.max_tokens = 16384
-
         super().__init__(config, cache)
+
+        # Override max_tokens to support higher limits for local models
+        self.max_tokens = max_tokens
 
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
