@@ -523,6 +523,8 @@ reranker, leveraging Gemini's log probabilities feature to rank passage relevanc
 Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
 for privacy-focused applications or when you want to avoid API costs.
 
+**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for Ollama and other OpenAI-compatible providers like LM Studio. The `OpenAIGenericClient` is optimized for local models with a higher default max token limit (16K vs 8K) and full support for structured outputs.
+
 Install the models:
 
 ```bash

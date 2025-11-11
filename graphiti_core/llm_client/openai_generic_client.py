@@ -77,6 +77,10 @@ class OpenAIGenericClient(LLMClient):
         if config is None:
             config = LLMConfig()
 
+        # Override max_tokens default to 16K for better compatibility with local models
+        if config.max_tokens == DEFAULT_MAX_TOKENS:
+            config.max_tokens = 16384
+
         super().__init__(config, cache)
 
         if client is None:
