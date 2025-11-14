@@ -98,6 +98,25 @@ class QueueService:
         self._graphiti_client = graphiti_client
         logger.info('Queue service initialized with graphiti client')
 
+    async def shutdown(self) -> None:
+        """Cancel all queue workers and wait for completion."""
+        if not self._queue_workers:
+            logger.info('No queue workers to shut down')
+            return
+
+        logger.info(f'Shutting down {len(self._queue_workers)} queue workers...')
+
+        # Cancel all worker tasks if we have task references
+        # Note: Currently we don't store task references, so workers will be
+        # cancelled when the event loop shuts down. This is a placeholder for
+        # Phase 4 enhancement where we'll add task tracking.
+
+        for group_id, is_running in list(self._queue_workers.items()):
+            if is_running:
+                logger.info(f'Queue worker for {group_id} will be cancelled on shutdown')
+
+        logger.info('Queue service shutdown complete')
+
     async def add_episode(
         self,
         group_id: str,

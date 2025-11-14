@@ -333,6 +333,29 @@ class GraphitiService:
             logger.error(f'Failed to initialize Graphiti client: {e}')
             raise
 
+    async def shutdown(self) -> None:
+        """Clean shutdown of Graphiti service.
+
+        Closes database connections and cancels queue workers.
+        """
+        logger.info('Shutting down Graphiti service...')
+
+        try:
+            # Cancel all queue workers
+            if self.queue_service:
+                await self.queue_service.shutdown()
+
+            # Close Graphiti client (which closes the driver)
+            if self.client and self.client.driver:
+                logger.info('Closing Neo4j driver...')
+                await self.client.driver.close()
+                logger.info('Neo4j driver closed successfully')
+
+        except Exception as e:
+            logger.error(f'Error during shutdown: {e}')
+        finally:
+            logger.info('Graphiti service shutdown complete')
+
     async def get_client(self) -> Graphiti:
         """Get the Graphiti client, initializing if necessary."""
         if self.client is None:
@@ -1614,46 +1637,54 @@ async def initialize_server() -> ServerConfig:
 
 
 async def run_mcp_server():
-    """Run the MCP server in the current event loop."""
-    # Initialize the server
-    mcp_config = await initialize_server()
+    """Run the MCP server with proper lifecycle management."""
+    global graphiti_service
 
-    # Run the server with configured transport
-    logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
-    if mcp_config.transport == 'stdio':
-        await mcp.run_stdio_async()
-    elif mcp_config.transport == 'sse':
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
-        await mcp.run_sse_async()
-    elif mcp_config.transport == 'http':
-        # HTTP/streamable-http is not yet supported in the current FastMCP version
-        # Fall back to SSE which provides similar functionality for remote connections
-        display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
-        logger.warning(
-            'HTTP transport requested but not yet supported in FastMCP. '
-            'Using SSE transport instead for remote connections.'
-        )
-        logger.info(
-            f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
-        )
-        logger.info('=' * 60)
-        logger.info('MCP Server Access Information:')
-        logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
-        logger.info(f'  SSE Endpoint: http://{display_host}:{mcp.settings.port}/sse')
-        logger.info('  Transport: SSE (Server-Sent Events)')
-        logger.info('=' * 60)
-        logger.info('For MCP clients, connect to the /sse endpoint above')
+    try:
+        # Initialize the server
+        mcp_config = await initialize_server()
 
-        # Configure uvicorn logging to match our format
-        configure_uvicorn_logging()
+        # Run the server with configured transport
+        logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
+        if mcp_config.transport == 'stdio':
+            await mcp.run_stdio_async()
+        elif mcp_config.transport == 'sse':
+            logger.info(
+                f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
+            )
+            logger.info(f'Access the server at: http://{mcp.settings.host}:{mcp.settings.port}/sse')
+            await mcp.run_sse_async()
+        elif mcp_config.transport == 'http':
+            # HTTP/streamable-http is not yet supported in the current FastMCP version
+            # Fall back to SSE which provides similar functionality for remote connections
+            display_host = 'localhost' if mcp.settings.host == '0.0.0.0' else mcp.settings.host
+            logger.warning(
+                'HTTP transport requested but not yet supported in FastMCP. '
+                'Using SSE transport instead for remote connections.'
+            )
+            logger.info(
+                f'Running MCP server with SSE transport on {mcp.settings.host}:{mcp.settings.port}'
+            )
+            logger.info('=' * 60)
+            logger.info('MCP Server Access Information:')
+            logger.info(f'  Base URL: http://{display_host}:{mcp.settings.port}/')
+            logger.info(f'  SSE Endpoint: http://{display_host}:{mcp.settings.port}/sse')
+            logger.info('  Transport: SSE (Server-Sent Events)')
+            logger.info('=' * 60)
+            logger.info('For MCP clients, connect to the /sse endpoint above')
 
-        # Use SSE transport as fallback
-        await mcp.run_sse_async()
-    else:
-        raise ValueError(f'Unsupported transport: {mcp_config.transport}. Use "sse" or "stdio"')
+            # Configure uvicorn logging to match our format
+            configure_uvicorn_logging()
+
+            # Use SSE transport as fallback
+            await mcp.run_sse_async()
+        else:
+            raise ValueError(f'Unsupported transport: {mcp_config.transport}. Use "sse" or "stdio"')
+
+    finally:
+        # Always clean up on exit
+        if graphiti_service:
+            await graphiti_service.shutdown()
 
 
 def main():

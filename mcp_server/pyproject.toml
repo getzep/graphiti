@@ -10,7 +10,7 @@ allow-direct-references = true
 
 [project]
 name = "graphiti-mcp-varming"
-version = "1.0.5"
+version = "1.0.6"
 description = "Graphiti MCP Server - Enhanced fork with additional tools by Varming"
 readme = "README.md"
 requires-python = ">=3.10,<4"
@@ -31,7 +31,7 @@ classifiers = [
 dependencies = [
     "mcp>=1.21.0",
     "openai>=1.91.0",
-    "graphiti-core-varming>=0.23.1",  # Varming fork with database parameter fix (0.23.1+varming.1)
+    "graphiti-core-varming>=0.23.2",  # Varming fork with connection pool config (0.23.2)
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
 ]
@@ -46,7 +46,7 @@ Issues = "https://github.com/Varming73/graphiti/issues"
 
 [project.optional-dependencies]
 # FalkorDB support (Neo4j is included in graphiti-core-varming by default)
-falkordb = ["graphiti-core-varming[falkordb]>=0.23.1"]
+falkordb = ["graphiti-core-varming[falkordb]>=0.23.2"]
 
 # Azure support
 azure = [
@@ -82,7 +82,7 @@ all = [
 ]
 
 dev = [
-    "graphiti-core-varming>=0.23.1",
+    "graphiti-core-varming>=0.23.2",
     "httpx>=0.28.1",
     "mcp>=1.21.0",
     "pyright>=1.1.404",
