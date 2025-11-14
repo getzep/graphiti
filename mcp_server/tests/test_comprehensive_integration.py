@@ -464,7 +464,7 @@ class TestErrorHandling:
     async def test_timeout_handling(self):
         """Test timeout handling for long operations."""
         async with GraphitiTestClient() as client:
-            # Simulate a very large episode that might timeout
+            # Simulate a very large episode that might time out
             large_text = 'Large document content. ' * 10000
 
             result, metric = await client.call_tool_with_metrics(

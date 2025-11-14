@@ -244,7 +244,7 @@ class TestAsyncErrorHandling:
     async def test_timeout_recovery(self):
         """Test recovery from operation timeouts."""
         async with graphiti_test_client() as (session, group_id):
-            # Create a very large episode that might timeout
+            # Create a very large episode that might time out
             large_content = 'x' * 1000000  # 1MB of data
 
             with contextlib.suppress(asyncio.TimeoutError):
