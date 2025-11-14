@@ -53,9 +53,6 @@ neo4j_uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
 neo4j_password = os.environ.get("NEO4J_PASSWORD", "password")
 
-if not neo4j_uri or not neo4j_user or not neo4j_password:
-    raise ValueError("NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set")
-
 # Azure OpenAI connection parameters
 azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
 azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY")

@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 class AzureOpenAILLMClient(BaseOpenAIClient):
-    """Wrapper class for AsyncAzureOpenAI that implements the LLMClient interface."""
+    """Wrapper class for Azure OpenAI that implements the LLMClient interface.
+
+    Supports both AsyncAzureOpenAI and AsyncOpenAI (with Azure v1 API endpoint).
+    """
 
     # Class-level constants
     MAX_RETRIES: ClassVar[int] = 2
