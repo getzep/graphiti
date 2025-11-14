@@ -85,7 +85,8 @@ async def main():
 
     # Create LLM and Embedder clients
     llm_client = AzureOpenAILLMClient(
-        azure_client=azure_client, config=LLMConfig(small_model=azure_deployment)
+        azure_client=azure_client,
+        config=LLMConfig(model=azure_deployment, small_model=azure_deployment),
     )
     embedder_client = AzureOpenAIEmbedderClient(
         azure_client=azure_client, model=azure_embedding_deployment

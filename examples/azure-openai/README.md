@@ -92,7 +92,7 @@ azure_client = AsyncOpenAI(
 # Create LLM and Embedder clients
 llm_client = AzureOpenAILLMClient(
     azure_client=azure_client,
-    config=LLMConfig(small_model=azure_deployment)
+    config=LLMConfig(model=azure_deployment, small_model=azure_deployment)
 )
 embedder_client = AzureOpenAIEmbedderClient(
     azure_client=azure_client,

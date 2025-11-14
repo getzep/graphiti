@@ -409,7 +409,7 @@ azure_client = AsyncOpenAI(
 # Create LLM and Embedder clients
 llm_client = AzureOpenAILLMClient(
     azure_client=azure_client,
-    config=LLMConfig(small_model="gpt-5-mini")  # Your Azure deployment name
+    config=LLMConfig(model="gpt-5-mini", small_model="gpt-5-mini")  # Your Azure deployment name
 )
 embedder_client = AzureOpenAIEmbedderClient(
     azure_client=azure_client,
