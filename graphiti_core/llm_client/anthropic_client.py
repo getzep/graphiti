@@ -47,6 +47,9 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
+    'claude-sonnet-4-5-latest',
+    'claude-sonnet-4-5-20250929',
+    'claude-haiku-4-5-latest',
     'claude-3-7-sonnet-latest',
     'claude-3-7-sonnet-20250219',
     'claude-3-5-haiku-latest',
@@ -62,7 +65,7 @@ AnthropicModel = Literal[
     'claude-2.0',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 
 # Maximum output tokens for different Anthropic models
 # Based on official Anthropic documentation (as of 2025)

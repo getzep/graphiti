@@ -81,7 +81,7 @@ class TestAnthropicClientInitialization:
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
 
-        assert client.model == 'claude-3-7-sonnet-latest'
+        assert client.model == 'claude-haiku-4-5-latest'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
     def test_init_without_config(self):
@@ -89,7 +89,7 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
-        assert client.model == 'claude-3-7-sonnet-latest'
+        assert client.model == 'claude-haiku-4-5-latest'
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom AsyncAnthropic client."""
