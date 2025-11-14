@@ -38,11 +38,34 @@ class Neo4jDriver(GraphDriver):
         user: str | None,
         password: str | None,
         database: str = 'neo4j',
+        max_connection_pool_size: int = 200,
+        connection_timeout: float = 60.0,
+        max_connection_lifetime: float = 7200.0,
+        liveness_check_timeout: float = 60.0,
+        connection_acquisition_timeout: float = 120.0,
     ):
+        """Initialize Neo4j driver with connection pool configuration.
+
+        Args:
+            uri: Neo4j connection URI (bolt://, neo4j://, etc.)
+            user: Username for authentication
+            password: Password for authentication
+            database: Database name (default: 'neo4j')
+            max_connection_pool_size: Max connections per host (default: 200)
+            connection_timeout: Timeout for TCP connection (default: 60s)
+            max_connection_lifetime: Max time connection is kept (default: 7200s = 2hr)
+            liveness_check_timeout: Idle time before connection check (default: 60s)
+            connection_acquisition_timeout: Timeout to acquire connection (default: 120s)
+        """
         super().__init__()
         self.client = AsyncGraphDatabase.driver(
             uri=uri,
             auth=(user or '', password or ''),
+            max_connection_pool_size=max_connection_pool_size,
+            connection_timeout=connection_timeout,
+            max_connection_lifetime=max_connection_lifetime,
+            liveness_check_timeout=liveness_check_timeout,
+            connection_acquisition_timeout=connection_acquisition_timeout,
         )
         self._database = database
 
