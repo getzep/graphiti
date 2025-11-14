@@ -1,3 +1,0 @@
-graphiti-core
-python-dotenv
-openai

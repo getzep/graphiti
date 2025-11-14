@@ -12,10 +12,8 @@ This example demonstrates how to use Graphiti with Azure OpenAI and Neo4j to bui
 
 ### 1. Install Dependencies
 
-From the project root:
-
 ```bash
-uv sync --extra dev
+uv sync
 ```
 
 ### 2. Configure Environment Variables
@@ -69,7 +67,7 @@ For local development:
 
 ```bash
 cd examples/azure-openai
-python azure_openai_neo4j.py
+uv run azure_openai_neo4j.py
 ```
 
 ## What This Example Does
