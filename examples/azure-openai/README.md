@@ -46,11 +46,9 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 This example requires two Azure OpenAI model deployments:
 
 1. **Chat Completion Model**: Used for entity extraction and relationship analysis
-   - Recommended: GPT-4.1, GPT-4.1-mini, or GPT-4 Turbo
    - Set the deployment name in `AZURE_OPENAI_DEPLOYMENT`
 
 2. **Embedding Model**: Used for semantic search
-   - Recommended: text-embedding-3-small or text-embedding-3-large
    - Set the deployment name in `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`
 
 ### 4. Neo4j Setup
