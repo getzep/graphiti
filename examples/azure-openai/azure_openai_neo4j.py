@@ -59,7 +59,7 @@ if not neo4j_uri or not neo4j_user or not neo4j_password:
 azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 azure_api_key = os.environ.get('AZURE_OPENAI_API_KEY')
 azure_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', '2024-10-21')
-azure_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
+azure_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT', 'gpt-4.1')
 azure_embedding_deployment = os.environ.get(
     'AZURE_OPENAI_EMBEDDING_DEPLOYMENT', 'text-embedding-3-small'
 )

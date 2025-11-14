@@ -37,7 +37,7 @@ NEO4J_PASSWORD=your-password
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
 AZURE_OPENAI_API_KEY=your-api-key-here
 AZURE_OPENAI_API_VERSION=2024-10-21
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_DEPLOYMENT=gpt-4.1
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 ```
 
@@ -46,7 +46,7 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 This example requires two Azure OpenAI model deployments:
 
 1. **Chat Completion Model**: Used for entity extraction and relationship analysis
-   - Recommended: GPT-4, GPT-4 Turbo, or GPT-4.1
+   - Recommended: GPT-4.1, GPT-4.1-mini, or GPT-4 Turbo
    - Set the deployment name in `AZURE_OPENAI_DEPLOYMENT`
 
 2. **Embedding Model**: Used for semantic search
