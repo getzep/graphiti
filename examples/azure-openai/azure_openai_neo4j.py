@@ -22,11 +22,12 @@ from datetime import datetime, timezone
 from logging import INFO
 
 from dotenv import load_dotenv
-from openai import AsyncAzureOpenAI
+from openai import AsyncOpenAI
 
 from graphiti_core import Graphiti
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
+from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.nodes import EpisodeType
 
 #################################################
@@ -39,8 +40,8 @@ from graphiti_core.nodes import EpisodeType
 # Configure logging
 logging.basicConfig(
     level=INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -48,24 +49,23 @@ load_dotenv()
 
 # Neo4j connection parameters
 # Make sure Neo4j Desktop is running with a local DBMS started
-neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+neo4j_uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+neo4j_user = os.environ.get("NEO4J_USER", "neo4j")
+neo4j_password = os.environ.get("NEO4J_PASSWORD", "password")
 
 if not neo4j_uri or not neo4j_user or not neo4j_password:
-    raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
+    raise ValueError("NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set")
 
 # Azure OpenAI connection parameters
-azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
-azure_api_key = os.environ.get('AZURE_OPENAI_API_KEY')
-azure_api_version = os.environ.get('AZURE_OPENAI_API_VERSION', '2024-10-21')
-azure_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT', 'gpt-4.1')
+azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
 azure_embedding_deployment = os.environ.get(
-    'AZURE_OPENAI_EMBEDDING_DEPLOYMENT', 'text-embedding-3-small'
+    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small"
 )
 
 if not azure_endpoint or not azure_api_key:
-    raise ValueError('AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY must be set')
+    raise ValueError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY must be set")
 
 
 async def main():
@@ -78,14 +78,15 @@ async def main():
     #################################################
 
     # Initialize Azure OpenAI client
-    azure_client = AsyncAzureOpenAI(
-        azure_endpoint=azure_endpoint,
+    azure_client = AsyncOpenAI(
+        base_url=f"{azure_endpoint}/openai/v1/",
         api_key=azure_api_key,
-        api_version=azure_api_version,
     )
 
     # Create LLM and Embedder clients
-    llm_client = AzureOpenAILLMClient(azure_client=azure_client)
+    llm_client = AzureOpenAILLMClient(
+        azure_client=azure_client, config=LLMConfig(small_model=azure_deployment)
+    )
     embedder_client = AzureOpenAIEmbedderClient(
         azure_client=azure_client, model=azure_embedding_deployment
     )
@@ -113,38 +114,40 @@ async def main():
         # Episodes list containing both text and JSON episodes
         episodes = [
             {
-                'content': 'Kamala Harris is the Attorney General of California. She was previously '
-                'the district attorney for San Francisco.',
-                'type': EpisodeType.text,
-                'description': 'podcast transcript',
+                "content": "Kamala Harris is the Attorney General of California. She was previously "
+                "the district attorney for San Francisco.",
+                "type": EpisodeType.text,
+                "description": "podcast transcript",
             },
             {
-                'content': 'As AG, Harris was in office from January 3, 2011 – January 3, 2017',
-                'type': EpisodeType.text,
-                'description': 'podcast transcript',
+                "content": "As AG, Harris was in office from January 3, 2011 – January 3, 2017",
+                "type": EpisodeType.text,
+                "description": "podcast transcript",
             },
             {
-                'content': {
-                    'name': 'Gavin Newsom',
-                    'position': 'Governor',
-                    'state': 'California',
-                    'previous_role': 'Lieutenant Governor',
-                    'previous_location': 'San Francisco',
+                "content": {
+                    "name": "Gavin Newsom",
+                    "position": "Governor",
+                    "state": "California",
+                    "previous_role": "Lieutenant Governor",
+                    "previous_location": "San Francisco",
                 },
-                'type': EpisodeType.json,
-                'description': 'podcast metadata',
+                "type": EpisodeType.json,
+                "description": "podcast metadata",
             },
         ]
 
         # Add episodes to the graph
         for i, episode in enumerate(episodes):
             await graphiti.add_episode(
-                name=f'California Politics {i}',
-                episode_body=episode['content']
-                if isinstance(episode['content'], str)
-                else json.dumps(episode['content']),
-                source=episode['type'],
-                source_description=episode['description'],
+                name=f"California Politics {i}",
+                episode_body=(
+                    episode["content"]
+                    if isinstance(episode["content"], str)
+                    else json.dumps(episode["content"])
+                ),
+                source=episode["type"],
+                source_description=episode["description"],
                 reference_time=datetime.now(timezone.utc),
             )
             print(f'Added episode: California Politics {i} ({episode["type"].value})')
@@ -160,18 +163,18 @@ async def main():
 
         # Perform a hybrid search combining semantic similarity and BM25 retrieval
         print("\nSearching for: 'Who was the California Attorney General?'")
-        results = await graphiti.search('Who was the California Attorney General?')
+        results = await graphiti.search("Who was the California Attorney General?")
 
         # Print search results
-        print('\nSearch Results:')
+        print("\nSearch Results:")
         for result in results:
-            print(f'UUID: {result.uuid}')
-            print(f'Fact: {result.fact}')
-            if hasattr(result, 'valid_at') and result.valid_at:
-                print(f'Valid from: {result.valid_at}')
-            if hasattr(result, 'invalid_at') and result.invalid_at:
-                print(f'Valid until: {result.invalid_at}')
-            print('---')
+            print(f"UUID: {result.uuid}")
+            print(f"Fact: {result.fact}")
+            if hasattr(result, "valid_at") and result.valid_at:
+                print(f"Valid from: {result.valid_at}")
+            if hasattr(result, "invalid_at") and result.invalid_at:
+                print(f"Valid until: {result.invalid_at}")
+            print("---")
 
         #################################################
         # CENTER NODE SEARCH
@@ -186,25 +189,26 @@ async def main():
             # Get the source node UUID from the top result
             center_node_uuid = results[0].source_node_uuid
 
-            print('\nReranking search results based on graph distance:')
-            print(f'Using center node UUID: {center_node_uuid}')
+            print("\nReranking search results based on graph distance:")
+            print(f"Using center node UUID: {center_node_uuid}")
 
             reranked_results = await graphiti.search(
-                'Who was the California Attorney General?', center_node_uuid=center_node_uuid
+                "Who was the California Attorney General?",
+                center_node_uuid=center_node_uuid,
             )
 
             # Print reranked search results
-            print('\nReranked Search Results:')
+            print("\nReranked Search Results:")
             for result in reranked_results:
-                print(f'UUID: {result.uuid}')
-                print(f'Fact: {result.fact}')
-                if hasattr(result, 'valid_at') and result.valid_at:
-                    print(f'Valid from: {result.valid_at}')
-                if hasattr(result, 'invalid_at') and result.invalid_at:
-                    print(f'Valid until: {result.invalid_at}')
-                print('---')
+                print(f"UUID: {result.uuid}")
+                print(f"Fact: {result.fact}")
+                if hasattr(result, "valid_at") and result.valid_at:
+                    print(f"Valid from: {result.valid_at}")
+                if hasattr(result, "invalid_at") and result.invalid_at:
+                    print(f"Valid until: {result.invalid_at}")
+                print("---")
         else:
-            print('No results found in the initial search to use as center node.')
+            print("No results found in the initial search to use as center node.")
 
     finally:
         #################################################
@@ -216,8 +220,8 @@ async def main():
 
         # Close the connection
         await graphiti.close()
-        print('\nConnection closed')
+        print("\nConnection closed")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

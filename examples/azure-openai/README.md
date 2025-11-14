@@ -36,8 +36,7 @@ NEO4J_PASSWORD=your-password
 # Azure OpenAI settings
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
 AZURE_OPENAI_API_KEY=your-api-key-here
-AZURE_OPENAI_API_VERSION=2024-10-21
-AZURE_OPENAI_DEPLOYMENT=gpt-4.1
+AZURE_OPENAI_DEPLOYMENT=gpt-5-mini
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
 ```
 
@@ -80,18 +79,21 @@ uv run azure_openai_neo4j.py
 
 ### Azure OpenAI Integration
 
-The example shows how to configure Graphiti to use Azure OpenAI:
+The example shows how to configure Graphiti to use Azure OpenAI with the OpenAI v1 API:
 
 ```python
-# Initialize Azure OpenAI client
-azure_client = AsyncAzureOpenAI(
-    azure_endpoint=azure_endpoint,
+# Initialize Azure OpenAI client using the standard OpenAI client
+# with Azure's v1 API endpoint
+azure_client = AsyncOpenAI(
+    base_url=f"{azure_endpoint}/openai/v1/",
     api_key=azure_api_key,
-    api_version=azure_api_version,
 )
 
 # Create LLM and Embedder clients
-llm_client = AzureOpenAILLMClient(azure_client=azure_client)
+llm_client = AzureOpenAILLMClient(
+    azure_client=azure_client,
+    config=LLMConfig(small_model=azure_deployment)
+)
 embedder_client = AzureOpenAIEmbedderClient(
     azure_client=azure_client,
     model=azure_embedding_deployment
@@ -106,6 +108,8 @@ graphiti = Graphiti(
     embedder=embedder_client,
 )
 ```
+
+**Note**: This example uses Azure OpenAI's v1 API compatibility layer, which allows using the standard `AsyncOpenAI` client. The endpoint format is `https://your-resource-name.openai.azure.com/openai/v1/`.
 
 ### Episodes
 
