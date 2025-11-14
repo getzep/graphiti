@@ -73,6 +73,10 @@ DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 # Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
 # 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
 ANTHROPIC_MODEL_MAX_TOKENS = {
+    # Claude 4.5 models - 64K tokens
+    'claude-sonnet-4-5-latest': 65536,
+    'claude-sonnet-4-5-20250929': 65536,
+    'claude-haiku-4-5-latest': 65536,
     # Claude 3.7 models - standard 64K tokens
     'claude-3-7-sonnet-latest': 65536,
     'claude-3-7-sonnet-20250219': 65536,
