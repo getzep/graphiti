@@ -64,6 +64,34 @@ AnthropicModel = Literal[
 
 DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
 
+# Maximum output tokens for different Anthropic models
+# Based on official Anthropic documentation (as of 2025)
+# Note: These represent standard limits without beta headers.
+# Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
+# 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
+ANTHROPIC_MODEL_MAX_TOKENS = {
+    # Claude 3.7 models - standard 64K tokens
+    'claude-3-7-sonnet-latest': 65536,
+    'claude-3-7-sonnet-20250219': 65536,
+    # Claude 3.5 models
+    'claude-3-5-haiku-latest': 8192,
+    'claude-3-5-haiku-20241022': 8192,
+    'claude-3-5-sonnet-latest': 8192,
+    'claude-3-5-sonnet-20241022': 8192,
+    'claude-3-5-sonnet-20240620': 8192,
+    # Claude 3 models - 4K tokens
+    'claude-3-opus-latest': 4096,
+    'claude-3-opus-20240229': 4096,
+    'claude-3-sonnet-20240229': 4096,
+    'claude-3-haiku-20240307': 4096,
+    # Claude 2 models - 4K tokens
+    'claude-2.1': 4096,
+    'claude-2.0': 4096,
+}
+
+# Default max tokens for models not in the mapping
+DEFAULT_ANTHROPIC_MAX_TOKENS = 8192
+
 
 class AnthropicClient(LLMClient):
     """
@@ -177,6 +205,45 @@ class AnthropicClient(LLMClient):
         tool_choice_cast = typing.cast(ToolChoiceParam, tool_choice)
         return tool_list_cast, tool_choice_cast
 
+    def _get_max_tokens_for_model(self, model: str) -> int:
+        """Get the maximum output tokens for a specific Anthropic model.
+
+        Args:
+            model: The model name to look up
+
+        Returns:
+            int: The maximum output tokens for the model
+        """
+        return ANTHROPIC_MODEL_MAX_TOKENS.get(model, DEFAULT_ANTHROPIC_MAX_TOKENS)
+
+    def _resolve_max_tokens(self, requested_max_tokens: int | None, model: str) -> int:
+        """
+        Resolve the maximum output tokens to use based on precedence rules.
+
+        Precedence order (highest to lowest):
+        1. Explicit max_tokens parameter passed to generate_response()
+        2. Instance max_tokens set during client initialization
+        3. Model-specific maximum tokens from ANTHROPIC_MODEL_MAX_TOKENS mapping
+        4. DEFAULT_ANTHROPIC_MAX_TOKENS as final fallback
+
+        Args:
+            requested_max_tokens: The max_tokens parameter passed to generate_response()
+            model: The model name to look up model-specific limits
+
+        Returns:
+            int: The resolved maximum tokens to use
+        """
+        # 1. Use explicit parameter if provided
+        if requested_max_tokens is not None:
+            return requested_max_tokens
+
+        # 2. Use instance max_tokens if set during initialization
+        if self.max_tokens is not None:
+            return self.max_tokens
+
+        # 3. Use model-specific maximum or return DEFAULT_ANTHROPIC_MAX_TOKENS
+        return self._get_max_tokens_for_model(model)
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -204,12 +271,9 @@ class AnthropicClient(LLMClient):
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]]
         user_messages_cast = typing.cast(list[MessageParam], user_messages)
 
-        # TODO: Replace hacky min finding solution after fixing hardcoded EXTRACT_EDGES_MAX_TOKENS = 16384 in
-        # edge_operations.py. Throws errors with cheaper models that lower max_tokens.
-        max_creation_tokens: int = min(
-            max_tokens if max_tokens is not None else self.config.max_tokens,
-            DEFAULT_MAX_TOKENS,
-        )
+        # Resolve max_tokens dynamically based on the model's capabilities
+        # This allows different models to use their full output capacity
+        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, self.model)
 
         try:
             # Create the appropriate tool based on whether response_model is provided
