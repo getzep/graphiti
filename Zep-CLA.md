@@ -34,7 +34,7 @@ You are not expected to provide support for Your Contributions, except to the ex
 
 ## Third-Party Submissions
 
-Should You wish to submit work that is not Your original creation, You may submit it to Zep separately from any Contribution, identifying the complete details of its source and of any license or other restriction (including, but not limited to, related patents, trademarks, and license agreements) of which you are personally aware, and conspicuously marking the work as "Submitted on behalf of a third-party: [named here]".
+Should You wish to submit work that is not Your original creation, You may submit it to Zep separately from any Contribution, identifying the complete details of its source and of any license or other restriction (including, but not limited to, related patents, trademarks, and license agreements) of which you are personally aware, and conspicuously marking the work as "Submitted on behalf of a third party: [named here]".
 
 ## Notifications
 
