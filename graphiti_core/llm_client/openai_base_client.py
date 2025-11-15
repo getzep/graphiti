@@ -115,14 +115,21 @@ class BaseOpenAIClient(LLMClient):
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation."""
-        response_object = response.output_text
-
-        if response_object:
-            return json.loads(response_object)
-        elif response_object.refusal:
-            raise RefusalError(response_object.refusal)
+        # Check if the response has the beta output_text attribute
+        if hasattr(response, 'output_text') and response.output_text is not None:
+            response_content = response.output_text
+        elif hasattr(response, 'choices') and response.choices:
+            # Fallback to standard OpenAI chat completion content
+            response_content = response.choices[0].message.content
         else:
-            raise Exception(f'Invalid response from LLM: {response_object.model_dump()}')
+            raise Exception(f'Invalid response from LLM: {response}')
+
+        if response_content:
+            return json.loads(response_content)
+        elif hasattr(response, 'refusal') and response.refusal:
+            raise RefusalError(response.refusal)
+        else:
+            raise Exception(f'Invalid response from LLM: {response}')
 
     def _handle_json_response(self, response: Any) -> dict[str, Any]:
         """Handle JSON response parsing."""

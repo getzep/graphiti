@@ -125,6 +125,14 @@ class GroqProviderConfig(BaseModel):
     api_url: str = 'https://api.groq.com/openai/v1'
 
 
+class ChutesProviderConfig(BaseModel):
+    """Chutes provider configuration."""
+
+    api_key: str | None = None
+    api_url: str = 'https://llm.chutes.ai/v1'
+    embedding_url: str = 'https://chutes-qwen-qwen3-embedding-8b.chutes.ai/v1'
+
+
 class VoyageProviderConfig(BaseModel):
     """Voyage AI provider configuration."""
 
@@ -141,6 +149,7 @@ class LLMProvidersConfig(BaseModel):
     anthropic: AnthropicProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     groq: GroqProviderConfig | None = None
+    chutes: ChutesProviderConfig | None = None
 
 
 class LLMConfig(BaseModel):
@@ -162,6 +171,7 @@ class EmbedderProvidersConfig(BaseModel):
     azure_openai: AzureOpenAIProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     voyage: VoyageProviderConfig | None = None
+    chutes: ChutesProviderConfig | None = None
 
 
 class EmbedderConfig(BaseModel):

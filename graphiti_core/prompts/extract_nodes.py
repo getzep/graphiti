@@ -125,6 +125,12 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don
    - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
 
 {context['custom_prompt']}
+
+Response Format:
+Your response must be a JSON object with a single key: "extracted_entities".
+The value of "extracted_entities" must be a list of JSON objects, where each object has the following keys:
+- "name": The name of the extracted entity.
+- "entity_type_id": The ID of the classified entity type.
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -153,6 +159,12 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
 Given the above source description and JSON, extract relevant entities from the provided JSON.
 For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
 Indicate the classified entity type by providing its entity_type_id.
+
+Response Format:
+Your response must be a JSON object with a single key: "extracted_entities".
+The value of "extracted_entities" must be a list of JSON objects, where each object has the following keys:
+- "name": The name of the extracted entity.
+- "entity_type_id": The ID of the classified entity type.
 
 Guidelines:
 1. Extract all entities that the JSON represents. This will often be something like a "name" or "user" field
@@ -183,6 +195,12 @@ For each entity extracted, also determine its entity type based on the provided 
 Indicate the classified entity type by providing its entity_type_id.
 
 {context['custom_prompt']}
+
+Response Format:
+Your response must be a JSON object with a single key: "extracted_entities".
+The value of "extracted_entities" must be a list of JSON objects, where each object has the following keys:
+- "name": The name of the extracted entity.
+- "entity_type_id": The ID of the classified entity type.
 
 Guidelines:
 1. Extract significant entities, concepts, or actors mentioned in the conversation.

@@ -112,6 +112,16 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 {context['custom_prompt']}
 
+# RESPONSE FORMAT
+Your response must be a JSON object with a single key: "edges".
+The value of "edges" must be a list of JSON objects, where each object has the following keys:
+- "relation_type": A SCREAMING_SNAKE_CASE string representing the fact type (e.g., FOUNDED, WORKS_AT).
+- "source_entity_id": The ID of the source entity from the ENTITIES list.
+- "target_entity_id": The ID of the target entity from the ENTITIES list.
+- "fact": A natural language description of the relationship.
+- "valid_at": The start time of the relationship in ISO 8601 format (or null).
+- "invalid_at": The end time of the relationship in ISO 8601 format (or null).
+
 # EXTRACTION RULES
 
 1. **Entity ID Validation**: `source_entity_id` and `target_entity_id` must use only the `id` values from the ENTITIES list provided above.

@@ -44,6 +44,13 @@ except ImportError:
     HAS_VOYAGE_EMBEDDER = False
 
 try:
+    from services.chutes_client import ChutesEmbedderClient
+
+    HAS_CHUTES_EMBEDDER = True
+except ImportError:
+    HAS_CHUTES_EMBEDDER = False
+
+try:
     from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 
     HAS_AZURE_LLM = True
@@ -70,6 +77,12 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+try:
+    from services.chutes_client import ChutesLLMClient
+
+    HAS_CHUTES_LLM = True
+except ImportError:
+    HAS_CHUTES_LLM = False
 from utils.utils import create_azure_credential_token_provider
 
 
@@ -246,6 +259,27 @@ class LLMClientFactory:
                 )
                 return GroqClient(config=llm_config)
 
+            case 'chutes':
+                if not HAS_CHUTES_LLM:
+                    raise ValueError(
+                        'Chutes LLM client not available in current graphiti-core version'
+                    )
+                if not config.providers.chutes:
+                    raise ValueError('Chutes provider configuration not found')
+
+                api_key = config.providers.chutes.api_key
+                _validate_api_key('Chutes', api_key, logger)
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    base_url=config.providers.chutes.api_url,
+                    model=config.model,
+                    small_model=config.model,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                return ChutesLLMClient(config=llm_config)
+
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
 
@@ -355,6 +389,27 @@ class EmbedderFactory:
                     embedding_dim=config.dimensions or 1024,
                 )
                 return VoyageAIEmbedder(config=voyage_config)
+
+            case 'chutes':
+                if not HAS_CHUTES_EMBEDDER:
+                    raise ValueError(
+                        'Chutes embedder not available in current graphiti-core version'
+                    )
+                if not config.providers.chutes:
+                    raise ValueError('Chutes provider configuration not found')
+
+                api_key = config.providers.chutes.api_key
+                _validate_api_key('Chutes Embedder', api_key, logger)
+
+                from graphiti_core.embedder.chutes import ChutesEmbedderConfig
+
+                embedder_config = ChutesEmbedderConfig(
+                    api_key=api_key,
+                    base_url=config.providers.chutes.embedding_url,
+                    embedding_model=config.model,
+                    embedding_dim=config.dimensions,
+                )
+                return ChutesEmbedderClient(config=embedder_config)
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')

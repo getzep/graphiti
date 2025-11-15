@@ -35,6 +35,7 @@ pip install graphiti-core
 ```bash
 # Required for LLM and embedding
 export OPENAI_API_KEY=your_openai_api_key
+export CHUTES_API_TOKEN=your_chutes_api_key
 
 # Optional Neo4j connection parameters (defaults shown)
 export NEO4J_URI=bolt://localhost:7687
@@ -67,6 +68,9 @@ python quickstart_falkordb.py
 
 # For Amazon Neptune
 python quickstart_neptune.py
+
+# For Chutes
+python quickstart_chutes.py
 ```
 
 ## What This Example Demonstrates

@@ -752,7 +752,6 @@ async def get_status() -> StatusResponse:
             message=f'Graphiti MCP server is running but database connection failed: {error_msg}',
         )
 
-
 @mcp.custom_route('/health', methods=['GET'])
 async def health_check(request) -> JSONResponse:
     """Health check endpoint for Docker and load balancers."""
@@ -796,12 +795,12 @@ async def initialize_server() -> ServerConfig:
     # Provider selection arguments
     parser.add_argument(
         '--llm-provider',
-        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq'],
+        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq', 'chutes'],
         help='LLM provider to use',
     )
     parser.add_argument(
         '--embedder-provider',
-        choices=['openai', 'azure_openai', 'gemini', 'voyage'],
+        choices=['openai', 'azure_openai', 'gemini', 'voyage', 'chutes'],
         help='Embedder provider to use',
     )
     parser.add_argument(

@@ -180,6 +180,14 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         - Only use idx values that appear in EXISTING ENTITIES.
         - Set duplicate_idx to the smallest idx you collected for that entity, or -1 if duplicates is empty.
         - Never fabricate entities or indices.
+
+        Response Format:
+        Your response must be a JSON object with a single key: "entity_resolutions".
+        The value of "entity_resolutions" must be a list of JSON objects, where each object has the following keys:
+        - "id": The integer id from the ENTITIES list.
+        - "name": The best full name for the entity.
+        - "duplicate_idx": The index of the best duplicate match from EXISTING ENTITIES, or -1 if none.
+        - "duplicates": A sorted list of all duplicate indices from EXISTING ENTITIES.
         """,
         ),
     ]

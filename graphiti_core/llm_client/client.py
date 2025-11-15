@@ -223,6 +223,8 @@ class LLMClient(ABC):
             return 'gemini'
         elif 'groq' in class_name:
             return 'groq'
+        elif 'chutes' in class_name:
+            return 'chutes'
         else:
             return 'unknown'
 
