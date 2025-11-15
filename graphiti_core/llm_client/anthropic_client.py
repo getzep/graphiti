@@ -47,6 +47,9 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
+    'claude-sonnet-4-5-latest',
+    'claude-sonnet-4-5-20250929',
+    'claude-haiku-4-5-latest',
     'claude-3-7-sonnet-latest',
     'claude-3-7-sonnet-20250219',
     'claude-3-5-haiku-latest',
@@ -62,7 +65,7 @@ AnthropicModel = Literal[
     'claude-2.0',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 
 # Maximum output tokens for different Anthropic models
 # Based on official Anthropic documentation (as of 2025)
@@ -70,6 +73,10 @@ DEFAULT_MODEL: AnthropicModel = 'claude-3-7-sonnet-latest'
 # Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
 # 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
 ANTHROPIC_MODEL_MAX_TOKENS = {
+    # Claude 4.5 models - 64K tokens
+    'claude-sonnet-4-5-latest': 65536,
+    'claude-sonnet-4-5-20250929': 65536,
+    'claude-haiku-4-5-latest': 65536,
     # Claude 3.7 models - standard 64K tokens
     'claude-3-7-sonnet-latest': 65536,
     'claude-3-7-sonnet-20250219': 65536,
