@@ -8,8 +8,10 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+from uuid import UUID
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
@@ -19,6 +21,7 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from neo4j.exceptions import Neo4jError
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -223,24 +226,24 @@ for node in nodes:
 # Synthesize comprehensive answer from COMPLETE data
 ```
 
-### Example 3: Pattern Recognition
+### Example 3: Pattern Recognition (Research/Notes Context)
 
 ```python
-# User: "I'm feeling stressed today"
+# User: "Found another article about performance optimization"
 
-nodes = search_nodes(query="stress")
+nodes = search_nodes(query="performance optimization")
 connections = get_entity_connections(entity_uuid=nodes[0]['uuid'])
-# Discovers: stress ↔ work, sleep, project-deadline, coffee-intake
+# Discovers: performance ↔ caching, database-indexing, lazy-loading, CDN
 
 timeline = get_entity_timeline(entity_uuid=nodes[0]['uuid'])
-# Shows: First mentioned 3 months ago, frequency increasing
+# Shows: First researched 3 months ago, techniques evolving over time
 
 # Can now make informed observations based on complete data
 
 add_memory(
-    name="Stress discussion",
-    episode_body="Discussed stress today. User recognizes connection to
-                  project deadlines and sleep quality from our past conversations."
+    name="Performance research",
+    episode_body="New article discusses lazy loading techniques. Relates to
+                  our previous research on caching and database optimization."
 )
 ```
 
@@ -1593,6 +1596,11 @@ async def get_entity_connections(
     Returns:
         FactSearchResponse with all connected relationships and temporal metadata
 
+    Performance Notes:
+        - Fetches all connections from database, then filters/limits in application code
+        - For entities with 100+ connections, consider using smaller max_connections
+        - High-degree nodes (1000+ connections) may have slower response times
+
     Examples:
         # After finding entity
         nodes = search_nodes(query="Django project")
@@ -1612,6 +1620,12 @@ async def get_entity_connections(
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
+
+    # Validate UUID format
+    try:
+        UUID(entity_uuid)
+    except (ValueError, AttributeError):
+        return ErrorResponse(error='Invalid UUID format provided for entity_uuid')
 
     try:
         client = await graphiti_service.get_client()
@@ -1638,10 +1652,12 @@ async def get_entity_connections(
             message=f'Found {len(facts)} connection(s) for entity', facts=facts
         )
 
-    except Exception as e:
+    except (Neo4jError, ValueError, AttributeError) as e:
         error_msg = str(e)
-        logger.error(f'Error getting entity connections: {error_msg}')
-        return ErrorResponse(error=f'Error getting entity connections: {error_msg}')
+        logger.error(f'Error getting entity connections: {error_msg}', exc_info=True)
+        return ErrorResponse(
+            error='Failed to retrieve entity connections. Please check the entity UUID and try again.'
+        )
 
 
 @mcp.tool(
@@ -1679,7 +1695,7 @@ async def get_entity_timeline(
     Use Cases:
     - "When did we first discuss microservices architecture?"
     - "Show all mentions of the deployment pipeline"
-    - "Timeline of stress mentions"
+    - "Timeline of performance optimization research"
     - "How did our understanding of GraphQL evolve?"
 
     Args:
@@ -1689,6 +1705,11 @@ async def get_entity_timeline(
 
     Returns:
         EpisodeSearchResponse with episodes ordered chronologically
+
+    Performance Notes:
+        - Fetches all episodes from database, then sorts/limits in application code
+        - For entities mentioned in 100+ episodes, consider using smaller max_episodes
+        - Very frequently mentioned entities (1000+ episodes) may have slower response times
 
     Examples:
         # After finding entity
@@ -1710,6 +1731,12 @@ async def get_entity_timeline(
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate UUID format
+    try:
+        UUID(entity_uuid)
+    except (ValueError, AttributeError):
+        return ErrorResponse(error='Invalid UUID format provided for entity_uuid')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1720,8 +1747,8 @@ async def get_entity_timeline(
         if group_ids:
             episodes = [e for e in episodes if e.group_id in group_ids]
 
-        # Sort by valid_at (chronological order)
-        episodes.sort(key=lambda e: e.valid_at)
+        # Sort by valid_at (chronological order), handle None values
+        episodes.sort(key=lambda e: e.valid_at or datetime.min)
 
         # Limit results
         episodes = episodes[:max_episodes]
@@ -1751,10 +1778,12 @@ async def get_entity_timeline(
             episodes=episode_results,
         )
 
-    except Exception as e:
+    except (Neo4jError, ValueError, AttributeError) as e:
         error_msg = str(e)
-        logger.error(f'Error getting entity timeline: {error_msg}')
-        return ErrorResponse(error=f'Error getting entity timeline: {error_msg}')
+        logger.error(f'Error getting entity timeline: {error_msg}', exc_info=True)
+        return ErrorResponse(
+            error='Failed to retrieve entity timeline. Please check the entity UUID and try again.'
+        )
 
 
 @mcp.tool(
