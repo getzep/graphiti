@@ -115,33 +115,148 @@ config: GraphitiConfig
 
 # MCP server instructions
 GRAPHITI_MCP_INSTRUCTIONS = """
-Graphiti is a memory service for AI agents built on a knowledge graph. Graphiti performs well
-with dynamic data such as user interactions, changing enterprise data, and external information.
+Graphiti is a memory service for AI agents built on a knowledge graph. It transforms information
+into a richly connected knowledge network of entities and relationships.
 
-Graphiti transforms information into a richly connected knowledge network, allowing you to 
-capture relationships between concepts, entities, and information. The system organizes data as episodes 
-(content snippets), nodes (entities), and facts (relationships between entities), creating a dynamic, 
-queryable memory store that evolves with new information. Graphiti supports multiple data formats, including 
-structured JSON data, enabling seamless integration with existing data pipelines and systems.
+The system organizes data as:
+- **Episodes**: Content snippets (conversations, notes, documents)
+- **Nodes**: Entities (people, projects, concepts, decisions, anything)
+- **Facts**: Relationships between entities with temporal metadata
 
-Facts contain temporal metadata, allowing you to track the time of creation and whether a fact is invalid 
-(superseded by new information).
+## Core Workflow: SEARCH FIRST, THEN ADD
 
-Key capabilities:
-1. Add episodes (text, messages, or JSON) to the knowledge graph with the add_memory tool
-2. Search for nodes (entities) in the graph using natural language queries with search_nodes
-3. Find relevant facts (relationships between entities) with search_facts
-4. Retrieve specific entity edges or episodes by UUID
-5. Manage the knowledge graph with tools like delete_episode, delete_entity_edge, and clear_graph
+**Always explore existing knowledge before adding new information.**
 
-The server connects to a database for persistent storage and uses language models for certain operations. 
-Each piece of information is organized by group_id, allowing you to maintain separate knowledge domains.
+### WHEN ADDING INFORMATION:
 
-When adding information, provide descriptive names and detailed content to improve search quality. 
-When searching, use specific queries and consider filtering by group_id for more relevant results.
+```
+User provides information
+    ↓
+1. search_nodes(extract key entities/concepts)
+    ↓
+2. IF entities found:
+   → get_entity_connections(entity_uuid) - See what's already linked
+   → Optional: get_entity_timeline(entity_uuid) - Understand history
+    ↓
+3. add_memory(episode_body with explicit references to found entities)
+    ↓
+Result: New episode automatically connects to existing knowledge
+```
 
-For optimal performance, ensure the database is properly configured and accessible, and valid 
-API keys are provided for any language model operations.
+### WHEN RETRIEVING INFORMATION:
+
+```
+User asks question
+    ↓
+1. search_nodes(extract keywords from question)
+    ↓
+2. For relevant entities:
+   → get_entity_connections(uuid) - Explore neighborhood
+   → get_entity_timeline(uuid) - See evolution/history
+    ↓
+3. Optional: search_memory_facts(semantic query) - Find specific relationships
+    ↓
+Result: Comprehensive answer from complete graph context
+```
+
+## Tool Selection Guide
+
+**Finding entities:**
+- `search_nodes` - Semantic search for entities by keywords/description
+
+**Exploring connections:**
+- `get_entity_connections` - **ALL** relationships for an entity (complete, direct graph traversal)
+- `search_memory_facts` - Semantic search for relationships (query-driven, may miss some)
+
+**Understanding history:**
+- `get_entity_timeline` - **ALL** episodes mentioning an entity (chronological, complete)
+
+**Adding information:**
+- `add_memory` - Store new episodes (AFTER searching existing knowledge)
+
+**Retrieval vs Graph Traversal:**
+- Use `get_entity_connections` when you need COMPLETE data (pattern detection, exploration)
+- Use `search_memory_facts` when you have a specific semantic query
+
+## Examples
+
+### Example 1: Adding Technical Decision
+
+```python
+# ❌ BAD: Creates disconnected node
+add_memory(
+    name="Database choice",
+    episode_body="Chose PostgreSQL for new service"
+)
+
+# ✅ GOOD: Connects to existing knowledge
+nodes = search_nodes(query="database architecture microservices")
+# Found: MySQL (main db), Redis (cache), microservices pattern
+
+connections = get_entity_connections(entity_uuid=nodes[0]['uuid'])
+# Sees: MySQL connects to user-service, payment-service
+
+add_memory(
+    name="Database choice",
+    episode_body="Chose PostgreSQL for new notification-service. Different from
+                  existing MySQL used by user-service and payment-service because
+                  we need better JSON support for notification templates."
+)
+# Result: Rich connections created automatically
+```
+
+### Example 2: Exploring Project Context
+
+```python
+# User asks: "What database considerations do we have?"
+
+nodes = search_nodes(query="database")
+# Returns: PostgreSQL, MySQL, Redis entities
+
+for node in nodes:
+    connections = get_entity_connections(entity_uuid=node['uuid'])
+    # Shows ALL services, constraints, decisions connected to each database
+
+    timeline = get_entity_timeline(entity_uuid=node['uuid'])
+    # Shows when each database was discussed, decisions made over time
+
+# Synthesize comprehensive answer from COMPLETE data
+```
+
+### Example 3: Pattern Recognition
+
+```python
+# User: "I'm feeling stressed today"
+
+nodes = search_nodes(query="stress")
+connections = get_entity_connections(entity_uuid=nodes[0]['uuid'])
+# Discovers: stress ↔ work, sleep, project-deadline, coffee-intake
+
+timeline = get_entity_timeline(entity_uuid=nodes[0]['uuid'])
+# Shows: First mentioned 3 months ago, frequency increasing
+
+# Can now make informed observations based on complete data
+
+add_memory(
+    name="Stress discussion",
+    episode_body="Discussed stress today. User recognizes connection to
+                  project deadlines and sleep quality from our past conversations."
+)
+```
+
+## Key Principles
+
+1. **Always search before adding** - Even for trivial data
+2. **Reference found entities by name** - Creates automatic connections
+3. **Use complete data for patterns** - Graph traversal, not semantic guessing
+4. **Track evolution over time** - Timeline shows how understanding changed
+
+## Technical Notes
+
+- All tools respect `group_id` filtering for namespace isolation
+- Temporal metadata tracks both creation time and domain time
+- Facts can be invalidated (superseded) without deletion
+- Processing is asynchronous - episodes queued for background processing
 """
 
 # MCP server instance
@@ -384,14 +499,21 @@ async def add_memory(
 ) -> SuccessResponse | ErrorResponse:
     """Add information to memory. **This is the PRIMARY method for storing information.**
 
-    **PRIORITY: Use this tool FIRST when storing any information.**
+    **⚠️ IMPORTANT: SEARCH FIRST, THEN ADD**
+
+    Before using this tool, always:
+    1. Search for related entities: search_nodes(query="relevant keywords")
+    2. Explore their connections: get_entity_connections(entity_uuid=found_uuid)
+    3. Then add with context: Reference found entities by name in episode_body
+
+    This creates rich automatic connections instead of isolated nodes.
 
     Processes content asynchronously, automatically extracting entities, relationships,
     and deduplicating similar information. Returns immediately while processing continues
     in background.
 
     WHEN TO USE THIS TOOL:
-    - Storing information → add_memory (this tool) **USE THIS FIRST**
+    - Storing information → add_memory (this tool) **USE AFTER SEARCHING**
     - Searching information → use search_nodes or search_memory_facts
     - Deleting information → use delete_episode or delete_entity_edge
 
@@ -1424,6 +1546,215 @@ async def clear_graph(
         error_msg = str(e)
         logger.error(f'Error clearing graph: {error_msg}')
         return ErrorResponse(error=f'Error clearing graph: {error_msg}')
+
+
+@mcp.tool(
+    annotations={
+        'title': 'Get Entity Connections',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
+async def get_entity_connections(
+    entity_uuid: str,
+    group_ids: list[str] | None = None,
+    max_connections: int = 50,
+) -> FactSearchResponse | ErrorResponse:
+    """Get ALL relationships connected to a specific entity. **Complete graph traversal.**
+
+    **Use this to explore what's already known about an entity before adding new information.**
+
+    Unlike search_memory_facts which requires a semantic query, this performs direct graph
+    traversal to return EVERY relationship where the entity is involved. Guarantees completeness.
+
+    WHEN TO USE THIS TOOL:
+    - Exploring entity neighborhood → get_entity_connections **USE THIS**
+    - Before adding related info → get_entity_connections **USE THIS**
+    - Pattern detection (need complete data) → get_entity_connections **USE THIS**
+    - Understanding full context without formulating queries
+
+    WHEN NOT to use:
+    - Specific semantic query → use search_memory_facts instead
+    - Finding entities → use search_nodes instead
+
+    Use Cases:
+    - "Show everything connected to PostgreSQL decision"
+    - "What's linked to the authentication service?"
+    - "All relationships for Django project"
+    - Before adding: "Let me see what's already known about X"
+
+    Args:
+        entity_uuid: UUID of entity to explore (from search_nodes or previous results)
+        group_ids: Optional list of namespaces to filter connections
+        max_connections: Maximum relationships to return (default: 50)
+
+    Returns:
+        FactSearchResponse with all connected relationships and temporal metadata
+
+    Examples:
+        # After finding entity
+        nodes = search_nodes(query="Django project")
+        django_uuid = nodes[0]['uuid']
+
+        # Get all connections
+        connections = get_entity_connections(entity_uuid=django_uuid)
+
+        # Limited results for specific namespace
+        connections = get_entity_connections(
+            entity_uuid=django_uuid,
+            group_ids=["work"],
+            max_connections=20
+        )
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        # Use existing EntityEdge.get_by_node_uuid() method
+        edges = await EntityEdge.get_by_node_uuid(client.driver, entity_uuid)
+
+        # Filter by group_ids if provided
+        if group_ids:
+            edges = [e for e in edges if e.group_id in group_ids]
+
+        # Limit results
+        edges = edges[:max_connections]
+
+        if not edges:
+            return FactSearchResponse(
+                message=f'No connections found for entity {entity_uuid}', facts=[]
+            )
+
+        # Format using existing formatter
+        facts = [format_fact_result(edge) for edge in edges]
+
+        return FactSearchResponse(
+            message=f'Found {len(facts)} connection(s) for entity', facts=facts
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error getting entity connections: {error_msg}')
+        return ErrorResponse(error=f'Error getting entity connections: {error_msg}')
+
+
+@mcp.tool(
+    annotations={
+        'title': 'Get Entity Timeline',
+        'readOnlyHint': True,
+        'destructiveHint': False,
+        'idempotentHint': True,
+        'openWorldHint': True,
+    },
+)
+async def get_entity_timeline(
+    entity_uuid: str,
+    group_ids: list[str] | None = None,
+    max_episodes: int = 20,
+) -> EpisodeSearchResponse | ErrorResponse:
+    """Get chronological episode history for an entity. **Shows evolution over time.**
+
+    **Use this to understand how an entity was discussed across conversations.**
+
+    Returns ALL episodes where this entity was mentioned, in chronological order.
+    Shows the full conversational history and temporal evolution of concepts, decisions,
+    or any tracked entity.
+
+    WHEN TO USE THIS TOOL:
+    - Understanding entity history → get_entity_timeline **USE THIS**
+    - "When did we discuss X?" → get_entity_timeline **USE THIS**
+    - Tracking evolution over time → get_entity_timeline **USE THIS**
+    - Seeing context from original sources
+
+    WHEN NOT to use:
+    - Semantic search across all episodes → use search_episodes instead
+    - Finding entities → use search_nodes instead
+
+    Use Cases:
+    - "When did we first discuss microservices architecture?"
+    - "Show all mentions of the deployment pipeline"
+    - "Timeline of stress mentions"
+    - "How did our understanding of GraphQL evolve?"
+
+    Args:
+        entity_uuid: UUID of entity (from search_nodes or previous results)
+        group_ids: Optional list of namespaces to filter episodes
+        max_episodes: Maximum episodes to return (default: 20, chronological)
+
+    Returns:
+        EpisodeSearchResponse with episodes ordered chronologically
+
+    Examples:
+        # After finding entity
+        nodes = search_nodes(query="microservices")
+        arch_uuid = nodes[0]['uuid']
+
+        # Get conversation history
+        timeline = get_entity_timeline(entity_uuid=arch_uuid)
+
+        # Recent episodes only for specific namespace
+        timeline = get_entity_timeline(
+            entity_uuid=arch_uuid,
+            group_ids=["architecture"],
+            max_episodes=10
+        )
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        # Use existing EpisodicNode.get_by_entity_node_uuid() method
+        episodes = await EpisodicNode.get_by_entity_node_uuid(client.driver, entity_uuid)
+
+        # Filter by group_ids if provided
+        if group_ids:
+            episodes = [e for e in episodes if e.group_id in group_ids]
+
+        # Sort by valid_at (chronological order)
+        episodes.sort(key=lambda e: e.valid_at)
+
+        # Limit results
+        episodes = episodes[:max_episodes]
+
+        if not episodes:
+            return EpisodeSearchResponse(
+                message=f'No episodes found mentioning entity {entity_uuid}', episodes=[]
+            )
+
+        # Format episodes
+        episode_results = []
+        for ep in episodes:
+            episode_results.append(
+                {
+                    'uuid': ep.uuid,
+                    'name': ep.name,
+                    'content': ep.content,
+                    'valid_at': ep.valid_at.isoformat() if ep.valid_at else None,
+                    'created_at': ep.created_at.isoformat() if ep.created_at else None,
+                    'source': ep.source.value if ep.source else None,
+                    'group_id': ep.group_id,
+                }
+            )
+
+        return EpisodeSearchResponse(
+            message=f'Found {len(episode_results)} episode(s) mentioning entity',
+            episodes=episode_results,
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error getting entity timeline: {error_msg}')
+        return ErrorResponse(error=f'Error getting entity timeline: {error_msg}')
 
 
 @mcp.tool(

@@ -782,8 +782,8 @@ wheels = [
 ]
 
 [[package]]
-name = "graphiti-core"
-version = "0.23.0"
+name = "graphiti-core-varming"
+version = "0.23.2"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },

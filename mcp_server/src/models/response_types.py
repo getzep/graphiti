@@ -1,6 +1,7 @@
 """Response type definitions for Graphiti MCP Server."""
 
 from typing import Any
+
 from typing_extensions import TypedDict
 
 
