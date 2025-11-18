@@ -106,7 +106,7 @@ class Neo4jDriver(GraphDriver):
                 for query in index_queries
             ]
         )
-    
+
     async def health_check(self) -> None:
         """Check Neo4j connectivity by running the driver's verify_connectivity method."""
         try:

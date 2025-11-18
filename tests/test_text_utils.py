@@ -87,7 +87,7 @@ def test_truncate_at_sentence_strips_trailing_whitespace():
 
 def test_max_summary_chars_constant():
     """Test that MAX_SUMMARY_CHARS is set to expected value."""
-    assert MAX_SUMMARY_CHARS == 250
+    assert MAX_SUMMARY_CHARS == 500
 
 
 def test_truncate_at_sentence_realistic_summary():

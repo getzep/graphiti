@@ -17,7 +17,7 @@ limitations under the License.
 import re
 
 # Maximum length for entity/node summaries
-MAX_SUMMARY_CHARS = 250
+MAX_SUMMARY_CHARS = 500
 
 
 def truncate_at_sentence(text: str, max_chars: int) -> str:
