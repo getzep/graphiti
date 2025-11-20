@@ -45,7 +45,7 @@ else:
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gemini-2.5-flash'
-DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
+DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite'
 
 # Maximum output tokens for different Gemini models
 GEMINI_MODEL_MAX_TOKENS = {
@@ -53,7 +53,6 @@ GEMINI_MODEL_MAX_TOKENS = {
     'gemini-2.5-pro': 65536,
     'gemini-2.5-flash': 65536,
     'gemini-2.5-flash-lite': 64000,
-    'models/gemini-2.5-flash-lite-preview-06-17': 64000,
     # Gemini 2.0 models
     'gemini-2.0-flash': 8192,
     'gemini-2.0-flash-lite': 8192,

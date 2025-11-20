@@ -37,7 +37,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
+DEFAULT_MODEL = 'gemini-2.5-flash-lite'
 
 
 class GeminiRerankerClient(CrossEncoderClient):

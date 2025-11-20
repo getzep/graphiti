@@ -455,7 +455,6 @@ class TestGeminiClientGenerateResponse:
             ('gemini-2.5-flash', 65536),
             ('gemini-2.5-pro', 65536),
             ('gemini-2.5-flash-lite', 64000),
-            ('models/gemini-2.5-flash-lite-preview-06-17', 64000),
             ('gemini-2.0-flash', 8192),
             ('gemini-1.5-pro', 8192),
             ('gemini-1.5-flash', 8192),
