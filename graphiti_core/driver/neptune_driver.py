@@ -24,7 +24,23 @@ import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
-from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.driver import (
+    GraphDriver,
+    GraphDriverSession,
+    GraphProvider,
+    QueryLanguage,
+)
+
+# Gremlin imports are optional - only needed when using Gremlin query language
+try:
+    from gremlin_python.driver import client as gremlin_client
+    from gremlin_python.driver import serializer
+
+    GREMLIN_AVAILABLE = True
+except ImportError:
+    GREMLIN_AVAILABLE = False
+    gremlin_client = None  # type: ignore
+    serializer = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
@@ -109,7 +125,14 @@ aoss_indices = [
 class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
-    def __init__(self, host: str, aoss_host: str, port: int = 8182, aoss_port: int = 443):
+    def __init__(
+        self,
+        host: str,
+        aoss_host: str,
+        port: int = 8182,
+        aoss_port: int = 443,
+        query_language: QueryLanguage = QueryLanguage.CYPHER,
+    ):
         """This initializes a NeptuneDriver for use with Neptune as a backend
 
         Args:
@@ -117,24 +140,59 @@ class NeptuneDriver(GraphDriver):
             aoss_host (str): The OpenSearch host value
             port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
             aoss_port (int, optional): The OpenSearch port. Defaults to 443.
+            query_language (QueryLanguage, optional): Query language to use (CYPHER or GREMLIN). Defaults to CYPHER.
         """
         if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
-        if host.startswith('neptune-db://'):
-            # This is a Neptune Database Cluster
-            endpoint = host.replace('neptune-db://', '')
-            self.client = NeptuneGraph(endpoint, port)
-            logger.debug('Creating Neptune Database session for %s', host)
-        elif host.startswith('neptune-graph://'):
-            # This is a Neptune Analytics Graph
-            graphId = host.replace('neptune-graph://', '')
-            self.client = NeptuneAnalyticsGraph(graphId)
-            logger.debug('Creating Neptune Graph session for %s', host)
-        else:
-            raise ValueError(
-                'You must provide an endpoint to create a NeptuneDriver as either neptune-db://<endpoint> or neptune-graph://<graphid>'
-            )
+        self.query_language = query_language
+        self.host = host
+        self.port = port
+
+        # Initialize Cypher client if using Cypher or as fallback
+        if query_language == QueryLanguage.CYPHER or host.startswith('neptune-graph://'):
+            if host.startswith('neptune-db://'):
+                # This is a Neptune Database Cluster
+                endpoint = host.replace('neptune-db://', '')
+                self.cypher_client = NeptuneGraph(endpoint, port)
+                logger.debug('Creating Neptune Database Cypher session for %s', host)
+            elif host.startswith('neptune-graph://'):
+                # This is a Neptune Analytics Graph
+                graphId = host.replace('neptune-graph://', '')
+                self.cypher_client = NeptuneAnalyticsGraph(graphId)
+                logger.debug('Creating Neptune Analytics Cypher session for %s', host)
+            else:
+                raise ValueError(
+                    'You must provide an endpoint to create a NeptuneDriver as either neptune-db://<endpoint> or neptune-graph://<graphid>'
+                )
+            # For backwards compatibility
+            self.client = self.cypher_client
+
+        # Initialize Gremlin client if using Gremlin
+        if query_language == QueryLanguage.GREMLIN:
+            if not GREMLIN_AVAILABLE:
+                raise ImportError(
+                    'gremlinpython is required for Gremlin query language support. '
+                    'Install it with: pip install gremlinpython or pip install graphiti-core[neptune]'
+                )
+
+            if host.startswith('neptune-db://'):
+                endpoint = host.replace('neptune-db://', '')
+                gremlin_endpoint = f'wss://{endpoint}:{port}/gremlin'
+                self.gremlin_client = gremlin_client.Client(  # type: ignore
+                    gremlin_endpoint,
+                    'g',
+                    message_serializer=serializer.GraphSONSerializersV3d0(),  # type: ignore
+                )
+                logger.debug('Creating Neptune Database Gremlin session for %s', host)
+            elif host.startswith('neptune-graph://'):
+                raise ValueError(
+                    'Neptune Analytics does not support Gremlin. Please use QueryLanguage.CYPHER for Neptune Analytics.'
+                )
+            else:
+                raise ValueError(
+                    'You must provide an endpoint to create a NeptuneDriver as either neptune-db://<endpoint> or neptune-graph://<graphid>'
+                )
 
         if not aoss_host:
             raise ValueError('You must provide an AOSS endpoint to create an OpenSearch driver.')
@@ -189,36 +247,75 @@ class NeptuneDriver(GraphDriver):
             return query
 
     async def execute_query(
-        self, cypher_query_, **kwargs: Any
-    ) -> tuple[dict[str, Any], None, None]:
+        self, query_string: str, **kwargs: Any
+    ) -> tuple[dict[str, Any] | list[Any], None, None]:
         params = dict(kwargs)
-        if isinstance(cypher_query_, list):
-            for q in cypher_query_:
+        if isinstance(query_string, list):
+            result = None
+            for q in query_string:
                 result, _, _ = self._run_query(q[0], q[1])
-            return result, None, None
+            return result, None, None  # type: ignore
         else:
-            return self._run_query(cypher_query_, params)
+            return self._run_query(query_string, params)
 
-    def _run_query(self, cypher_query_, params):
-        cypher_query_ = str(self._sanitize_parameters(cypher_query_, params))
+    def _run_query(
+        self, query_string: str, params: dict
+    ) -> tuple[dict[str, Any] | list[Any], None, None]:
+        if self.query_language == QueryLanguage.GREMLIN:
+            return self._run_gremlin_query(query_string, params)
+        else:
+            return self._run_cypher_query(query_string, params)
+
+    def _run_cypher_query(self, cypher_query: str, params: dict):
+        cypher_query = str(self._sanitize_parameters(cypher_query, params))
         try:
-            result = self.client.query(cypher_query_, params=params)
+            result = self.cypher_client.query(cypher_query, params=params)
         except Exception as e:
-            logger.error('Query: %s', cypher_query_)
+            logger.error('Cypher Query: %s', cypher_query)
             logger.error('Parameters: %s', params)
-            logger.error('Error executing query: %s', e)
+            logger.error('Error executing Cypher query: %s', e)
             raise e
 
         return result, None, None
+
+    def _run_gremlin_query(self, gremlin_query: str, params: dict):
+        try:
+            # Submit the Gremlin query with parameters (bindings)
+            result_set = self.gremlin_client.submit(gremlin_query, bindings=params)
+            # Convert the result set to a list of dictionaries
+            results = []
+            for result in result_set:
+                if isinstance(result, dict):
+                    results.append(result)
+                elif hasattr(result, '__dict__'):
+                    # Convert objects to dictionaries if possible
+                    results.append(vars(result))
+                else:
+                    # Wrap primitive values
+                    results.append({'value': result})
+            return results, None, None
+        except Exception as e:
+            logger.error('Gremlin Query: %s', gremlin_query)
+            logger.error('Parameters: %s', params)
+            logger.error('Error executing Gremlin query: %s', e)
+            raise e
 
     def session(self, database: str | None = None) -> GraphDriverSession:
         return NeptuneDriverSession(driver=self)
 
     async def close(self) -> None:
-        return self.client.client.close()
+        if hasattr(self, 'cypher_client'):
+            self.cypher_client.client.close()
+        if hasattr(self, 'gremlin_client'):
+            self.gremlin_client.close()
 
     async def _delete_all_data(self) -> Any:
-        return await self.execute_query('MATCH (n) DETACH DELETE n')
+        if self.query_language == QueryLanguage.GREMLIN:
+            from graphiti_core.graph_queries import gremlin_delete_all_nodes
+
+            return await self.execute_query(gremlin_delete_all_nodes())
+        else:
+            return await self.execute_query('MATCH (n) DETACH DELETE n')
 
     def delete_all_indexes(self) -> Coroutine[Any, Any, Any]:
         return self.delete_all_indexes_impl()
