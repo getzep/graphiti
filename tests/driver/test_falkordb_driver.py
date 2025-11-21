@@ -70,6 +70,30 @@ class TestFalkorDriver:
         """Test driver provider identification."""
         assert self.driver.provider == GraphProvider.FALKORDB
 
+    def test_init_with_lite_uses_redislite_adapter(self):
+        """Test initialization with lite=True uses redislite client adapter.
+
+        We don't require falkordb for this test as we patch the redislite import path.
+        """
+        import sys
+        import types
+
+        # Create a fake redislite.falkordb_client module with FalkorDB class
+        fake_redislite = types.ModuleType('redislite')
+        fake_client_mod = types.ModuleType('redislite.falkordb_client')
+        fake_client_mod.FalkorDB = MagicMock()
+
+        with patch.dict(sys.modules, {
+            'redislite': fake_redislite,
+            'redislite.falkordb_client': fake_client_mod,
+        }):
+            from graphiti_core.driver.falkordb_driver import FalkorDriver as _FD
+
+            try:
+                _FD(lite=True, database='default_db')
+            except Exception as e:
+                pytest.fail(f'Lite initialization raised unexpectedly: {e}')
+
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_get_graph_with_name(self):
         """Test _get_graph with specific graph name."""
