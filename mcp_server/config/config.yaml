@@ -6,13 +6,13 @@
 # See README.md "Concurrency and LLM Provider 429 Rate Limit Errors" section for tuning guidance
 
 server:
-  transport: "http"  # Options: stdio, sse (deprecated), http
+  transport: "sse"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
   port: 8000
   
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-5-mini"
+  model: ${MODEL_NAME:"gpt-4o"}
   max_tokens: 4096
   
   providers:
@@ -71,7 +71,7 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: "neo4j"  # Default: falkordb. Options: neo4j, falkordb
 
   providers:
     falkordb:
