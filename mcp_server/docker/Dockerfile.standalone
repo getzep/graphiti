@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Standalone Graphiti MCP Server Image
-# This image runs only the MCP server and connects to an external database (Neo4j or FalkorDB)
+# This image runs only the MCP server and connects to an external database (Neo4j, FalkorDB or Neptune)
 
 FROM python:3.11-slim-bookworm
 
