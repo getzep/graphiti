@@ -201,7 +201,20 @@ class NeptuneProviderConfig(BaseModel):
     region: str | None = None
 
     def model_post_init(self, __context) -> None:
-        """Validate Neptune-specific requirements."""
+        """Validate and normalize Neptune-specific requirements."""
+        # Auto-detect and add protocol if missing
+        if not self.host.startswith(('neptune-db://', 'neptune-graph://', 'bolt://', 'http://', 'https://')):
+            # Check if it looks like a Neptune Analytics graph ID (starts with 'g-')
+            if self.host.startswith('g-'):
+                self.host = f'neptune-graph://{self.host}'
+            # Check if it contains 'neptune.amazonaws.com' (Neptune Database cluster)
+            elif 'neptune.amazonaws.com' in self.host:
+                self.host = f'neptune-db://{self.host}'
+            # Otherwise default to Neptune Database protocol
+            else:
+                self.host = f'neptune-db://{self.host}'
+
+        # Validate protocol is correct
         if not self.host.startswith(('neptune-db://', 'neptune-graph://')):
             raise ValueError(
                 'Neptune host must start with neptune-db:// or neptune-graph://\n'
