@@ -228,6 +228,23 @@ class GraphitiService:
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
                     )
+                elif self.config.database.provider.lower() == 'neptune':
+                    # For Neptune, create a NeptuneDriver instance directly
+                    from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+                    neptune_driver = NeptuneDriver(
+                        host=db_config['host'],
+                        aoss_host=db_config['aoss_host'],
+                        port=db_config['port'],
+                        aoss_port=db_config['aoss_port'],
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=neptune_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
                 else:
                     # For Neo4j (default), use the original approach
                     self.client = Graphiti(
@@ -264,6 +281,25 @@ class GraphitiService:
                             f'  - Using Docker Compose: cd mcp_server && docker compose -f docker/docker-compose-neo4j.yml up\n'
                             f'  - Or install Neo4j Desktop from: https://neo4j.com/download/\n'
                             f'  - Or run Neo4j manually: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n\n'
+                            f'{"=" * 70}\n'
+                        ) from db_error
+                    elif db_provider.lower() == 'neptune':
+                        raise RuntimeError(
+                            f'\n{"=" * 70}\n'
+                            f'Database Connection Error: Neptune is not accessible\n'
+                            f'{"=" * 70}\n\n'
+                            f'Neptune: {db_config.get("host", "unknown")}\n'
+                            f'OpenSearch: {db_config.get("aoss_host", "unknown")}\n\n'
+                            f'Troubleshooting:\n'
+                            f'  1. Verify Neptune endpoint format (neptune-db:// or neptune-graph://)\n'
+                            f'  2. Check AWS credentials: aws sts get-caller-identity\n'
+                            f'  3. Verify security groups allow access\n'
+                            f'  4. Confirm OpenSearch Serverless endpoint is accessible\n'
+                            f'  5. Check IAM permissions (neptune-db:*, aoss:*, neptune-graph:*)\n\n'
+                            f'AWS Setup:\n'
+                            f'  - Region: {db_config.get("region", "not set")}\n'
+                            f'  - Run: aws neptune describe-db-clusters (for Database)\n'
+                            f'  - Run: aws neptune-graph list-graphs (for Analytics)\n\n'
                             f'{"=" * 70}\n'
                         ) from db_error
                     else:
@@ -806,7 +842,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
+        choices=['neo4j', 'falkordb', 'neptune'],
         help='Database provider to use',
     )
 

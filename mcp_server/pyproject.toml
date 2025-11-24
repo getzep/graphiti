@@ -1,13 +1,13 @@
 [project]
 name = "mcp-server"
-version = "1.0.1"
+version = "1.0.2"
 description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
     "mcp>=1.9.4",
     "openai>=1.91.0",
-    "graphiti-core[falkordb]>=0.23.1",
+    "graphiti-core[falkordb,neptune]>=0.23.1",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0",
     "typing-extensions>=4.0.0",
