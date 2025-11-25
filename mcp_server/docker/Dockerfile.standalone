@@ -28,7 +28,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.24.1
+ARG GRAPHITI_CORE_VERSION=0.24.2
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
