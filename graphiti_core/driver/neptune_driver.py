@@ -29,6 +29,38 @@ from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphPr
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
 
+
+class GraphitiNeptuneGraph(NeptuneGraph):
+    """
+    Custom NeptuneGraph subclass that uses pre-defined Graphiti schema
+    instead of calling Neptune's expensive statistics API.
+    """
+
+    # Define Graphiti schema to avoid expensive statistics API calls
+    GRAPHITI_SCHEMA = """
+Node labels: Episodic, Entity, Community
+Relationship types: MENTIONS, RELATES_TO, HAS_MEMBER
+Node properties:
+  Episodic {uuid: string, name: string, group_id: string, source: string, source_description: string, content: string, valid_at: datetime, created_at: datetime, entity_edges: list}
+  Entity {uuid: string, name: string, group_id: string, summary: string, created_at: datetime, name_embedding: string, labels: list}
+  Community {uuid: string, name: string, group_id: string, summary: string, created_at: datetime, name_embedding: string}
+Relationship properties:
+  MENTIONS {created_at: datetime}
+  RELATES_TO {uuid: string, name: string, group_id: string, fact: string, fact_embedding: string, episodes: list, created_at: datetime, expired_at: datetime, valid_at: datetime, invalid_at: datetime}
+  HAS_MEMBER {uuid: string, created_at: datetime}
+"""
+
+    def _refresh_schema(self) -> None:
+        """
+        Override to use pre-defined schema instead of calling statistics API.
+
+        This avoids the expensive Neptune statistics API call that requires
+        statistics to be enabled on the Neptune instance.
+        """
+        self.schema = self.GRAPHITI_SCHEMA
+        logger.debug('Using pre-defined Graphiti schema, skipping Neptune statistics API')
+
+
 aoss_indices = [
     {
         'index_name': 'node_name_and_summary',
@@ -109,7 +141,7 @@ aoss_indices = [
 class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
-    def __init__(self, host: str, aoss_host: str, port: int = 8182, aoss_port: int = 443):
+    def __init__(self, host: str, aoss_host: str, port: int = 8182, aoss_port: int = 443, database: str = 'default'):
         """This initializes a NeptuneDriver for use with Neptune as a backend
 
         Args:
@@ -117,29 +149,20 @@ class NeptuneDriver(GraphDriver):
             aoss_host (str): The OpenSearch host value
             port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
             aoss_port (int, optional): The OpenSearch port. Defaults to 443.
+            database (str, optional): The database name (for compatibility with base class). Defaults to 'default'.
         """
         if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
-        # Define Graphiti schema to avoid expensive statistics API calls
-        graphiti_schema = """
-Node labels: Episodic, Entity, Community
-Relationship types: MENTIONS, RELATES_TO, HAS_MEMBER
-Node properties: 
-  Episodic {uuid: string, name: string, group_id: string, source: string, source_description: string, content: string, valid_at: datetime, created_at: datetime, entity_edges: list}
-  Entity {uuid: string, name: string, group_id: string, summary: string, created_at: datetime, name_embedding: string, labels: list}
-  Community {uuid: string, name: string, group_id: string, summary: string, created_at: datetime, name_embedding: string}
-Relationship properties:
-  MENTIONS {created_at: datetime}
-  RELATES_TO {uuid: string, name: string, group_id: string, fact: string, fact_embedding: string, episodes: list, created_at: datetime, expired_at: datetime, valid_at: datetime, invalid_at: datetime}
-  HAS_MEMBER {uuid: string, created_at: datetime}
-"""
+        # Set the database attribute required by the base GraphDriver class
+        self._database = database
 
         if host.startswith('neptune-db://'):
             # This is a Neptune Database Cluster
             endpoint = host.replace('neptune-db://', '')
-            self.client = NeptuneGraph(endpoint, port, schema=graphiti_schema)
-            logger.debug('Creating Neptune Database session for %s', host)
+            # Use custom GraphitiNeptuneGraph to avoid expensive statistics API calls
+            self.client = GraphitiNeptuneGraph(endpoint, port)
+            logger.debug('Creating Neptune Database session for %s with pre-defined schema', host)
         elif host.startswith('neptune-graph://'):
             # This is a Neptune Analytics Graph
             graphId = host.replace('neptune-graph://', '')
@@ -153,9 +176,12 @@ Relationship properties:
         if not aoss_host:
             raise ValueError('You must provide an AOSS endpoint to create an OpenSearch driver.')
 
+        # Strip protocol prefix from aoss_host if present (OpenSearch expects just the hostname)
+        aoss_hostname = aoss_host.replace('https://', '').replace('http://', '')
+
         session = boto3.Session()
         self.aoss_client = OpenSearch(
-            hosts=[{'host': aoss_host, 'port': aoss_port}],
+            hosts=[{'host': aoss_hostname, 'port': aoss_port}],
             http_auth=Urllib3AWSV4SignerAuth(
                 session.get_credentials(), session.region_name, 'aoss'
             ),

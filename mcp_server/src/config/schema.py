@@ -203,7 +203,9 @@ class NeptuneProviderConfig(BaseModel):
     def model_post_init(self, __context) -> None:
         """Validate and normalize Neptune-specific requirements."""
         # Auto-detect and add protocol if missing
-        if not self.host.startswith(('neptune-db://', 'neptune-graph://', 'bolt://', 'http://', 'https://')):
+        if not self.host.startswith(
+            ('neptune-db://', 'neptune-graph://', 'bolt://', 'http://', 'https://')
+        ):
             # Check if it looks like a Neptune Analytics graph ID (starts with 'g-')
             if self.host.startswith('g-'):
                 self.host = f'neptune-graph://{self.host}'
@@ -230,8 +232,13 @@ class NeptuneProviderConfig(BaseModel):
                 '  database:\n'
                 '    providers:\n'
                 '      neptune:\n'
-                '        aoss_host: "your-aoss-endpoint.us-east-1.aoss.amazonaws.com"'
+                '        aoss_host: "your-aoss-endpoint.us-east-1.aoss.amazonaws.com"\n'
+                'Note: Provide hostname only, without https:// prefix'
             )
+
+        # Strip protocol prefix from aoss_host if present (OpenSearch expects just the hostname)
+        if self.aoss_host.startswith(('https://', 'http://')):
+            self.aoss_host = self.aoss_host.replace('https://', '').replace('http://', '')
 
 
 class DatabaseProvidersConfig(BaseModel):
