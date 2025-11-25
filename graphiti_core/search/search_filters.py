@@ -87,6 +87,11 @@ def node_search_filter_query_constructor(
         if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.NEPTUNE:
+            # Neptune doesn't support pipe operator in WHERE clause
+            # Use OR with separate label checks instead
+            label_conditions = [f'n:{label}' for label in filters.node_labels]
+            node_label_filter = '(' + ' OR '.join(label_conditions) + ')'
         else:
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
@@ -130,6 +135,15 @@ def edge_search_filter_query_constructor(
                 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
             )
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.NEPTUNE:
+            # Neptune doesn't support pipe operator in WHERE clause
+            # Use OR with separate label checks instead
+            n_label_conditions = [f'n:{label}' for label in filters.node_labels]
+            m_label_conditions = [f'm:{label}' for label in filters.node_labels]
+            node_label_filter = (
+                '(' + ' OR '.join(n_label_conditions) + ') AND ('
+                + ' OR '.join(m_label_conditions) + ')'
+            )
         else:
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels

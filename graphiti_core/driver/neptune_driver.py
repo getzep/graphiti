@@ -200,30 +200,22 @@ class NeptuneDriver(GraphDriver):
         else:
             for k, v in params.items():
                 if isinstance(v, datetime.datetime):
+                    # Convert datetime to ISO format string
                     params[k] = v.isoformat()
                 elif isinstance(v, list):
-                    # Handle lists that might contain datetime objects
+                    # Check if list contains actual datetime objects (not just strings with 'T')
+                    has_datetime = any(isinstance(item, datetime.datetime) for item in v)
+
+                    if has_datetime:
+                        # Convert datetime objects to ISO strings
+                        for i, item in enumerate(v):
+                            if isinstance(item, datetime.datetime):
+                                v[i] = item.isoformat()
+
+                    # Handle nested dictionaries
                     for i, item in enumerate(v):
-                        if isinstance(item, datetime.datetime):
-                            v[i] = item.isoformat()
-                            query = str(query).replace(f'${k}', f'datetime(${k})')
                         if isinstance(item, dict):
                             query = self._sanitize_parameters(query, v[i])
-
-                    # If the list contains datetime objects, we need to wrap each element with datetime()
-                    if any(isinstance(item, str) and 'T' in item for item in v):
-                        # Create a new list expression with datetime() wrapped around each element
-                        datetime_list = (
-                            '['
-                            + ', '.join(
-                                f'datetime("{item}")'
-                                if isinstance(item, str) and 'T' in item
-                                else repr(item)
-                                for item in v
-                            )
-                            + ']'
-                        )
-                        query = str(query).replace(f'${k}', datetime_list)
                 elif isinstance(v, dict):
                     query = self._sanitize_parameters(query, v)
             return query
@@ -232,6 +224,13 @@ class NeptuneDriver(GraphDriver):
         self, cypher_query_, **kwargs: Any
     ) -> tuple[list[dict[str, Any]], None, None]:
         params = dict(kwargs)
+
+        # Flatten nested 'params' dict if present (for compatibility with Neo4j driver interface)
+        if 'params' in params and isinstance(params['params'], dict):
+            nested_params = params.pop('params')
+            # Merge nested params into the top level, nested params take precedence
+            params = {**params, **nested_params}
+
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
