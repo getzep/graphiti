@@ -122,7 +122,7 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
     e.group_id AS group_id,
     e.source_description AS source_description,
     e.source AS source,
-    split(e.entity_edges, ",") AS entity_edges
+    split(e.entity_edges, "|") AS entity_edges
 """
 
 
