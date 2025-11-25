@@ -11,7 +11,6 @@ These tests validate Neptune-specific configuration requirements including:
 """
 
 import os
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -107,17 +106,13 @@ def test_neptune_environment_overrides():
             config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
             config = GraphitiConfig(_env_file=None, config_path=str(config_path))
 
-            print(f'✓ Loaded configuration with environment overrides')
+            print('✓ Loaded configuration with environment overrides')
 
             # Verify environment variables were applied
             if config.database.providers and config.database.providers.neptune:
                 neptune_config = config.database.providers.neptune
-                print(
-                    f'  Neptune host: {neptune_config.host}'
-                )
-                print(
-                    f'  AOSS host: {neptune_config.aoss_host}'
-                )
+                print(f'  Neptune host: {neptune_config.host}')
+                print(f'  AOSS host: {neptune_config.aoss_host}')
                 print(f'  Neptune port: {neptune_config.port}')
                 print(f'  AOSS port: {neptune_config.aoss_port}')
                 print(f'  Region: {neptune_config.region}')
@@ -224,7 +219,7 @@ def test_neptune_factory_missing_credentials():
 
     with patch('boto3.Session', return_value=mock_session):
         try:
-            db_config = DatabaseDriverFactory.create_config(test_config)
+            DatabaseDriverFactory.create_config(test_config)
             print('✗ Factory should have failed with missing credentials')
             raise AssertionError('Expected ValueError for missing AWS credentials')
         except ValueError as e:
