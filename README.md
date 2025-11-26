@@ -77,6 +77,23 @@ We're excited to open-source Graphiti, believing its potential reaches far beyon
     <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
 </p>
 
+## Zep vs Graphiti
+
+| Aspect | Zep | Graphiti |
+|--------|-----|----------|
+| **What they are** | Fully managed platform for context engineering and AI memory | Open-source graph framework |
+| **User & conversation management** | Built-in users, threads, and message storage | Build your own |
+| **Retrieval & performance** | Pre-configured, production-ready retrieval with sub-200ms performance at scale | Custom implementation required; performance depends on your setup |
+| **Developer tools** | Dashboard with graph visualization, debug logs, API logs; SDKs for Python, TypeScript, and Go | Build your own tools |
+| **Enterprise features** | SLAs, support, security guarantees | Self-managed |
+| **Deployment** | Fully managed or in your cloud | Self-hosted only |
+
+### When to choose which
+
+**Choose Zep** if you want a turnkey, enterprise-grade platform with security, performance, and support baked in.
+
+**Choose Graphiti** if you want a flexible OSS core and you're comfortable building/operating the surrounding system.
+
 ## Why Graphiti?
 
 Traditional RAG approaches often rely on batch processing and static data summarization, making them inefficient for
@@ -239,6 +256,22 @@ The quickstart demonstrates:
 The example is fully documented with clear explanations of each functionality and includes a comprehensive README with
 setup instructions and next steps.
 
+### Running with Docker Compose
+
+You can use Docker Compose to quickly start the required services:
+
+- **Neo4j Docker:**
+  ```sh
+  docker compose up
+  ```
+  This will start the Neo4j Docker service and related components.
+
+- **FalkorDB Docker:**
+  ```sh
+  docker compose --profile falkordb up
+  ```
+  This will start the FalkorDB Docker service and related components.
+
 ## MCP Server
 
 The `mcp_server` directory contains a Model Context Protocol (MCP) server implementation for Graphiti. This server
@@ -355,49 +388,32 @@ graphiti = Graphiti(graph_driver=driver)
 
 ## Using Graphiti with Azure OpenAI
 
-Graphiti supports Azure OpenAI for both LLM inference and embeddings. Azure deployments often require different
-endpoints for LLM and embedding services, and separate deployments for default and small models.
+Graphiti supports Azure OpenAI for both LLM inference and embeddings using Azure's OpenAI v1 API compatibility layer.
 
-> [!IMPORTANT]
-> **Azure OpenAI v1 API Opt-in Required for Structured Outputs**
->
-> Graphiti uses structured outputs via the `client.beta.chat.completions.parse()` method, which requires Azure OpenAI
-> deployments to opt into the v1 API. Without this opt-in, you'll encounter 404 Resource not found errors during episode
-> ingestion.
->
-> To enable v1 API support in your Azure OpenAI deployment, follow Microsoft's
-> guide: [Azure OpenAI API version lifecycle](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle?tabs=key#api-evolution).
+### Quick Start
 
 ```python
-from openai import AsyncAzureOpenAI
+from openai import AsyncOpenAI
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import LLMConfig, OpenAIClient
-from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
-from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
 
-# Azure OpenAI configuration - use separate endpoints for different services
-api_key = "<your-api-key>"
-api_version = "<your-api-version>"
-llm_endpoint = "<your-llm-endpoint>"  # e.g., "https://your-llm-resource.openai.azure.com/"
-embedding_endpoint = "<your-embedding-endpoint>"  # e.g., "https://your-embedding-resource.openai.azure.com/"
-
-# Create separate Azure OpenAI clients for different services
-llm_client_azure = AsyncAzureOpenAI(
-    api_key=api_key,
-    api_version=api_version,
-    azure_endpoint=llm_endpoint
+# Initialize Azure OpenAI client using the standard OpenAI client
+# with Azure's v1 API endpoint
+azure_client = AsyncOpenAI(
+    base_url="https://your-resource-name.openai.azure.com/openai/v1/",
+    api_key="your-api-key",
 )
 
-embedding_client_azure = AsyncAzureOpenAI(
-    api_key=api_key,
-    api_version=api_version,
-    azure_endpoint=embedding_endpoint
+# Create LLM and Embedder clients
+llm_client = AzureOpenAILLMClient(
+    azure_client=azure_client,
+    config=LLMConfig(model="gpt-5-mini", small_model="gpt-5-mini")  # Your Azure deployment name
 )
-
-# Create LLM Config with your Azure deployment names
-azure_llm_config = LLMConfig(
-    small_model="gpt-4.1-nano",
-    model="gpt-4.1-mini",
+embedder_client = AzureOpenAIEmbedderClient(
+    azure_client=azure_client,
+    model="text-embedding-3-small"  # Your Azure embedding deployment name
 )
 
 # Initialize Graphiti with Azure OpenAI clients
@@ -405,29 +421,19 @@ graphiti = Graphiti(
     "bolt://localhost:7687",
     "neo4j",
     "password",
-    llm_client=OpenAIClient(
-        config=azure_llm_config,
-        client=llm_client_azure
-    ),
-    embedder=OpenAIEmbedder(
-        config=OpenAIEmbedderConfig(
-            embedding_model="text-embedding-3-small-deployment"  # Your Azure embedding deployment name
-        ),
-        client=embedding_client_azure
-    ),
-    cross_encoder=OpenAIRerankerClient(
-        config=LLMConfig(
-            model=azure_llm_config.small_model  # Use small model for reranking
-        ),
-        client=llm_client_azure
-    )
+    llm_client=llm_client,
+    embedder=embedder_client,
 )
 
 # Now you can use Graphiti with Azure OpenAI
 ```
 
-Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names that match
-your Azure OpenAI service configuration.
+**Key Points:**
+- Use the standard `AsyncOpenAI` client with Azure's v1 API endpoint format: `https://your-resource-name.openai.azure.com/openai/v1/`
+- The deployment names (e.g., `gpt-5-mini`, `text-embedding-3-small`) should match your Azure OpenAI deployment names
+- See `examples/azure-openai/` for a complete working example
+
+Make sure to replace the placeholder values with your actual Azure OpenAI credentials and deployment names.
 
 ## Using Graphiti with Google Gemini
 
@@ -473,7 +479,7 @@ graphiti = Graphiti(
     cross_encoder=GeminiRerankerClient(
         config=LLMConfig(
             api_key=api_key,
-            model="gemini-2.5-flash-lite-preview-06-17"
+            model="gemini-2.5-flash-lite"
         )
     )
 )
@@ -481,7 +487,7 @@ graphiti = Graphiti(
 # Now you can use Graphiti with Google Gemini for all components
 ```
 
-The Gemini reranker uses the `gemini-2.5-flash-lite-preview-06-17` model by default, which is optimized for
+The Gemini reranker uses the `gemini-2.5-flash-lite` model by default, which is optimized for
 cost-effective and low-latency classification tasks. It uses the same boolean classification approach as the OpenAI
 reranker, leveraging Gemini's log probabilities feature to rank passage relevance.
 
@@ -489,6 +495,8 @@ reranker, leveraging Gemini's log probabilities feature to rank passage relevanc
 
 Graphiti supports Ollama for running local LLMs and embedding models via Ollama's OpenAI-compatible API. This is ideal
 for privacy-focused applications or when you want to avoid API costs.
+
+**Note:** Use `OpenAIGenericClient` (not `OpenAIClient`) for Ollama and other OpenAI-compatible providers like LM Studio. The `OpenAIGenericClient` is optimized for local models with a higher default max token limit (16K vs 8K) and full support for structured outputs.
 
 Install the models:
 

@@ -20,6 +20,7 @@ This example demonstrates the basic functionality of Graphiti, including:
   - FalkorDB server running (see [FalkorDB documentation](https://falkordb.com/docs/) for setup)
 - **For Memgraph**:
   - Memgraph server running (see [Memgraph documentation](https://memgraph.com/docs/) for setup)
+  - FalkorDB server running (see [FalkorDB documentation](https://docs.falkordb.com) for setup)
 - **For Amazon Neptune**:
   - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
 

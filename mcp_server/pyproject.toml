@@ -1,13 +1,76 @@
 [project]
 name = "mcp-server"
-version = "0.4.0"
+version = "1.0.1"
 description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "mcp>=1.5.0",
-    "openai>=1.68.2",
-    "graphiti-core>=0.14.0",
+    "mcp>=1.9.4",
+    "openai>=1.91.0",
+    "graphiti-core[falkordb]>=0.23.1",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0",
+    "typing-extensions>=4.0.0",
+]
+
+[project.optional-dependencies]
+azure = [
     "azure-identity>=1.21.0",
-    "graphiti-core",
+]
+providers = [
+    "google-genai>=1.8.0",
+    "anthropic>=0.49.0",
+    "groq>=0.2.0",
+    "voyageai>=0.2.3",
+    "sentence-transformers>=2.0.0",
+]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Required by Pydantic on Python < 3.12
+"typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.uv.sources]
+graphiti-core = { path = "../", editable = true }
+
+[dependency-groups]
+dev = [
+    "faker>=37.12.0",
+    "httpx>=0.28.1",
+    "psutil>=7.1.2",
+    "pyright>=1.1.404",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.7.1",
 ]

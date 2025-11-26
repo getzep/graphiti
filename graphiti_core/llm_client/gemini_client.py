@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
+from .client import LLMClient, get_extraction_language_instruction
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
 
@@ -45,7 +45,7 @@ else:
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gemini-2.5-flash'
-DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
+DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite'
 
 # Maximum output tokens for different Gemini models
 GEMINI_MODEL_MAX_TOKENS = {
@@ -53,7 +53,6 @@ GEMINI_MODEL_MAX_TOKENS = {
     'gemini-2.5-pro': 65536,
     'gemini-2.5-flash': 65536,
     'gemini-2.5-flash-lite': 64000,
-    'models/gemini-2.5-flash-lite-preview-06-17': 64000,
     # Gemini 2.0 models
     'gemini-2.0-flash': 8192,
     'gemini-2.0-flash-lite': 8192,
@@ -357,6 +356,8 @@ class GeminiClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the Gemini language model with retry logic and error handling.
@@ -367,62 +368,79 @@ class GeminiClient(LLMClient):
             response_model (type[BaseModel] | None): An optional Pydantic model to parse the response into.
             max_tokens (int | None): The maximum number of tokens to generate in the response.
             model_size (ModelSize): The size of the model to use (small or medium).
+            group_id (str | None): Optional partition identifier for the graph.
+            prompt_name (str | None): Optional name of the prompt for tracing.
 
         Returns:
             dict[str, typing.Any]: The response from the language model.
         """
-        retry_count = 0
-        last_error = None
-        last_output = None
-
         # Add multilingual extraction instructions
-        messages[0].content += MULTILINGUAL_EXTRACTION_RESPONSES
+        messages[0].content += get_extraction_language_instruction(group_id)
 
-        while retry_count < self.MAX_RETRIES:
-            try:
-                response = await self._generate_response(
-                    messages=messages,
-                    response_model=response_model,
-                    max_tokens=max_tokens,
-                    model_size=model_size,
-                )
-                last_output = (
-                    response.get('content')
-                    if isinstance(response, dict) and 'content' in response
-                    else None
-                )
-                return response
-            except RateLimitError as e:
-                # Rate limit errors should not trigger retries (fail fast)
-                raise e
-            except Exception as e:
-                last_error = e
+        # Wrap entire operation in tracing span
+        with self.tracer.start_span('llm.generate') as span:
+            attributes = {
+                'llm.provider': 'gemini',
+                'model.size': model_size.value,
+                'max_tokens': max_tokens or self.max_tokens,
+            }
+            if prompt_name:
+                attributes['prompt.name'] = prompt_name
+            span.add_attributes(attributes)
 
-                # Check if this is a safety block - these typically shouldn't be retried
-                error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
-                if 'safety' in error_text.lower() or 'blocked' in error_text.lower():
-                    logger.warning(f'Content blocked by safety filters: {e}')
-                    raise Exception(f'Content blocked by safety filters: {e}') from e
+            retry_count = 0
+            last_error = None
+            last_output = None
 
-                retry_count += 1
+            while retry_count < self.MAX_RETRIES:
+                try:
+                    response = await self._generate_response(
+                        messages=messages,
+                        response_model=response_model,
+                        max_tokens=max_tokens,
+                        model_size=model_size,
+                    )
+                    last_output = (
+                        response.get('content')
+                        if isinstance(response, dict) and 'content' in response
+                        else None
+                    )
+                    return response
+                except RateLimitError as e:
+                    # Rate limit errors should not trigger retries (fail fast)
+                    span.set_status('error', str(e))
+                    raise e
+                except Exception as e:
+                    last_error = e
 
-                # Construct a detailed error message for the LLM
-                error_context = (
-                    f'The previous response attempt was invalid. '
-                    f'Error type: {e.__class__.__name__}. '
-                    f'Error details: {str(e)}. '
-                    f'Please try again with a valid response, ensuring the output matches '
-                    f'the expected format and constraints.'
-                )
+                    # Check if this is a safety block - these typically shouldn't be retried
+                    error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
+                    if 'safety' in error_text.lower() or 'blocked' in error_text.lower():
+                        logger.warning(f'Content blocked by safety filters: {e}')
+                        span.set_status('error', str(e))
+                        raise Exception(f'Content blocked by safety filters: {e}') from e
 
-                error_message = Message(role='user', content=error_context)
-                messages.append(error_message)
-                logger.warning(
-                    f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
-                )
+                    retry_count += 1
 
-        # If we exit the loop without returning, all retries are exhausted
-        logger.error('🦀 LLM generation failed and retries are exhausted.')
-        logger.error(self._get_failed_generation_log(messages, last_output))
-        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
-        raise last_error or Exception('Max retries exceeded')
+                    # Construct a detailed error message for the LLM
+                    error_context = (
+                        f'The previous response attempt was invalid. '
+                        f'Error type: {e.__class__.__name__}. '
+                        f'Error details: {str(e)}. '
+                        f'Please try again with a valid response, ensuring the output matches '
+                        f'the expected format and constraints.'
+                    )
+
+                    error_message = Message(role='user', content=error_context)
+                    messages.append(error_message)
+                    logger.warning(
+                        f'Retrying after application error (attempt {retry_count}/{self.MAX_RETRIES}): {e}'
+                    )
+
+            # If we exit the loop without returning, all retries are exhausted
+            logger.error('🦀 LLM generation failed and retries are exhausted.')
+            logger.error(self._get_failed_generation_log(messages, last_output))
+            logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
+            span.set_status('error', str(last_error))
+            span.record_exception(last_error) if last_error else None
+            raise last_error or Exception('Max retries exceeded')

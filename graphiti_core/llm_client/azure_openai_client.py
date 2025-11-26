@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from typing import ClassVar
 
-from openai import AsyncAzureOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
@@ -28,18 +28,29 @@ logger = logging.getLogger(__name__)
 
 
 class AzureOpenAILLMClient(BaseOpenAIClient):
-    """Wrapper class for AsyncAzureOpenAI that implements the LLMClient interface."""
+    """Wrapper class for Azure OpenAI that implements the LLMClient interface.
+
+    Supports both AsyncAzureOpenAI and AsyncOpenAI (with Azure v1 API endpoint).
+    """
 
     # Class-level constants
     MAX_RETRIES: ClassVar[int] = 2
 
     def __init__(
         self,
-        azure_client: AsyncAzureOpenAI,
+        azure_client: AsyncAzureOpenAI | AsyncOpenAI,
         config: LLMConfig | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        reasoning: str | None = None,
+        verbosity: str | None = None,
     ):
-        super().__init__(config, cache=False, max_tokens=max_tokens)
+        super().__init__(
+            config,
+            cache=False,
+            max_tokens=max_tokens,
+            reasoning=reasoning,
+            verbosity=verbosity,
+        )
         self.client = azure_client
 
     async def _create_structured_completion(
@@ -49,15 +60,29 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel],
+        reasoning: str | None,
+        verbosity: str | None,
     ):
-        """Create a structured completion using Azure OpenAI's beta parse API."""
-        return await self.client.beta.chat.completions.parse(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_model,  # type: ignore
-        )
+        """Create a structured completion using Azure OpenAI's responses.parse API."""
+        supports_reasoning = self._supports_reasoning_features(model)
+        request_kwargs = {
+            'model': model,
+            'input': messages,
+            'max_output_tokens': max_tokens,
+            'text_format': response_model,  # type: ignore
+        }
+
+        temperature_value = temperature if not supports_reasoning else None
+        if temperature_value is not None:
+            request_kwargs['temperature'] = temperature_value
+
+        if supports_reasoning and reasoning:
+            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+
+        if supports_reasoning and verbosity:
+            request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
+
+        return await self.client.responses.parse(**request_kwargs)
 
     async def _create_completion(
         self,
@@ -68,10 +93,23 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         response_model: type[BaseModel] | None = None,
     ):
         """Create a regular completion with JSON format using Azure OpenAI."""
-        return await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
-        )
+        supports_reasoning = self._supports_reasoning_features(model)
+
+        request_kwargs = {
+            'model': model,
+            'messages': messages,
+            'max_tokens': max_tokens,
+            'response_format': {'type': 'json_object'},
+        }
+
+        temperature_value = temperature if not supports_reasoning else None
+        if temperature_value is not None:
+            request_kwargs['temperature'] = temperature_value
+
+        return await self.client.chat.completions.create(**request_kwargs)
+
+    @staticmethod
+    def _supports_reasoning_features(model: str) -> bool:
+        """Return True when the Azure model supports reasoning/verbosity options."""
+        reasoning_prefixes = ('o1', 'o3', 'gpt-5')
+        return model.startswith(reasoning_prefixes)

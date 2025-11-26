@@ -74,10 +74,11 @@ async def search(
     center_node_uuid: str | None = None,
     bfs_origin_node_uuids: list[str] | None = None,
     query_vector: list[float] | None = None,
+    driver: GraphDriver | None = None,
 ) -> SearchResults:
     start = time()
 
-    driver = clients.driver
+    driver = driver or clients.driver
     embedder = clients.embedder
     cross_encoder = clients.cross_encoder
 
@@ -325,9 +326,7 @@ async def node_search(
     search_tasks = []
     if NodeSearchMethod.bm25 in config.search_methods:
         search_tasks.append(
-            node_fulltext_search(
-                driver, query, search_filter, group_ids, 2 * limit, config.use_local_indexes
-            )
+            node_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
         )
     if NodeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(
@@ -338,7 +337,6 @@ async def node_search(
                 group_ids,
                 2 * limit,
                 config.sim_min_score,
-                config.use_local_indexes,
             )
         )
     if NodeSearchMethod.bfs in config.search_methods:
@@ -434,9 +432,7 @@ async def episode_search(
     search_results: list[list[EpisodicNode]] = list(
         await semaphore_gather(
             *[
-                episode_fulltext_search(
-                    driver, query, search_filter, group_ids, 2 * limit, config.use_local_indexes
-                ),
+                episode_fulltext_search(driver, query, search_filter, group_ids, 2 * limit),
             ]
         )
     )

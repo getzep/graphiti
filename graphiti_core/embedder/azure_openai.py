@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 from typing import Any
 
-from openai import AsyncAzureOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from .client import EmbedderClient
 
@@ -25,9 +25,16 @@ logger = logging.getLogger(__name__)
 
 
 class AzureOpenAIEmbedderClient(EmbedderClient):
-    """Wrapper class for AsyncAzureOpenAI that implements the EmbedderClient interface."""
+    """Wrapper class for Azure OpenAI that implements the EmbedderClient interface.
 
-    def __init__(self, azure_client: AsyncAzureOpenAI, model: str = 'text-embedding-3-small'):
+    Supports both AsyncAzureOpenAI and AsyncOpenAI (with Azure v1 API endpoint).
+    """
+
+    def __init__(
+        self,
+        azure_client: AsyncAzureOpenAI | AsyncOpenAI,
+        model: str = 'text-embedding-3-small',
+    ):
         self.azure_client = azure_client
         self.model = model
 

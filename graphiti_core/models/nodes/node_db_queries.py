@@ -63,7 +63,6 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
         case _:  # Neo4j
             return """
                 MERGE (n:Episodic {uuid: $uuid})
-                SET n:$($group_label)
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
                 entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
                 RETURN n.uuid AS uuid
@@ -115,7 +114,6 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n:$(episode.group_label)
                 SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
                 entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
                 RETURN n.uuid AS uuid
@@ -147,13 +145,14 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
 """
 
 
-def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
+def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: bool = False) -> str:
     match provider:
         case GraphProvider.FALKORDB:
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 SET n:{labels}
                 SET n = $entity_data
+                SET n.name_embedding = vecf32($entity_data.name_embedding)
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
@@ -190,16 +189,27 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str) -> str:
                 RETURN n.uuid AS uuid
             """
         case _:
-            return f"""
+            save_embedding_query = (
+                'WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)'
+                if not has_aoss
+                else ''
+            )
+            return (
+                f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 SET n:{labels}
                 SET n = $entity_data
-                WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)
+                """
+                + save_embedding_query
+                + """
                 RETURN n.uuid AS uuid
             """
+            )
 
 
-def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) -> str | Any:
+def get_entity_node_save_bulk_query(
+    provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
+) -> str | Any:
     match provider:
         case GraphProvider.FALKORDB:
             queries = []
@@ -260,14 +270,23 @@ def get_entity_node_save_bulk_query(provider: GraphProvider, nodes: list[dict]) 
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
-            return """
-                UNWIND $nodes AS node
-                MERGE (n:Entity {uuid: node.uuid})
-                SET n:$(node.labels)
-                SET n = node
-                WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)
+            save_embedding_query = (
+                'WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)'
+                if not has_aoss
+                else ''
+            )
+            return (
+                """
+                    UNWIND $nodes AS node
+                    MERGE (n:Entity {uuid: node.uuid})
+                    SET n:$(node.labels)
+                    SET n = node
+                    """
+                + save_embedding_query
+                + """
                 RETURN n.uuid AS uuid
             """
+            )
 
 
 def get_entity_node_return_query(provider: GraphProvider) -> str:

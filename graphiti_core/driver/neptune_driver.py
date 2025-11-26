@@ -243,6 +243,12 @@ class NeptuneDriver(GraphDriver):
             if client.indices.exists(index=index_name):
                 client.indices.delete(index=index_name)
 
+    async def build_indices_and_constraints(self, delete_existing: bool = False):
+        # Neptune uses OpenSearch (AOSS) for indexing
+        if delete_existing:
+            await self.delete_aoss_indices()
+        await self.create_aoss_indices()
+
     def run_aoss_query(self, name: str, query_text: str, limit: int = 10) -> dict[str, Any]:
         for index in aoss_indices:
             if name.lower() == index['index_name']:
@@ -257,15 +263,13 @@ class NeptuneDriver(GraphDriver):
             if name.lower() == index['index_name']:
                 to_index = []
                 for d in data:
-                    item = {'_index': name}
+                    item = {'_index': name, '_id': d['uuid']}
                     for p in index['body']['mappings']['properties']:
-                        item[p] = d[p]
+                        if p in d:
+                            item[p] = d[p]
                     to_index.append(item)
                 success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                if failed > 0:
-                    return success
-                else:
-                    return 0
+                return success
 
         return 0
 
