@@ -18,6 +18,7 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
+import neo4j.exceptions
 from neo4j import AsyncGraphDatabase, EagerResult
 from typing_extensions import LiteralString
 
@@ -70,6 +71,15 @@ class Neo4jDriver(GraphDriver):
 
         try:
             result = await self.client.execute_query(cypher_query_, parameters_=params, **kwargs)
+        except neo4j.exceptions.ClientError as e:
+            # Handle race condition when creating indices/constraints in parallel
+            # Neo4j 5.26+ may throw EquivalentSchemaRuleAlreadyExists even with IF NOT EXISTS
+            if 'EquivalentSchemaRuleAlreadyExists' in str(e):
+                logger.info(f'Index or constraint already exists, continuing: {cypher_query_}')
+                # Return empty result to indicate success (index exists)
+                return EagerResult([], None, None)  # type: ignore
+            logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
+            raise
         except Exception as e:
             logger.error(f'Error executing Neo4j query: {e}\n{cypher_query_}\n{params}')
             raise
