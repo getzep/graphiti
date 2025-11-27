@@ -87,6 +87,35 @@ services:
       - PORT=8001
       - db_backend=falkordb
 
+  memgraph:
+    image: memgraph/memgraph:latest
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mg_client",
+          "--host",
+          "localhost",
+          "--port",
+          "7687",
+          "--use-ssl=false",
+          "--query",
+          "RETURN 1;"
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 3s
+    ports:
+      - "7688:7687" # Bolt (using different port to avoid conflict)
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    environment:
+      - MEMGRAPH_USER=${MEMGRAPH_USER:-}
+      - MEMGRAPH_PASSWORD=${MEMGRAPH_PASSWORD:-}
+    command: ["--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687"]
+
 volumes:
   neo4j_data:
+  memgraph_data:
   falkordb_data:
