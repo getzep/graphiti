@@ -19,7 +19,9 @@ This example demonstrates the basic functionality of Graphiti, including:
 - **For FalkorDB**:
   - FalkorDB server running (see [FalkorDB documentation](https://docs.falkordb.com) for setup)
 - **For Amazon Neptune**:
-  - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
+  - Amazon Neptune Database or Neptune Analytics running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
+  - OpenSearch Service cluster for fulltext search
+  - **Note**: Neptune Database supports both Cypher and Gremlin query languages. Neptune Analytics only supports Cypher.
 
 
 ## Setup Instructions
@@ -65,9 +67,33 @@ python quickstart_neo4j.py
 # For FalkorDB
 python quickstart_falkordb.py
 
-# For Amazon Neptune
+# For Amazon Neptune (using Cypher)
 python quickstart_neptune.py
+
+# For Amazon Neptune Database (using Gremlin)
+python quickstart_neptune_gremlin.py
 ```
+
+### Using Gremlin with Neptune Database
+
+Neptune Database supports both openCypher and Gremlin query languages. To use Gremlin:
+
+```python
+from graphiti_core.driver.driver import QueryLanguage
+from graphiti_core.driver.neptune_driver import NeptuneDriver
+
+driver = NeptuneDriver(
+    host='neptune-db://your-cluster.amazonaws.com',
+    aoss_host='your-aoss-cluster.amazonaws.com',
+    query_language=QueryLanguage.GREMLIN  # Use Gremlin instead of Cypher
+)
+```
+
+**Important Notes:**
+- Only Neptune **Database** supports Gremlin. Neptune Analytics does not support Gremlin.
+- Gremlin support is experimental and focuses on basic graph operations.
+- Vector similarity and fulltext search still use OpenSearch integration.
+- The high-level Graphiti API remains the same regardless of query language.
 
 ## What This Example Demonstrates
 
