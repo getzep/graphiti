@@ -48,7 +48,11 @@ def get_extraction_language_instruction(group_id: str | None = None) -> str:
     Returns:
         str: Language instruction to append to system messages
     """
-    return '\n\nAny extracted information should be returned in the same language as it was written in.'
+    return (
+        '\n\nAny extracted information should be returned in the same language as it was written in. '
+        'Only output non-English text when the user has written full sentences or phrases in that non-English language. '
+        'Otherwise, output English.'
+    )
 
 
 logger = logging.getLogger(__name__)
