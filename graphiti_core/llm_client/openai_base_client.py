@@ -31,8 +31,8 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gpt-5-mini'
-DEFAULT_SMALL_MODEL = 'gpt-5-nano'
+DEFAULT_MODEL = 'gpt-4o-mini'
+DEFAULT_SMALL_MODEL = 'gpt-4o-mini'
 DEFAULT_REASONING = 'minimal'
 DEFAULT_VERBOSITY = 'low'
 
