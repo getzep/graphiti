@@ -34,7 +34,7 @@ falkordb = ["falkordb>=1.1.2,<2.0.0"]
 voyageai = ["voyageai>=0.2.3"]
 neo4j-opensearch = ["boto3>=1.39.16", "opensearch-py>=3.0.0"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
-neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0", "boto3>=1.39.16"]
+neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0", "boto3>=1.39.16", "gremlinpython>=3.7.0"]
 tracing = ["opentelemetry-api>=1.20.0", "opentelemetry-sdk>=1.20.0"]
 dev = [
     "pyright>=1.1.404",
@@ -46,6 +46,7 @@ dev = [
     "boto3>=1.39.16",
     "opensearch-py>=3.0.0",
     "langchain-aws>=0.2.29",
+    "gremlinpython>=3.7.0",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
     "diskcache-stubs>=5.6.3.6.20240818",
