@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
@@ -326,6 +327,55 @@ class GraphitiService:
         if self.client is None:
             raise RuntimeError('Failed to initialize Graphiti client')
         return self.client
+
+
+@asynccontextmanager
+async def graphiti_lifespan(app):
+    """Lifespan context manager for FastMCP Cloud deployment.
+
+    This function initializes the Graphiti service when the server starts.
+    FastMCP Cloud calls this automatically - it does NOT run the if __name__ == '__main__' block.
+    """
+    global config, graphiti_service, queue_service, graphiti_client, semaphore
+
+    logger.info('Initializing Graphiti service via lifespan...')
+
+    try:
+        # Load configuration from environment variables (FastMCP Cloud sets these)
+        config = GraphitiConfig()
+
+        # Log configuration details
+        logger.info('Using configuration:')
+        logger.info(f'  - LLM: {config.llm.provider} / {config.llm.model}')
+        logger.info(f'  - Embedder: {config.embedder.provider} / {config.embedder.model}')
+        logger.info(f'  - Database: {config.database.provider}')
+        logger.info(f'  - Group ID: {config.graphiti.group_id}')
+
+        # Initialize services
+        graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
+        queue_service = QueueService()
+        await graphiti_service.initialize()
+
+        # Set global client for backward compatibility
+        graphiti_client = await graphiti_service.get_client()
+        semaphore = graphiti_service.semaphore
+
+        # Initialize queue service with the client
+        await queue_service.initialize(graphiti_client)
+
+        logger.info('Graphiti service initialized successfully via lifespan')
+
+        yield  # Server runs here
+
+    except Exception as e:
+        logger.error(f'Failed to initialize Graphiti service: {e}')
+        raise
+    finally:
+        logger.info('Shutting down Graphiti service...')
+
+
+# Update the MCP server to use the lifespan
+mcp.lifespan = graphiti_lifespan
 
 
 @mcp.tool()
