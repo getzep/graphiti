@@ -168,6 +168,7 @@ async def graphiti_test_client(
     env = {
         'DATABASE_PROVIDER': database,
         'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'test_key' if use_mock_llm else None),
+        'SEMAPHORE_LIMIT': os.environ.get('SEMAPHORE_LIMIT', '10'),
     }
 
     # Database-specific configuration

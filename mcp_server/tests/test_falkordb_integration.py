@@ -32,6 +32,7 @@ class GraphitiFalkorDBIntegrationTest:
                 'FALKORDB_DATABASE': 'default_db',
                 'OPENAI_API_KEY': 'dummy_key_for_testing',
                 'GRAPHITI_GROUP_ID': self.test_group_id,
+                'SEMAPHORE_LIMIT': '10',
             },
         )
 

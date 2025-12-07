@@ -24,6 +24,8 @@ async def test_stdio():
             'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
             'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
             'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'dummy'),
+            'FALKORDB_URI': os.environ.get('FALKORDB_URI', 'redis://localhost:6379'),
+            'SEMAPHORE_LIMIT': os.environ.get('SEMAPHORE_LIMIT', '10'),
         },
     )
 

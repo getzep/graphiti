@@ -10,7 +10,8 @@ The test suite is designed to thoroughly test all aspects of the Graphiti MCP se
 
 ### Core Test Modules
 
-- **`test_comprehensive_integration.py`** - Main integration test suite covering all MCP tools
+- **`test_inmemory_example.py`** - **Recommended** in-memory tests using FastMCP Client (fast, reliable)
+- **`test_comprehensive_integration.py`** - Integration test suite using subprocess (slower, may have env issues)
 - **`test_async_operations.py`** - Tests for concurrent operations and async patterns
 - **`test_stress_load.py`** - Stress testing and load testing scenarios
 - **`test_fixtures.py`** - Shared fixtures and test utilities
@@ -34,16 +35,31 @@ Tests are organized with pytest markers:
 # Install test dependencies
 uv add --dev pytest pytest-asyncio pytest-timeout pytest-xdist faker psutil
 
-# Install MCP SDK
+# Install MCP SDK (fastmcp is already a dependency of graphiti-core)
 uv add mcp
 ```
 
+> **Note on FastMCP**: The `fastmcp` package (v2.13.3) is a dependency of `graphiti-core` and provides the `Client` class for testing. The MCP server uses `mcp.server.fastmcp.FastMCP` which is bundled in the official `mcp` package.
+
 ## Running Tests
 
-### Quick Start
+### Quick Start (Recommended)
+
+The fastest and most reliable way to test is using the in-memory tests:
 
 ```bash
-# Run smoke tests (quick validation)
+# Run in-memory tests (fast, ~1 second)
+uv run pytest tests/test_inmemory_example.py -v -s
+```
+
+This uses FastMCP's recommended testing pattern with in-memory transport, avoiding subprocess issues.
+
+### Alternative: Subprocess-based Tests
+
+The original test runner spawns subprocess servers. These tests may experience environment variable issues:
+
+```bash
+# Run smoke tests (may timeout due to subprocess issues)
 python tests/run_tests.py smoke
 
 # Run integration tests with mock LLM
@@ -52,6 +68,8 @@ python tests/run_tests.py integration --mock-llm
 # Run all tests
 python tests/run_tests.py all
 ```
+
+> **Note**: The subprocess-based tests use `StdioServerParameters` which can have environment variable isolation issues. If you encounter `ValueError: invalid literal for int()` errors related to `SEMAPHORE_LIMIT` or `MAX_REFLEXION_ITERATIONS`, use the in-memory tests instead.
 
 ### Test Runner Options
 
@@ -153,6 +171,64 @@ The `pytest.ini` file configures:
 - Test markers
 - Timeout settings
 - Output formatting
+
+## In-Memory Testing Pattern (Recommended)
+
+The `test_inmemory_example.py` file demonstrates FastMCP's recommended testing approach:
+
+```python
+import os
+import sys
+from pathlib import Path
+
+import pytest
+from fastmcp.client import Client
+
+# Set env vars BEFORE importing graphiti modules
+def set_env_if_empty(key: str, value: str):
+    if not os.environ.get(key):
+        os.environ[key] = value
+
+set_env_if_empty('SEMAPHORE_LIMIT', '10')
+set_env_if_empty('MAX_REFLEXION_ITERATIONS', '0')
+set_env_if_empty('FALKORDB_URI', 'redis://localhost:6379')
+
+# Import after env vars are set
+from graphiti_mcp_server import mcp
+
+@pytest.fixture
+async def mcp_client():
+    """In-memory MCP client - no subprocess needed."""
+    async with Client(transport=mcp) as client:
+        yield client
+
+async def test_list_tools(mcp_client: Client):
+    tools = await mcp_client.list_tools()
+    assert len(tools) > 0
+```
+
+### Benefits of In-Memory Testing
+
+| Aspect | In-Memory | Subprocess |
+|--------|-----------|------------|
+| Speed | ~1 second | 10+ minutes |
+| Reliability | High | Environment issues |
+| Debugging | Easy | Difficult |
+| Resource Usage | Low | High |
+
+### Available MCP Tools
+
+The Graphiti MCP server exposes these tools:
+
+- `add_memory` - Add episodes to the knowledge graph
+- `search_nodes` - Search for entity nodes
+- `search_memory_facts` - Search for facts/relationships
+- `delete_entity_edge` - Delete an edge
+- `delete_episode` - Delete an episode
+- `get_entity_edge` - Get edge by UUID
+- `get_episodes` - Get recent episodes
+- `clear_graph` - Clear all data
+- `get_status` - Get server status
 
 ## Test Fixtures
 
@@ -267,6 +343,18 @@ jobs:
    # Skip stress tests on low-memory systems
    python tests/run_tests.py all --skip-slow
    ```
+
+5. **Environment variable errors** (`ValueError: invalid literal for int()`)
+   ```bash
+   # This occurs when SEMAPHORE_LIMIT or MAX_REFLEXION_ITERATIONS is set to empty string
+   # Solution 1: Use in-memory tests (recommended)
+   uv run pytest tests/test_inmemory_example.py -v
+
+   # Solution 2: Set env vars explicitly
+   SEMAPHORE_LIMIT=10 MAX_REFLEXION_ITERATIONS=0 python tests/run_tests.py smoke
+   ```
+
+   **Root cause**: The graphiti_core/helpers.py module parses environment variables at import time. If these are set to empty strings (not unset), `int('')` fails.
 
 ## Test Reports
 

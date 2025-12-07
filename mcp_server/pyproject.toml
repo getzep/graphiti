@@ -5,7 +5,7 @@ description = "Graphiti MCP Server"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
-    "mcp>=1.9.4",
+    "fastmcp>=2.13.3",
     "openai>=1.91.0",
     "graphiti-core[falkordb]>=0.23.1",
     "pydantic-settings>=2.0.0",

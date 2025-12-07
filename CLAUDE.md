@@ -11,8 +11,9 @@ Key features:
 - Bi-temporal data model with explicit tracking of event occurrence times
 - Hybrid retrieval combining semantic embeddings, keyword search (BM25), and graph traversal
 - Support for custom entity definitions via Pydantic models
-- Integration with Neo4j and FalkorDB as graph storage backends
+- Integration with Neo4j, FalkorDB, Kuzu, and Amazon Neptune as graph storage backends
 - Optional OpenTelemetry distributed tracing support
+- High-concurrency ingestion pipelines with configurable rate limiting
 
 ## Development Commands
 
