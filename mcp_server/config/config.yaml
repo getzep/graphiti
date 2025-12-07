@@ -43,9 +43,9 @@ llm:
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
 
 embedder:
-  provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
-  dimensions: 1536
+  provider: ${EMBEDDER_PROVIDER:openai}  # Options: openai, azure_openai, gemini, voyage
+  model: ${EMBEDDER_MODEL:text-embedding-3-small}
+  dimensions: ${EMBEDDING_DIM:1536}  # OpenAI: 1536, Voyage: 1024
   
   providers:
     openai:
@@ -71,7 +71,7 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: ${DATABASE_PROVIDER:falkordb}  # Options: neo4j, falkordb. Set DATABASE_PROVIDER env var to override
 
   providers:
     falkordb:
