@@ -61,6 +61,11 @@ jobs:
           NEO4J_AUTH: neo4j/testpass
           NEO4J_PLUGINS: '["apoc"]'
         options: --health-cmd "cypher-shell -u neo4j -p testpass 'RETURN 1'" --health-interval 10s --health-timeout 5s --health-retries 10
+      memgraph:
+        image: memgraph/memgraph:latest
+        ports:
+          - 7688:7687
+        options: --health-cmd "mg_client --host localhost --port 7687 --use-ssl=false --query 'RETURN 1;'" --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -98,3 +103,13 @@ jobs:
             tests/cross_encoder/test_bge_reranker_client_int.py \
             tests/driver/test_falkordb_driver.py \
             -m "not integration"
+      - name: Run Memgraph integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          MEMGRAPH_URI: bolt://localhost:7688
+          MEMGRAPH_USER: 
+          MEMGRAPH_PASSWORD: 
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          uv run pytest tests/test_*_int.py -k "memgraph"
+
