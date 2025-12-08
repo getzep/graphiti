@@ -43,7 +43,9 @@ class DateFilter(BaseModel):
 
 class PropertyFilter(BaseModel):
     property_name: str = Field(description='Property name')
-    property_value: str = Field(description='Value you wnt to match on for the property')
+    property_value: str | int | float | None = Field(
+        description='Value you want to match on for the property'
+    )
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for the property'
     )
