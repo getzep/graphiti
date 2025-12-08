@@ -41,6 +41,14 @@ class DateFilter(BaseModel):
     )
 
 
+class PropertyFilter(BaseModel):
+    property_name: str = Field(description='Property name')
+    property_value: str = Field(description='Value you wnt to match on for the property')
+    comparison_operator: ComparisonOperator = Field(
+        description='Comparison operator for the property'
+    )
+
+
 class SearchFilters(BaseModel):
     node_labels: list[str] | None = Field(
         default=None, description='List of node labels to filter on'
@@ -53,6 +61,7 @@ class SearchFilters(BaseModel):
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
     edge_uuids: list[str] | None = Field(default=None)
+    property_filters: list[PropertyFilter] | None = Field(default=None)
 
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
