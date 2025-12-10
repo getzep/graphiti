@@ -22,7 +22,8 @@ import openai
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from ..helpers import semaphore_gather
-from ..llm_client import LLMConfig, OpenAIClient, RateLimitError
+from ..llm_client import LLMConfig, RateLimitError
+from ..llm_client.openai_base_client import BaseOpenAIClient
 from ..prompts import Message
 from .client import CrossEncoderClient
 
@@ -35,7 +36,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
     def __init__(
         self,
         config: LLMConfig | None = None,
-        client: AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | None = None,
+        client: AsyncOpenAI | AsyncAzureOpenAI | BaseOpenAIClient | None = None,
     ):
         """
         Initialize the OpenAIRerankerClient with the provided configuration and client.
@@ -45,7 +46,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
-            client (AsyncOpenAI | AsyncAzureOpenAI | OpenAIClient | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+            client (AsyncOpenAI | AsyncAzureOpenAI | BaseOpenAIClient | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
         """
         if config is None:
             config = LLMConfig()
@@ -53,7 +54,7 @@ class OpenAIRerankerClient(CrossEncoderClient):
         self.config = config
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
-        elif isinstance(client, OpenAIClient):
+        elif isinstance(client, BaseOpenAIClient):
             self.client = client.client
         else:
             self.client = client
