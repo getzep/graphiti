@@ -17,10 +17,14 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing_extensions import LiteralString
+
+if TYPE_CHECKING:
+    from graphiti_core.config import GraphitiConfig
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
@@ -139,6 +143,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        config: 'GraphitiConfig | None' = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -175,6 +180,9 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        config : GraphitiConfig | None, optional
+            A GraphitiConfig instance for unified configuration. If provided, it takes precedence
+            over individual parameters. Allows configuration via YAML files or programmatically.
 
         Returns
         -------
@@ -186,36 +194,91 @@ class Graphiti:
         credentials. It also sets up the LLM client, either using the provided client
         or by creating a default OpenAIClient.
 
-        The default database name is defined during the driver’s construction. If a different database name
+        The default database name is defined during the driver's construction. If a different database name
         is required, it should be specified in the URI or set separately after
         initialization.
 
         The OpenAI API key is expected to be set in the environment variables.
         Make sure to set the OPENAI_API_KEY environment variable before initializing
         Graphiti if you're using the default OpenAIClient.
+
+        Examples:
+            >>> # Traditional initialization
+            >>> graphiti = Graphiti(uri='bolt://localhost:7687', user='neo4j', password='password')
+
+            >>> # New config-based initialization
+            >>> from graphiti_core.config import GraphitiConfig, LLMProviderConfig, LLMProvider
+            >>> config = GraphitiConfig.from_yaml('graphiti.yaml')
+            >>> graphiti = Graphiti(config=config)
+
+            >>> # Or use the factory method
+            >>> graphiti = Graphiti.from_config(config)
         """
 
-        if graph_driver:
-            self.driver = graph_driver
-        else:
-            if uri is None:
-                raise ValueError('uri must be provided when graph_driver is None')
-            self.driver = Neo4jDriver(uri, user, password)
+        # If config is provided, use it to initialize clients
+        if config is not None:
+            from graphiti_core.config.factory import (
+                create_database_driver,
+                create_embedder,
+                create_llm_client,
+                create_reranker,
+            )
 
-        self.store_raw_episode_content = store_raw_episode_content
-        self.max_coroutines = max_coroutines
-        if llm_client:
-            self.llm_client = llm_client
+            # Use config values, allowing individual params to override
+            if graph_driver is None:
+                self.driver = create_database_driver(config.database)
+            else:
+                self.driver = graph_driver
+
+            if llm_client is None:
+                self.llm_client = create_llm_client(config.llm)
+            else:
+                self.llm_client = llm_client
+
+            if embedder is None:
+                self.embedder = create_embedder(config.embedder)
+            else:
+                self.embedder = embedder
+
+            if cross_encoder is None:
+                self.cross_encoder = create_reranker(config.reranker)
+            else:
+                self.cross_encoder = cross_encoder
+
+            self.store_raw_episode_content = (
+                store_raw_episode_content
+                if store_raw_episode_content is not None
+                else config.store_raw_episode_content
+            )
+            self.max_coroutines = (
+                max_coroutines if max_coroutines is not None else config.max_coroutines
+            )
+
         else:
-            self.llm_client = OpenAIClient()
-        if embedder:
-            self.embedder = embedder
-        else:
-            self.embedder = OpenAIEmbedder()
-        if cross_encoder:
-            self.cross_encoder = cross_encoder
-        else:
-            self.cross_encoder = OpenAIRerankerClient()
+            # Traditional initialization path (backward compatible)
+            if graph_driver:
+                self.driver = graph_driver
+            else:
+                if uri is None:
+                    raise ValueError(
+                        'uri must be provided when graph_driver is None and config is None'
+                    )
+                self.driver = Neo4jDriver(uri, user, password)
+
+            self.store_raw_episode_content = store_raw_episode_content
+            self.max_coroutines = max_coroutines
+            if llm_client:
+                self.llm_client = llm_client
+            else:
+                self.llm_client = OpenAIClient()
+            if embedder:
+                self.embedder = embedder
+            else:
+                self.embedder = OpenAIEmbedder()
+            if cross_encoder:
+                self.cross_encoder = cross_encoder
+            else:
+                self.cross_encoder = OpenAIRerankerClient()
 
         # Initialize tracer
         self.tracer = create_tracer(tracer, trace_span_prefix)
@@ -233,6 +296,44 @@ class Graphiti:
 
         # Capture telemetry event
         self._capture_initialization_telemetry()
+
+    @classmethod
+    def from_config(
+        cls,
+        config: 'GraphitiConfig',
+        tracer: Tracer | None = None,
+        trace_span_prefix: str = 'graphiti',
+    ) -> 'Graphiti':
+        """Create a Graphiti instance from a GraphitiConfig.
+
+        This is a convenience method for creating Graphiti instances using the
+        new configuration system.
+
+        Parameters
+        ----------
+        config : GraphitiConfig
+            The configuration object containing all settings
+        tracer : Tracer | None, optional
+            An OpenTelemetry tracer instance for distributed tracing
+        trace_span_prefix : str, optional
+            Prefix to prepend to all span names
+
+        Returns
+        -------
+        Graphiti
+            A new Graphiti instance configured according to the provided config
+
+        Examples
+        --------
+        >>> from graphiti_core.config import GraphitiConfig
+        >>> config = GraphitiConfig.from_yaml('graphiti.yaml')
+        >>> graphiti = Graphiti.from_config(config)
+
+        >>> # Or with environment-based config
+        >>> config = GraphitiConfig.from_env()
+        >>> graphiti = Graphiti.from_config(config)
+        """
+        return cls(config=config, tracer=tracer, trace_span_prefix=trace_span_prefix)
 
     def _capture_initialization_telemetry(self):
         """Capture telemetry event for Graphiti initialization."""
