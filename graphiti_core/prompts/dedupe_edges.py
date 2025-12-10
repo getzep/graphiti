@@ -130,6 +130,7 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         1. DUPLICATE DETECTION:
            - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.
            - Facts with similar information that contain key differences should NOT be marked as duplicates.
+           - Facts ARE duplicates if they convey the same information using different wording.
            - Return idx values from EXISTING FACTS.
            - If no duplicates, return an empty list for duplicate_facts.
 
@@ -150,6 +151,9 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         Guidelines:
         1. Some facts may be very similar but will have key differences, particularly around numeric values in the facts.
             Do not mark these facts as duplicates.
+        2. Same values in different formats ARE duplicates (e.g., "$1M" = "$1,000,000").
+        3. Active/passive voice variations ARE duplicates (e.g., "X awarded Y" = "Y received from X").
+        4. Self-referential rewordings ARE duplicates (e.g., "X is its own Y" = "X is a Y of X").
 
         <FACT TYPES>
         {context['edge_types']}
