@@ -226,6 +226,7 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `NEO4J_URI`: URI for the Neo4j database (default: `bolt://localhost:7687`)
 - `NEO4J_USER`: Neo4j username (default: `neo4j`)
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
+- `USE_VSCODE_MODELS`: Enable VS Code models integration (no external API key required)
 - `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
 - `GOOGLE_API_KEY`: Google API key (for Gemini models)
@@ -238,6 +239,11 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+
+**VS Code Models Configuration (when USE_VSCODE_MODELS=true):**
+- `VSCODE_LLM_MODEL`: VS Code model name for LLM operations (default: detected from VS Code)
+- `VSCODE_EMBEDDING_MODEL`: VS Code model name for embeddings (default: detected from VS Code)
+- `VSCODE_EMBEDDING_DIM`: Embedding dimensions (default: 1024)
 
 You can set these variables in a `.env` file in the project directory.
 
