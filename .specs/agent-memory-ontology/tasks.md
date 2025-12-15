@@ -16,14 +16,14 @@
   - [x] 5.1 Add/adjust pytest discovery so root tests stay isolated _Requirements: 3.3_
   - [x] 5.2 Add demo under `examples/` or `server/README.md` _Requirements: 4.1, 4.2_
 - [x] 6. Verify, commit, push, PR _Requirements: 1, 2, 3, 4_
-- [ ] 7. Add canonical group id resolver _Requirements: 5.1, 5.2, 5.3_
-  - [ ] 7.1 Add group id hashing helper in `graph_service` _Requirements: 5.3_
-  - [ ] 7.2 Add `POST /groups/resolve` endpoint _Requirements: 5.1, 5.2_
-- [ ] 8. Document identity key recommendations _Requirements: 5.4_
-  - [ ] 8.1 Document GitHub-login based keys in `server/README.md` _Requirements: 5.4_
-- [ ] 9. Verify, commit, push, PR (origin) _Requirements: 5_
+- [x] 7. Add canonical group id resolver _Requirements: 5.1, 5.2, 5.3_
+  - [x] 7.1 Add group id hashing helper in `graph_service` _Requirements: 5.3_
+  - [x] 7.2 Add `POST /groups/resolve` endpoint _Requirements: 5.1, 5.2_
+- [x] 8. Document identity key recommendations _Requirements: 5.4_
+  - [x] 8.1 Document GitHub-login based keys in `server/README.md` _Requirements: 5.4_
+- [x] 9. Verify, commit, push, PR (origin) _Requirements: 5_
 
 ## Current Status Summary
 
-- Phase: implementation (in progress)
-- Next: implement tasks 7–9, then redeploy Graphiti service.
+- Phase: implementation (complete; PR open)
+- Next: merge PR and redeploy Graphiti service.
