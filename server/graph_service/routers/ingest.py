@@ -1,13 +1,17 @@
 import asyncio
-from contextlib import asynccontextmanager
+import logging
 from functools import partial
+from typing import Any, cast
 
-from fastapi import APIRouter, FastAPI, status
+from fastapi import APIRouter, HTTPException, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
+from graph_service.ontologies import is_known_schema_id, resolve_ontology
 from graph_service.zep_graphiti import ZepGraphitiDep
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncWorker:
@@ -17,12 +21,17 @@ class AsyncWorker:
 
     async def worker(self):
         while True:
+            job = None
             try:
-                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
                 await job()
             except asyncio.CancelledError:
                 break
+            except Exception:
+                logger.exception('Graphiti background job failed.')
+            finally:
+                if job is not None:
+                    self.queue.task_done()
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())
@@ -37,15 +46,7 @@ class AsyncWorker:
 
 async_worker = AsyncWorker()
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    await async_worker.start()
-    yield
-    await async_worker.stop()
-
-
-router = APIRouter(lifespan=lifespan)
+router = APIRouter()
 
 
 @router.post('/messages', status_code=status.HTTP_202_ACCEPTED)
@@ -53,7 +54,14 @@ async def add_messages(
     request: AddMessagesRequest,
     graphiti: ZepGraphitiDep,
 ):
+    if request.schema_id is not None and not is_known_schema_id(request.schema_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Unknown schema_id: {request.schema_id}',
+        )
+
     async def add_messages_task(m: Message):
+        ontology = resolve_ontology(request.schema_id, m.content)
         await graphiti.add_episode(
             uuid=m.uuid,
             group_id=request.group_id,
@@ -62,6 +70,9 @@ async def add_messages(
             reference_time=m.timestamp,
             source=EpisodeType.message,
             source_description=m.source_description,
+            entity_types=cast(Any, ontology.entity_types) if ontology else None,
+            edge_types=cast(Any, ontology.edge_types) if ontology else None,
+            edge_type_map=ontology.edge_type_map if ontology else None,
         )
 
     for m in request.messages:
