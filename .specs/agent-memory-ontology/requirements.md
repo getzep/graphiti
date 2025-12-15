@@ -65,3 +65,13 @@ This feature standardizes “agent memory” extraction for multiple clients by 
 4.1 THE repository SHALL document the health endpoint (`/healthcheck`) and basic redeploy steps.
 4.2 THE repository SHALL include a minimal demo/example that uses `agent_memory_v1` ingestion and shows how to retrieve facts via `/search`.
 
+### Requirement 5: Canonical Group IDs for Shared Memory
+
+**User Story:** As an agent user, I want Copilot Chat and Codex to share the same durable memory, so that preferences and terminology carry across tools.
+
+#### Acceptance Criteria
+
+5.1 THE Graphiti Service SHALL expose an endpoint that resolves a canonical `group_id` from a `(scope, key)` pair.
+5.2 THE endpoint SHALL support at least `user`, `workspace`, and `session` scopes.
+5.3 WHEN given the same `(scope, key)`, THE Graphiti Service SHALL return the same `group_id` across requests and deployments.
+5.4 The repository SHALL document recommended `key` derivation for the `user` scope using GitHub login (e.g. `github_login:<login>`).

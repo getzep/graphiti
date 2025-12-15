@@ -60,12 +60,29 @@ Run the async worker for the lifetime of the FastAPI app and keep a single `ZepG
 
 This keeps the API responsive while ensuring background jobs can safely use Graphiti resources.
 
+### Shared identity and canonical group ids (cross-client memory)
+
+To share durable memory across multiple agent clients (e.g. Copilot Chat + Codex), all clients must write/read from the same “user scope” group (and ideally the same “workspace scope” group). Relying on each client to implement hashing/normalization is error-prone (language drift).
+
+Add a small Graphiti-service endpoint that resolves a canonical `group_id` given a `(scope, key)` pair:
+
+- `scope`: `user | workspace | session`
+- `key`: a stable identifier for that scope
+
+The service computes `group_id` deterministically (hash + prefix) and returns it. Clients can cache the result and use it for ingest + recall, enabling shared memory.
+
+**Identity key recommendation:** GitHub login is typically stable across tools (VS Code GitHub auth, `gh auth status`), and is available without relying on private email addresses. Prefer keys like `github_login:<login>`.
+
 ## Components
 
 - `server/graph_service/ontologies/agent_memory_v1.py`
   - Defines `agent_memory_v1` schema: entity types + edge types (docstring-driven, no fields).
 - `server/graph_service/ontologies/registry.py`
   - Central registry + resolver helpers.
+- `server/graph_service/group_ids.py`
+  - Canonical group id hashing + resolver for `(scope, key)`.
+- `server/graph_service/routers/groups.py`
+  - `POST /groups/resolve` endpoint returning canonical `group_id`.
 - `server/graph_service/dto/ingest.py`
   - Adds `schema_id` to `AddMessagesRequest`.
 - `server/graph_service/routers/ingest.py`
@@ -92,6 +109,7 @@ Copilot Chat / Codex
 
 - **Clients** can remain unchanged if they already wrap durable/structured memory as `<graphiti_episode …>…</graphiti_episode>`.
 - **Explicit opt-in**: clients may set `schema_id=agent_memory_v1` in `POST /messages` for deterministic behavior.
+- **Shared group ids**: clients can call `POST /groups/resolve` once per session/workspace/user identity and cache the returned group ids.
 - Docker compose: pass through `OPENAI_BASE_URL`, `MODEL_NAME`, `EMBEDDING_MODEL_NAME` so service behavior matches client/test environments.
 
 ## Migration / Rollout Strategy
@@ -117,4 +135,3 @@ Copilot Chat / Codex
 - Structured JSON episodes (`EpisodeType.json`) for deterministic ingestion of ownership/metadata without LLM parsing.
 - MCP server parity: expose the same schema ids/ontology selection through MCP tools.
 - Organization/team scope groups and cross-group linking policies.
-
