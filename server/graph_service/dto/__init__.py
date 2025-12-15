@@ -1,4 +1,5 @@
 from .common import Message, Result
+from .groups import ResolveGroupIdRequest, ResolveGroupIdResponse
 from .ingest import AddEntityNodeRequest, AddMessagesRequest
 from .retrieve import FactResult, GetMemoryRequest, GetMemoryResponse, SearchQuery, SearchResults
 
@@ -12,4 +13,6 @@ __all__ = [
     'Result',
     'GetMemoryRequest',
     'GetMemoryResponse',
+    'ResolveGroupIdRequest',
+    'ResolveGroupIdResponse',
 ]

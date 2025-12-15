@@ -125,6 +125,27 @@ curl -sS http://localhost:8000/search \\
   }'
 ```
 
+## Shared Memory Across Tools (Canonical Group IDs)
+
+To share durable memory across multiple clients (e.g. Copilot Chat + Codex), use the same `group_id` for the same scope.
+
+The Graphiti service can resolve a canonical `group_id` from a `(scope, key)` pair:
+
+```bash
+curl -sS http://localhost:8000/groups/resolve \
+  -H 'content-type: application/json' \
+  -d '{
+    "scope": "user",
+    "key": "github_login:yulongbai-nov"
+  }'
+```
+
+Recommended key for user scope:
+
+- Use GitHub login (common across tools): `github_login:<login>`
+  - CLI: parse from `gh auth status`
+  - VS Code: use the GitHub auth session account label
+
 ## Troubleshooting
 
 - If `POST /messages` returns `202` but no episodes/facts appear, ensure you are running a build that keeps a single Graphiti client alive for background jobs (app-scoped client + app-scoped worker). Rebuild/redeploy the container (`docker compose up -d --build`).
