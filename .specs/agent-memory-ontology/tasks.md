@@ -15,9 +15,9 @@
 - [x] 5. Add server tests and docs/demo _Requirements: 3.3, 4.1, 4.2_
   - [x] 5.1 Add/adjust pytest discovery so root tests stay isolated _Requirements: 3.3_
   - [x] 5.2 Add demo under `examples/` or `server/README.md` _Requirements: 4.1, 4.2_
-- [ ] 6. Verify, commit, push, PR _Requirements: 1, 2, 3, 4_
+- [x] 6. Verify, commit, push, PR _Requirements: 1, 2, 3, 4_
 
 ## Current Status Summary
 
-- Phase: implementation (in progress)
-- Next: implement tasks 2–5, then run root + server `make check` and open a PR.
+- Phase: implementation (complete; PR open)
+- Next: merge PR, then redeploy Graphiti service.
