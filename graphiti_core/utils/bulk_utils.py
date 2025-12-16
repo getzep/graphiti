@@ -182,7 +182,9 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
         else:
-            entity_data.update(node.attributes or {})
+            # Neo4j: Serialize attributes to JSON string to support nested structures
+            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
+            entity_data['attributes'] = json.dumps(attributes) if attributes else '{}'
 
         nodes.append(entity_data)
 
@@ -209,7 +211,9 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes)
         else:
-            edge_data.update(edge.attributes or {})
+            # Neo4j: Serialize attributes to JSON string to support nested structures
+            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
+            edge_data['attributes'] = json.dumps(attributes) if attributes else '{}'
 
         edges.append(edge_data)
 
