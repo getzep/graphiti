@@ -755,14 +755,20 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
     else:
-        attributes = record['attributes']
-        attributes.pop('uuid', None)
-        attributes.pop('name', None)
-        attributes.pop('group_id', None)
-        attributes.pop('name_embedding', None)
-        attributes.pop('summary', None)
-        attributes.pop('created_at', None)
-        attributes.pop('labels', None)
+        # Neo4j now stores attributes as JSON string
+        raw_attrs = record.get('attributes', '{}')
+        if isinstance(raw_attrs, str):
+            attributes = json.loads(raw_attrs) if raw_attrs else {}
+        else:
+            # Backward compatibility: handle dict from properties(n)
+            attributes = raw_attrs
+            attributes.pop('uuid', None)
+            attributes.pop('name', None)
+            attributes.pop('group_id', None)
+            attributes.pop('name_embedding', None)
+            attributes.pop('summary', None)
+            attributes.pop('created_at', None)
+            attributes.pop('labels', None)
 
     labels = record.get('labels', [])
     group_id = record.get('group_id')

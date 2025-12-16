@@ -217,7 +217,7 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.invalid_at AS invalid_at,
     """ + (
         'e.attributes AS attributes'
-        if provider == GraphProvider.KUZU
+        if provider in (GraphProvider.KUZU, GraphProvider.NEO4J)
         else 'properties(e) AS attributes'
     )
 

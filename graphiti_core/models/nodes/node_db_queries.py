@@ -265,6 +265,17 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
             n.summary AS summary,
             n.attributes AS attributes
         """
+    
+    if provider == GraphProvider.NEO4J:
+        return """
+            n.uuid AS uuid,
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at,
+            n.summary AS summary,
+            labels(n) AS labels,
+            n.attributes AS attributes
+        """
 
     return """
         n.uuid AS uuid,
