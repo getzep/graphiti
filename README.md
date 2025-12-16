@@ -221,6 +221,9 @@ pip install graphiti-core[falkordb,anthropic,google-genai]
 
 # Install with Amazon Neptune
 pip install graphiti-core[neptune]
+
+# Install with Amazon Bedrock
+pip install graphiti-core[bedrock]
 ```
 
 ## Default to Low Concurrency; LLM Provider 429 Rate Limit Errors
@@ -543,6 +546,68 @@ graphiti = Graphiti(
 ```
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
+
+## Using Graphiti with Amazon Bedrock
+
+Graphiti supports Amazon Bedrock for LLM inference, embeddings, and reranking. Amazon Bedrock provides access to foundation models from leading AI companies.
+
+Install Graphiti with Amazon Bedrock support:
+
+```bash
+uv add "graphiti-core[bedrock]"
+
+# or
+
+pip install "graphiti-core[bedrock]"
+```
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.amazon_bedrock_client import AmazonBedrockLLMClient
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.embedder.amazon_bedrock import AmazonBedrockEmbedder, AmazonBedrockEmbedderConfig
+from graphiti_core.cross_encoder.amazon_bedrock_reranker_client import AmazonBedrockRerankerClient
+
+# Configure Amazon Bedrock clients
+llm_client = AmazonBedrockLLMClient(
+    config=LLMConfig(
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        temperature=0.1,
+        max_tokens=1000,
+    ),
+    region="us-east-1",
+)
+
+embedder_client = AmazonBedrockEmbedder(
+    config=AmazonBedrockEmbedderConfig(
+        model="amazon.titan-embed-text-v2:0",
+        region="us-east-1",
+    )
+)
+
+reranker_client = AmazonBedrockRerankerClient(
+    model="cohere.rerank-v3-5:0",
+    region="us-east-1",
+    max_results=10,
+)
+
+# Initialize Graphiti with Amazon Bedrock clients
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=llm_client,
+    embedder=embedder_client,
+    cross_encoder=reranker_client,
+)
+
+# Now you can use Graphiti with Amazon Bedrock
+```
+
+**Key Points:**
+- Requires AWS credentials configured (via AWS CLI, environment variables, or IAM roles)
+- Different models are available in different AWS regions - check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html) for availability
+- See `examples/amazon-bedrock/` for a complete working example
 
 ## Documentation
 
