@@ -274,7 +274,8 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
             n.created_at AS created_at,
             n.summary AS summary,
             labels(n) AS labels,
-            n.attributes AS attributes
+            COALESCE(n.attributes, '') AS attributes,
+            properties(n) AS all_properties
         """
 
     return """
