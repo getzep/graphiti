@@ -576,26 +576,48 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
     episodes = record['episodes']
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
-    else:
-        # Neo4j now stores attributes as JSON string
-        raw_attrs = record.get('attributes', '{}')
-        if isinstance(raw_attrs, str):
-            attributes = json.loads(raw_attrs) if raw_attrs else {}
+    elif provider == GraphProvider.NEO4J:
+        # Neo4j: Try new JSON format first, fall back to old spread format
+        raw_attrs = record.get('attributes', '')
+        if raw_attrs and isinstance(raw_attrs, str):
+            # New format: JSON string in e.attributes
+            attributes = json.loads(raw_attrs)
         else:
-            # Backward compatibility: handle dict from properties(n)
-            attributes = raw_attrs
-            attributes.pop('uuid', None)
-            attributes.pop('source_node_uuid', None)
-            attributes.pop('target_node_uuid', None)
-            attributes.pop('fact', None)
-            attributes.pop('fact_embedding', None)
-            attributes.pop('name', None)
-            attributes.pop('group_id', None)
-            attributes.pop('episodes', None)
-            attributes.pop('created_at', None)
-            attributes.pop('expired_at', None)
-            attributes.pop('valid_at', None)
-            attributes.pop('invalid_at', None)
+            # Old format: attributes spread as individual properties
+            all_props = record.get('all_properties', {})
+            if all_props:
+                attributes = dict(all_props)
+                # Remove known system fields
+                attributes.pop('uuid', None)
+                attributes.pop('source_node_uuid', None)
+                attributes.pop('target_node_uuid', None)
+                attributes.pop('fact', None)
+                attributes.pop('fact_embedding', None)
+                attributes.pop('name', None)
+                attributes.pop('group_id', None)
+                attributes.pop('episodes', None)
+                attributes.pop('created_at', None)
+                attributes.pop('expired_at', None)
+                attributes.pop('valid_at', None)
+                attributes.pop('invalid_at', None)
+                attributes.pop('attributes', None)  # Remove the empty attributes field
+            else:
+                attributes = {}
+    else:
+        # FalkorDB, Neptune: Original behavior
+        attributes = record['attributes']
+        attributes.pop('uuid', None)
+        attributes.pop('source_node_uuid', None)
+        attributes.pop('target_node_uuid', None)
+        attributes.pop('fact', None)
+        attributes.pop('fact_embedding', None)
+        attributes.pop('name', None)
+        attributes.pop('group_id', None)
+        attributes.pop('episodes', None)
+        attributes.pop('created_at', None)
+        attributes.pop('expired_at', None)
+        attributes.pop('valid_at', None)
+        attributes.pop('invalid_at', None)
 
     edge = EntityEdge(
         uuid=record['uuid'],

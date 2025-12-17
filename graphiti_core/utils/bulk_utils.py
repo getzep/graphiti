@@ -181,10 +181,13 @@ async def add_nodes_and_edges_bulk_tx(
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
-        else:
+        elif driver.provider == GraphProvider.NEO4J:
             # Neo4j: Serialize attributes to JSON string to support nested structures
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes) if attributes else '{}'
+        else:
+            # FalkorDB, Neptune: Keep original behavior (spread attributes)
+            entity_data.update(node.attributes or {})
 
         nodes.append(entity_data)
 
@@ -210,10 +213,13 @@ async def add_nodes_and_edges_bulk_tx(
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes)
-        else:
+        elif driver.provider == GraphProvider.NEO4J:
             # Neo4j: Serialize attributes to JSON string to support nested structures
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes) if attributes else '{}'
+        else:
+            # FalkorDB, Neptune: Keep original behavior (spread attributes)
+            edge_data.update(edge.attributes or {})
 
         edges.append(edge_data)
 
