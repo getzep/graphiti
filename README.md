@@ -63,7 +63,7 @@ while handling changing relationships and maintaining historical context.
 
 ## Graphiti and Zep's Context Engineering Platform.
 
-Graphiti powers the core of [Zep](https://www.getzep.com), a turn-key context engineering platform for AI Agents. Zep
+Graphiti powers the core of [Zep's context engineering platform](https://www.getzep.com) for AI Agents. Zep
 offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
 
 Using Graphiti, we've demonstrated Zep is
