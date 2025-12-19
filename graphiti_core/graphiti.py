@@ -1185,7 +1185,7 @@ class Graphiti:
             )
             resolved_source = resolved_source_nodes[0]
 
-        if source_node.uuid is not None:
+        if target_node.uuid is not None:
             resolved_target = await EntityNode.get_by_uuid(self.driver, target_node.uuid)
         else:
             resolved_target_nodes, _, _ = await resolve_extracted_nodes(
