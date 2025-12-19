@@ -1194,6 +1194,8 @@ class Graphiti:
             )
             resolved_target = resolved_target_nodes[0]
 
+        nodes = [resolved_source, resolved_target]
+
         # Merge user-provided properties from original nodes into resolved nodes (excluding uuid)
         # Update attributes dictionary (merge rather than replace)
         if source_node.attributes:
@@ -1223,8 +1225,8 @@ class Graphiti:
         related_edges = (
             await search(
                 self.clients,
-                updated_edge.fact,
-                group_ids=[updated_edge.group_id],
+                edge.fact,
+                group_ids=[edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(edge_uuids=[edge.uuid for edge in valid_edges]),
             )
@@ -1232,8 +1234,8 @@ class Graphiti:
         existing_edges = (
             await search(
                 self.clients,
-                updated_edge.fact,
-                group_ids=[updated_edge.group_id],
+                edge.fact,
+                group_ids=[edge.group_id],
                 config=EDGE_HYBRID_SEARCH_RRF,
                 search_filter=SearchFilters(),
             )
@@ -1241,7 +1243,7 @@ class Graphiti:
 
         resolved_edge, invalidated_edges, _ = await resolve_extracted_edge(
             self.llm_client,
-            updated_edge,
+            edge,
             related_edges,
             existing_edges,
             EpisodicNode(
