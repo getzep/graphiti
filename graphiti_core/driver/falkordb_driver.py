@@ -289,7 +289,7 @@ class FalkorDriver(GraphDriver):
     def sanitize(self, query: str) -> str:
         """
         Replace FalkorDB special characters with whitespace.
-        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~
+        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~/?
         """
         # FalkorDB separator characters that break text into tokens
         separator_map = str.maketrans(
@@ -321,6 +321,7 @@ class FalkorDriver(GraphDriver):
                 '=': ' ',
                 '~': ' ',
                 '?': ' ',
+                '/': ' ',
             }
         )
         sanitized = query.translate(separator_map)
