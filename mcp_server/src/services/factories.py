@@ -77,6 +77,16 @@ except ImportError:
     HAS_OPENAI_GENERIC = False
 
 
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
+from utils.utils import create_azure_credential_token_provider
+
+
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
 
