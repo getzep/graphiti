@@ -1216,11 +1216,11 @@ class Graphiti:
         if target_node.summary:
             resolved_target.summary = target_node.summary
 
-        # Update labels
+        # Update labels (merge with existing)
         if source_node.labels:
-            resolved_source.labels = source_node.labels
+            resolved_source.labels = list(set(resolved_source.labels) | set(source_node.labels))
         if target_node.labels:
-            resolved_target.labels = target_node.labels
+            resolved_target.labels = list(set(resolved_target.labels) | set(target_node.labels))
 
         edge.source_node_uuid = resolved_source.uuid
         edge.target_node_uuid = resolved_target.uuid
