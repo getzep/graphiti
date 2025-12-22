@@ -1193,7 +1193,7 @@ class Graphiti:
             try:
                 resolved_target = await EntityNode.get_by_uuid(self.driver, target_node.uuid)
             except NodeNotFoundError:
-                raise ValueError(f'Node with UUID {target_node.uuid} not found') from None
+                raise ValueError(f'Node with UUID {target_node.uuid} not found') from err
         else:
             resolved_target_nodes, _, _ = await resolve_extracted_nodes(
                 self.clients,
