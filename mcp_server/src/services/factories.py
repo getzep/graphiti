@@ -69,6 +69,13 @@ try:
 except ImportError:
     HAS_GROQ = False
 
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
@@ -241,6 +248,32 @@ class LLMClientFactory:
                     max_tokens=config.max_tokens,
                 )
                 return GroqClient(config=llm_config)
+
+            case 'openai_generic':
+                # OpenAI Generic client - uses /chat/completions with response_format
+                # instead of /responses endpoint. Compatible with LiteLLM, Ollama, vLLM, etc.
+                if not HAS_OPENAI_GENERIC:
+                    raise ValueError(
+                        'OpenAI Generic client not available in current graphiti-core version'
+                    )
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found')
+
+                api_key = config.providers.openai.api_key
+                base_url = config.providers.openai.api_url
+                _validate_api_key('OpenAI Generic', api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=config.model,
+                    small_model='gpt-4.1-mini',
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                return OpenAIGenericClient(config=llm_config)
 
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
