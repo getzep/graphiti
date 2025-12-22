@@ -595,7 +595,7 @@ class CommunityNode(Node):
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
             await driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'communities',
+                'community_name',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(
