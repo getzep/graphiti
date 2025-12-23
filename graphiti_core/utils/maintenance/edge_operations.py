@@ -29,13 +29,13 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
-from graphiti_core.prompts.extract_edges import ExtractedEdges, MissingFacts
+from graphiti_core.prompts.extract_edges import ExtractedEdges
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
@@ -94,6 +94,7 @@ async def extract_edges(
     edge_type_map: dict[tuple[str, str], list[str]],
     group_id: str = '',
     edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -129,42 +130,17 @@ async def extract_edges(
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
-        'custom_prompt': '',
+        'custom_extraction_instructions': custom_extraction_instructions or '',
     }
 
-    facts_missed = True
-    reflexion_iterations = 0
-    while facts_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
-        llm_response = await llm_client.generate_response(
-            prompt_library.extract_edges.edge(context),
-            response_model=ExtractedEdges,
-            max_tokens=extract_edges_max_tokens,
-            group_id=group_id,
-            prompt_name='extract_edges.edge',
-        )
-        edges_data = ExtractedEdges(**llm_response).edges
-
-        context['extracted_facts'] = [edge_data.fact for edge_data in edges_data]
-
-        reflexion_iterations += 1
-        if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
-            reflexion_response = await llm_client.generate_response(
-                prompt_library.extract_edges.reflexion(context),
-                response_model=MissingFacts,
-                max_tokens=extract_edges_max_tokens,
-                group_id=group_id,
-                prompt_name='extract_edges.reflexion',
-            )
-
-            missing_facts = reflexion_response.get('missing_facts', [])
-
-            custom_prompt = 'The following facts were missed in a previous extraction: '
-            for fact in missing_facts:
-                custom_prompt += f'\n{fact},'
-
-            context['custom_prompt'] = custom_prompt
-
-            facts_missed = len(missing_facts) != 0
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_edges.edge(context),
+        response_model=ExtractedEdges,
+        max_tokens=extract_edges_max_tokens,
+        group_id=group_id,
+        prompt_name='extract_edges.edge',
+    )
+    edges_data = ExtractedEdges(**llm_response).edges
 
     end = time()
     logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')

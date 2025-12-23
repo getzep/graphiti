@@ -110,7 +110,7 @@ Only extract facts that:
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 
 
-{context['custom_prompt']}
+{context['custom_extraction_instructions']}
 
 # EXTRACTION RULES
 

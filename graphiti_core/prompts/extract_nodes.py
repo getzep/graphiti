@@ -124,7 +124,7 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don
 5. **Formatting**:
    - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
 
-{context['custom_prompt']}
+{context['custom_extraction_instructions']}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -148,7 +148,7 @@ def extract_json(context: dict[str, Any]) -> list[Message]:
 {context['episode_content']}
 </JSON>
 
-{context['custom_prompt']}
+{context['custom_extraction_instructions']}
 
 Given the above source description and JSON, extract relevant entities from the provided JSON.
 For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
@@ -182,7 +182,7 @@ Given the above text, extract entities from the TEXT that are explicitly or impl
 For each entity extracted, also determine its entity type based on the provided ENTITY TYPES and their descriptions.
 Indicate the classified entity type by providing its entity_type_id.
 
-{context['custom_prompt']}
+{context['custom_extraction_instructions']}
 
 Guidelines:
 1. Extract significant entities, concepts, or actors mentioned in the conversation.
