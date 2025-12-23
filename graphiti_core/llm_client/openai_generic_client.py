@@ -92,6 +92,41 @@ class OpenAIGenericClient(LLMClient):
         else:
             self.client = client
 
+        # Instance-level fallback state for providers that don't support json_schema
+        # (e.g., LiteLLM with Gemini). Once set to True, remains True for client lifetime.
+        self._use_json_object_mode: bool = False
+
+    def _is_schema_returned_as_data(self, response: dict[str, Any]) -> bool:
+        """Detect if the model returned the schema definition instead of data.
+
+        When some providers (e.g., LiteLLM with Gemini) receive json_schema format,
+        they return the schema definition itself instead of data conforming to the schema.
+
+        Args:
+            response: The parsed JSON response from the LLM
+
+        Returns:
+            True if the response appears to be a JSON Schema definition
+        """
+        # JSON Schema structural markers
+        schema_indicators = {'properties', '$defs', '$schema', 'definitions'}
+
+        # Quick check: if none of the indicators are present, it's not a schema
+        if not any(key in response for key in schema_indicators):
+            return False
+
+        # Strong indicator: top-level "type": "object" with "properties"
+        if response.get('type') == 'object' and 'properties' in response:
+            return True
+
+        # Another strong indicator: "required" as list of strings alongside "properties"
+        if 'required' in response and 'properties' in response:
+            required = response.get('required')
+            if isinstance(required, list) and all(isinstance(item, str) for item in required):
+                return True
+
+        return False
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -107,9 +142,10 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            # Prepare response format
-            response_format: dict[str, Any] = {'type': 'json_object'}
-            if response_model is not None:
+            # Prepare response format based on mode
+            response_format: dict[str, Any]
+            if response_model is not None and not self._use_json_object_mode:
+                # Preferred mode: use json_schema format (works with OpenAI, vLLM, etc.)
                 schema_name = getattr(response_model, '__name__', 'structured_response')
                 json_schema = response_model.model_json_schema()
                 response_format = {
@@ -119,6 +155,21 @@ class OpenAIGenericClient(LLMClient):
                         'schema': json_schema,
                     },
                 }
+            else:
+                # Fallback mode: use json_object format with schema embedded in prompt
+                # (for providers that don't support json_schema, e.g., LiteLLM with Gemini)
+                response_format = {'type': 'json_object'}
+                if response_model is not None:
+                    # Append schema to last user message (like base class does)
+                    serialized_model = json.dumps(response_model.model_json_schema())
+                    for i in range(len(openai_messages) - 1, -1, -1):
+                        if openai_messages[i]['role'] == 'user':
+                            content = openai_messages[i].get('content', '')
+                            openai_messages[i]['content'] = (
+                                f'{content}\n\nRespond with a JSON object in the following '
+                                f'format:\n\n{serialized_model}'
+                            )
+                            break
 
             response = await self.client.chat.completions.create(
                 model=self.model or DEFAULT_MODEL,
@@ -153,9 +204,12 @@ class OpenAIGenericClient(LLMClient):
         # Wrap entire operation in tracing span
         with self.tracer.start_span('llm.generate') as span:
             attributes = {
-                'llm.provider': 'openai',
+                'llm.provider': 'openai_generic',
                 'model.size': model_size.value,
                 'max_tokens': max_tokens,
+                'structured_output.mode': 'json_object'
+                if self._use_json_object_mode
+                else 'json_schema',
             }
             if prompt_name:
                 attributes['prompt.name'] = prompt_name
@@ -163,12 +217,37 @@ class OpenAIGenericClient(LLMClient):
 
             retry_count = 0
             last_error = None
+            # Track if we've already attempted fallback in this call
+            fallback_attempted_this_call = False
 
             while retry_count <= self.MAX_RETRIES:
                 try:
                     response = await self._generate_response(
                         messages, response_model, max_tokens=max_tokens, model_size=model_size
                     )
+
+                    # Check for schema-as-data pattern (only if using json_schema mode)
+                    if (
+                        response_model is not None
+                        and not self._use_json_object_mode
+                        and self._is_schema_returned_as_data(response)
+                    ):
+                        if not fallback_attempted_this_call:
+                            logger.warning(
+                                'Provider returned schema definition instead of data. '
+                                'Switching to json_object mode with embedded schema.'
+                            )
+                            self._use_json_object_mode = True
+                            fallback_attempted_this_call = True
+                            span.add_attributes({'structured_output.fallback_triggered': True})
+                            # Retry immediately with fallback mode (does NOT count against MAX_RETRIES)
+                            continue
+                        else:
+                            # Fallback already attempted but still got schema - treat as error
+                            raise ValueError(
+                                'Provider returned schema definition even in fallback mode'
+                            )
+
                     return response
                 except (RateLimitError, RefusalError):
                     # These errors should not trigger retries
