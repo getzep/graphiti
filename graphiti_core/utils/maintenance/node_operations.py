@@ -91,7 +91,7 @@ async def extract_nodes(
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
-    custom_prompt: str | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
@@ -121,7 +121,7 @@ async def extract_nodes(
         'episode_content': episode.content,
         'episode_timestamp': episode.valid_at.isoformat(),
         'previous_episodes': [ep.content for ep in previous_episodes],
-        'custom_prompt': custom_prompt or '',
+        'custom_extraction_instructions': custom_extraction_instructions or '',
         'entity_types': entity_types_context,
         'source_description': episode.source_description,
     }

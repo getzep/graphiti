@@ -94,7 +94,7 @@ async def extract_edges(
     edge_type_map: dict[tuple[str, str], list[str]],
     group_id: str = '',
     edge_types: dict[str, type[BaseModel]] | None = None,
-    custom_prompt: str | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -130,7 +130,7 @@ async def extract_edges(
         'previous_episodes': [ep.content for ep in previous_episodes],
         'reference_time': episode.valid_at,
         'edge_types': edge_types_context,
-        'custom_prompt': custom_prompt or '',
+        'custom_extraction_instructions': custom_extraction_instructions or '',
     }
 
     llm_response = await llm_client.generate_response(

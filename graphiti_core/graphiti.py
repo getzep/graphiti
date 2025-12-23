@@ -385,7 +385,7 @@ class Graphiti:
             edge_types: dict[str, type[BaseModel]] | None,
             nodes: list[EntityNode],
             uuid_map: dict[str, str],
-            custom_prompt: str | None = None,
+            custom_extraction_instructions: str | None = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode and resolve against existing graph."""
         extracted_edges = await extract_edges(
@@ -396,7 +396,7 @@ class Graphiti:
             edge_type_map,
             group_id,
             edge_types,
-            custom_prompt,
+            custom_extraction_instructions,
         )
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
@@ -630,7 +630,7 @@ class Graphiti:
             previous_episode_uuids: list[str] | None = None,
             edge_types: dict[str, type[BaseModel]] | None = None,
             edge_type_map: dict[tuple[str, str], list[str]] | None = None,
-            custom_prompt: str | None = None,
+            custom_extraction_instructions: str | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -665,8 +665,8 @@ class Graphiti:
         previous_episode_uuids : list[str] | None
             Optional.  list of episode uuids to use as the previous episodes. If this is not provided,
             the most recent episodes by created_at date will be used.
-        custom_prompt : str | None
-            Optional. Custom prompt string to be included in the extract entities and extract edges prompts.
+        custom_extraction_instructions : str | None
+            Optional. Custom extraction instructions string to be included in the extract entities and extract edges prompts.
             This allows for additional instructions or context to guide the extraction process.
 
         Returns
@@ -746,7 +746,7 @@ class Graphiti:
 
                 # Extract and resolve nodes
                 extracted_nodes = await extract_nodes(
-                    self.clients, episode, previous_episodes, entity_types, excluded_entity_types, custom_prompt
+                    self.clients, episode, previous_episodes, entity_types, excluded_entity_types, custom_extraction_instructions
                 )
 
                 nodes, uuid_map, _ = await resolve_extracted_nodes(
@@ -767,7 +767,7 @@ class Graphiti:
                     edge_types,
                     nodes,
                     uuid_map,
-                    custom_prompt,
+                    custom_extraction_instructions,
                 )
 
                 # Extract node attributes
