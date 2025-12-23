@@ -22,7 +22,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import MAX_REFLEXION_ITERATIONS, semaphore_gather
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
 from graphiti_core.nodes import (
@@ -91,13 +91,10 @@ async def extract_nodes(
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
+    custom_prompt: str | None = None,
 ) -> list[EntityNode]:
     start = time()
     llm_client = clients.llm_client
-    llm_response = {}
-    custom_prompt = ''
-    entities_missed = True
-    reflexion_iterations = 0
 
     entity_types_context = [
         {
@@ -124,53 +121,35 @@ async def extract_nodes(
         'episode_content': episode.content,
         'episode_timestamp': episode.valid_at.isoformat(),
         'previous_episodes': [ep.content for ep in previous_episodes],
-        'custom_prompt': custom_prompt,
+        'custom_prompt': custom_prompt or '',
         'entity_types': entity_types_context,
         'source_description': episode.source_description,
     }
 
-    while entities_missed and reflexion_iterations <= MAX_REFLEXION_ITERATIONS:
-        if episode.source == EpisodeType.message:
-            llm_response = await llm_client.generate_response(
-                prompt_library.extract_nodes.extract_message(context),
-                response_model=ExtractedEntities,
-                group_id=episode.group_id,
-                prompt_name='extract_nodes.extract_message',
-            )
-        elif episode.source == EpisodeType.text:
-            llm_response = await llm_client.generate_response(
-                prompt_library.extract_nodes.extract_text(context),
-                response_model=ExtractedEntities,
-                group_id=episode.group_id,
-                prompt_name='extract_nodes.extract_text',
-            )
-        elif episode.source == EpisodeType.json:
-            llm_response = await llm_client.generate_response(
-                prompt_library.extract_nodes.extract_json(context),
-                response_model=ExtractedEntities,
-                group_id=episode.group_id,
-                prompt_name='extract_nodes.extract_json',
-            )
+    if episode.source == EpisodeType.message:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_nodes.extract_message(context),
+            response_model=ExtractedEntities,
+            group_id=episode.group_id,
+            prompt_name='extract_nodes.extract_message',
+        )
+    elif episode.source == EpisodeType.text:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_nodes.extract_text(context),
+            response_model=ExtractedEntities,
+            group_id=episode.group_id,
+            prompt_name='extract_nodes.extract_text',
+        )
+    elif episode.source == EpisodeType.json:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_nodes.extract_json(context),
+            response_model=ExtractedEntities,
+            group_id=episode.group_id,
+            prompt_name='extract_nodes.extract_json',
+        )
 
-        response_object = ExtractedEntities(**llm_response)
-
-        extracted_entities: list[ExtractedEntity] = response_object.extracted_entities
-
-        reflexion_iterations += 1
-        if reflexion_iterations < MAX_REFLEXION_ITERATIONS:
-            missing_entities = await extract_nodes_reflexion(
-                llm_client,
-                episode,
-                previous_episodes,
-                [entity.name for entity in extracted_entities],
-                episode.group_id,
-            )
-
-            entities_missed = len(missing_entities) != 0
-
-            custom_prompt = 'Make sure that the following entities are extracted: '
-            for entity in missing_entities:
-                custom_prompt += f'\n{entity},'
+    response_object = ExtractedEntities(**llm_response)
+    extracted_entities: list[ExtractedEntity] = response_object.extracted_entities
 
     filtered_extracted_entities = [entity for entity in extracted_entities if entity.name.strip()]
     end = time()
