@@ -78,15 +78,25 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
-        response = await self.client.responses.parse(
-            model=model,
-            input=messages,  # type: ignore
-            temperature=temperature if not is_reasoning_model else None,
-            max_output_tokens=max_tokens,
-            text_format=response_model,  # type: ignore
-            reasoning={'effort': reasoning} if reasoning is not None else None,  # type: ignore
-            text={'verbosity': verbosity} if verbosity is not None else None,  # type: ignore
-        )
+        request_kwargs = {
+            'model': model,
+            'input': messages,  # type: ignore
+            'max_output_tokens': max_tokens,
+            'text_format': response_model,  # type: ignore
+        }
+
+        temperature_value = temperature if not is_reasoning_model else None
+        if temperature_value is not None:
+            request_kwargs['temperature'] = temperature_value
+
+        # Only include reasoning and verbosity parameters for reasoning models
+        if is_reasoning_model and reasoning is not None:
+            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+
+        if is_reasoning_model and verbosity is not None:
+            request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
+
+        response = await self.client.responses.parse(**request_kwargs)
 
         return response
 
