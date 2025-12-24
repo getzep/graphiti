@@ -49,9 +49,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
-        entity_nodes: list[EntityNode],
-        episode_uuid: str,
-        created_at: datetime,
+    entity_nodes: list[EntityNode],
+    episode_uuid: str,
+    created_at: datetime,
 ) -> list[EpisodicEdge]:
     episodic_edges: list[EpisodicEdge] = [
         EpisodicEdge(
@@ -69,9 +69,9 @@ def build_episodic_edges(
 
 
 def build_community_edges(
-        entity_nodes: list[EntityNode],
-        community_node: CommunityNode,
-        created_at: datetime,
+    entity_nodes: list[EntityNode],
+    community_node: CommunityNode,
+    created_at: datetime,
 ) -> list[CommunityEdge]:
     edges: list[CommunityEdge] = [
         CommunityEdge(
@@ -87,14 +87,14 @@ def build_community_edges(
 
 
 async def extract_edges(
-        clients: GraphitiClients,
-        episode: EpisodicNode,
-        nodes: list[EntityNode],
-        previous_episodes: list[EpisodicNode],
-        edge_type_map: dict[tuple[str, str], list[str]],
-        group_id: str = '',
-        edge_types: dict[str, type[BaseModel]] | None = None,
-        custom_extraction_instructions: str | None = None,
+    clients: GraphitiClients,
+    episode: EpisodicNode,
+    nodes: list[EntityNode],
+    previous_episodes: list[EpisodicNode],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    group_id: str = '',
+    edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> list[EntityEdge]:
     start = time()
 
@@ -222,13 +222,17 @@ async def extract_edges(
     for edge in edges:
         nodes_with_edges.add(edge.source_node_uuid)
         nodes_with_edges.add(edge.target_node_uuid)
-    
+
     nodes_without_edges = [node for node in nodes if node.uuid not in nodes_with_edges]
     if nodes_without_edges:
         logger.info(
             f'Extracted {len(edges)} edges. {len(nodes_without_edges)} nodes have no edges: '
             f'{[node.name for node in nodes_without_edges[:10]]}'
-            + (f' (and {len(nodes_without_edges) - 10} more)' if len(nodes_without_edges) > 10 else '')
+            + (
+                f' (and {len(nodes_without_edges) - 10} more)'
+                if len(nodes_without_edges) > 10
+                else ''
+            )
         )
 
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
@@ -237,12 +241,12 @@ async def extract_edges(
 
 
 async def resolve_extracted_edges(
-        clients: GraphitiClients,
-        extracted_edges: list[EntityEdge],
-        episode: EpisodicNode,
-        entities: list[EntityNode],
-        edge_types: dict[str, type[BaseModel]],
-        edge_type_map: dict[tuple[str, str], list[str]],
+    clients: GraphitiClients,
+    extracted_edges: list[EntityEdge],
+    episode: EpisodicNode,
+    entities: list[EntityNode],
+    edge_types: dict[str, type[BaseModel]],
+    edge_type_map: dict[tuple[str, str], list[str]],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
     # seen: dict[tuple[str, str, str], EntityEdge] = {}
@@ -427,7 +431,7 @@ async def resolve_extracted_edges(
 
 
 def resolve_edge_contradictions(
-        resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
+    resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
 ) -> list[EntityEdge]:
     if len(invalidation_candidates) == 0:
         return []
@@ -442,20 +446,20 @@ def resolve_edge_contradictions(
         resolved_edge_invalid_at_utc = ensure_utc(resolved_edge.invalid_at)
 
         if (
-                edge_invalid_at_utc is not None
-                and resolved_edge_valid_at_utc is not None
-                and edge_invalid_at_utc <= resolved_edge_valid_at_utc
+            edge_invalid_at_utc is not None
+            and resolved_edge_valid_at_utc is not None
+            and edge_invalid_at_utc <= resolved_edge_valid_at_utc
         ) or (
-                edge_valid_at_utc is not None
-                and resolved_edge_invalid_at_utc is not None
-                and resolved_edge_invalid_at_utc <= edge_valid_at_utc
+            edge_valid_at_utc is not None
+            and resolved_edge_invalid_at_utc is not None
+            and resolved_edge_invalid_at_utc <= edge_valid_at_utc
         ):
             continue
         # New edge invalidates edge
         elif (
-                edge_valid_at_utc is not None
-                and resolved_edge_valid_at_utc is not None
-                and edge_valid_at_utc < resolved_edge_valid_at_utc
+            edge_valid_at_utc is not None
+            and resolved_edge_valid_at_utc is not None
+            and edge_valid_at_utc < resolved_edge_valid_at_utc
         ):
             edge.invalid_at = resolved_edge.valid_at
             edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
@@ -465,13 +469,13 @@ def resolve_edge_contradictions(
 
 
 async def resolve_extracted_edge(
-        llm_client: LLMClient,
-        extracted_edge: EntityEdge,
-        related_edges: list[EntityEdge],
-        existing_edges: list[EntityEdge],
-        episode: EpisodicNode,
-        edge_type_candidates: dict[str, type[BaseModel]] | None = None,
-        custom_edge_type_names: set[str] | None = None,
+    llm_client: LLMClient,
+    extracted_edge: EntityEdge,
+    related_edges: list[EntityEdge],
+    existing_edges: list[EntityEdge],
+    episode: EpisodicNode,
+    edge_type_candidates: dict[str, type[BaseModel]] | None = None,
+    custom_edge_type_names: set[str] | None = None,
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     """Resolve an extracted edge against existing graph context.
 
@@ -506,9 +510,9 @@ async def resolve_extracted_edge(
     normalized_fact = _normalize_string_exact(extracted_edge.fact)
     for edge in related_edges:
         if (
-                edge.source_node_uuid == extracted_edge.source_node_uuid
-                and edge.target_node_uuid == extracted_edge.target_node_uuid
-                and _normalize_string_exact(edge.fact) == normalized_fact
+            edge.source_node_uuid == extracted_edge.source_node_uuid
+            and edge.target_node_uuid == extracted_edge.target_node_uuid
+            and _normalize_string_exact(edge.fact) == normalized_fact
         ):
             resolved = edge
             if episode is not None and episode.uuid not in resolved.episodes:
@@ -652,9 +656,9 @@ async def resolve_extracted_edge(
             candidate_valid_at_utc = ensure_utc(candidate.valid_at)
             resolved_edge_valid_at_utc = ensure_utc(resolved_edge.valid_at)
             if (
-                    candidate_valid_at_utc is not None
-                    and resolved_edge_valid_at_utc is not None
-                    and candidate_valid_at_utc > resolved_edge_valid_at_utc
+                candidate_valid_at_utc is not None
+                and resolved_edge_valid_at_utc is not None
+                and candidate_valid_at_utc > resolved_edge_valid_at_utc
             ):
                 # Expire new edge since we have information about more recent events
                 resolved_edge.invalid_at = candidate.valid_at
@@ -671,7 +675,7 @@ async def resolve_extracted_edge(
 
 
 async def filter_existing_duplicate_of_edges(
-        driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
+    driver: GraphDriver, duplicates_node_tuples: list[tuple[EntityNode, EntityNode]]
 ) -> list[tuple[EntityNode, EntityNode]]:
     if not duplicates_node_tuples:
         return []
