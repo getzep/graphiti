@@ -49,12 +49,12 @@ class BaseOpenAIClient(LLMClient):
     MAX_RETRIES: ClassVar[int] = 2
 
     def __init__(
-            self,
-            config: LLMConfig | None = None,
-            cache: bool = False,
-            max_tokens: int = DEFAULT_MAX_TOKENS,
-            reasoning: str | None = DEFAULT_REASONING,
-            verbosity: str | None = DEFAULT_VERBOSITY,
+        self,
+        config: LLMConfig | None = None,
+        cache: bool = False,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        reasoning: str | None = DEFAULT_REASONING,
+        verbosity: str | None = DEFAULT_VERBOSITY,
     ):
         if cache:
             raise NotImplementedError('Caching is not implemented for OpenAI-based clients')
@@ -69,32 +69,32 @@ class BaseOpenAIClient(LLMClient):
 
     @abstractmethod
     async def _create_completion(
-            self,
-            model: str,
-            messages: list[ChatCompletionMessageParam],
-            temperature: float | None,
-            max_tokens: int,
-            response_model: type[BaseModel] | None = None,
+        self,
+        model: str,
+        messages: list[ChatCompletionMessageParam],
+        temperature: float | None,
+        max_tokens: int,
+        response_model: type[BaseModel] | None = None,
     ) -> Any:
         """Create a completion using the specific client implementation."""
         pass
 
     @abstractmethod
     async def _create_structured_completion(
-            self,
-            model: str,
-            messages: list[ChatCompletionMessageParam],
-            temperature: float | None,
-            max_tokens: int,
-            response_model: type[BaseModel],
-            reasoning: str | None,
-            verbosity: str | None,
+        self,
+        model: str,
+        messages: list[ChatCompletionMessageParam],
+        temperature: float | None,
+        max_tokens: int,
+        response_model: type[BaseModel],
+        reasoning: str | None,
+        verbosity: str | None,
     ) -> Any:
         """Create a structured completion using the specific client implementation."""
         pass
 
     def _convert_messages_to_openai_format(
-            self, messages: list[Message]
+        self, messages: list[Message]
     ) -> list[ChatCompletionMessageParam]:
         """Convert internal Message format to OpenAI ChatCompletionMessageParam format."""
         openai_messages: list[ChatCompletionMessageParam] = []
@@ -130,11 +130,11 @@ class BaseOpenAIClient(LLMClient):
         return json.loads(result)
 
     async def _generate_response(
-            self,
-            messages: list[Message],
-            response_model: type[BaseModel] | None = None,
-            max_tokens: int = DEFAULT_MAX_TOKENS,
-            model_size: ModelSize = ModelSize.medium,
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, Any]:
         """Generate a response using the appropriate client implementation."""
         openai_messages = self._convert_messages_to_openai_format(messages)
@@ -182,13 +182,13 @@ class BaseOpenAIClient(LLMClient):
             raise
 
     async def generate_response(
-            self,
-            messages: list[Message],
-            response_model: type[BaseModel] | None = None,
-            max_tokens: int | None = None,
-            model_size: ModelSize = ModelSize.medium,
-            group_id: str | None = None,
-            prompt_name: str | None = None,
+        self,
+        messages: list[Message],
+        response_model: type[BaseModel] | None = None,
+        max_tokens: int | None = None,
+        model_size: ModelSize = ModelSize.medium,
+        group_id: str | None = None,
+        prompt_name: str | None = None,
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling."""
         if max_tokens is None:
@@ -222,9 +222,9 @@ class BaseOpenAIClient(LLMClient):
                     span.set_status('error', str(last_error))
                     raise
                 except (
-                        openai.APITimeoutError,
-                        openai.APIConnectionError,
-                        openai.InternalServerError,
+                    openai.APITimeoutError,
+                    openai.APIConnectionError,
+                    openai.InternalServerError,
                 ):
                     # Let OpenAI's client handle these retries
                     span.set_status('error', str(last_error))
