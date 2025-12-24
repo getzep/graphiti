@@ -168,22 +168,14 @@ async def extract_edges(
             logger.warning('No entities provided for edge extraction')
             continue
 
-        # Validate and get source node
-        if not (0 <= source_node_idx < len(nodes)):
+        if not (0 <= source_node_idx < len(nodes) and 0 <= target_node_idx < len(nodes)):
             logger.warning(
-                f'Invalid source_entity_id {source_node_idx} in edge extraction for {edge_data.relation_type}. '
-                f'Valid range: 0-{len(nodes) - 1}, fact: {edge_data.fact[:100]}...'
+                f'Invalid entity IDs in edge extraction for {edge_data.relation_type}. '
+                f'source_entity_id: {source_node_idx}, target_entity_id: {target_node_idx}, '
+                f'but only {len(nodes)} entities available (valid range: 0-{len(nodes) - 1})'
             )
             continue
         source_node_uuid = nodes[source_node_idx].uuid
-
-        # Validate and get target node
-        if not (0 <= target_node_idx < len(nodes)):
-            logger.warning(
-                f'Invalid target_entity_id {target_node_idx} in edge extraction for {edge_data.relation_type}. '
-                f'Valid range: 0-{len(nodes) - 1}, fact: {edge_data.fact[:100]}...'
-            )
-            continue
         target_node_uuid = nodes[target_node_idx].uuid
 
         if valid_at:
@@ -217,24 +209,6 @@ async def extract_edges(
             f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
         )
 
-    # Track which nodes have edges
-    nodes_with_edges = set()
-    for edge in edges:
-        nodes_with_edges.add(edge.source_node_uuid)
-        nodes_with_edges.add(edge.target_node_uuid)
-
-    nodes_without_edges = [node for node in nodes if node.uuid not in nodes_with_edges]
-    if nodes_without_edges:
-        logger.info(
-            f'Extracted {len(edges)} edges. {len(nodes_without_edges)} nodes have no edges: '
-            f'{[node.name for node in nodes_without_edges[:10]]}'
-            + (
-                f' (and {len(nodes_without_edges) - 10} more)'
-                if len(nodes_without_edges) > 10
-                else ''
-            )
-        )
-
     logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
 
     return edges
@@ -249,20 +223,20 @@ async def resolve_extracted_edges(
     edge_type_map: dict[tuple[str, str], list[str]],
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
-    # seen: dict[tuple[str, str, str], EntityEdge] = {}
-    # deduplicated_edges: list[EntityEdge] = []
-    #
-    # for edge in extracted_edges:
-    #     key = (
-    #         edge.source_node_uuid,
-    #         edge.target_node_uuid,
-    #         _normalize_string_exact(edge.fact),
-    #     )
-    #     if key not in seen:
-    #         seen[key] = edge
-    #         deduplicated_edges.append(edge)
-    #
-    # extracted_edges = deduplicated_edges
+    seen: dict[tuple[str, str, str], EntityEdge] = {}
+    deduplicated_edges: list[EntityEdge] = []
+
+    for edge in extracted_edges:
+        key = (
+            edge.source_node_uuid,
+            edge.target_node_uuid,
+            _normalize_string_exact(edge.fact),
+        )
+        if key not in seen:
+            seen[key] = edge
+            deduplicated_edges.append(edge)
+
+    extracted_edges = deduplicated_edges
 
     driver = clients.driver
     llm_client = clients.llm_client
@@ -325,20 +299,9 @@ async def resolve_extracted_edges(
 
     # Fetch missing nodes from the database
     if referenced_node_uuids:
-        logger.warning(
-            f'Edges reference {len(referenced_node_uuids)} node UUIDs not in entities list. '
-            f'Fetching from database: {referenced_node_uuids}'
-        )
         missing_nodes = await EntityNode.get_by_uuids(driver, list(referenced_node_uuids))
         for node in missing_nodes:
             uuid_entity_map[node.uuid] = node
-        if len(missing_nodes) < len(referenced_node_uuids):
-            found_uuids = {node.uuid for node in missing_nodes}
-            missing_uuids = referenced_node_uuids - found_uuids
-            logger.warning(
-                f'Could not find {len(missing_uuids)} nodes in database: {missing_uuids}. '
-                f'Edges referencing these nodes may be processed with default Entity labels.'
-            )
 
     # Determine which edge types are relevant for each edge.
     # `edge_types_lst` stores the subset of custom edge definitions whose
