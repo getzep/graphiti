@@ -46,6 +46,11 @@ class GraphProvider(Enum):
     NEPTUNE = 'neptune'
 
 
+class QueryLanguage(Enum):
+    CYPHER = 'cypher'
+    GREMLIN = 'gremlin'
+
+
 class GraphDriverSession(ABC):
     provider: GraphProvider
 
@@ -72,6 +77,7 @@ class GraphDriverSession(ABC):
 
 class GraphDriver(ABC):
     provider: GraphProvider
+    query_language: QueryLanguage = QueryLanguage.CYPHER
     fulltext_syntax: str = (
         ''  # Neo4j (default) syntax does not require a prefix for fulltext queries
     )

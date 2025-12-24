@@ -19,7 +19,11 @@ from datetime import datetime
 
 from typing_extensions import LiteralString
 
-from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.driver.driver import GraphDriver, GraphProvider, QueryLanguage
+from graphiti_core.graph_queries import (
+    gremlin_delete_all_nodes,
+    gremlin_delete_nodes_by_group_id,
+)
 from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_RETURN_NEPTUNE,
@@ -35,22 +39,34 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
     async with driver.session() as session:
 
         async def delete_all(tx):
-            await tx.run('MATCH (n) DETACH DELETE n')
+            if hasattr(driver, 'query_language') and driver.query_language == QueryLanguage.GREMLIN:
+                await tx.run(gremlin_delete_all_nodes())
+            else:
+                await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            labels = ['Entity', 'Episodic', 'Community']
-            if driver.provider == GraphProvider.KUZU:
-                labels.append('RelatesToNode_')
+            if hasattr(driver, 'query_language') and driver.query_language == QueryLanguage.GREMLIN:
+                # For Gremlin, delete nodes by group_id for each label
+                labels = ['Entity', 'Episodic', 'Community']
+                for label in labels:
+                    await tx.run(
+                        gremlin_delete_nodes_by_group_id(label, 'group_ids'),
+                        group_ids=group_ids,
+                    )
+            else:
+                labels = ['Entity', 'Episodic', 'Community']
+                if driver.provider == GraphProvider.KUZU:
+                    labels.append('RelatesToNode_')
 
-            for label in labels:
-                await tx.run(
-                    f"""
-                    MATCH (n:{label})
-                    WHERE n.group_id IN $group_ids
-                    DETACH DELETE n
-                    """,
-                    group_ids=group_ids,
-                )
+                for label in labels:
+                    await tx.run(
+                        f"""
+                        MATCH (n:{label})
+                        WHERE n.group_id IN $group_ids
+                        DETACH DELETE n
+                        """,
+                        group_ids=group_ids,
+                    )
 
         if group_ids is None:
             await session.execute_write(delete_all)
