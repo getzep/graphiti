@@ -289,6 +289,20 @@ async def resolve_extracted_edges(
     # Build entity hash table
     uuid_entity_map: dict[str, EntityNode] = {entity.uuid: entity for entity in entities}
 
+    # Collect all node UUIDs referenced by edges that are not in the entities list
+    referenced_node_uuids = set()
+    for extracted_edge in extracted_edges:
+        if extracted_edge.source_node_uuid not in uuid_entity_map:
+            referenced_node_uuids.add(extracted_edge.source_node_uuid)
+        if extracted_edge.target_node_uuid not in uuid_entity_map:
+            referenced_node_uuids.add(extracted_edge.target_node_uuid)
+
+    # Fetch missing nodes from the database
+    if referenced_node_uuids:
+        missing_nodes = await EntityNode.get_by_uuids(driver, list(referenced_node_uuids))
+        for node in missing_nodes:
+            uuid_entity_map[node.uuid] = node
+
     # Determine which edge types are relevant for each edge.
     # `edge_types_lst` stores the subset of custom edge definitions whose
     # node signature matches each extracted edge. Anything outside this subset
