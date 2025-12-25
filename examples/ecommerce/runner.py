@@ -60,7 +60,7 @@ def setup_logging():
 shoe_conversation = [
     "SalesBot: Hi, I'm Allbirds Assistant! How can I help you today?",
     "John: Hi, I'm looking for a new pair of shoes.",
-    'SalesBot: Of course! What kinde of material are you looking for?',
+    'SalesBot: Of course! What kind of material are you looking for?',
     "John: I'm looking for shoes made out of wool",
     """SalesBot: We have just what you are looking for, how do you like our Men's SuperLight Wool Runners 
     - Dark Grey (Medium Grey Sole)? They use the SuperLight Foam technology.""",

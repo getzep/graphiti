@@ -2,17 +2,17 @@
 
 # Define variables
 PYTHON = python3
-POETRY = poetry
-PYTEST = $(POETRY) run pytest
-RUFF = $(POETRY) run ruff
-MYPY = $(POETRY) run mypy
+UV = uv
+PYTEST = $(UV) run pytest
+RUFF = $(UV) run ruff
+PYRIGHT = $(UV) run pyright
 
 # Default target
 all: format lint test
 
 # Install dependencies
 install:
-	$(POETRY) install --with dev
+	$(UV) sync --extra dev
 
 # Format code
 format:
@@ -22,7 +22,7 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) . --show-column-numbers --show-error-codes --pretty 
+	$(PYRIGHT) . 
 
 # Run tests
 test:

@@ -4,9 +4,6 @@ on:
   push:
     tags: ["v*.*.*"]
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -18,21 +15,23 @@ jobs:
       url: https://pypi.org/p/zep-cloud
     steps:
       - uses: actions/checkout@v4
-      - name: Install poetry
-        run: pipx install poetry==$POETRY_VERSION
-      - name: Set up Python 3.10
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-          cache: "poetry"
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
       - name: Compare pyproject version with tag
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/}
-          if [ "$TAG_VERSION" != "v$(poetry version --short)" ]; then
-            echo "Tag version $TAG_VERSION does not match the project version $(poetry version --short)"
+          PROJECT_VERSION=$(uv run python -c "import tomllib; print('v' + tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag version $TAG_VERSION does not match the project version $PROJECT_VERSION"
             exit 1
           fi
       - name: Build project for distribution
-        run: poetry build
+        run: uv build
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

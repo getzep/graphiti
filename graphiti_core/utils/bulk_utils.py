@@ -14,57 +14,93 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 import typing
-from collections import defaultdict
 from datetime import datetime
-from math import ceil
 
-from neo4j import AsyncDriver, AsyncManagedTransaction
-from numpy import dot, sqrt
-from pydantic import BaseModel
+import numpy as np
+from pydantic import BaseModel, Field
 from typing_extensions import Any
 
-from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge
+from graphiti_core.driver.driver import (
+    GraphDriver,
+    GraphDriverSession,
+    GraphProvider,
+)
+from graphiti_core.edges import Edge, EntityEdge, EpisodicEdge, create_entity_edge_embeddings
+from graphiti_core.embedder import EmbedderClient
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
-from graphiti_core.llm_client import LLMClient
+from graphiti_core.helpers import normalize_l2, semaphore_gather
 from graphiti_core.models.edges.edge_db_queries import (
-    ENTITY_EDGE_SAVE_BULK,
-    EPISODIC_EDGE_SAVE_BULK,
+    get_entity_edge_save_bulk_query,
+    get_episodic_edge_save_bulk_query,
 )
 from graphiti_core.models.nodes.node_db_queries import (
-    ENTITY_NODE_SAVE_BULK,
-    EPISODIC_NODE_SAVE_BULK,
+    get_entity_node_save_bulk_query,
+    get_episode_node_save_bulk_query,
 )
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
-from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.search.search_utils import get_relevant_edges, get_relevant_nodes
-from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
+from graphiti_core.utils.maintenance.dedup_helpers import (
+    DedupResolutionState,
+    _build_candidate_indexes,
+    _normalize_string_exact,
+    _resolve_with_similarity,
+)
 from graphiti_core.utils.maintenance.edge_operations import (
-    build_episodic_edges,
-    dedupe_edge_list,
-    dedupe_extracted_edges,
     extract_edges,
+    resolve_extracted_edge,
 )
 from graphiti_core.utils.maintenance.graph_data_operations import (
     EPISODE_WINDOW_LEN,
     retrieve_episodes,
 )
 from graphiti_core.utils.maintenance.node_operations import (
-    dedupe_extracted_nodes,
-    dedupe_node_list,
     extract_nodes,
+    resolve_extracted_nodes,
 )
-from graphiti_core.utils.maintenance.temporal_operations import extract_edge_dates
 
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 10
 
 
+def _build_directed_uuid_map(pairs: list[tuple[str, str]]) -> dict[str, str]:
+    """Collapse alias -> canonical chains while preserving direction.
+
+    The incoming pairs represent directed mappings discovered during node dedupe. We use a simple
+    union-find with iterative path compression to ensure every source UUID resolves to its ultimate
+    canonical target, even if aliases appear lexicographically smaller than the canonical UUID.
+    """
+
+    parent: dict[str, str] = {}
+
+    def find(uuid: str) -> str:
+        """Directed union-find lookup using iterative path compression."""
+        parent.setdefault(uuid, uuid)
+        root = uuid
+        while parent[root] != root:
+            root = parent[root]
+
+        while parent[uuid] != root:
+            next_uuid = parent[uuid]
+            parent[uuid] = root
+            uuid = next_uuid
+
+        return root
+
+    for source_uuid, target_uuid in pairs:
+        parent.setdefault(source_uuid, source_uuid)
+        parent.setdefault(target_uuid, target_uuid)
+        parent[find(source_uuid)] = find(target_uuid)
+
+    return {uuid: find(uuid) for uuid in parent}
+
+
 class RawEpisode(BaseModel):
     name: str
+    uuid: str | None = Field(default=None)
     content: str
     source_description: str
     source: EpisodeType
@@ -72,7 +108,7 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: AsyncDriver, episodes: list[EpisodicNode]
+    driver: GraphDriver, episodes: list[EpisodicNode]
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -90,278 +126,413 @@ async def retrieve_previous_episodes_bulk(
 
 
 async def add_nodes_and_edges_bulk(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
 ):
-    async with driver.session(database=DEFAULT_DATABASE) as session:
+    session = driver.session()
+    try:
         await session.execute_write(
-            add_nodes_and_edges_bulk_tx, episodic_nodes, episodic_edges, entity_nodes, entity_edges
+            add_nodes_and_edges_bulk_tx,
+            episodic_nodes,
+            episodic_edges,
+            entity_nodes,
+            entity_edges,
+            embedder,
+            driver=driver,
         )
+    finally:
+        await session.close()
 
 
 async def add_nodes_and_edges_bulk_tx(
-    tx: AsyncManagedTransaction,
+    tx: GraphDriverSession,
     episodic_nodes: list[EpisodicNode],
     episodic_edges: list[EpisodicEdge],
     entity_nodes: list[EntityNode],
     entity_edges: list[EntityEdge],
+    embedder: EmbedderClient,
+    driver: GraphDriver,
 ):
     episodes = [dict(episode) for episode in episodic_nodes]
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
-    nodes: list[dict[str, Any]] = []
+        episode.pop('labels', None)
+
+    nodes = []
+
     for node in entity_nodes:
+        if node.name_embedding is None:
+            await node.generate_name_embedding(embedder)
+
         entity_data: dict[str, Any] = {
             'uuid': node.uuid,
             'name': node.name,
-            'name_embedding': node.name_embedding,
             'group_id': node.group_id,
             'summary': node.summary,
             'created_at': node.created_at,
+            'name_embedding': node.name_embedding,
+            'labels': list(set(node.labels + ['Entity'])),
         }
 
-        entity_data.update(node.attributes or {})
-        entity_data['labels'] = list(set(node.labels + ['Entity']))
+        if driver.provider == GraphProvider.KUZU:
+            attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
+            entity_data['attributes'] = json.dumps(attributes)
+        else:
+            entity_data.update(node.attributes or {})
+
         nodes.append(entity_data)
 
-    await tx.run(EPISODIC_NODE_SAVE_BULK, episodes=episodes)
-    await tx.run(ENTITY_NODE_SAVE_BULK, nodes=nodes)
-    await tx.run(
-        EPISODIC_EDGE_SAVE_BULK, episodic_edges=[edge.model_dump() for edge in episodic_edges]
-    )
-    await tx.run(ENTITY_EDGE_SAVE_BULK, entity_edges=[edge.model_dump() for edge in entity_edges])
+    edges = []
+    for edge in entity_edges:
+        if edge.fact_embedding is None:
+            await edge.generate_embedding(embedder)
+        edge_data: dict[str, Any] = {
+            'uuid': edge.uuid,
+            'source_node_uuid': edge.source_node_uuid,
+            'target_node_uuid': edge.target_node_uuid,
+            'name': edge.name,
+            'fact': edge.fact,
+            'group_id': edge.group_id,
+            'episodes': edge.episodes,
+            'created_at': edge.created_at,
+            'expired_at': edge.expired_at,
+            'valid_at': edge.valid_at,
+            'invalid_at': edge.invalid_at,
+            'fact_embedding': edge.fact_embedding,
+        }
+
+        if driver.provider == GraphProvider.KUZU:
+            attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
+            edge_data['attributes'] = json.dumps(attributes)
+        else:
+            edge_data.update(edge.attributes or {})
+
+        edges.append(edge_data)
+
+    if driver.graph_operations_interface:
+        await driver.graph_operations_interface.episodic_node_save_bulk(None, driver, tx, episodes)
+        await driver.graph_operations_interface.node_save_bulk(None, driver, tx, nodes)
+        await driver.graph_operations_interface.episodic_edge_save_bulk(
+            None, driver, tx, [edge.model_dump() for edge in episodic_edges]
+        )
+        await driver.graph_operations_interface.edge_save_bulk(None, driver, tx, edges)
+
+    elif driver.provider == GraphProvider.KUZU:
+        # FIXME: Kuzu's UNWIND does not currently support STRUCT[] type properly, so we insert the data one by one instead for now.
+        episode_query = get_episode_node_save_bulk_query(driver.provider)
+        for episode in episodes:
+            await tx.run(episode_query, **episode)
+        entity_node_query = get_entity_node_save_bulk_query(driver.provider, nodes)
+        for node in nodes:
+            await tx.run(entity_node_query, **node)
+        entity_edge_query = get_entity_edge_save_bulk_query(driver.provider)
+        for edge in edges:
+            await tx.run(entity_edge_query, **edge)
+        episodic_edge_query = get_episodic_edge_save_bulk_query(driver.provider)
+        for edge in episodic_edges:
+            await tx.run(episodic_edge_query, **edge.model_dump())
+    else:
+        await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
+        await tx.run(
+            get_entity_node_save_bulk_query(driver.provider, nodes),
+            nodes=nodes,
+        )
+        await tx.run(
+            get_episodic_edge_save_bulk_query(driver.provider),
+            episodic_edges=[edge.model_dump() for edge in episodic_edges],
+        )
+        await tx.run(
+            get_entity_edge_save_bulk_query(driver.provider),
+            entity_edges=edges,
+        )
 
 
 async def extract_nodes_and_edges_bulk(
-    clients: GraphitiClients, episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]]
-) -> tuple[list[EntityNode], list[EntityEdge], list[EpisodicEdge]]:
-    extracted_nodes_bulk = await semaphore_gather(
+    clients: GraphitiClients,
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    edge_type_map: dict[tuple[str, str], list[str]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+    excluded_entity_types: list[str] | None = None,
+    edge_types: dict[str, type[BaseModel]] | None = None,
+) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
+    extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
         *[
-            extract_nodes(clients, episode, previous_episodes)
+            extract_nodes(clients, episode, previous_episodes, entity_types, excluded_entity_types)
             for episode, previous_episodes in episode_tuples
         ]
     )
 
-    episodes, previous_episodes_list = (
-        [episode[0] for episode in episode_tuples],
-        [episode[1] for episode in episode_tuples],
-    )
-
-    extracted_edges_bulk = await semaphore_gather(
+    extracted_edges_bulk: list[list[EntityEdge]] = await semaphore_gather(
         *[
             extract_edges(
                 clients,
                 episode,
                 extracted_nodes_bulk[i],
-                previous_episodes_list[i],
-                episode.group_id,
+                previous_episodes,
+                edge_type_map=edge_type_map,
+                group_id=episode.group_id,
+                edge_types=edge_types,
             )
-            for i, episode in enumerate(episodes)
+            for i, (episode, previous_episodes) in enumerate(episode_tuples)
         ]
     )
 
-    episodic_edges: list[EpisodicEdge] = []
-    for i, episode in enumerate(episodes):
-        episodic_edges += build_episodic_edges(extracted_nodes_bulk[i], episode, episode.created_at)
-
-    nodes: list[EntityNode] = []
-    for extracted_nodes in extracted_nodes_bulk:
-        nodes += extracted_nodes
-
-    edges: list[EntityEdge] = []
-    for extracted_edges in extracted_edges_bulk:
-        edges += extracted_edges
-
-    return nodes, edges, episodic_edges
+    return extracted_nodes_bulk, extracted_edges_bulk
 
 
 async def dedupe_nodes_bulk(
-    driver: AsyncDriver,
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
-) -> tuple[list[EntityNode], dict[str, str]]:
-    # Compress nodes
-    nodes, uuid_map = node_name_match(extracted_nodes)
+    clients: GraphitiClients,
+    extracted_nodes: list[list[EntityNode]],
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    entity_types: dict[str, type[BaseModel]] | None = None,
+) -> tuple[dict[str, list[EntityNode]], dict[str, str]]:
+    """Resolve entity duplicates across an in-memory batch using a two-pass strategy.
 
-    compressed_nodes, compressed_map = await compress_nodes(llm_client, nodes, uuid_map)
+    1. Run :func:`resolve_extracted_nodes` for every episode in parallel so each batch item is
+       reconciled against the live graph just like the non-batch flow.
+    2. Re-run the deterministic similarity heuristics across the union of resolved nodes to catch
+       duplicates that only co-occur inside this batch, emitting a canonical UUID map that callers
+       can apply to edges and persistence.
+    """
 
-    node_chunks = [nodes[i : i + CHUNK_SIZE] for i in range(0, len(nodes), CHUNK_SIZE)]
-
-    existing_nodes_chunks: list[list[EntityNode]] = list(
-        await semaphore_gather(
-            *[get_relevant_nodes(driver, node_chunk, SearchFilters()) for node_chunk in node_chunks]
-        )
+    first_pass_results = await semaphore_gather(
+        *[
+            resolve_extracted_nodes(
+                clients,
+                nodes,
+                episode_tuples[i][0],
+                episode_tuples[i][1],
+                entity_types,
+            )
+            for i, nodes in enumerate(extracted_nodes)
+        ]
     )
 
-    results: list[tuple[list[EntityNode], dict[str, str]]] = list(
-        await semaphore_gather(
-            *[
-                dedupe_extracted_nodes(llm_client, node_chunk, existing_nodes_chunks[i])
-                for i, node_chunk in enumerate(node_chunks)
-            ]
-        )
-    )
+    episode_resolutions: list[tuple[str, list[EntityNode]]] = []
+    per_episode_uuid_maps: list[dict[str, str]] = []
+    duplicate_pairs: list[tuple[str, str]] = []
 
-    final_nodes: list[EntityNode] = []
-    for result in results:
-        final_nodes.extend(result[0])
-        partial_uuid_map = result[1]
-        compressed_map.update(partial_uuid_map)
+    for (resolved_nodes, uuid_map, duplicates), (episode, _) in zip(
+        first_pass_results, episode_tuples, strict=True
+    ):
+        episode_resolutions.append((episode.uuid, resolved_nodes))
+        per_episode_uuid_maps.append(uuid_map)
+        duplicate_pairs.extend((source.uuid, target.uuid) for source, target in duplicates)
 
-    return final_nodes, compressed_map
+    canonical_nodes: dict[str, EntityNode] = {}
+    for _, resolved_nodes in episode_resolutions:
+        for node in resolved_nodes:
+            # NOTE: this loop is O(n^2) in the number of nodes inside the batch because we rebuild
+            # the MinHash index for the accumulated canonical pool each time. The LRU-backed
+            # shingle cache keeps the constant factors low for typical batch sizes (≤ CHUNK_SIZE),
+            # but if batches grow significantly we should switch to an incremental index or chunked
+            # processing.
+            if not canonical_nodes:
+                canonical_nodes[node.uuid] = node
+                continue
+
+            existing_candidates = list(canonical_nodes.values())
+            normalized = _normalize_string_exact(node.name)
+            exact_match = next(
+                (
+                    candidate
+                    for candidate in existing_candidates
+                    if _normalize_string_exact(candidate.name) == normalized
+                ),
+                None,
+            )
+            if exact_match is not None:
+                if exact_match.uuid != node.uuid:
+                    duplicate_pairs.append((node.uuid, exact_match.uuid))
+                continue
+
+            indexes = _build_candidate_indexes(existing_candidates)
+            state = DedupResolutionState(
+                resolved_nodes=[None],
+                uuid_map={},
+                unresolved_indices=[],
+            )
+            _resolve_with_similarity([node], indexes, state)
+
+            resolved = state.resolved_nodes[0]
+            if resolved is None:
+                canonical_nodes[node.uuid] = node
+                continue
+
+            canonical_uuid = resolved.uuid
+            canonical_nodes.setdefault(canonical_uuid, resolved)
+            if canonical_uuid != node.uuid:
+                duplicate_pairs.append((node.uuid, canonical_uuid))
+
+    union_pairs: list[tuple[str, str]] = []
+    for uuid_map in per_episode_uuid_maps:
+        union_pairs.extend(uuid_map.items())
+    union_pairs.extend(duplicate_pairs)
+
+    compressed_map: dict[str, str] = _build_directed_uuid_map(union_pairs)
+
+    nodes_by_episode: dict[str, list[EntityNode]] = {}
+    for episode_uuid, resolved_nodes in episode_resolutions:
+        deduped_nodes: list[EntityNode] = []
+        seen: set[str] = set()
+        for node in resolved_nodes:
+            canonical_uuid = compressed_map.get(node.uuid, node.uuid)
+            if canonical_uuid in seen:
+                continue
+            seen.add(canonical_uuid)
+            canonical_node = canonical_nodes.get(canonical_uuid)
+            if canonical_node is None:
+                logger.error(
+                    'Canonical node %s missing during batch dedupe; falling back to %s',
+                    canonical_uuid,
+                    node.uuid,
+                )
+                canonical_node = node
+            deduped_nodes.append(canonical_node)
+
+        nodes_by_episode[episode_uuid] = deduped_nodes
+
+    return nodes_by_episode, compressed_map
 
 
 async def dedupe_edges_bulk(
-    driver: AsyncDriver, llm_client: LLMClient, extracted_edges: list[EntityEdge]
-) -> list[EntityEdge]:
-    # First compress edges
-    compressed_edges = await compress_edges(llm_client, extracted_edges)
+    clients: GraphitiClients,
+    extracted_edges: list[list[EntityEdge]],
+    episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]],
+    _entities: list[EntityNode],
+    edge_types: dict[str, type[BaseModel]],
+    _edge_type_map: dict[tuple[str, str], list[str]],
+) -> dict[str, list[EntityEdge]]:
+    embedder = clients.embedder
+    min_score = 0.6
 
-    edge_chunks = [
-        compressed_edges[i : i + CHUNK_SIZE] for i in range(0, len(compressed_edges), CHUNK_SIZE)
-    ]
-
-    relevant_edges_chunks: list[list[EntityEdge]] = list(
-        await semaphore_gather(
-            *[get_relevant_edges(driver, edge_chunk, SearchFilters()) for edge_chunk in edge_chunks]
-        )
+    # generate embeddings
+    await semaphore_gather(
+        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges]
     )
 
-    resolved_edge_chunks: list[list[EntityEdge]] = list(
-        await semaphore_gather(
-            *[
-                dedupe_extracted_edges(llm_client, edge_chunk, relevant_edges_chunks[i])
-                for i, edge_chunk in enumerate(edge_chunks)
-            ]
-        )
+    # Find similar results
+    dedupe_tuples: list[tuple[EpisodicNode, EntityEdge, list[EntityEdge]]] = []
+    for i, edges_i in enumerate(extracted_edges):
+        existing_edges: list[EntityEdge] = []
+        for edges_j in extracted_edges:
+            existing_edges += edges_j
+
+        for edge in edges_i:
+            candidates: list[EntityEdge] = []
+            for existing_edge in existing_edges:
+                # Skip self-comparison
+                if edge.uuid == existing_edge.uuid:
+                    continue
+                # Approximate BM25 by checking for word overlaps (this is faster than creating many in-memory indices)
+                # This approach will cast a wider net than BM25, which is ideal for this use case
+                if (
+                    edge.source_node_uuid != existing_edge.source_node_uuid
+                    or edge.target_node_uuid != existing_edge.target_node_uuid
+                ):
+                    continue
+
+                edge_words = set(edge.fact.lower().split())
+                existing_edge_words = set(existing_edge.fact.lower().split())
+                has_overlap = not edge_words.isdisjoint(existing_edge_words)
+                if has_overlap:
+                    candidates.append(existing_edge)
+                    continue
+
+                # Check for semantic similarity even if there is no overlap
+                similarity = np.dot(
+                    normalize_l2(edge.fact_embedding or []),
+                    normalize_l2(existing_edge.fact_embedding or []),
+                )
+                if similarity >= min_score:
+                    candidates.append(existing_edge)
+
+            dedupe_tuples.append((episode_tuples[i][0], edge, candidates))
+
+    bulk_edge_resolutions: list[
+        tuple[EntityEdge, EntityEdge, list[EntityEdge]]
+    ] = await semaphore_gather(
+        *[
+            resolve_extracted_edge(
+                clients.llm_client,
+                edge,
+                candidates,
+                candidates,
+                episode,
+                edge_types,
+                set(edge_types),
+            )
+            for episode, edge, candidates in dedupe_tuples
+        ]
     )
 
-    edges = [edge for edge_chunk in resolved_edge_chunks for edge in edge_chunk]
-    return edges
+    # For now we won't track edge invalidation
+    duplicate_pairs: list[tuple[str, str]] = []
+    for i, (_, _, duplicates) in enumerate(bulk_edge_resolutions):
+        episode, edge, candidates = dedupe_tuples[i]
+        for duplicate in duplicates:
+            duplicate_pairs.append((edge.uuid, duplicate.uuid))
+
+    # Now we compress the duplicate_map, so that 3 -> 2 and 2 -> becomes 3 -> 1 (sorted by uuid)
+    compressed_map: dict[str, str] = compress_uuid_map(duplicate_pairs)
+
+    edge_uuid_map: dict[str, EntityEdge] = {
+        edge.uuid: edge for edges in extracted_edges for edge in edges
+    }
+
+    edges_by_episode: dict[str, list[EntityEdge]] = {}
+    for i, edges in enumerate(extracted_edges):
+        episode = episode_tuples[i][0]
+
+        edges_by_episode[episode.uuid] = [
+            edge_uuid_map[compressed_map.get(edge.uuid, edge.uuid)] for edge in edges
+        ]
+
+    return edges_by_episode
 
 
-def node_name_match(nodes: list[EntityNode]) -> tuple[list[EntityNode], dict[str, str]]:
-    uuid_map: dict[str, str] = {}
-    name_map: dict[str, EntityNode] = {}
-    for node in nodes:
-        if node.name in name_map:
-            uuid_map[node.uuid] = name_map[node.name].uuid
-            continue
+class UnionFind:
+    def __init__(self, elements):
+        # start each element in its own set
+        self.parent = {e: e for e in elements}
 
-        name_map[node.name] = node
+    def find(self, x):
+        # path‐compression
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
 
-    return [node for node in name_map.values()], uuid_map
-
-
-async def compress_nodes(
-    llm_client: LLMClient, nodes: list[EntityNode], uuid_map: dict[str, str]
-) -> tuple[list[EntityNode], dict[str, str]]:
-    # We want to first compress the nodes by deduplicating nodes across each of the episodes added in bulk
-    if len(nodes) == 0:
-        return nodes, uuid_map
-
-    # Our approach involves us deduplicating chunks of nodes in parallel.
-    # We want n chunks of size n so that n ** 2 == len(nodes).
-    # We want chunk sizes to be at least 10 for optimizing LLM processing time
-    chunk_size = max(int(sqrt(len(nodes))), CHUNK_SIZE)
-
-    # First calculate similarity scores between nodes
-    similarity_scores: list[tuple[int, int, float]] = [
-        (i, j, dot(n.name_embedding or [], m.name_embedding or []))
-        for i, n in enumerate(nodes)
-        for j, m in enumerate(nodes[:i])
-    ]
-
-    # We now sort by semantic similarity
-    similarity_scores.sort(key=lambda score_tuple: score_tuple[2])
-
-    # initialize our chunks based on chunk size
-    node_chunks: list[list[EntityNode]] = [[] for _ in range(ceil(len(nodes) / chunk_size))]
-
-    # Draft the most similar nodes into the same chunk
-    while len(similarity_scores) > 0:
-        i, j, _ = similarity_scores.pop()
-        # determine if any of the nodes have already been drafted into a chunk
-        n = nodes[i]
-        m = nodes[j]
-        # make sure the shortest chunks get preference
-        node_chunks.sort(reverse=True, key=lambda chunk: len(chunk))
-
-        n_chunk = max([i if n in chunk else -1 for i, chunk in enumerate(node_chunks)])
-        m_chunk = max([i if m in chunk else -1 for i, chunk in enumerate(node_chunks)])
-
-        # both nodes already in a chunk
-        if n_chunk > -1 and m_chunk > -1:
-            continue
-
-        # n has a chunk and that chunk is not full
-        elif n_chunk > -1 and len(node_chunks[n_chunk]) < chunk_size:
-            # put m in the same chunk as n
-            node_chunks[n_chunk].append(m)
-
-        # m has a chunk and that chunk is not full
-        elif m_chunk > -1 and len(node_chunks[m_chunk]) < chunk_size:
-            # put n in the same chunk as m
-            node_chunks[m_chunk].append(n)
-
-        # neither node has a chunk or the chunk is full
+    def union(self, a, b):
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return
+        # attach the lexicographically larger root under the smaller
+        if ra < rb:
+            self.parent[rb] = ra
         else:
-            # add both nodes to the shortest chunk
-            node_chunks[-1].extend([n, m])
-
-    results = await semaphore_gather(
-        *[dedupe_node_list(llm_client, chunk) for chunk in node_chunks]
-    )
-
-    extended_map = dict(uuid_map)
-    compressed_nodes: list[EntityNode] = []
-    for node_chunk, uuid_map_chunk in results:
-        compressed_nodes += node_chunk
-        extended_map.update(uuid_map_chunk)
-
-    # Check if we have removed all duplicates
-    if len(compressed_nodes) == len(nodes):
-        compressed_uuid_map = compress_uuid_map(extended_map)
-        return compressed_nodes, compressed_uuid_map
-
-    return await compress_nodes(llm_client, compressed_nodes, extended_map)
+            self.parent[ra] = rb
 
 
-async def compress_edges(llm_client: LLMClient, edges: list[EntityEdge]) -> list[EntityEdge]:
-    if len(edges) == 0:
-        return edges
-    # We only want to dedupe edges that are between the same pair of nodes
-    # We build a map of the edges based on their source and target nodes.
-    edge_chunks = chunk_edges_by_nodes(edges)
+def compress_uuid_map(duplicate_pairs: list[tuple[str, str]]) -> dict[str, str]:
+    """
+    all_ids: iterable of all entity IDs (strings)
+    duplicate_pairs: iterable of (id1, id2) pairs
+    returns: dict mapping each id -> lexicographically smallest id in its duplicate set
+    """
+    all_uuids = set()
+    for pair in duplicate_pairs:
+        all_uuids.add(pair[0])
+        all_uuids.add(pair[1])
 
-    results = await semaphore_gather(
-        *[dedupe_edge_list(llm_client, chunk) for chunk in edge_chunks]
-    )
-
-    compressed_edges: list[EntityEdge] = []
-    for edge_chunk in results:
-        compressed_edges += edge_chunk
-
-    # Check if we have removed all duplicates
-    if len(compressed_edges) == len(edges):
-        return compressed_edges
-
-    return await compress_edges(llm_client, compressed_edges)
-
-
-def compress_uuid_map(uuid_map: dict[str, str]) -> dict[str, str]:
-    # make sure all uuid values aren't mapped to other uuids
-    compressed_map = {}
-    for key, uuid in uuid_map.items():
-        curr_value = uuid
-        while curr_value in uuid_map:
-            curr_value = uuid_map[curr_value]
-
-        compressed_map[key] = curr_value
-    return compressed_map
+    uf = UnionFind(all_uuids)
+    for a, b in duplicate_pairs:
+        uf.union(a, b)
+    # ensure full path‐compression before mapping
+    return {uuid: uf.find(uuid) for uuid in all_uuids}
 
 
 E = typing.TypeVar('E', bound=Edge)
@@ -375,63 +546,3 @@ def resolve_edge_pointers(edges: list[E], uuid_map: dict[str, str]):
         edge.target_node_uuid = uuid_map.get(target_uuid, target_uuid)
 
     return edges
-
-
-async def extract_edge_dates_bulk(
-    llm_client: LLMClient,
-    extracted_edges: list[EntityEdge],
-    episode_pairs: list[tuple[EpisodicNode, list[EpisodicNode]]],
-) -> list[EntityEdge]:
-    edges: list[EntityEdge] = []
-    # confirm that all of our edges have at least one episode
-    for edge in extracted_edges:
-        if edge.episodes is not None and len(edge.episodes) > 0:
-            edges.append(edge)
-
-    episode_uuid_map: dict[str, tuple[EpisodicNode, list[EpisodicNode]]] = {
-        episode.uuid: (episode, previous_episodes) for episode, previous_episodes in episode_pairs
-    }
-
-    results = await semaphore_gather(
-        *[
-            extract_edge_dates(
-                llm_client,
-                edge,
-                episode_uuid_map[edge.episodes[0]][0],  # type: ignore
-                episode_uuid_map[edge.episodes[0]][1],  # type: ignore
-            )
-            for edge in edges
-        ]
-    )
-
-    for i, result in enumerate(results):
-        valid_at = result[0]
-        invalid_at = result[1]
-        edge = edges[i]
-
-        edge.valid_at = valid_at
-        edge.invalid_at = invalid_at
-        if edge.invalid_at:
-            edge.expired_at = utc_now()
-
-    return edges
-
-
-def chunk_edges_by_nodes(edges: list[EntityEdge]) -> list[list[EntityEdge]]:
-    # We only want to dedupe edges that are between the same pair of nodes
-    # We build a map of the edges based on their source and target nodes.
-    edge_chunk_map: dict[str, list[EntityEdge]] = defaultdict(list)
-    for edge in edges:
-        # We drop loop edges
-        if edge.source_node_uuid == edge.target_node_uuid:
-            continue
-
-        # Keep the order of the two nodes consistent, we want to be direction agnostic during edge resolution
-        pointers = [edge.source_node_uuid, edge.target_node_uuid]
-        pointers.sort()
-
-        edge_chunk_map[pointers[0] + pointers[1]].append(edge)
-
-    edge_chunks = [chunk for chunk in edge_chunk_map.values()]
-
-    return edge_chunks

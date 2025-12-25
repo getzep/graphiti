@@ -2,17 +2,17 @@
 
 # Define variables
 PYTHON = python3
-POETRY = poetry
-PYTEST = $(POETRY) run pytest
-RUFF = $(POETRY) run ruff
-MYPY = $(POETRY) run mypy
+UV = uv
+PYTEST = $(UV) run pytest
+RUFF = $(UV) run ruff
+PYRIGHT = $(UV) run pyright
 
 # Default target
 all: format lint test
 
 # Install dependencies
 install:
-	$(POETRY) install --with dev
+	$(UV) sync --extra dev
 
 # Format code
 format:
@@ -22,11 +22,11 @@ format:
 # Lint code
 lint:
 	$(RUFF) check
-	$(MYPY) ./graphiti_core --show-column-numbers --show-error-codes --pretty 
+	$(PYRIGHT) ./graphiti_core 
 
 # Run tests
 test:
-	$(PYTEST)
+	DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) -m "not integration"
 
 # Run format, lint, and test
 check: format lint test

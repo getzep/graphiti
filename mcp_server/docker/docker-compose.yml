@@ -1,0 +1,44 @@
+services:
+  graphiti-falkordb:
+    image: zepai/knowledge-graph-mcp:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.23.0}
+        MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.0.0}
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # FalkorDB configuration
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
+      # MCP Server configuration
+      - FALKORDB_URI=redis://localhost:6379
+      - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
+      - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+      - PATH=/root/.local/bin:${PATH}
+    volumes:
+      - falkordb_data:/var/lib/falkordb/data
+      - mcp_logs:/var/log/graphiti
+    ports:
+      - "6379:6379"  # FalkorDB/Redis
+      - "3000:3000"  # FalkorDB web UI
+      - "8000:8000"  # MCP server HTTP
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  falkordb_data:
+    driver: local
+  mcp_logs:
+    driver: local

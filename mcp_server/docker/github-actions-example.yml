@@ -1,0 +1,119 @@
+# Example GitHub Actions workflow for building and pushing the MCP Server Docker image
+# This should be placed in .github/workflows/ in your repository
+
+name: Build and Push MCP Server Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'mcp-v*'
+  pull_request:
+    paths:
+      - 'mcp_server/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: zepai/graphiti-mcp
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          # Get MCP server version from pyproject.toml
+          MCP_VERSION=$(grep '^version = ' mcp_server/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "mcp_version=${MCP_VERSION}" >> $GITHUB_OUTPUT
+
+          # Get build date and git ref
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "vcs_ref=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        id: build
+        with:
+          context: ./mcp_server
+          file: ./mcp_server/docker/Dockerfile
+          push: false
+          load: true
+          tags: temp-image:latest
+          build-args: |
+            MCP_SERVER_VERSION=${{ steps.meta.outputs.mcp_version }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            VCS_REF=${{ steps.meta.outputs.vcs_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract Graphiti Core version
+        id: graphiti
+        run: |
+          # Extract graphiti-core version from the built image
+          GRAPHITI_VERSION=$(docker run --rm temp-image:latest cat /app/.graphiti-core-version)
+          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
+          echo "Graphiti Core Version: ${GRAPHITI_VERSION}"
+
+      - name: Generate Docker tags
+        id: tags
+        run: |
+          MCP_VERSION="${{ steps.meta.outputs.mcp_version }}"
+          GRAPHITI_VERSION="${{ steps.graphiti.outputs.graphiti_version }}"
+
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${MCP_VERSION}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${MCP_VERSION}-graphiti-${GRAPHITI_VERSION}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+
+          # Add SHA tag for traceability
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ steps.meta.outputs.vcs_ref }}"
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+          echo "Docker tags:"
+          echo "${TAGS}" | tr ',' '\n'
+
+      - name: Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mcp_server
+          file: ./mcp_server/docker/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            MCP_SERVER_VERSION=${{ steps.meta.outputs.mcp_version }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            VCS_REF=${{ steps.meta.outputs.vcs_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create release summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**MCP Server Version:** ${{ steps.meta.outputs.mcp_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**VCS Ref:** ${{ steps.meta.outputs.vcs_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Date:** ${{ steps.meta.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Image Tags" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1
+# Standalone Graphiti MCP Server Image
+# This image runs only the MCP server and connects to an external database (Neo4j or FalkorDB)
+
+FROM python:3.11-slim-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for Python package management
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Add uv to PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Configure uv for optimal Docker usage
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    MCP_SERVER_HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
+
+# Set up MCP server directory
+WORKDIR /app/mcp
+
+# Accept graphiti-core version as build argument
+ARG GRAPHITI_CORE_VERSION=0.23.1
+
+# Copy project files for dependency installation
+COPY pyproject.toml uv.lock ./
+
+# Remove the local path override for graphiti-core in Docker builds
+# Install with BOTH neo4j and falkordb extras for maximum flexibility
+# and regenerate lock file to match the PyPI version
+RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
+    sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    echo "Regenerating lock file for PyPI graphiti-core..." && \
+    rm -f uv.lock && \
+    uv lock
+
+# Install Python dependencies (exclude dev dependency group)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-group dev
+
+# Store graphiti-core version
+RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
+
+# Copy MCP server application code
+COPY main.py ./
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Create log directory
+RUN mkdir -p /var/log/graphiti
+
+# Add Docker labels with version information
+ARG MCP_SERVER_VERSION=1.0.1
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.title="Graphiti MCP Server (Standalone)" \
+      org.opencontainers.image.description="Standalone Graphiti MCP server for external Neo4j or FalkorDB" \
+      org.opencontainers.image.version="${MCP_SERVER_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="Zep AI" \
+      org.opencontainers.image.source="https://github.com/zep-ai/graphiti" \
+      graphiti.core.version="${GRAPHITI_CORE_VERSION}"
+
+# Expose MCP server port
+EXPOSE 8000
+
+# Health check - verify MCP server is responding
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the MCP server
+CMD ["uv", "run", "--no-sync", "main.py"]

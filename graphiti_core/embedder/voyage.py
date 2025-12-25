@@ -15,8 +15,19 @@ limitations under the License.
 """
 
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-import voyageai  # type: ignore
+if TYPE_CHECKING:
+    import voyageai
+else:
+    try:
+        import voyageai
+    except ImportError:
+        raise ImportError(
+            'voyageai is required for VoyageAIEmbedderClient. '
+            'Install it with: pip install graphiti-core[voyageai]'
+        ) from None
+
 from pydantic import Field
 
 from .client import EmbedderClient, EmbedderConfig
@@ -38,7 +49,7 @@ class VoyageAIEmbedder(EmbedderClient):
         if config is None:
             config = VoyageAIEmbedderConfig()
         self.config = config
-        self.client = voyageai.AsyncClient(api_key=config.api_key)
+        self.client = voyageai.AsyncClient(api_key=config.api_key)  # type: ignore[reportUnknownMemberType]
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]

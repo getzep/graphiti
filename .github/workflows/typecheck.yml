@@ -1,4 +1,7 @@
-name: MyPy Type Check
+name: Pyright Type Check
+
+permissions:
+  contents: read
 
 on:
   push:
@@ -7,7 +10,7 @@ on:
     branches: ["main"]
 
 jobs:
-  mypy:
+  pyright:
     runs-on: depot-ubuntu-22.04
     environment: development
     steps:
@@ -17,34 +20,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          version: 2.1.2
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
+          version: "latest"
       - name: Install dependencies
-        run: poetry install --no-interaction --with dev
-      - name: Run MyPy for graphiti-core
+        run: uv sync --all-extras
+      - name: Run Pyright for graphiti-core
         shell: bash
         run: |
-          set -o pipefail
-          poetry run mypy ./graphiti_core --show-column-numbers --show-error-codes | sed -E '
-            s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
-            s/^(.*):([0-9]+):([0-9]+): note: (.+)/::notice file=\1,line=\2,endLine=\2,col=\3,title=Note::\4/;
-          '
+          uv run pyright ./graphiti_core
       - name: Install graph-service dependencies
         shell: bash
         run: |
           cd server
-          poetry install --no-interaction --with dev
-      - name: Run MyPy for graph-service
+          uv sync --all-extras
+      - name: Run Pyright for graph-service
         shell: bash
         run: |
           cd server
-          set -o pipefail
-          poetry run mypy . --show-column-numbers --show-error-codes | sed -E '
-            s/^(.*):([0-9]+):([0-9]+): (error|warning): (.+) \[(.+)\]/::error file=\1,line=\2,endLine=\2,col=\3,title=\6::\5/;
-            s/^(.*):([0-9]+):([0-9]+): note: (.+)/::notice file=\1,line=\2,endLine=\2,col=\3,title=Note::\4/;
-          '
+          uv run pyright .

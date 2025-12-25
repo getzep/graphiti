@@ -15,96 +15,42 @@ limitations under the License.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
-from neo4j import AsyncDriver
 from typing_extensions import LiteralString
 
-from graphiti_core.helpers import DEFAULT_DATABASE, semaphore_gather
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.driver.driver import GraphDriver, GraphProvider
+from graphiti_core.models.nodes.node_db_queries import (
+    EPISODIC_NODE_RETURN,
+    EPISODIC_NODE_RETURN_NEPTUNE,
+)
+from graphiti_core.nodes import EpisodeType, EpisodicNode, get_episodic_node_from_record
 
 EPISODE_WINDOW_LEN = 3
 
 logger = logging.getLogger(__name__)
 
 
-async def build_indices_and_constraints(driver: AsyncDriver, delete_existing: bool = False):
-    if delete_existing:
-        records, _, _ = await driver.execute_query(
-            """
-        SHOW INDEXES YIELD name
-        """,
-            database_=DEFAULT_DATABASE,
-        )
-        index_names = [record['name'] for record in records]
-        await semaphore_gather(
-            *[
-                driver.execute_query(
-                    """DROP INDEX $name""",
-                    name=name,
-                    database_=DEFAULT_DATABASE,
-                )
-                for name in index_names
-            ]
-        )
-
-    range_indices: list[LiteralString] = [
-        'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
-        'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
-        'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
-        'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
-        'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
-        'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
-        'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
-        'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
-        'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
-        'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
-        'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
-        'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
-        'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
-        'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
-        'CREATE INDEX name_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.name)',
-        'CREATE INDEX created_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.created_at)',
-        'CREATE INDEX expired_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.expired_at)',
-        'CREATE INDEX valid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.valid_at)',
-        'CREATE INDEX invalid_at_edge_index IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.invalid_at)',
-    ]
-
-    fulltext_indices: list[LiteralString] = [
-        """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS 
-        FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
-        """CREATE FULLTEXT INDEX node_name_and_summary IF NOT EXISTS 
-        FOR (n:Entity) ON EACH [n.name, n.summary, n.group_id]""",
-        """CREATE FULLTEXT INDEX community_name IF NOT EXISTS 
-        FOR (n:Community) ON EACH [n.name, n.group_id]""",
-        """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS 
-        FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
-    ]
-
-    index_queries: list[LiteralString] = range_indices + fulltext_indices
-
-    await semaphore_gather(
-        *[
-            driver.execute_query(
-                query,
-                database_=DEFAULT_DATABASE,
-            )
-            for query in index_queries
-        ]
-    )
-
-
-async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
-    async with driver.session(database=DEFAULT_DATABASE) as session:
+async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
+    async with driver.session() as session:
 
         async def delete_all(tx):
             await tx.run('MATCH (n) DETACH DELETE n')
 
         async def delete_group_ids(tx):
-            await tx.run(
-                'MATCH (n:Entity|Episodic|Community) WHERE n.group_id IN $group_ids DETACH DELETE n',
-                group_ids=group_ids,
-            )
+            labels = ['Entity', 'Episodic', 'Community']
+            if driver.provider == GraphProvider.KUZU:
+                labels.append('RelatesToNode_')
+
+            for label in labels:
+                await tx.run(
+                    f"""
+                    MATCH (n:{label})
+                    WHERE n.group_id IN $group_ids
+                    DETACH DELETE n
+                    """,
+                    group_ids=group_ids,
+                )
 
         if group_ids is None:
             await session.execute_write(delete_all)
@@ -113,7 +59,7 @@ async def clear_data(driver: AsyncDriver, group_ids: list[str] | None = None):
 
 
 async def retrieve_episodes(
-    driver: AsyncDriver,
+    driver: GraphDriver,
     reference_time: datetime,
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
@@ -123,7 +69,7 @@ async def retrieve_episodes(
     Retrieve the last n episodic nodes from the graph.
 
     Args:
-        driver (AsyncDriver): The Neo4j driver instance.
+        driver (Driver): The Neo4j driver instance.
         reference_time (datetime): The reference time to filter episodes. Only episodes with a valid_at timestamp
                                    less than or equal to this reference_time will be retrieved. This allows for
                                    querying the graph's state at a specific point in time.
@@ -133,52 +79,42 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
-    group_id_filter: LiteralString = (
-        '\nAND e.group_id IN $group_ids' if group_ids and len(group_ids) > 0 else ''
-    )
-    source_filter: LiteralString = '\nAND e.source = $source' if source is not None else ''
+
+    query_params: dict = {}
+    query_filter = ''
+    if group_ids and len(group_ids) > 0:
+        query_filter += '\nAND e.group_id IN $group_ids'
+        query_params['group_ids'] = group_ids
+
+    if source is not None:
+        query_filter += '\nAND e.source = $source'
+        query_params['source'] = source.name
 
     query: LiteralString = (
         """
-                        MATCH (e:Episodic) WHERE e.valid_at <= $reference_time
-                        """
-        + group_id_filter
-        + source_filter
+                                    MATCH (e:Episodic)
+                                    WHERE e.valid_at <= $reference_time
+                                    """
+        + query_filter
         + """
-        RETURN e.content AS content,
-            e.created_at AS created_at,
-            e.valid_at AS valid_at,
-            e.uuid AS uuid,
-            e.group_id AS group_id,
-            e.name AS name,
-            e.source_description AS source_description,
-            e.source AS source
+        RETURN
+        """
+        + (
+            EPISODIC_NODE_RETURN_NEPTUNE
+            if driver.provider == GraphProvider.NEPTUNE
+            else EPISODIC_NODE_RETURN
+        )
+        + """
         ORDER BY e.valid_at DESC
         LIMIT $num_episodes
         """
     )
-
-    result = await driver.execute_query(
+    result, _, _ = await driver.execute_query(
         query,
         reference_time=reference_time,
-        source=source.name if source is not None else None,
         num_episodes=last_n,
-        group_ids=group_ids,
-        database_=DEFAULT_DATABASE,
+        **query_params,
     )
-    episodes = [
-        EpisodicNode(
-            content=record['content'],
-            created_at=datetime.fromtimestamp(
-                record['created_at'].to_native().timestamp(), timezone.utc
-            ),
-            valid_at=(record['valid_at'].to_native()),
-            uuid=record['uuid'],
-            group_id=record['group_id'],
-            source=EpisodeType.from_str(record['source']),
-            name=record['name'],
-            source_description=record['source_description'],
-        )
-        for record in result.records
-    ]
+
+    episodes = [get_episodic_node_from_record(record) for record in result]
     return list(reversed(episodes))  # Return in chronological order

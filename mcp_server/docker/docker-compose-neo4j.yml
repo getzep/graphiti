@@ -1,0 +1,55 @@
+services:
+  neo4j:
+    image: neo4j:5.26.0
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-demodemo}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  graphiti-mcp:
+    image: zepai/knowledge-graph-mcp:standalone
+    # For specific versions, replace 'standalone' with a version tag:
+    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
+    # When building locally, the build section below will be used.
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.standalone
+    env_file:
+      - path: ../.env
+        required: false
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-demodemo}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      # Application configuration
+      - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+      - PATH=/root/.local/bin:${PATH}
+    volumes:
+      - ../config/config-docker-neo4j.yaml:/app/mcp/config/config.yaml:ro
+    ports:
+      - "8000:8000" # Expose the MCP server via HTTP transport
+    command: ["uv", "run", "main.py"]
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

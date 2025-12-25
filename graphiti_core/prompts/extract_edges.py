@@ -14,19 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
+from .prompt_helpers import to_prompt_json
 
 
 class Edge(BaseModel):
     relation_type: str = Field(..., description='FACT_PREDICATE_IN_SCREAMING_SNAKE_CASE')
-    source_entity_name: str = Field(..., description='The name of the source entity of the fact.')
-    target_entity_name: str = Field(..., description='The name of the target entity of the fact.')
-    fact: str = Field(..., description='')
+    source_entity_id: int = Field(
+        ..., description='The id of the source entity from the ENTITIES list'
+    )
+    target_entity_id: int = Field(
+        ..., description='The id of the target entity from the ENTITIES list'
+    )
+    fact: str = Field(
+        ...,
+        description='A natural language description of the relationship between the entities, paraphrased from the source text',
+    )
     valid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact became true or was established. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
@@ -48,11 +55,13 @@ class MissingFacts(BaseModel):
 class Prompt(Protocol):
     edge: PromptVersion
     reflexion: PromptVersion
+    extract_attributes: PromptVersion
 
 
 class Versions(TypedDict):
     edge: PromptFunction
     reflexion: PromptFunction
+    extract_attributes: PromptFunction
 
 
 def edge(context: dict[str, Any]) -> list[Message]:
@@ -66,8 +75,12 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
+<FACT TYPES>
+{context['edge_types']}
+</FACT TYPES>
+
 <PREVIOUS_MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS_MESSAGES>
 
 <CURRENT_MESSAGE>
@@ -75,7 +88,7 @@ def edge(context: dict[str, Any]) -> list[Message]:
 </CURRENT_MESSAGE>
 
 <ENTITIES>
-{context['nodes']}  # Each has: id, label (e.g., Person, Org), name, aliases
+{to_prompt_json(context['nodes'])}
 </ENTITIES>
 
 <REFERENCE_TIME>
@@ -87,20 +100,26 @@ Extract all factual relationships between the given ENTITIES based on the CURREN
 Only extract facts that:
 - involve two DISTINCT ENTITIES from the ENTITIES list,
 - are clearly stated or unambiguously implied in the CURRENT MESSAGE,
-- and can be represented as edges in a knowledge graph.
+    and can be represented as edges in a knowledge graph.
+- Facts should include entity names rather than pronouns whenever possible.
+- The FACT TYPES provide a list of the most important types of facts, make sure to extract facts of these types
+- The FACT TYPES are not an exhaustive list, extract all facts from the message even if they do not fit into one
+    of the FACT TYPES
+- The FACT TYPES each contain their fact_type_signature which represents the source and target entity types.
 
 You may use information from the PREVIOUS MESSAGES only to disambiguate references or support continuity.
 
 
-{context['custom_prompt']}
+{context['custom_extraction_instructions']}
 
 # EXTRACTION RULES
 
-1. Only emit facts where both the subject and object match IDs in ENTITIES.
+1. **Entity ID Validation**: `source_entity_id` and `target_entity_id` must use only the `id` values from the ENTITIES list provided above.
+   - **CRITICAL**: Using IDs not in the list will cause the edge to be rejected
 2. Each fact must involve two **distinct** entities.
 3. Use a SCREAMING_SNAKE_CASE string as the `relation_type` (e.g., FOUNDED, WORKS_AT).
 4. Do not emit duplicate or semantically redundant facts.
-5. The `fact_text` should quote or closely paraphrase the original source sentence(s).
+5. The `fact` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
 6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
 7. Do **not** hallucinate or infer temporal bounds from unrelated events.
 
@@ -122,7 +141,7 @@ def reflexion(context: dict[str, Any]) -> list[Message]:
 
     user_prompt = f"""
 <PREVIOUS MESSAGES>
-{json.dumps([ep for ep in context['previous_episodes']], indent=2)}
+{to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS MESSAGES>
 <CURRENT MESSAGE>
 {context['episode_content']}
@@ -145,4 +164,40 @@ determine if any facts haven't been extracted.
     ]
 
 
-versions: Versions = {'edge': edge, 'reflexion': reflexion}
+def extract_attributes(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that extracts fact properties from the provided text.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+
+        <MESSAGE>
+        {to_prompt_json(context['episode_content'])}
+        </MESSAGE>
+        <REFERENCE TIME>
+        {context['reference_time']}
+        </REFERENCE TIME>
+
+        Given the above MESSAGE, its REFERENCE TIME, and the following FACT, update any of its attributes based on the information provided
+        in MESSAGE. Use the provided attribute descriptions to better understand how each attribute should be determined.
+
+        Guidelines:
+        1. Do not hallucinate entity property values if they cannot be found in the current context.
+        2. Only use the provided MESSAGES and FACT to set attribute values.
+
+        <FACT>
+        {context['fact']}
+        </FACT>
+        """,
+        ),
+    ]
+
+
+versions: Versions = {
+    'edge': edge,
+    'reflexion': reflexion,
+    'extract_attributes': extract_attributes,
+}

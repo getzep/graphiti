@@ -14,12 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from neo4j import AsyncGraphDatabase
 
 from graphiti_core.nodes import (
     CommunityNode,
@@ -27,10 +25,18 @@ from graphiti_core.nodes import (
     EpisodeType,
     EpisodicNode,
 )
+from tests.helpers_test import (
+    assert_community_node_equals,
+    assert_entity_node_equals,
+    assert_episodic_node_equals,
+    get_node_count,
+    group_id,
+)
 
-NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
-NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
-NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'test')
+created_at = datetime.now()
+deleted_at = created_at + timedelta(days=3)
+valid_at = created_at + timedelta(days=1)
+invalid_at = created_at + timedelta(days=2)
 
 
 @pytest.fixture
@@ -38,10 +44,15 @@ def sample_entity_node():
     return EntityNode(
         uuid=str(uuid4()),
         name='Test Entity',
-        group_id='test_group',
-        labels=['Entity'],
+        group_id=group_id,
+        labels=['Entity', 'Person'],
+        created_at=created_at,
         name_embedding=[0.5] * 1024,
         summary='Entity Summary',
+        attributes={
+            'age': 30,
+            'location': 'New York',
+        },
     )
 
 
@@ -50,11 +61,13 @@ def sample_episodic_node():
     return EpisodicNode(
         uuid=str(uuid4()),
         name='Episode 1',
-        group_id='test_group',
+        group_id=group_id,
+        created_at=created_at,
         source=EpisodeType.text,
         source_description='Test source',
         content='Some content here',
-        valid_at=datetime.now(timezone.utc),
+        valid_at=valid_at,
+        entity_edges=[],
     )
 
 
@@ -63,60 +76,154 @@ def sample_community_node():
     return CommunityNode(
         uuid=str(uuid4()),
         name='Community A',
+        group_id=group_id,
+        created_at=created_at,
         name_embedding=[0.5] * 1024,
-        group_id='test_group',
         summary='Community summary',
     )
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
-async def test_entity_node_save_get_and_delete(sample_entity_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-    await sample_entity_node.save(neo4j_driver)
-    retrieved = await EntityNode.get_by_uuid(neo4j_driver, sample_entity_node.uuid)
-    assert retrieved.uuid == sample_entity_node.uuid
-    assert retrieved.name == 'Test Entity'
-    assert retrieved.group_id == 'test_group'
+async def test_entity_node(sample_entity_node, graph_driver):
+    uuid = sample_entity_node.uuid
 
-    await sample_entity_node.delete(neo4j_driver)
+    # Create node
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
 
-    await neo4j_driver.close()
+    # Get node by uuid
+    retrieved = await EntityNode.get_by_uuid(graph_driver, sample_entity_node.uuid)
+    await assert_entity_node_equals(graph_driver, retrieved, sample_entity_node)
+
+    # Get node by uuids
+    retrieved = await EntityNode.get_by_uuids(graph_driver, [sample_entity_node.uuid])
+    await assert_entity_node_equals(graph_driver, retrieved[0], sample_entity_node)
+
+    # Get node by group ids
+    retrieved = await EntityNode.get_by_group_ids(
+        graph_driver, [group_id], limit=2, with_embeddings=True
+    )
+    assert len(retrieved) == 1
+    await assert_entity_node_equals(graph_driver, retrieved[0], sample_entity_node)
+
+    # Delete node by uuid
+    await sample_entity_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by uuids
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_entity_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by group id
+    await sample_entity_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_entity_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    await graph_driver.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
-async def test_community_node_save_get_and_delete(sample_community_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+async def test_community_node(sample_community_node, graph_driver):
+    uuid = sample_community_node.uuid
 
-    await sample_community_node.save(neo4j_driver)
+    # Create node
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
 
-    retrieved = await CommunityNode.get_by_uuid(neo4j_driver, sample_community_node.uuid)
-    assert retrieved.uuid == sample_community_node.uuid
-    assert retrieved.name == 'Community A'
-    assert retrieved.group_id == 'test_group'
-    assert retrieved.summary == 'Community summary'
+    # Get node by uuid
+    retrieved = await CommunityNode.get_by_uuid(graph_driver, sample_community_node.uuid)
+    await assert_community_node_equals(graph_driver, retrieved, sample_community_node)
 
-    await sample_community_node.delete(neo4j_driver)
+    # Get node by uuids
+    retrieved = await CommunityNode.get_by_uuids(graph_driver, [sample_community_node.uuid])
+    await assert_community_node_equals(graph_driver, retrieved[0], sample_community_node)
 
-    await neo4j_driver.close()
+    # Get node by group ids
+    retrieved = await CommunityNode.get_by_group_ids(graph_driver, [group_id], limit=2)
+    assert len(retrieved) == 1
+    await assert_community_node_equals(graph_driver, retrieved[0], sample_community_node)
+
+    # Delete node by uuid
+    await sample_community_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by uuids
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_community_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by group id
+    await sample_community_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_community_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    await graph_driver.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.integration
-async def test_episodic_node_save_get_and_delete(sample_episodic_node):
-    neo4j_driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+async def test_episodic_node(sample_episodic_node, graph_driver):
+    uuid = sample_episodic_node.uuid
 
-    await sample_episodic_node.save(neo4j_driver)
+    # Create node
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
 
-    retrieved = await EpisodicNode.get_by_uuid(neo4j_driver, sample_episodic_node.uuid)
-    assert retrieved.uuid == sample_episodic_node.uuid
-    assert retrieved.name == 'Episode 1'
-    assert retrieved.group_id == 'test_group'
-    assert retrieved.source == EpisodeType.text
-    assert retrieved.source_description == 'Test source'
-    assert retrieved.content == 'Some content here'
+    # Get node by uuid
+    retrieved = await EpisodicNode.get_by_uuid(graph_driver, sample_episodic_node.uuid)
+    await assert_episodic_node_equals(retrieved, sample_episodic_node)
 
-    await sample_episodic_node.delete(neo4j_driver)
+    # Get node by uuids
+    retrieved = await EpisodicNode.get_by_uuids(graph_driver, [sample_episodic_node.uuid])
+    await assert_episodic_node_equals(retrieved[0], sample_episodic_node)
 
-    await neo4j_driver.close()
+    # Get node by group ids
+    retrieved = await EpisodicNode.get_by_group_ids(graph_driver, [group_id], limit=2)
+    assert len(retrieved) == 1
+    await assert_episodic_node_equals(retrieved[0], sample_episodic_node)
+
+    # Delete node by uuid
+    await sample_episodic_node.delete(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by uuids
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_episodic_node.delete_by_uuids(graph_driver, [uuid])
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    # Delete node by group id
+    await sample_episodic_node.save(graph_driver)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 1
+    await sample_episodic_node.delete_by_group_id(graph_driver, group_id)
+    node_count = await get_node_count(graph_driver, [uuid])
+    assert node_count == 0
+
+    await graph_driver.close()

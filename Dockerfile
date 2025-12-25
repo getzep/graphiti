@@ -1,43 +1,78 @@
-# Build stage
-FROM python:3.12-slim as builder
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Poetry
-RUN pip install --no-cache-dir poetry
-
-# Copy only the files needed for installation
-COPY ./pyproject.toml ./poetry.lock* ./README.md /app/
-COPY ./graphiti_core /app/graphiti_core
-COPY ./server/pyproject.toml ./server/poetry.lock* /app/server/
-
-RUN poetry config virtualenvs.create false 
-
-# Install the local package
-RUN poetry build && pip install dist/*.whl
-
-# Install server dependencies
-WORKDIR /app/server
-RUN poetry install --no-interaction --no-ansi --only main --no-root
-
+# syntax=docker/dockerfile:1.9
 FROM python:3.12-slim
 
-# Copy only the necessary files from the builder stage
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Inherit build arguments for labels
+ARG GRAPHITI_VERSION
+ARG BUILD_DATE
+ARG VCS_REF
 
-# Create the app directory and copy server files
+# OCI image annotations
+LABEL org.opencontainers.image.title="Graphiti FastAPI Server"
+LABEL org.opencontainers.image.description="FastAPI server for Graphiti temporal knowledge graphs"
+LABEL org.opencontainers.image.version="${GRAPHITI_VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.vendor="Zep AI"
+LABEL org.opencontainers.image.source="https://github.com/getzep/graphiti"
+LABEL org.opencontainers.image.documentation="https://github.com/getzep/graphiti/tree/main/server"
+LABEL io.graphiti.core.version="${GRAPHITI_VERSION}"
+
+# Install uv using the installer script
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Configure uv for runtime
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+# Create non-root user
+RUN groupadd -r app && useradd -r -d /app -g app app
+
+# Set up the server application first
 WORKDIR /app
-COPY ./server /app
+COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
+COPY ./server/graph_service ./graph_service
+
+# Install server dependencies (without graphiti-core from lockfile)
+# Then install graphiti-core from PyPI at the desired version
+# This prevents the stale lockfile from pinning an old graphiti-core version
+ARG INSTALL_FALKORDB=false
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev && \
+    if [ -n "$GRAPHITI_VERSION" ]; then \
+        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+            uv pip install --system --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+        else \
+            uv pip install --system --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
+        fi; \
+    else \
+        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+            uv pip install --system --upgrade "graphiti-core[falkordb]"; \
+        else \
+            uv pip install --system --upgrade graphiti-core; \
+        fi; \
+    fi
+
+# Change ownership to app user
+RUN chown -R app:app /app
 
 # Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
-# Command to run the application
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
 
-CMD uvicorn graph_service.main:app --host 0.0.0.0 --port $PORT
+# Switch to non-root user
+USER app
+
+# Set port
+ENV PORT=8000
+EXPOSE $PORT
+
+# Use uv run for execution
+CMD ["uv", "run", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]

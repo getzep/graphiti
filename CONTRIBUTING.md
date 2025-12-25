@@ -20,11 +20,11 @@ For **feature requests**, tell us the story of what you're trying to accomplish.
 
 For **bug reports**, we need enough context to reproduce the problem. Use the [GitHub issue tracker](https://github.com/getzep/graphiti/issues) and include:
 
--   A clear title that summarizes the specific problem
--   What you were trying to do when you encountered the bug
--   What you expected to happen
--   What actually happened
--   A code sample or test case that demonstrates the issue
+- A clear title that summarizes the specific problem
+- What you were trying to do when you encountered the bug
+- What you expected to happen
+- What actually happened
+- A code sample or test case that demonstrates the issue
 
 ### Share Your Use Cases
 
@@ -36,6 +36,9 @@ Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and p
 
 ## What happens next?
 
+### Notes for Large Changes
+> Please keep the changes as concise as possible. For major architectural changes (>500 LOC), we would expect a GitHub issue (RFC) discussing the technical design and justification. Otherwise, we will tag it with rfc-required and might not go through the PR.
+
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
 1. Share your approach in the issue discussion or [Discord](https://discord.com/invite/W8Kw6bsgXQ) before diving deep into code. This helps ensure your solution adheres to the architecture of Graphiti from the start and saves you from potential rework.
@@ -46,77 +49,78 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 
 1. Fork the repository on GitHub.
 2. Clone your fork locally:
-    ```
-    git clone https://github.com/getzep/graphiti
-    cd graphiti
-    ```
+   ```
+   git clone https://github.com/getzep/graphiti
+   cd graphiti
+   ```
 3. Set up your development environment:
 
-    - Ensure you have Python 3.10+ installed.
-    - Install Poetry: https://python-poetry.org/docs/#installation
-    - Install project dependencies:
-        ```
-        make install
-        ```
-    - To run integration tests, set the appropriate environment variables
+   - Ensure you have Python 3.10+ installed.
+   - Install uv: https://docs.astral.sh/uv/getting-started/installation/
+   - Install project dependencies:
+     ```
+     make install
+     ```
+   - To run integration tests, set the appropriate environment variables
 
-        ```
-        export TEST_OPENAI_API_KEY=...
-        export TEST_OPENAI_MODEL=...
-        export TEST_ANTHROPIC_API_KEY=...
+     ```
+     export TEST_OPENAI_API_KEY=...
+     export TEST_OPENAI_MODEL=...
+     export TEST_ANTHROPIC_API_KEY=...
 
-        export NEO4J_URI=neo4j://...
-        export NEO4J_USER=...
-        export NEO4J_PASSWORD=...
-        ```
+     # For Neo4j
+     export TEST_URI=neo4j://...
+     export TEST_USER=...
+     export TEST_PASSWORD=...
+     ```
 
 ## Making Changes
 
 1. Create a new branch for your changes:
-    ```
-    git checkout -b your-branch-name
-    ```
+   ```
+   git checkout -b your-branch-name
+   ```
 2. Make your changes in the codebase.
 3. Write or update tests as necessary.
 4. Run the tests to ensure they pass:
-    ```
-    make test
-    ```
+   ```
+   make test
+   ```
 5. Format your code:
-    ```
-    make format
-    ```
+   ```
+   make format
+   ```
 6. Run linting checks:
-    ```
-    make lint
-    ```
+   ```
+   make lint
+   ```
 
 ## Submitting Changes
 
 1. Commit your changes:
-    ```
-    git commit -m "Your detailed commit message"
-    ```
+   ```
+   git commit -m "Your detailed commit message"
+   ```
 2. Push to your fork:
-    ```
-    git push origin your-branch-name
-    ```
+   ```
+   git push origin your-branch-name
+   ```
 3. Submit a pull request through the GitHub website to https://github.com/getzep/graphiti.
 
 ## Pull Request Guidelines
 
--   Provide a clear title and description of your changes.
--   Include any relevant issue numbers in the PR description.
--   Ensure all tests pass and there are no linting errors.
--   Update documentation if you're changing functionality.
+- Provide a clear title and description of your changes.
+- Include any relevant issue numbers in the PR description.
+- Ensure all tests pass and there are no linting errors.
+- Update documentation if you're changing functionality.
 
 ## Code Style and Quality
 
 We use several tools to maintain code quality:
 
--   Ruff for linting and formatting
--   Mypy for static type checking
--   Pytest for testing
+- Ruff for linting and formatting
+- Pyright for static type checking
+- Pytest for testing
 
 Before submitting a pull request, please run:
 
@@ -125,6 +129,67 @@ make check
 ```
 
 This command will format your code, run linting checks, and execute tests.
+
+## Third-Party Integrations
+
+When contributing integrations for third-party services (LLM providers, embedding services, databases, etc.), please follow these patterns:
+
+### Optional Dependencies
+
+All third-party integrations must be optional dependencies to keep the core library lightweight. Follow this pattern:
+
+1. **Add to `pyproject.toml`**: Define your dependency as an optional extra AND include it in the dev extra:
+   ```toml
+   [project.optional-dependencies]
+   your-service = ["your-package>=1.0.0"]
+   dev = [
+       # ... existing dev dependencies
+       "your-package>=1.0.0",  # Include all optional extras here
+       # ... other dependencies
+   ]
+   ```
+
+2. **Use TYPE_CHECKING pattern**: In your integration module, import dependencies conditionally:
+   ```python
+   from typing import TYPE_CHECKING
+   
+   if TYPE_CHECKING:
+       import your_package
+       from your_package import SomeType
+   else:
+       try:
+           import your_package
+           from your_package import SomeType
+       except ImportError:
+           raise ImportError(
+               'your-package is required for YourServiceClient. '
+               'Install it with: pip install graphiti-core[your-service]'
+           ) from None
+   ```
+
+3. **Benefits of this pattern**:
+   - Fast startup times (no import overhead during type checking)
+   - Clear error messages with installation instructions
+   - Proper type hints for development
+   - Consistent user experience
+
+4. **Do NOT**:
+   - Add optional imports to `__init__.py` files
+   - Use direct imports without error handling
+   - Include optional dependencies in the main `dependencies` list
+
+### Integration Structure
+
+- Place LLM clients in `graphiti_core/llm_client/`
+- Place embedding clients in `graphiti_core/embedder/`
+- Place database drivers in `graphiti_core/driver/`
+- Follow existing naming conventions (e.g., `your_service_client.py`)
+
+### Testing
+
+- Add comprehensive tests in the appropriate `tests/` subdirectory
+- Mark integration tests with `_int` suffix if they require external services
+- Include both unit tests and integration tests where applicable
 
 # Questions?
 

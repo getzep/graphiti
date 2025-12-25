@@ -1,0 +1,158 @@
+name: Release MCP Server
+
+on:
+  push:
+    tags: ["mcp-v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g., mcp-v1.0.0) - tag must exist in repo'
+        required: true
+        type: string
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: zepai/knowledge-graph-mcp
+
+jobs:
+  release:
+    runs-on: depot-ubuntu-24.04-small
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: release
+    strategy:
+      matrix:
+        variant:
+          - name: standalone
+            dockerfile: docker/Dockerfile.standalone
+            image_suffix: "-standalone"
+            tag_latest: "standalone"
+            title: "Graphiti MCP Server (Standalone)"
+            description: "Standalone Graphiti MCP server for external Neo4j or FalkorDB"
+          - name: combined
+            dockerfile: docker/Dockerfile
+            image_suffix: ""
+            tag_latest: "latest"
+            title: "FalkorDB + Graphiti MCP Server"
+            description: "Combined FalkorDB graph database with Graphiti MCP server"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Extract and validate version
+        id: version
+        run: |
+          # Extract tag from either push event or manual workflow_dispatch input
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG_FULL="${{ inputs.tag }}"
+            TAG_VERSION=${TAG_FULL#mcp-v}
+          else
+            TAG_VERSION=${GITHUB_REF#refs/tags/mcp-v}
+          fi
+
+          # Validate semantic versioning format
+          if ! [[ $TAG_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Tag must follow semantic versioning: mcp-vX.Y.Z (e.g., mcp-v1.0.0)"
+            echo "Received: mcp-v$TAG_VERSION"
+            exit 1
+          fi
+
+          # Validate against pyproject.toml version
+          PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('mcp_server/pyproject.toml', 'rb'))['project']['version'])")
+
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Error: Tag version mcp-v$TAG_VERSION does not match mcp_server/pyproject.toml version $PROJECT_VERSION"
+            exit 1
+          fi
+
+          echo "version=$PROJECT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Depot CLI
+        uses: depot/setup-action@v1
+
+      - name: Get latest graphiti-core version from PyPI
+        id: graphiti
+        run: |
+          # Query PyPI for the latest graphiti-core version with error handling
+          set -eo pipefail
+
+          if ! GRAPHITI_VERSION=$(curl -sf https://pypi.org/pypi/graphiti-core/json | python -c "import sys, json; data=json.load(sys.stdin); print(data['info']['version'])"); then
+            echo "Error: Failed to fetch graphiti-core version from PyPI"
+            exit 1
+          fi
+
+          if [ -z "$GRAPHITI_VERSION" ]; then
+            echo "Error: Empty version returned from PyPI"
+            exit 1
+          fi
+
+          echo "graphiti_version=${GRAPHITI_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest Graphiti Core version from PyPI: ${GRAPHITI_VERSION}"
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          # Get build date
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}${{ matrix.variant.image_suffix }}
+            type=raw,value=${{ steps.version.outputs.version }}-graphiti-${{ steps.graphiti.outputs.graphiti_version }}${{ matrix.variant.image_suffix }}
+            type=raw,value=${{ matrix.variant.tag_latest }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.variant.title }}
+            org.opencontainers.image.description=${{ matrix.variant.description }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.vendor=Zep AI
+            graphiti.core.version=${{ steps.graphiti.outputs.graphiti_version }}
+
+      - name: Build and push Docker image (${{ matrix.variant.name }})
+        uses: depot/build-push-action@v1
+        with:
+          project: v9jv1mlpwc
+          context: ./mcp_server
+          file: ./mcp_server/${{ matrix.variant.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            MCP_SERVER_VERSION=${{ steps.version.outputs.version }}
+            GRAPHITI_CORE_VERSION=${{ steps.graphiti.outputs.graphiti_version }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            VCS_REF=${{ steps.version.outputs.version }}
+
+      - name: Create release summary
+        run: |
+          {
+            echo "## MCP Server Release Summary - ${{ matrix.variant.title }}"
+            echo ""
+            echo "**MCP Server Version:** ${{ steps.version.outputs.version }}"
+            echo "**Graphiti Core Version:** ${{ steps.graphiti.outputs.graphiti_version }}"
+            echo "**Build Date:** ${{ steps.meta.outputs.build_date }}"
+            echo ""
+            echo "### Docker Image Tags"
+            echo "${{ steps.docker_meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/- /'
+            echo ""
+          } >> $GITHUB_STEP_SUMMARY
