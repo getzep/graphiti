@@ -87,7 +87,7 @@ async def get_graphiti(settings: ZepEnvDep):
             port=settings.falkordb_port or 6379,
             database=settings.falkordb_database or 'default_db',
         )
-        client = ZepGraphiti(graph_driver=driver)
+        client = ZepGraphiti(graph_driver=driver)  # type: ignore[call-arg]
     else:
         client = ZepGraphiti(
             uri=settings.neo4j_uri,
@@ -116,7 +116,7 @@ async def initialize_graphiti(settings: ZepEnvDep):
             port=settings.falkordb_port or 6379,
             database=settings.falkordb_database or 'default_db',
         )
-        client = ZepGraphiti(graph_driver=driver)
+        client = ZepGraphiti(graph_driver=driver)  # type: ignore[call-arg]
     else:
         client = ZepGraphiti(
             uri=settings.neo4j_uri,
