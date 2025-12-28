@@ -15,8 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 class ZepGraphiti(Graphiti):
-    def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None):
-        super().__init__(uri, user, password, llm_client)
+    def __init__(
+        self,
+        uri: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        llm_client: LLMClient | None = None,
+        **kwargs,
+    ):
+        super().__init__(uri, user, password, llm_client, **kwargs)
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -72,11 +79,21 @@ class ZepGraphiti(Graphiti):
 
 
 async def get_graphiti(settings: ZepEnvDep):
-    client = ZepGraphiti(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    if settings.db_backend == 'falkordb':
+        from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+        driver = FalkorDriver(
+            host=settings.falkordb_host or 'localhost',
+            port=settings.falkordb_port or 6379,
+            database=settings.falkordb_database or 'default_db',
+        )
+        client = ZepGraphiti(graph_driver=driver)
+    else:
+        client = ZepGraphiti(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
     if settings.openai_base_url is not None:
         client.llm_client.config.base_url = settings.openai_base_url
     if settings.openai_api_key is not None:
@@ -91,11 +108,21 @@ async def get_graphiti(settings: ZepEnvDep):
 
 
 async def initialize_graphiti(settings: ZepEnvDep):
-    client = ZepGraphiti(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    if settings.db_backend == 'falkordb':
+        from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+        driver = FalkorDriver(
+            host=settings.falkordb_host or 'localhost',
+            port=settings.falkordb_port or 6379,
+            database=settings.falkordb_database or 'default_db',
+        )
+        client = ZepGraphiti(graph_driver=driver)
+    else:
+        client = ZepGraphiti(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
     await client.build_indices_and_constraints()
 
 
