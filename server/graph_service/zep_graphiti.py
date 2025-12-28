@@ -23,7 +23,7 @@ class ZepGraphiti(Graphiti):
         llm_client: LLMClient | None = None,
         **kwargs,
     ):
-        super().__init__(uri, user, password, llm_client, **kwargs)
+        super().__init__(uri, user, password, llm_client, **kwargs)  # type: ignore[arg-type]
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -82,7 +82,7 @@ async def get_graphiti(settings: ZepEnvDep):
     if settings.db_backend == 'falkordb':
         from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-        driver = FalkorDriver(
+        driver = FalkorDriver(  # type: ignore[call-arg]
             host=settings.falkordb_host or 'localhost',
             port=settings.falkordb_port or 6379,
             database=settings.falkordb_database or 'default_db',
@@ -111,7 +111,7 @@ async def initialize_graphiti(settings: ZepEnvDep):
     if settings.db_backend == 'falkordb':
         from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-        driver = FalkorDriver(
+        driver = FalkorDriver(  # type: ignore[call-arg]
             host=settings.falkordb_host or 'localhost',
             port=settings.falkordb_port or 6379,
             database=settings.falkordb_database or 'default_db',
