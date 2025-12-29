@@ -108,24 +108,74 @@ class OpenAIGenericClient(LLMClient):
         Returns:
             True if the response appears to be a JSON Schema definition
         """
-        # JSON Schema structural markers
-        schema_indicators = {'properties', '$defs', '$schema', 'definitions'}
-
-        # Quick check: if none of the indicators are present, it's not a schema
-        if not any(key in response for key in schema_indicators):
-            return False
-
-        # Strong indicator: top-level "type": "object" with "properties"
-        if response.get('type') == 'object' and 'properties' in response:
+        # Immediate detection: JSON Schema keywords that are NEVER present in real data
+        schema_keywords = {'$defs', '$schema', 'definitions', 'properties'}
+        if any(key in response for key in schema_keywords):
             return True
 
-        # Another strong indicator: "required" as list of strings alongside "properties"
-        if 'required' in response and 'properties' in response:
-            required = response.get('required')
-            if isinstance(required, list) and all(isinstance(item, str) for item in required):
-                return True
+        # Also detect "type": "object" at top level (another JSON Schema pattern)
+        return response.get('type') == 'object'
 
-        return False
+    def _extract_json(self, text: str) -> dict[str, Any]:
+        """Extract the first valid JSON object from text that may contain trailing content.
+
+        Some LLM providers return JSON followed by explanatory text, which breaks
+        standard JSON parsing. This method finds and extracts the first complete
+        JSON object.
+
+        Args:
+            text: Raw response text that may contain JSON with trailing content
+
+        Returns:
+            Parsed JSON as a dictionary
+
+        Raises:
+            json.JSONDecodeError: If no valid JSON object can be extracted
+        """
+        text = text.strip()
+
+        # Try standard parsing first (fast path)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            # Only handle "Extra data" errors - other errors should propagate
+            if 'Extra data' not in str(e):
+                raise
+
+        # Find the first complete JSON object by matching braces
+        if not text.startswith('{'):
+            raise json.JSONDecodeError('No JSON object found', text, 0)
+
+        depth = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == '\\' and in_string:
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if in_string:
+                continue
+
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    # Found complete JSON object
+                    json_str = text[: i + 1]
+                    return json.loads(json_str)
+
+        raise json.JSONDecodeError('Incomplete JSON object', text, len(text))
 
     async def _generate_response(
         self,
@@ -179,7 +229,7 @@ class OpenAIGenericClient(LLMClient):
                 response_format=response_format,  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
-            return json.loads(result)
+            return self._extract_json(result)
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
