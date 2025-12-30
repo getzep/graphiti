@@ -495,13 +495,15 @@ async def edge_bfs_search(
             records.extend(sub_records)
     else:
         if driver.provider == GraphProvider.NEPTUNE:
+            # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
+            # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS *1..{bfs_max_depth}]->(n:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
                 WHERE origin:Entity OR origin:Episodic
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+                MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -522,12 +524,14 @@ async def edge_bfs_search(
                 """
             )
         else:
+            # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
+            # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(:Entity)
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+                MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -788,10 +792,11 @@ async def node_bfs_search(
     if filter_queries:
         filter_query = ' AND ' + (' AND '.join(filter_queries))
 
+    # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
     match_queries = [
         f"""
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+        MATCH (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
         WHERE n.group_id = origin.group_id
         """
     ]
@@ -800,7 +805,7 @@ async def node_bfs_search(
         match_queries = [
             f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin {{uuid: origin_uuid}})-[e:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+            MATCH (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
             WHERE origin:Entity OR origin.Episode
             AND n.group_id = origin.group_id
             """
