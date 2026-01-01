@@ -1315,3 +1315,21 @@ class Graphiti:
         await Node.delete_by_uuids(self.driver, [node.uuid for node in nodes_to_delete])
 
         await episode.delete(self.driver)
+
+        orphan_query: LiteralString = """
+            MATCH (n:Entity)
+            WHERE NOT EXISTS { (e:Episodic)-[:MENTIONS]->(n) }
+            AND n.group_id = $group_id
+            RETURN n.uuid AS uuid
+        """
+
+        records, _, _ = await self.driver.execute_query(
+            orphan_query,
+            group_id=episode.group_id,
+            routing_="r",
+        )
+
+        orphaned_uuids = [record["uuid"] for record in records]
+
+        if orphaned_uuids:
+            await Node.delete_by_uuids(self.driver, orphaned_uuids)
