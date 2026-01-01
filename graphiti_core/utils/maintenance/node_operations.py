@@ -178,6 +178,7 @@ async def extract_nodes(
             labels=labels,
             summary='',
             created_at=utc_now(),
+            attributes=extracted_entity.attributes,
         )
         extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
@@ -368,6 +369,7 @@ async def _resolve_with_llm(
         state.resolved_nodes[original_index] = resolved_node
         state.uuid_map[extracted_node.uuid] = resolved_node.uuid
         if resolved_node.uuid != extracted_node.uuid:
+            resolved_node.attributes.update(extracted_node.attributes)
             state.duplicate_pairs.append((extracted_node, resolved_node))
 
 
