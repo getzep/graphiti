@@ -25,6 +25,11 @@ from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
 
+class EntityAttribute(BaseModel):
+    key: str = Field(..., description='Attribute name (e.g., employee_count, title)')
+    value: str = Field(..., description='Attribute value as string')
+
+
 class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
@@ -32,9 +37,9 @@ class ExtractedEntity(BaseModel):
         description='ID of the classified entity type. '
         'Must be one of the provided entity_type_id integers.',
     )
-    attributes: dict[str, str | int | float] = Field(
+    attributes: list[EntityAttribute] = Field(
         ...,
-        description='Extracted attributes as key-value pairs (empty {} if none)',
+        description='Extracted attributes (empty [] if none)',
     )
 
 

@@ -172,13 +172,16 @@ async def extract_nodes(
 
         labels: list[str] = list({'Entity', str(entity_type_name)})
 
+        # Convert list of EntityAttribute to dict
+        attributes_dict = {attr.key: attr.value for attr in extracted_entity.attributes}
+
         new_node = EntityNode(
             name=extracted_entity.name,
             group_id=episode.group_id,
             labels=labels,
             summary='',
             created_at=utc_now(),
-            attributes=extracted_entity.attributes,
+            attributes=attributes_dict,
         )
         extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
