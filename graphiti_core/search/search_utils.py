@@ -553,10 +553,11 @@ async def edge_bfs_search(
         if driver.provider == GraphProvider.NEPTUNE:
             # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
             # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
+            # NOTE: We traverse in BOTH directions (-[*1..N]-) to find edges regardless of direction
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]-(n:Entity)
                 WHERE origin:Entity OR origin:Episodic
                 UNWIND relationships(path) AS rel
                 MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
@@ -582,10 +583,11 @@ async def edge_bfs_search(
         else:
             # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
             # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
+            # NOTE: We traverse in BOTH directions (-[*1..N]-) to find edges regardless of direction
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]-(:Entity)
                 UNWIND relationships(path) AS rel
                 MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
                 """
