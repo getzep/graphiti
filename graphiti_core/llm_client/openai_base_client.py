@@ -21,6 +21,7 @@ from abc import abstractmethod
 from typing import Any, ClassVar
 
 import openai
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
@@ -47,6 +48,9 @@ class BaseOpenAIClient(LLMClient):
 
     # Class-level constants
     MAX_RETRIES: ClassVar[int] = 2
+
+    # Instance attribute (initialized in subclasses)
+    client: AsyncOpenAI | AsyncAzureOpenAI
 
     def __init__(
         self,
