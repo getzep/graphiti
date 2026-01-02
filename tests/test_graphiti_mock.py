@@ -1089,6 +1089,22 @@ async def test_edge_fulltext_search_custom_edge_types(
 
 
 @pytest.mark.asyncio
+async def test_ensure_edge_type_index(graph_driver):
+    """Test ensure_edge_type_index creates fulltext indexes for custom edge types."""
+    if graph_driver.provider != GraphProvider.FALKORDB:
+        pytest.skip('ensure_edge_type_index only implemented for FalkorDB')
+
+    # Test creating index for a custom edge type (should succeed)
+    await graph_driver.ensure_edge_type_index('CUSTOM_TYPE')
+
+    # Test calling it again is idempotent (should not fail)
+    await graph_driver.ensure_edge_type_index('CUSTOM_TYPE')
+
+    # Test that RELATES_TO is a no-op (index already exists from build_indices_and_constraints)
+    await graph_driver.ensure_edge_type_index('RELATES_TO')
+
+
+@pytest.mark.asyncio
 async def test_edge_similarity_search(graph_driver, mock_embedder):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')

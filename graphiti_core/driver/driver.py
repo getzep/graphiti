@@ -110,6 +110,19 @@ class GraphDriver(ABC):
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         raise NotImplementedError()
 
+    async def ensure_edge_type_index(self, edge_type: str) -> None:
+        """
+        Ensure a fulltext index exists for a custom edge type.
+
+        This method should be called when custom edge types are used to enable
+        BM25 fulltext search on those relationship types. The default implementation
+        is a no-op; drivers that support fulltext indexes should override this.
+
+        Args:
+            edge_type: The relationship type name (e.g., 'SANCTION', 'OWNERSHIP')
+        """
+        pass  # Default no-op for drivers that don't support fulltext indexes
+
     def clone(self, database: str) -> 'GraphDriver':
         """Clone the driver with a different database or graph name."""
         return self

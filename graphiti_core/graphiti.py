@@ -744,6 +744,11 @@ class Graphiti:
                     else {('Entity', 'Entity'): []}
                 )
 
+                # Ensure fulltext indexes exist for custom edge types
+                if edge_types is not None:
+                    for edge_type in edge_types.keys():
+                        await self.driver.ensure_edge_type_index(edge_type)
+
                 # Extract and resolve nodes
                 extracted_nodes = await extract_nodes(
                     self.clients,
@@ -904,6 +909,11 @@ class Graphiti:
                     if edge_types is not None
                     else {('Entity', 'Entity'): []}
                 )
+
+                # Ensure fulltext indexes exist for custom edge types
+                if edge_types is not None:
+                    for edge_type in edge_types.keys():
+                        await self.driver.ensure_edge_type_index(edge_type)
 
                 episodes = [
                     await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
