@@ -1,6 +1,6 @@
 [project]
 name = "graphiti-core"
-description = "A temporal graph building library"
+description = "A temporal graph building library, with supplementary CLI tools for direct interaction"
 version = "0.25.0"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
@@ -21,11 +21,19 @@ dependencies = [
     "posthog>=3.0.0"
 ]
 
+[project.scripts]
+graphiti = "cli.main:app"
+
 [project.urls]
 Homepage = "https://help.getzep.com/graphiti/graphiti/overview"
 Repository = "https://github.com/getzep/graphiti"
+Documentation = "https://help.getzep.com/graphiti/cli/overview"
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.15.0",
+    "rich>=13.7.0",
+]
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
 google-genai = ["google-genai>=1.8.0"]
@@ -61,6 +69,8 @@ dev = [
     "pytest-xdist>=3.6.1",
     "ruff>=0.7.1",
     "opentelemetry-sdk>=1.20.0",
+    "typer>=0.15.0",
+    "rich>=13.7.0",
 ]
 
 [build-system]
@@ -103,4 +113,3 @@ docstring-code-format = true
 include = ["graphiti_core"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
-

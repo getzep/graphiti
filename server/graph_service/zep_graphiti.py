@@ -8,10 +8,15 @@ from graphiti_core.errors import EdgeNotFoundError, GroupsEdgesNotFoundError, No
 from graphiti_core.llm_client import LLMClient  # type: ignore
 from graphiti_core.nodes import EntityNode, EpisodicNode  # type: ignore
 
-from graph_service.config import ZepEnvDep
+from graph_service.config import ZepEnvDep, get_settings
 from graph_service.dto import FactResult
 
 logger = logging.getLogger(__name__)
+
+# Singleton graphiti client - stays open for app lifecycle
+# This is required because background workers need access to the client
+# after the original request has completed
+_graphiti_client: 'ZepGraphiti | None' = None
 
 
 class ZepGraphiti(Graphiti):
@@ -71,12 +76,38 @@ class ZepGraphiti(Graphiti):
             raise HTTPException(status_code=404, detail=e.message) from e
 
 
-async def get_graphiti(settings: ZepEnvDep):
+def get_graphiti() -> 'ZepGraphiti':
+    """Return the singleton graphiti client.
+
+    The client stays open for the entire app lifecycle to support
+    background workers that run after requests complete.
+    """
+    global _graphiti_client
+    if _graphiti_client is None:
+        raise RuntimeError('Graphiti client not initialized. Call initialize_graphiti() first.')
+    return _graphiti_client
+
+
+async def initialize_graphiti(settings: ZepEnvDep):
+    """Initialize the singleton graphiti client on app startup.
+
+    Creates a single client that stays open for the app lifecycle.
+    This fixes the 'Driver closed' error that occurred when background
+    workers tried to use request-scoped clients after the request ended.
+    """
+    global _graphiti_client
+
+    if _graphiti_client is not None:
+        logger.warning('Graphiti client already initialized, closing existing client')
+        await _graphiti_client.close()
+
     client = ZepGraphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
     )
+
+    # Configure LLM client if settings provided
     if settings.openai_base_url is not None:
         client.llm_client.config.base_url = settings.openai_base_url
     if settings.openai_api_key is not None:
@@ -84,19 +115,20 @@ async def get_graphiti(settings: ZepEnvDep):
     if settings.model_name is not None:
         client.llm_client.model = settings.model_name
 
-    try:
-        yield client
-    finally:
-        await client.close()
-
-
-async def initialize_graphiti(settings: ZepEnvDep):
-    client = ZepGraphiti(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    # Build indices and wait for completion
     await client.build_indices_and_constraints()
+
+    _graphiti_client = client
+    logger.info('Graphiti client initialized successfully')
+
+
+async def shutdown_graphiti():
+    """Shutdown the singleton graphiti client on app shutdown."""
+    global _graphiti_client
+    if _graphiti_client is not None:
+        await _graphiti_client.close()
+        _graphiti_client = None
+        logger.info('Graphiti client closed')
 
 
 def get_fact_result_from_edge(edge: EntityEdge):
@@ -111,4 +143,6 @@ def get_fact_result_from_edge(edge: EntityEdge):
     )
 
 
+# Dependency that returns the singleton client
+# No cleanup needed since client stays open for app lifecycle
 ZepGraphitiDep = Annotated[ZepGraphiti, Depends(get_graphiti)]
