@@ -203,7 +203,9 @@ async def edge_search(
     search_tasks = []
     if EdgeSearchMethod.bm25 in config.search_methods:
         search_tasks.append(
-            edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
+            edge_fulltext_search(
+                driver, query, search_filter, group_ids, 2 * limit, config.edge_types
+            )
         )
     if EdgeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(

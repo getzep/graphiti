@@ -31,6 +31,7 @@ class SearchInterface(BaseModel):
         search_filter: Any,
         group_ids: list[str] | None = None,
         limit: int = 100,
+        edge_types: list[str] | None = None,
     ) -> list[Any]:
         raise NotImplementedError
 
