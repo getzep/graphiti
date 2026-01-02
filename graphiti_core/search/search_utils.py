@@ -173,10 +173,11 @@ async def edge_fulltext_search(
     search_filter: SearchFilters,
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
+    edge_types: list[str] | None = None,
 ) -> list[EntityEdge]:
     if driver.search_interface:
         return await driver.search_interface.edge_fulltext_search(
-            driver, query, search_filter, group_ids, limit
+            driver, query, search_filter, group_ids, limit, edge_types
         )
 
     # fulltext search over facts
@@ -185,15 +186,9 @@ async def edge_fulltext_search(
     if fuzzy_query == '':
         return []
 
-    match_query = """
-    YIELD relationship AS rel, score
-    MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
-    """
-    if driver.provider == GraphProvider.KUZU:
-        match_query = """
-        YIELD node, score
-        MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
-        """
+    # Default to RELATES_TO if no edge types specified
+    if edge_types is None:
+        edge_types = ['RELATES_TO']
 
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
@@ -219,8 +214,8 @@ async def edge_fulltext_search(
                 """
                                 UNWIND $ids as id
                                 MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
+                                WHERE e.group_id IN $group_ids
+                                AND id(e)=id
                                 """
                 + filter_query
                 + """
@@ -253,7 +248,68 @@ async def edge_fulltext_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # For FalkorDB, query each edge type's fulltext index and combine results
+        all_records: list[Any] = []
+        for edge_type in edge_types:
+            match_query = f"""
+            YIELD relationship AS rel, score
+            MATCH (n:Entity)-[e:{edge_type} {{uuid: rel.uuid}}]->(m:Entity)
+            """
+
+            query_str = (
+                get_relationships_query(
+                    'edge_name_and_fact', limit=limit, provider=driver.provider, edge_type=edge_type
+                )
+                + match_query
+                + filter_query
+                + """
+                WITH e, score, n, m
+                RETURN
+                """
+                + get_entity_edge_return_query(driver.provider)
+                + """
+                ORDER BY score DESC
+                LIMIT $limit
+                """
+            )
+
+            try:
+                records, _, _ = await driver.execute_query(
+                    query_str,
+                    query=fuzzy_query,
+                    limit=limit,
+                    routing_='r',
+                    **filter_params,
+                )
+                all_records.extend(records)
+            except Exception as e:
+                # Index may not exist for this edge type - skip silently
+                logger.debug(f'Fulltext search skipped for edge type {edge_type}: {e}')
+                continue
+
+        # Dedupe by uuid and sort by score
+        seen_uuids: set[str] = set()
+        unique_records = []
+        for record in all_records:
+            uuid = record.get('uuid') or record[0]
+            if uuid not in seen_uuids:
+                seen_uuids.add(uuid)
+                unique_records.append(record)
+
+        records = unique_records[:limit]
     else:
+        # For other providers (Neo4j, Kuzu), use existing behavior
+        match_query = """
+        YIELD relationship AS rel, score
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+        """
+        if driver.provider == GraphProvider.KUZU:
+            match_query = """
+            YIELD node, score
+            MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
+            """
+
         query = (
             get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
             + match_query
@@ -495,13 +551,16 @@ async def edge_bfs_search(
             records.extend(sub_records)
     else:
         if driver.provider == GraphProvider.NEPTUNE:
+            # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
+            # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
+            # NOTE: We traverse in BOTH directions (-[*1..N]-) to find edges regardless of direction
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS *1..{bfs_max_depth}]->(n:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]-(n:Entity)
                 WHERE origin:Entity OR origin:Episodic
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+                MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -522,12 +581,15 @@ async def edge_bfs_search(
                 """
             )
         else:
+            # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
+            # The Entity-to-Entity match naturally excludes MENTIONS edges (which connect Episodic to Entity)
+            # NOTE: We traverse in BOTH directions (-[*1..N]-) to find edges regardless of direction
             query = (
                 f"""
                 UNWIND $bfs_origin_node_uuids AS origin_uuid
-                MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(:Entity)
+                MATCH path = (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]-(:Entity)
                 UNWIND relationships(path) AS rel
-                MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+                MATCH (n:Entity)-[e {{uuid: rel.uuid}}]-(m:Entity)
                 """
                 + filter_query
                 + """
@@ -788,10 +850,11 @@ async def node_bfs_search(
     if filter_queries:
         filter_query = ' AND ' + (' AND '.join(filter_queries))
 
+    # Use wildcard traversal to support custom edge types (LOCATED_IN, MEMBER_OF, etc.)
     match_queries = [
         f"""
         UNWIND $bfs_origin_node_uuids AS origin_uuid
-        MATCH (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+        MATCH (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
         WHERE n.group_id = origin.group_id
         """
     ]
@@ -800,7 +863,7 @@ async def node_bfs_search(
         match_queries = [
             f"""
             UNWIND $bfs_origin_node_uuids AS origin_uuid
-            MATCH (origin {{uuid: origin_uuid}})-[e:RELATES_TO|MENTIONS*1..{bfs_max_depth}]->(n:Entity)
+            MATCH (origin {{uuid: origin_uuid}})-[*1..{bfs_max_depth}]->(n:Entity)
             WHERE origin:Entity OR origin.Episode
             AND n.group_id = origin.group_id
             """
