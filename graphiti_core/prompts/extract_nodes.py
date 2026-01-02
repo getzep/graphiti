@@ -28,12 +28,13 @@ from .snippets import summary_instructions
 class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
+        ...,
         description='ID of the classified entity type. '
         'Must be one of the provided entity_type_id integers.',
     )
     attributes: dict[str, str | int | float] = Field(
-        default_factory=dict,
-        description='Extracted attributes as key-value pairs',
+        ...,
+        description='Extracted attributes as key-value pairs (empty {} if none)',
     )
 
 
