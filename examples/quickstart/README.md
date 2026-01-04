@@ -21,7 +21,6 @@ This example demonstrates the basic functionality of Graphiti, including:
 - **For Amazon Neptune**:
   - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
 
-
 ## Setup Instructions
 
 1. Install the required dependencies:
@@ -30,7 +29,7 @@ This example demonstrates the basic functionality of Graphiti, including:
 pip install graphiti-core
 ```
 
-2. Set up environment variables:
+1. Set up environment variables:
 
 ```bash
 # Required for LLM and embedding
@@ -54,10 +53,10 @@ AOSS_PORT=your_port_or_443
 ```
 
 TIP: For Amazon Neptune host string please use the following formats
-* For Neptune Database: `neptune-db://<cluster endpoint>`
-* For Neptune Analytics: `neptune-graph://<graph identifier>`
+- For Neptune Database: `neptune-db://<cluster endpoint>`
+- For Neptune Analytics: `neptune-graph://<graph identifier>`
 
-3. Run the example:
+1. Run the example:
 
 ```bash
 python quickstart_neo4j.py

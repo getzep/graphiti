@@ -44,4 +44,3 @@ graphiti = Graphiti(graph_driver=kuzu_driver, tracer=tracer)
 ## Example
 
 See `examples/opentelemetry/` for a complete working example with stdout tracing
-

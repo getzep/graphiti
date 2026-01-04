@@ -45,21 +45,23 @@ gh repo clone getzep/graphiti
 
 1. Note the full path to this directory.
 
-```
+```bash
 cd graphiti && pwd
 ```
 
-2. Install the [Graphiti prerequisites](#prerequisites).
+1. Install the [Graphiti prerequisites](#prerequisites).
 
-3. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
+2. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
 
 ### For Cursor and other HTTP-enabled clients
 
 1. Change directory to the `mcp_server` directory
 
-`cd graphiti/mcp_server`
+```bash
+cd graphiti/mcp_server
+```
 
-2. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
+1. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
 
 ```bash
 docker compose up
@@ -68,11 +70,12 @@ docker compose up
 This starts both FalkorDB and the MCP server in a single container.
 
 **Alternative**: Run with separate containers using Neo4j:
+
 ```bash
 docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
-4. Point your MCP client to `http://localhost:8000/mcp/`
+1. Point your MCP client to `http://localhost:8000/mcp/`
 
 ## Installation
 
@@ -105,6 +108,7 @@ The server can be configured using a `config.yaml` file, environment variables, 
 ### Default Configuration
 
 The MCP server comes with sensible defaults:
+
 - **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
 - **Database**: FalkorDB (combined in single container with MCP server)
 - **LLM**: OpenAI with model gpt-5-mini
@@ -252,6 +256,7 @@ docker compose up
 ```
 
 This starts a single container with:
+
 - HTTP transport on `http://localhost:8000/mcp/`
 - FalkorDB graph database on `localhost:6379`
 - FalkorDB web UI on `http://localhost:3000`
@@ -335,20 +340,24 @@ Graphiti's ingestion pipelines are designed for high concurrency, controlled by 
 #### Tuning Guidelines by LLM Provider
 
 **OpenAI:**
+
 - Tier 1 (free): 3 RPM → `SEMAPHORE_LIMIT=1-2`
 - Tier 2: 60 RPM → `SEMAPHORE_LIMIT=5-8`
 - Tier 3: 500 RPM → `SEMAPHORE_LIMIT=10-15`
 - Tier 4: 5,000 RPM → `SEMAPHORE_LIMIT=20-50`
 
 **Anthropic:**
+
 - Default tier: 50 RPM → `SEMAPHORE_LIMIT=5-8`
 - High tier: 1,000 RPM → `SEMAPHORE_LIMIT=15-30`
 
 **Azure OpenAI:**
+
 - Consult your quota in Azure Portal and adjust accordingly
 - Start conservative and increase gradually
 
 **Ollama (local):**
+
 - Hardware dependent → `SEMAPHORE_LIMIT=1-5`
 - Monitor CPU/GPU usage and adjust
 
@@ -365,6 +374,7 @@ Graphiti's ingestion pipelines are designed for high concurrency, controlled by 
 - Track token usage and costs
 
 Set this in your `.env` file:
+
 ```bash
 SEMAPHORE_LIMIT=10  # Adjust based on your LLM provider tier
 ```
@@ -380,12 +390,14 @@ A pre-built Graphiti MCP container is available at: `zepai/knowledge-graph-mcp`
 Before running Docker Compose, configure your API keys using a `.env` file (recommended):
 
 1. **Create a .env file in the mcp_server directory**:
+
    ```bash
    cd graphiti/mcp_server
    cp .env.example .env
    ```
 
 2. **Edit the .env file** to set your API keys:
+
    ```bash
    # Required - at least one LLM provider API key
    OPENAI_API_KEY=your_openai_api_key_here
@@ -426,6 +438,7 @@ docker compose -f docker/docker-compose-neo4j.yml up
 ```
 
 Default Neo4j credentials:
+
 - Username: `neo4j`
 - Password: `demodemo`
 - Bolt URI: `bolt://neo4j:7687`
@@ -440,6 +453,7 @@ docker compose -f docker/docker-compose-falkordb.yml up
 ```
 
 FalkorDB configuration:
+
 - Redis port: `6379`
 - Web UI: `http://localhost:3000`
 - Connection: `redis://falkordb:6379`
@@ -447,6 +461,7 @@ FalkorDB configuration:
 #### Accessing the MCP Server
 
 Once running, the MCP server is available at:
+
 - **HTTP endpoint**: `http://localhost:8000/mcp/`
 - **Health check**: `http://localhost:8000/health`
 
@@ -555,8 +570,7 @@ The Graphiti MCP server exposes the following tools:
 The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This
 allows you to automatically extract entities and relationships from structured data:
 
-```
-
+```text
 add_episode(
 name="Customer Profile",
 episode_body="{\"company\": {\"name\": \"Acme Technologies\"}, \"products\": [{\"id\": \"P001\", \"name\": \"CloudSync\"}, {\"id\": \"P002\", \"name\": \"DataMiner\"}]}",
@@ -584,7 +598,7 @@ or
 docker compose up
 ```
 
-2. Configure Cursor to connect to the Graphiti MCP server.
+1. Configure Cursor to connect to the Graphiti MCP server.
 
 ```json
 {
@@ -596,9 +610,9 @@ docker compose up
 }
 ```
 
-3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+1. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
 
-4. Kick off an agent session in Cursor.
+2. Kick off an agent session in Cursor.
 
 The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph
 capabilities.
@@ -607,7 +621,7 @@ capabilities.
 
 The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote`.
 
-1.  **Run the Graphiti MCP server**:
+1. **Run the Graphiti MCP server**:
 
     ```bash
     docker compose up
@@ -615,14 +629,14 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
     uv run main.py
     ```
 
-2.  **(Optional) Install `mcp-remote` globally**:
+2. **(Optional) Install `mcp-remote` globally**:
     If you prefer to have `mcp-remote` installed globally, or if you encounter issues with `npx` fetching the package, you can install it globally. Otherwise, `npx` (used in the next step) will handle it for you.
 
     ```bash
     npm install -g mcp-remote
     ```
 
-3.  **Configure Claude Desktop**:
+3. **Configure Claude Desktop**:
     Open your Claude Desktop configuration file (usually `claude_desktop_config.json`) and add or modify the `mcpServers` section as follows:
 
     ```json
@@ -642,7 +656,7 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
 
     If you already have an `mcpServers` entry, add `graphiti-memory` (or your chosen name) as a new key within it.
 
-4.  **Restart Claude Desktop** for the changes to take effect.
+4. **Restart Claude Desktop** for the changes to take effect.
 
 ## Requirements
 
@@ -672,7 +686,7 @@ export GRAPHITI_TELEMETRY_ENABLED=false
 
 Or add it to your `.env` file:
 
-```
+```text
 GRAPHITI_TELEMETRY_ENABLED=false
 ```
 

@@ -9,12 +9,14 @@ The FastAPI server container is automatically built and published to Docker Hub 
 **Image:** `zepai/graphiti`
 
 **Available tags:**
+
 - `latest` - Latest stable release
 - `0.22.1` - Specific version (matches graphiti-core version)
 
 **Platforms:** linux/amd64, linux/arm64
 
 The automated release workflow:
+
 1. Triggers when `graphiti-core` PyPI release completes
 2. Waits for PyPI package availability
 3. Builds multi-platform Docker image
@@ -31,7 +33,7 @@ Only stable releases are built automatically (pre-release versions are skipped).
 
 3. Make sure to pass the following environment variables to the service
 
-   ```
+   ```text
    OPENAI_API_KEY=your_openai_api_key
    NEO4J_USER=your_neo4j_user
    NEO4J_PASSWORD=your_neo4j_password
