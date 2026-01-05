@@ -3,7 +3,7 @@
 ### Before Starting Any Task
 
 - **Always search first:** Use the `search_nodes` tool to look for relevant preferences and procedures before beginning work.
-- **Search for facts too:** Use the `search_facts` tool to discover relationships and factual information that may be relevant to your task.
+- **Search for facts too:** Use the `search_memory_facts` tool to discover relationships and factual information that may be relevant to your task.
 - **Filter by entity type:** Specify `Preference`, `Procedure`, or `Requirement` in your node search to get targeted results.
 - **Review all matches:** Carefully examine any preferences, procedures, or facts that match your current task.
 
@@ -26,7 +26,7 @@
 ### Best Practices
 
 - **Search before suggesting:** Always check if there's established knowledge before making recommendations.
-- **Combine node and fact searches:** For complex tasks, search both nodes and facts to build a complete picture.
+- **Combine node and fact searches:** For complex tasks, use both `search_nodes` and `search_memory_facts` to build a complete picture.
 - **Use `center_node_uuid`:** When exploring related information, center your search around a specific node.
 - **Prioritize specific matches:** More specific information takes precedence over general information.
 - **Be proactive:** If you notice patterns in user behavior, consider storing them as preferences or procedures.
