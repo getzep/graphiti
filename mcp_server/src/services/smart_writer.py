@@ -127,30 +127,64 @@ class SmartMemoryWriter:
                 logger.debug(f"Written to project group: {project_config.group_id}")
 
             elif classification.category == MemoryCategory.MIXED:
-                # Write to both project and shared groups
-                # For MVP: write full content to both
-                # Future: could split content based on classification.shared_part/project_part
+                # Write to both project and shared groups with content splitting
+                # Use split content if available, otherwise write full content to both
 
-                # Write to project group
-                await self._write_to_group(
-                    name=name,
-                    episode_body=episode_body,
-                    group_id=project_config.group_id,
-                    metadata=metadata
-                )
-                written_groups.append(project_config.group_id)
-                logger.debug(f"Written to project group: {project_config.group_id}")
+                # Check if we have split content
+                if classification.shared_part or classification.project_part:
+                    # Content splitting is available
+                    shared_content = classification.shared_part or episode_body
+                    project_content = classification.project_part or episode_body
 
-                # Write to shared groups
-                for shared_gid in project_config.shared_group_ids:
+                    logger.debug(
+                        f"Using split content: shared={len(shared_content)} chars, "
+                        f"project={len(project_content)} chars"
+                    )
+
+                    # Write shared part to shared groups
+                    for shared_gid in project_config.shared_group_ids:
+                        await self._write_to_group(
+                            name=name,
+                            episode_body=shared_content,
+                            group_id=shared_gid,
+                            metadata=metadata
+                        )
+                        written_groups.append(shared_gid)
+                        logger.debug(f"Written shared part to: {shared_gid}")
+
+                    # Write project part to project group
+                    await self._write_to_group(
+                        name=name,
+                        episode_body=project_content,
+                        group_id=project_config.group_id,
+                        metadata=metadata
+                    )
+                    written_groups.append(project_config.group_id)
+                    logger.debug(f"Written project part to: {project_config.group_id}")
+                else:
+                    # No split content available, write full content to both
+                    logger.debug("No split content available, writing full content to both")
+
+                    # Write to project group
                     await self._write_to_group(
                         name=name,
                         episode_body=episode_body,
-                        group_id=shared_gid,
+                        group_id=project_config.group_id,
                         metadata=metadata
                     )
-                    written_groups.append(shared_gid)
-                    logger.debug(f"Written to shared group: {shared_gid}")
+                    written_groups.append(project_config.group_id)
+                    logger.debug(f"Written to project group: {project_config.group_id}")
+
+                    # Write to shared groups
+                    for shared_gid in project_config.shared_group_ids:
+                        await self._write_to_group(
+                            name=name,
+                            episode_body=episode_body,
+                            group_id=shared_gid,
+                            metadata=metadata
+                        )
+                        written_groups.append(shared_gid)
+                        logger.debug(f"Written to shared group: {shared_gid}")
 
             logger.info(
                 f"Memory '{name}' written to {len(written_groups)} group(s): {written_groups}"

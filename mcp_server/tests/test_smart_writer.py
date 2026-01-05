@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from services.smart_writer import SmartMemoryWriter, WriteResult
 from classifiers.rule_based import RuleBasedClassifier
-from classifiers.base import MemoryCategory
+from classifiers.base import MemoryCategory, ClassificationResult
 from utils.project_config import ProjectConfig
 
 
@@ -260,6 +260,114 @@ def test_write_to_group_params():
     asyncio.run(run_test())
 
 
+def test_add_memory_mixed_with_split_content():
+    """Test writing MIXED memory with split content."""
+    print("\nTest: Writing MIXED memory with content splitting")
+
+    # Create a mock classifier that returns MIXED with split content
+    mock_classifier = MagicMock()
+    mock_classifier.classify = AsyncMock(
+        return_value=ClassificationResult(
+            category=MemoryCategory.MIXED,
+            confidence=0.8,
+            reasoning="Contains both shared and project-specific content",
+            shared_part="User prefers dark mode for all projects",
+            project_part="Project uses React with TypeScript at /api/v1/users"
+        )
+    )
+
+    mock_client = AsyncMock()
+    writer = SmartMemoryWriter(mock_classifier, mock_client)
+
+    config = create_test_config(
+        shared_group_ids=["user-common"],
+        shared_entity_types=["Preference"]
+    )
+
+    async def run_test():
+        result = await writer.add_memory(
+            name="Mixed memory",
+            episode_body="User prefers dark mode. Project uses React at /api/v1/users.",
+            project_config=config
+        )
+
+        assert result.success is True
+        assert result.category == MemoryCategory.MIXED.value
+        assert len(result.written_to) == 2
+        assert "user-common" in result.written_to
+        assert "test-project" in result.written_to
+
+        # Verify add_episode was called twice (once for shared, once for project)
+        assert mock_client.add_episode.call_count == 2
+
+        # Get the call arguments
+        calls = mock_client.add_episode.call_args_list
+
+        # First call should be to shared group with shared content
+        shared_call_kwargs = calls[0].kwargs
+        assert shared_call_kwargs['group_id'] == "user-common"
+        assert "User prefers dark mode for all projects" in shared_call_kwargs['episode_body']
+        assert "React" not in shared_call_kwargs['episode_body']
+
+        # Second call should be to project group with project content
+        project_call_kwargs = calls[1].kwargs
+        assert project_call_kwargs['group_id'] == "test-project"
+        assert "React with TypeScript" in project_call_kwargs['episode_body']
+        assert "/api/v1/users" in project_call_kwargs['episode_body']
+
+        print("  ✓ MIXED memory with split content written correctly")
+
+    asyncio.run(run_test())
+
+
+def test_add_memory_mixed_without_split_content():
+    """Test writing MIXED memory without split content (fallback)."""
+    print("\nTest: Writing MIXED memory without split content (fallback)")
+
+    # Create a mock classifier that returns MIXED without split content
+    mock_classifier = MagicMock()
+    mock_classifier.classify = AsyncMock(
+        return_value=ClassificationResult(
+            category=MemoryCategory.MIXED,
+            confidence=0.8,
+            reasoning="Contains both shared and project-specific content",
+            shared_part="",
+            project_part=""
+        )
+    )
+
+    mock_client = AsyncMock()
+    writer = SmartMemoryWriter(mock_classifier, mock_client)
+
+    config = create_test_config(
+        shared_group_ids=["user-common"],
+        shared_entity_types=["Preference"]
+    )
+
+    async def run_test():
+        result = await writer.add_memory(
+            name="Mixed memory",
+            episode_body="User prefers dark mode. Project uses React.",
+            project_config=config
+        )
+
+        assert result.success is True
+        assert result.category == MemoryCategory.MIXED.value
+        assert len(result.written_to) == 2
+
+        # Verify add_episode was called twice with full content both times
+        assert mock_client.add_episode.call_count == 2
+
+        # Both calls should have the full content
+        calls = mock_client.add_episode.call_args_list
+        for call in calls:
+            assert "User prefers dark mode. Project uses React." in call.kwargs['episode_body']
+
+        print("  ✓ MIXED memory without split content falls back correctly")
+
+    asyncio.run(run_test())
+
+
 def run_all_tests():
     """Run all tests."""
     print("=" * 60)
@@ -275,6 +383,8 @@ def run_all_tests():
         test_add_memory_project_specific,
         test_add_memory_multiple_shared_groups,
         test_write_to_group_params,
+        test_add_memory_mixed_with_split_content,
+        test_add_memory_mixed_without_split_content,
         # test_add_memory_with_error,  # Temporarily disabled due to test isolation issues
     ]
 

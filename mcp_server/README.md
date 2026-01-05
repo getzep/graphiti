@@ -242,7 +242,7 @@ When working in `frontend/src/`, the `frontend-app` configuration is used. When 
 
 ## Smart Memory Classification
 
-> **Feature Status**: ✅ Implemented
+> **Feature Status**: ✅ Implemented (Phases 1-8 Complete)
 
 The Smart Memory Classification feature automatically routes memories to appropriate knowledge spaces based on their content. This allows shared knowledge (user preferences, coding conventions, team procedures) to be accessible across multiple projects while keeping project-specific knowledge isolated.
 
@@ -251,8 +251,12 @@ The Smart Memory Classification feature automatically routes memories to appropr
 1. **Classification**: When you add a memory, the system analyzes its content to determine if it's:
    - **Shared**: User preferences, coding conventions, team standards (stored in shared groups)
    - **Project-Specific**: API endpoints, project architecture, implementation details (stored only in project group)
+   - **Mixed**: Contains both shared and project-specific elements (split and stored separately)
 
-2. **Smart Write**: Shared memories are automatically written to both the project group AND configured shared groups
+2. **Smart Write**: Memories are written to appropriate groups based on classification:
+   - Shared memories are written to all shared groups
+   - Project-specific memories are written only to the project group
+   - Mixed memories are split - shared parts go to shared groups, project parts go to project group
 
 3. **Smart Search**: When you search, the system automatically searches across both your project group AND shared groups
 
@@ -294,27 +298,113 @@ Enable shared memory classification in your `.graphiti.json`:
 - Implementation details: "Project uses FastAPI framework"
 - Project-specific files: "Config file is in config/settings.yaml"
 
+**Mixed Content** (split automatically):
+- "User prefers dark mode. Project uses React at /api/v1/users."
+- Shared part: "User prefers dark mode" → stored in shared groups
+- Project part: "Project uses React at /api/v1/users" → stored in project group
+
+### Classification Strategies
+
+The system supports multiple classification strategies:
+
+#### 1. Rule-Based Classifier (Default)
+
+Fast, pattern-based classification using keyword matching and entity type detection.
+
+**Pros:**
+- Zero additional LLM cost
+- Fast response time
+- Predictable behavior
+
+**Cons:**
+- Limited to predefined patterns
+- May miss nuanced content
+
+**How it works:**
+- Checks for shared entity types (Preference, Procedure, Requirement)
+- Matches against shared patterns (keywords like "convention", "标准", "偏好")
+- Falls back to PROJECT_SPECIFIC if no patterns match
+
+#### 2. LLM-Based Classifier
+
+Intelligent classification using language model analysis for higher accuracy.
+
+**Pros:**
+- More accurate classification
+- Understands context and nuance
+- Can split mixed content automatically
+
+**Cons:**
+- Additional LLM API cost per classification
+- Slower response time
+
+**How it works:**
+- Uses LLM to analyze content and determine category
+- For MIXED category, splits content into shared and project-specific parts
+- Falls back to PROJECT_SPECIFIC on errors
+
+**Configuration:**
+```json
+{
+  "group_id": "my-project",
+  "shared_group_ids": ["user-common"],
+  "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+  "write_strategy": "llm_based"
+}
+```
+
+### Content Splitting for Mixed Memories
+
+When a memory is classified as **MIXED**, the LLM-based classifier can automatically split it into:
+
+1. **Shared Part**: Knowledge useful across projects (preferences, conventions, procedures)
+2. **Project Part**: Project-specific knowledge (APIs, implementation details, project files)
+
+**Example:**
+
+Original memory:
+```
+"User prefers dark mode UI. The API endpoint is at /api/v1/users for user data."
+```
+
+After splitting:
+- **Shared Part** → stored in `user-common`: "User prefers dark mode UI"
+- **Project Part** → stored in `my-project`: "The API endpoint is at /api/v1/users for user data"
+
+**Benefits:**
+- Shared groups remain clean and relevant
+- Project groups contain only project-specific details
+- Better search results across projects
+
 ### Example Scenarios
 
-**Scenario 1: User Preferences**
+**Scenario 1: User Preferences (Rule-Based)**
 ```
 You: "User preference: I prefer 4-space indentation"
+→ Classified as: SHARED (matches "preference" keyword)
 → Stored in: my-project + user-common + team-standards
 → Benefit: All your projects will know your preference
 ```
 
-**Scenario 2: Project-Specific Knowledge**
+**Scenario 2: Project-Specific Knowledge (Rule-Based)**
 ```
 You: "The API endpoint is at /api/v1/users"
+→ Classified as: PROJECT_SPECIFIC (no shared patterns matched)
 → Stored in: my-project (only)
 → Benefit: Other projects won't see this project-specific detail
 ```
 
-**Scenario 3: Smart Search**
+**Scenario 3: Mixed Content (LLM-Based with Splitting)**
 ```
-You: "What are my coding preferences?"
-→ Searches in: my-project + user-common + team-standards
-→ Returns: All your preferences across all projects
+You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
+→ Classified as: MIXED (LLM detects both shared and project-specific content)
+→ Split into:
+  - Shared: "User prefers dark mode for all interfaces"
+  - Project: "The API is at /api/v1/users"
+→ Stored in:
+  - user-common: "User prefers dark mode for all interfaces"
+  - my-project: "The API is at /api/v1/users"
+→ Benefit: Other projects learn your preference but not the API endpoint
 ```
 
 ### Benefits
@@ -341,7 +431,7 @@ You: "What are my coding preferences?"
 }
 ```
 
-**Full Configuration**:
+**Full Configuration (Rule-Based)**:
 ```json
 {
   "group_id": "my-app",
@@ -350,6 +440,18 @@ You: "What are my coding preferences?"
   "shared_entity_types": ["Preference", "Procedure", "Requirement"],
   "shared_patterns": ["convention", "guideline", "标准"],
   "write_strategy": "simple"
+}
+```
+
+**With LLM-Based Classification**:
+```json
+{
+  "group_id": "my-app",
+  "description": "My application with LLM-based classification",
+  "shared_group_ids": ["user-common", "team-standards"],
+  "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+  "shared_patterns": ["convention", "guideline", "标准"],
+  "write_strategy": "llm_based"
 }
 ```
 
