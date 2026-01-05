@@ -1189,24 +1189,18 @@ class Graphiti:
         if edge.fact_embedding is None:
             await edge.generate_embedding(self.embedder)
 
-        if source_node.uuid is not None:
-            try:
-                resolved_source = await EntityNode.get_by_uuid(self.driver, source_node.uuid)
-            except NodeNotFoundError:
-                raise ValueError(f'Node with UUID {source_node.uuid} not found') from None
-        else:
+        try:
+            resolved_source = await EntityNode.get_by_uuid(self.driver, source_node.uuid)
+        except NodeNotFoundError:
             resolved_source_nodes, _, _ = await resolve_extracted_nodes(
                 self.clients,
                 [source_node],
             )
             resolved_source = resolved_source_nodes[0]
 
-        if target_node.uuid is not None:
-            try:
-                resolved_target = await EntityNode.get_by_uuid(self.driver, target_node.uuid)
-            except NodeNotFoundError:
-                raise ValueError(f'Node with UUID {target_node.uuid} not found') from None
-        else:
+        try:
+            resolved_target = await EntityNode.get_by_uuid(self.driver, target_node.uuid)
+        except NodeNotFoundError:
             resolved_target_nodes, _, _ = await resolve_extracted_nodes(
                 self.clients,
                 [target_node],
