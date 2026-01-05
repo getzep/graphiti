@@ -19,6 +19,7 @@ except ImportError:
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
@@ -115,34 +116,54 @@ class LLMClientFactory:
                     raise ValueError('OpenAI provider configuration not found')
 
                 api_key = config.providers.openai.api_key
+                api_url = config.providers.openai.api_url
                 _validate_api_key('OpenAI', api_key, logger)
 
-                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+                # Check if using a non-standard OpenAI API URL (e.g., DashScope, Ollama)
+                # These should use OpenAIGenericClient instead of OpenAIClient
+                is_generic = api_url and not api_url.startswith('https://api.openai.com')
 
-                # Determine appropriate small model based on main model type
-                is_reasoning_model = (
-                    config.model.startswith('gpt-5')
-                    or config.model.startswith('o1')
-                    or config.model.startswith('o3')
-                )
-                small_model = (
-                    'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
-                )  # Use reasoning model for small tasks if main model is reasoning
+                if is_generic:
+                    # Use OpenAIGenericClient for OpenAI-compatible APIs (DashScope, Ollama, etc.)
+                    logger.info(f'Using OpenAIGenericClient for {api_url}')
+                    from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                llm_config = CoreLLMConfig(
-                    api_key=api_key,
-                    model=config.model,
-                    small_model=small_model,
-                    temperature=config.temperature,
-                    max_tokens=config.max_tokens,
-                )
-
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    llm_config = CoreLLMConfig(
+                        api_key=api_key,
+                        base_url=api_url,
+                        model=config.model,
+                        temperature=config.temperature,
+                        max_tokens=config.max_tokens,
+                    )
+                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens or 16384)
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    # Use standard OpenAIClient for official OpenAI API
+                    from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                    # Determine appropriate small model based on main model type
+                    is_reasoning_model = (
+                        config.model.startswith('gpt-5')
+                        or config.model.startswith('o1')
+                        or config.model.startswith('o3')
+                    )
+                    small_model = (
+                        'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
+                    )  # Use reasoning model for small tasks if main model is reasoning
+
+                    llm_config = CoreLLMConfig(
+                        api_key=api_key,
+                        model=config.model,
+                        small_model=small_model,
+                        temperature=config.temperature,
+                        max_tokens=config.max_tokens,
+                    )
+
+                    # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
+                    if is_reasoning_model:
+                        return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    else:
+                        # For non-reasoning models, explicitly pass None to disable these parameters
+                        return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
