@@ -33,8 +33,9 @@ from models.response_types import (
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
+from services.smart_writer import SmartMemoryWriter
 from utils.formatting import format_fact_result
-from utils.project_config import find_project_config
+from utils.project_config import ProjectConfig, find_project_config, load_project_config
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -153,10 +154,14 @@ mcp = FastMCP(
 # Global services
 graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
+smart_writer: SmartMemoryWriter | None = None
 
 # Global client for backward compatibility
 graphiti_client: Graphiti | None = None
 semaphore: asyncio.Semaphore
+
+# Global project config (for smart writer)
+project_config: ProjectConfig | None = None
 
 
 class GraphitiService:
@@ -333,6 +338,11 @@ async def add_memory(
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), memories will be
+    automatically classified and written to appropriate group_ids based on their content.
+    Shared knowledge (user preferences, procedures, requirements) is stored in shared groups
+    accessible across multiple projects.
+
     Args:
         name (str): Name of the episode
         episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
@@ -366,12 +376,32 @@ async def add_memory(
             source_description="CRM data"
         )
     """
-    global graphiti_service, queue_service
+    global graphiti_service, queue_service, smart_writer, project_config
 
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
 
     try:
+        # === Smart Writer Path ===
+        # Use smart writer if available and no explicit group_id override
+        if smart_writer is not None and project_config is not None and group_id is None:
+            logger.debug(f"Using SmartMemoryWriter for episode '{name}'")
+
+            result = await smart_writer.add_memory(
+                name=name,
+                episode_body=episode_body,
+                project_config=project_config,
+                metadata={'timestamp': source_description, 'source': source}
+            )
+
+            if result.success:
+                return SuccessResponse(
+                    message=f"Episode '{name}' written to {len(result.written_to)} group(s): {', '.join(result.written_to)} (category: {result.category})"
+                )
+            else:
+                return ErrorResponse(error=f"Smart writer error: {result.error}")
+
+        # === Standard Path (fallback or explicit group_id) ===
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id or config.graphiti.group_id
 
@@ -414,13 +444,17 @@ async def search_nodes(
 ) -> NodeSearchResponse | ErrorResponse:
     """Search for nodes in the graph memory.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional list of group IDs to filter results. If not provided, searches
+                  the project group and any configured shared groups.
         max_nodes: Maximum number of nodes to return (default: 10)
         entity_types: Optional list of entity type names to filter by
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -428,14 +462,29 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Build effective group IDs
+        if group_ids is not None:
+            # User explicitly specified group_ids - use them
+            effective_group_ids = group_ids
+            logger.debug(f"Using explicit group_ids: {group_ids}")
+        else:
+            # No explicit group_ids - build from project config
+            effective_group_ids = []
+            if config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+
+            # Add shared groups if configured
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+                logger.debug(
+                    f"Auto-including shared groups: {project_config.shared_group_ids}"
+                )
+
+            # Deduplicate while preserving order
+            seen = set()
+            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+            logger.debug(f"Searching in groups: {effective_group_ids}")
 
         # Create search filters
         search_filters = SearchFilters(
@@ -494,13 +543,17 @@ async def search_memory_facts(
 ) -> FactSearchResponse | ErrorResponse:
     """Search the graph memory for relevant facts.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional list of group IDs to filter results. If not provided, searches
+                  the project group and any configured shared groups.
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -512,14 +565,29 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Build effective group IDs
+        if group_ids is not None:
+            # User explicitly specified group_ids - use them
+            effective_group_ids = group_ids
+            logger.debug(f"Using explicit group_ids: {group_ids}")
+        else:
+            # No explicit group_ids - build from project config
+            effective_group_ids = []
+            if config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+
+            # Add shared groups if configured
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+                logger.debug(
+                    f"Auto-including shared groups: {project_config.shared_group_ids}"
+                )
+
+            # Deduplicate while preserving order
+            seen = set()
+            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+            logger.debug(f"Searching in groups: {effective_group_ids}")
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -625,11 +693,15 @@ async def get_episodes(
 ) -> EpisodeSearchResponse | ErrorResponse:
     """Get episodes from the graph memory.
 
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config), searches will
+    automatically include shared groups to find knowledge that's accessible across projects.
+
     Args:
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional list of group IDs to filter results. If not provided, searches
+                  the project group and any configured shared groups.
         max_episodes: Maximum number of episodes to return (default: 10)
     """
-    global graphiti_service
+    global graphiti_service, project_config
 
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
@@ -637,14 +709,29 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Build effective group IDs
+        if group_ids is not None:
+            # User explicitly specified group_ids - use them
+            effective_group_ids = group_ids
+            logger.debug(f"Using explicit group_ids: {group_ids}")
+        else:
+            # No explicit group_ids - build from project config
+            effective_group_ids = []
+            if config.graphiti.group_id:
+                effective_group_ids.append(config.graphiti.group_id)
+
+            # Add shared groups if configured
+            if project_config and project_config.has_shared_config:
+                effective_group_ids.extend(project_config.shared_group_ids)
+                logger.debug(
+                    f"Auto-including shared groups: {project_config.shared_group_ids}"
+                )
+
+            # Deduplicate while preserving order
+            seen = set()
+            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+
+            logger.debug(f"Searching in groups: {effective_group_ids}")
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
@@ -766,7 +853,7 @@ async def health_check(request) -> JSONResponse:
 
 async def initialize_server() -> ServerConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
-    global config, graphiti_service, queue_service, graphiti_client, semaphore
+    global config, graphiti_service, queue_service, smart_writer, graphiti_client, semaphore, project_config
 
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with YAML configuration support'
@@ -922,6 +1009,24 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize queue service with the client
     await queue_service.initialize(graphiti_client)
+
+    # === Smart Memory Writer Initialization ===
+    # Initialize SmartMemoryWriter if project has shared config
+    if project_config and project_config.has_shared_config:
+        from classifiers.rule_based import RuleBasedClassifier
+
+        classifier = RuleBasedClassifier()
+        smart_writer = SmartMemoryWriter(
+            classifier=classifier,
+            graphiti_client=graphiti_client
+        )
+        logger.info(f"SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}")
+        logger.info(f"Shared entity types: {project_config.shared_entity_types or 'default'}")
+    else:
+        smart_writer = None
+        if project_config:
+            logger.info("Project config found but no shared config - SmartMemoryWriter disabled")
+    # === End Smart Memory Writer Initialization ===
 
     # Set MCP server settings
     if config.server.host:

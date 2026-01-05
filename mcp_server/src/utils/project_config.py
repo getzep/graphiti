@@ -6,9 +6,9 @@ Graphiti configuration from .graphiti.json files in the project directory.
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +21,23 @@ class ProjectConfig:
     config_path: Path
     description: Optional[str] = None
 
+    # Shared knowledge configuration
+    shared_group_ids: List[str] = field(default_factory=list)
+    shared_entity_types: List[str] = field(default_factory=list)
+    shared_patterns: List[str] = field(default_factory=list)
+
+    # Write strategy: 'simple' (default) | 'smart_split' | 'smart_duplicate'
+    write_strategy: str = "simple"
+
     @property
     def project_root(self) -> Path:
         """Get the project root directory."""
         return self.config_path.parent
+
+    @property
+    def has_shared_config(self) -> bool:
+        """Check if this project has shared knowledge configuration."""
+        return len(self.shared_group_ids) > 0
 
 
 def find_project_config(start_dir: Optional[Path] = None) -> Optional[ProjectConfig]:
@@ -88,11 +101,42 @@ def load_project_config(config_path: Path) -> Optional[ProjectConfig]:
             )
             description = None
 
-        logger.info(f"Loaded project config from {config_path}: group_id={group_id}")
+        # Load shared knowledge configuration
+        shared_group_ids = data.get("shared_group_ids", [])
+        if not isinstance(shared_group_ids, list):
+            logger.warning(f"{config_path} 'shared_group_ids' must be a list")
+            shared_group_ids = []
+
+        shared_entity_types = data.get("shared_entity_types", [])
+        if not isinstance(shared_entity_types, list):
+            logger.warning(f"{config_path} 'shared_entity_types' must be a list")
+            shared_entity_types = []
+
+        shared_patterns = data.get("shared_patterns", [])
+        if not isinstance(shared_patterns, list):
+            logger.warning(f"{config_path} 'shared_patterns' must be a list")
+            shared_patterns = []
+
+        write_strategy = data.get("write_strategy", "simple")
+        if not isinstance(write_strategy, str):
+            logger.warning(f"{config_path} 'write_strategy' must be a string")
+            write_strategy = "simple"
+
+        logger.info(
+            f"Loaded project config from {config_path}: "
+            f"group_id={group_id}, "
+            f"shared_groups={len(shared_group_ids)}, "
+            f"strategy={write_strategy}"
+        )
+
         return ProjectConfig(
             group_id=group_id,
             config_path=config_path,
             description=description,
+            shared_group_ids=shared_group_ids,
+            shared_entity_types=shared_entity_types,
+            shared_patterns=shared_patterns,
+            write_strategy=write_strategy,
         )
 
     except json.JSONDecodeError as e:
