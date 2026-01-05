@@ -101,6 +101,137 @@ uv sync
 uv sync --extra providers
 ```
 
+## Project Isolation with .graphiti.json
+
+> **Transport Mode Support**: Project isolation with `.graphiti.json` is supported for **stdio mode only**. For HTTP mode, use the `--group-id` parameter or server configuration.
+
+The Graphiti MCP server supports automatic project isolation using `.graphiti.json` configuration files in stdio mode. This allows different projects to have separate knowledge graphs, preventing cross-project contamination when working with multiple projects simultaneously in IDEs like Cursor or Claude Desktop.
+
+### Creating a Project Configuration
+
+Create a `.graphiti.json` file in your project root:
+
+```json
+{
+  "group_id": "my-awesome-project",
+  "description": "My project knowledge graph"
+}
+```
+
+### How It Works
+
+1. When the MCP server starts, it searches upward from the working directory for `.graphiti.json`
+2. If found, it uses the `group_id` from that file for all operations
+3. All knowledge added to the graph is automatically associated with that project
+4. Subdirectories within the project share the same `group_id`
+
+### MCP Client Configuration
+
+For stdio-based clients (Claude Desktop, Cursor), pass the project directory via environment variable:
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "transport": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory", "/path/to/graphiti/mcp_server",
+        "run", "python", "main.py",
+        "--config", "config/config-local-ollama.yaml"
+      ],
+      "env": {
+        "GRAPHITI_PROJECT_DIR": "${workspaceFolder}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+The `${workspaceFolder}` variable is automatically expanded by the MCP client to your project directory.
+
+### The `GRAPHITI_PROJECT_DIR` Environment Variable
+
+The `GRAPHITI_PROJECT_DIR` environment variable tells the MCP server **where to start searching** for the `.graphiti.json` configuration file.
+
+**What it does:**
+
+- **Startup only**: Used only during server initialization to locate the project config
+- **Not stored**: The directory path is never stored in the knowledge graph
+- **Points to config**: Tells the server where to begin the upward search for `.graphiti.json`
+
+**What gets stored:**
+
+- The `group_id` value from `.graphiti.json` is what actually tags and isolates your memory data
+- This allows projects to be renamed or moved without losing their memory associations
+
+**Typical configuration:**
+
+```json
+"env": {
+  "GRAPHITI_PROJECT_DIR": "${workspaceFolder}"
+}
+```
+
+When the MCP client (Cursor/Claude Desktop) expands `${workspaceFolder}` to `/workspace/my-app`, the server will:
+
+1. Search for `/workspace/my-app/.graphiti.json`
+2. Extract the `group_id` (e.g., `"my-app"`)
+3. Use that `group_id` for all memory operations
+
+### The `OPENAI_API_KEY` Environment Variable
+
+> **Required for initialization:** The `Graphiti` class creates a default `OpenAIRerankerClient` on startup, which requires this environment variable. However, the default search configuration uses RRF reranking (local computation), so the API key is never actually called.
+
+**Why is it needed?**
+
+The `Graphiti` class unconditionally creates an `OpenAIRerankerClient` instance during initialization, which initializes an OpenAI SDK client. This requires `OPENAI_API_KEY` to be set (even if invalid), otherwise the initialization will fail.
+
+**Search Configuration:**
+
+The default `NODE_HYBRID_SEARCH_RRF` configuration uses **RRF (Reciprocal Rank Fusion)** reranking, which is a local mathematical algorithm. It does not make any LLM API calls, so the `OpenAIRerankerClient` is never actually used.
+
+**Component API Key Usage:**
+
+| Component | API Key Source | Notes |
+|-----------|---------------|-------|
+| LLM Client | Config file `llm.providers.openai.api_key` | Use Dashscope/Ollama/etc. as needed |
+| Embedder Client | Config file `embedder.providers.openai.api_key` | Use Dashscope/Ollama/etc. as needed |
+| Default Reranker | Environment variable `OPENAI_API_KEY` | **Required for init**, but not used by RRF |
+
+**Alternative:** To avoid needing `OPENAI_API_KEY`, pass a custom reranker client (e.g., `BGERerankerClient` with sentence-transformers) during `Graphiti` initialization.
+
+### Fallback Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| `.graphiti.json` found | Uses the `group_id` from the file |
+| No `.graphiti.json` | Uses server default `group_id` (from config.yaml or "main") |
+| Invalid `.graphiti.json` | Logs error and uses server default `group_id` |
+
+### Benefits
+
+- **Automatic Isolation**: Each project gets its own knowledge graph space
+- **No Manual group_id**: Don't need to specify `group_id` in every tool call
+- **Git-Like Discovery**: Works from any subdirectory within your project
+- **Persistent Configuration**: The `.graphiti.json` file can be committed to your project
+
+### Example: Monorepo Setup
+
+For a monorepo with multiple sub-projects, each sub-project can have its own configuration:
+
+```text
+/my-monorepo/
+  ├── .graphiti.json          {"group_id": "monorepo-root"}
+  ├── frontend/
+  │   └── .graphiti.json      {"group_id": "frontend-app"}
+  └── backend/
+      └── .graphiti.json      {"group_id": "backend-api"}
+```
+
+When working in `frontend/src/`, the `frontend-app` configuration is used. When working in `backend/`, the `backend-api` configuration is used.
+
 ## Configuration
 
 The server can be configured using a `config.yaml` file, environment variables, or command-line arguments (in order of precedence).
@@ -586,33 +717,33 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 
 1. Run the Graphiti MCP server using the default HTTP transport:
 
-```bash
-uv run main.py --group-id <your_group_id>
-```
+   ```bash
+   uv run main.py --group-id <your_group_id>
+   ```
 
-Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "main" as the group_id.
+   Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "main" as the group_id.
 
-or
+   or
 
-```bash
-docker compose up
-```
+   ```bash
+   docker compose up
+   ```
 
-1. Configure Cursor to connect to the Graphiti MCP server.
+2. Configure Cursor to connect to the Graphiti MCP server.
 
-```json
-{
-  "mcpServers": {
-    "graphiti-memory": {
-      "url": "http://localhost:8000/mcp/"
-    }
-  }
-}
-```
+   ```json
+   {
+     "mcpServers": {
+       "graphiti-memory": {
+         "url": "http://localhost:8000/mcp/"
+       }
+     }
+   }
+   ```
 
-1. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
 
-2. Kick off an agent session in Cursor.
+4. Kick off an agent session in Cursor.
 
 The integration enables AI assistants in Cursor to maintain persistent memory through Graphiti's knowledge graph
 capabilities.

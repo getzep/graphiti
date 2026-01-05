@@ -34,6 +34,7 @@ from models.response_types import (
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
+from utils.project_config import find_project_config
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -702,7 +703,11 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+            group_ids
+            if group_ids is not None
+            else [config.graphiti.group_id]
+            if config.graphiti.group_id
+            else []
         )
 
         if not effective_group_ids:
@@ -836,6 +841,29 @@ async def initialize_server() -> ServerConfig:
     )
 
     args = parser.parse_args()
+
+    # === Project Configuration Detection ===
+    # Check for project directory override from environment
+    project_dir_str = os.environ.get('GRAPHITI_PROJECT_DIR')
+    if project_dir_str:
+        project_dir = Path(project_dir_str).resolve()
+        logger.info(f"Detecting project configuration starting from: {project_dir}")
+
+        # Try to find .graphiti.json in project directory hierarchy
+        project_config = find_project_config(project_dir)
+
+        if project_config:
+            # Override group_id from project config
+            logger.info(f"Using project group_id: {project_config.group_id}")
+            logger.info(f"Project root: {project_config.project_root}")
+
+            # Set environment variable that will be picked up by GraphitiConfig
+            # Note: We use GRAPHITI_GROUP_ID (single underscore) to match the config schema
+            os.environ['GRAPHITI_GROUP_ID'] = project_config.group_id
+        else:
+            logger.info(f"No .graphiti.json found in {project_dir} or parent directories")
+            logger.info("Using server default group_id or other configuration sources")
+    # === End Project Configuration Detection ===
 
     # Set config path in environment for the settings to pick up
     if args.config:
