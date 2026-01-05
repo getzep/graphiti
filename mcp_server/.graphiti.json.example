@@ -6,3 +6,15 @@
   "shared_patterns": ["偏好", "习惯", "convention"],
   "write_strategy": "simple"
 }
+
+// Alternative: Use LLM-based classification with content splitting
+// Change "write_strategy" to "llm_based" for intelligent classification:
+// "write_strategy": "llm_based"
+//
+// Available strategies:
+// - "simple": Fast, rule-based classification (default, no extra LLM cost)
+// - "llm_based": Intelligent classification with content splitting (requires LLM API calls)
+//
+// With llm_based, mixed content is automatically split:
+// - Shared knowledge (preferences, conventions) → stored in shared groups
+// - Project-specific knowledge (APIs, implementation) → stored in project group only
