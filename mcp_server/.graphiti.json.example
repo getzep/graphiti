@@ -1,0 +1,8 @@
+{
+  "group_id": "my-project",
+  "description": "My project with shared knowledge configuration",
+  "shared_group_ids": ["user-common", "team-standards"],
+  "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+  "shared_patterns": ["偏好", "习惯", "convention"],
+  "write_strategy": "simple"
+}

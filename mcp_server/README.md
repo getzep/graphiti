@@ -19,6 +19,14 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
+- **Project Isolation**: Automatic project-level memory isolation with `.graphiti.json` configuration (stdio mode)
+- **Smart Memory Classification**: Intelligent routing of memories to appropriate knowledge spaces
+
+## Documentation
+
+- **[Architecture Design](docs/design/architecture.md)** - Overall architecture and design decisions for memory classification
+- **[Implementation Plan](docs/design/implementation-plan.md)** - Detailed phased implementation plan
+- **[Progress Tracking](docs/progress.md)** - Current implementation status and progress
 
 ## Quick Start
 
@@ -224,6 +232,121 @@ For a monorepo with multiple sub-projects, each sub-project can have its own con
 ```
 
 When working in `frontend/src/`, the `frontend-app` configuration is used. When working in `backend/`, the `backend-api` configuration is used.
+
+## Smart Memory Classification
+
+> **Feature Status**: ✅ Implemented
+
+The Smart Memory Classification feature automatically routes memories to appropriate knowledge spaces based on their content. This allows shared knowledge (user preferences, coding conventions, team procedures) to be accessible across multiple projects while keeping project-specific knowledge isolated.
+
+### How It Works
+
+1. **Classification**: When you add a memory, the system analyzes its content to determine if it's:
+   - **Shared**: User preferences, coding conventions, team standards (stored in shared groups)
+   - **Project-Specific**: API endpoints, project architecture, implementation details (stored only in project group)
+
+2. **Smart Write**: Shared memories are automatically written to both the project group AND configured shared groups
+
+3. **Smart Search**: When you search, the system automatically searches across both your project group AND shared groups
+
+### Configuration
+
+Enable shared memory classification in your `.graphiti.json`:
+
+```json
+{
+  "group_id": "my-project",
+  "description": "My project with shared knowledge",
+  "shared_group_ids": ["user-common", "team-standards"],
+  "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+  "shared_patterns": ["偏好", "习惯", "convention"],
+  "write_strategy": "simple"
+}
+```
+
+### Configuration Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `group_id` | string | Your project's unique identifier (required) |
+| `shared_group_ids` | array | List of shared group IDs for cross-project knowledge |
+| `shared_entity_types` | array | Entity types that indicate shared knowledge |
+| `shared_patterns` | array | Keywords/patterns that indicate shared knowledge |
+| `write_strategy` | string | Strategy name (currently "simple" is supported) |
+
+### What Gets Classified as Shared
+
+**Automatically Shared** (when matched):
+- User preferences: "User preference: dark mode"
+- Coding conventions: "Convention: 4-space indentation"
+- Team procedures: "Procedure: run tests before committing"
+- Requirements: "Requirement: must support Python 3.10+"
+
+**Stays Project-Specific**:
+- API endpoints: "The API endpoint is at /api/v1/users"
+- Implementation details: "Project uses FastAPI framework"
+- Project-specific files: "Config file is in config/settings.yaml"
+
+### Example Scenarios
+
+**Scenario 1: User Preferences**
+```
+You: "User preference: I prefer 4-space indentation"
+→ Stored in: my-project + user-common + team-standards
+→ Benefit: All your projects will know your preference
+```
+
+**Scenario 2: Project-Specific Knowledge**
+```
+You: "The API endpoint is at /api/v1/users"
+→ Stored in: my-project (only)
+→ Benefit: Other projects won't see this project-specific detail
+```
+
+**Scenario 3: Smart Search**
+```
+You: "What are my coding preferences?"
+→ Searches in: my-project + user-common + team-standards
+→ Returns: All your preferences across all projects
+```
+
+### Benefits
+
+- **Consistent Preferences**: Your coding style and preferences are automatically shared across projects
+- **Team Knowledge**: Team standards and procedures are accessible from any project
+- **Automatic Isolation**: Project-specific details stay project-specific
+- **No Manual Management**: The system automatically routes memories to the right places
+
+### Example .graphiti.json Files
+
+**Basic Setup** (minimal):
+```json
+{
+  "group_id": "my-app"
+}
+```
+
+**With Shared Knowledge**:
+```json
+{
+  "group_id": "my-app",
+  "shared_group_ids": ["my-shared-knowledge"]
+}
+```
+
+**Full Configuration**:
+```json
+{
+  "group_id": "my-app",
+  "description": "My application project",
+  "shared_group_ids": ["user-common", "team-standards"],
+  "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+  "shared_patterns": ["convention", "guideline", "标准"],
+  "write_strategy": "simple"
+}
+```
+
+See `.graphiti.json.example` for a complete example.
 
 ## Configuration
 

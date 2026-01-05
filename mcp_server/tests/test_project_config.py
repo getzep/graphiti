@@ -150,6 +150,139 @@ def test_nested_configs_uses_closest():
         print(f"  ✓ Used closest config: group_id={config.group_id}")
 
 
+def test_config_with_shared_group_ids():
+    """Test loading config with shared_group_ids."""
+    print("\nTest: Config with shared_group_ids")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        test_data = {
+            "group_id": "my-app",
+            "shared_group_ids": ["user-common", "team-standards"]
+        }
+        config_file.write_text(json.dumps(test_data))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.shared_group_ids == ["user-common", "team-standards"]
+        assert config.has_shared_config is True
+        print(f"  ✓ Loaded shared_group_ids: {config.shared_group_ids}")
+
+
+def test_config_with_shared_entity_types():
+    """Test loading config with shared_entity_types."""
+    print("\nTest: Config with shared_entity_types")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        test_data = {
+            "group_id": "my-app",
+            "shared_entity_types": ["Preference", "Procedure", "Requirement"]
+        }
+        config_file.write_text(json.dumps(test_data))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.shared_entity_types == ["Preference", "Procedure", "Requirement"]
+        print(f"  ✓ Loaded shared_entity_types: {config.shared_entity_types}")
+
+
+def test_config_with_shared_patterns():
+    """Test loading config with shared_patterns."""
+    print("\nTest: Config with shared_patterns")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        test_data = {
+            "group_id": "my-app",
+            "shared_patterns": ["用户.*偏好", "programming style", "coding convention"]
+        }
+        config_file.write_text(json.dumps(test_data))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.shared_patterns == ["用户.*偏好", "programming style", "coding convention"]
+        print(f"  ✓ Loaded shared_patterns: {config.shared_patterns}")
+
+
+def test_config_with_write_strategy():
+    """Test loading config with write_strategy."""
+    print("\nTest: Config with write_strategy")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        test_data = {
+            "group_id": "my-app",
+            "write_strategy": "smart_split"
+        }
+        config_file.write_text(json.dumps(test_data))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.write_strategy == "smart_split"
+        print(f"  ✓ Loaded write_strategy: {config.write_strategy}")
+
+
+def test_config_with_all_shared_fields():
+    """Test loading config with all shared configuration fields."""
+    print("\nTest: Config with all shared fields")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        test_data = {
+            "group_id": "my-app",
+            "description": "My application",
+            "shared_group_ids": ["user-common"],
+            "shared_entity_types": ["Preference"],
+            "shared_patterns": ["偏好"],
+            "write_strategy": "simple"
+        }
+        config_file.write_text(json.dumps(test_data))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.group_id == "my-app"
+        assert config.description == "My application"
+        assert config.shared_group_ids == ["user-common"]
+        assert config.shared_entity_types == ["Preference"]
+        assert config.shared_patterns == ["偏好"]
+        assert config.write_strategy == "simple"
+        assert config.has_shared_config is True
+        print("  ✓ Loaded all shared fields correctly")
+
+
+def test_config_with_invalid_shared_group_ids_type():
+    """Test handling of invalid shared_group_ids type."""
+    print("\nTest: Config with invalid shared_group_ids type")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        config_file.write_text(json.dumps({"group_id": "my-app", "shared_group_ids": "not-a-list"}))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.shared_group_ids == []  # Should default to empty list
+        print("  ✓ Invalid shared_group_ids type handled correctly")
+
+
+def test_config_defaults_when_shared_fields_missing():
+    """Test that shared fields default to empty/when not specified."""
+    print("\nTest: Config defaults when shared fields missing")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        config_file = tmpdir / ".graphiti.json"
+        config_file.write_text(json.dumps({"group_id": "minimal-app"}))
+
+        config = find_project_config(tmpdir)
+        assert config is not None
+        assert config.shared_group_ids == []
+        assert config.shared_entity_types == []
+        assert config.shared_patterns == []
+        assert config.write_strategy == "simple"  # Default value
+        assert config.has_shared_config is False
+        print("  ✓ Shared fields defaulted correctly")
+
+
 def run_all_tests():
     """Run all tests."""
     print("=" * 60)
@@ -166,6 +299,13 @@ def run_all_tests():
         test_config_with_invalid_description,
         test_config_with_invalid_group_id_type,
         test_nested_configs_uses_closest,
+        test_config_with_shared_group_ids,
+        test_config_with_shared_entity_types,
+        test_config_with_shared_patterns,
+        test_config_with_write_strategy,
+        test_config_with_all_shared_fields,
+        test_config_with_invalid_shared_group_ids_type,
+        test_config_defaults_when_shared_fields_missing,
     ]
 
     passed = 0
