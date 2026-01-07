@@ -35,7 +35,7 @@ class ComparisonOperator(Enum):
 
 
 class DateFilter(BaseModel):
-    date: datetime | None = Field(description='A datetime to filter on')
+    date: datetime | None = Field(default=None, description='A datetime to filter on')
     comparison_operator: ComparisonOperator = Field(
         description='Comparison operator for date filter'
     )
@@ -44,6 +44,7 @@ class DateFilter(BaseModel):
 class PropertyFilter(BaseModel):
     property_name: str = Field(description='Property name')
     property_value: str | int | float | None = Field(
+        default=None,
         description='Value you want to match on for the property'
     )
     comparison_operator: ComparisonOperator = Field(
