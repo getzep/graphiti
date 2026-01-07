@@ -1,0 +1,83 @@
+# Graphiti Configuration Example
+# Save this file as .graphiti.yaml or specify path via GRAPHITI_CONFIG_PATH environment variable
+
+# LLM Configuration
+llm:
+  # Provider: openai, azure_openai, anthropic, gemini, groq, litellm, custom
+  provider: anthropic
+  model: claude-sonnet-4-5-latest
+  small_model: claude-haiku-4-5-latest
+  temperature: 0.7
+  max_tokens: 8192
+  # api_key: "your-api-key"  # Or set via ANTHROPIC_API_KEY environment variable
+
+# Embedder Configuration
+embedder:
+  # Provider: openai, azure_openai, voyage, gemini, custom
+  provider: voyage
+  model: voyage-3
+  dimensions: 1024
+  # api_key: "your-voyage-key"  # Or set via VOYAGE_API_KEY environment variable
+
+# Reranker Configuration
+reranker:
+  # Provider: openai, azure_openai, custom
+  provider: openai
+  # api_key: "your-api-key"  # Or set via OPENAI_API_KEY environment variable
+
+# Database Configuration
+database:
+  # Provider: neo4j, falkordb, neptune, custom
+  provider: neo4j
+  uri: "bolt://localhost:7687"
+  user: neo4j
+  password: password
+  database: graphiti
+
+# General Settings
+store_raw_episode_content: true
+max_coroutines: null  # null uses default
+
+---
+# Azure OpenAI Example
+# Uncomment and modify for Azure OpenAI setup
+
+# llm:
+#   provider: azure_openai
+#   base_url: "https://your-resource.openai.azure.com"
+#   azure_deployment: "gpt-4-deployment-name"
+#   azure_api_version: "2024-10-21"
+#   api_key: "your-azure-key"  # Or set via AZURE_OPENAI_API_KEY
+#   temperature: 1.0
+#   max_tokens: 8192
+
+# embedder:
+#   provider: azure_openai
+#   base_url: "https://your-resource.openai.azure.com"
+#   azure_deployment: "embedding-deployment-name"
+#   azure_api_version: "2024-10-21"
+#   model: text-embedding-3-small
+#   api_key: "your-azure-key"  # Or set via AZURE_OPENAI_API_KEY
+
+---
+# LiteLLM Multi-Provider Example
+# Use LiteLLM for unified access to 100+ LLM providers
+
+# llm:
+#   provider: litellm
+#   litellm_model: "azure/gpt-4-deployment"  # Or "bedrock/claude-3", "ollama/llama2", etc.
+#   base_url: "https://your-resource.openai.azure.com"  # For Azure
+#   api_key: "your-key"
+#   temperature: 1.0
+#   max_tokens: 8192
+
+---
+# Local Models Example
+# Use Ollama or other local models via LiteLLM
+
+# llm:
+#   provider: litellm
+#   litellm_model: "ollama/llama2"
+#   base_url: "http://localhost:11434"
+#   temperature: 0.8
+#   max_tokens: 4096
