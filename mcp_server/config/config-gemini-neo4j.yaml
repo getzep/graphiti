@@ -1,0 +1,73 @@
+# Graphiti MCP Server Configuration - Gemini + Neo4j
+# For use with docker-compose-evadenta.yml
+
+server:
+  transport: "http"
+  host: "0.0.0.0"
+  port: 8000
+
+llm:
+  provider: "gemini"
+  model: "gemini-2.5-flash"
+  max_tokens: 8192
+
+  providers:
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_PROJECT_ID:}
+      location: ${GOOGLE_LOCATION:europe-west1}
+    # Keep other providers for potential future use
+    openai:
+      api_key: ${OPENAI_API_KEY:}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+
+embedder:
+  provider: "gemini"
+  model: "text-embedding-004"
+  dimensions: 768
+
+  providers:
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_PROJECT_ID:}
+      location: ${GOOGLE_LOCATION:europe-west1}
+    openai:
+      api_key: ${OPENAI_API_KEY:}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+
+database:
+  provider: "neo4j"
+
+  providers:
+    neo4j:
+      uri: ${NEO4J_URI:bolt://localhost:7688}
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:graphiti-2025}
+      database: ${NEO4J_DATABASE:neo4j}
+      use_parallel_runtime: false
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:evadenta}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:}
+  user_id: ${USER_ID:claude_code}
+
+  # Entity types for knowledge extraction
+  entity_types:
+    - name: "Decision"
+      description: "Technical or architectural decisions made during development"
+    - name: "Approach"
+      description: "Implementation approaches tried, including failed ones"
+    - name: "Component"
+      description: "Software components, services, or modules"
+    - name: "Pattern"
+      description: "Design patterns, coding patterns, or architectural patterns"
+    - name: "Constraint"
+      description: "Technical constraints, limitations, or requirements"
+    - name: "Preference"
+      description: "User preferences, coding style preferences, or tool preferences"
+    - name: "Procedure"
+      description: "Standard operating procedures, deployment steps, or workflows"
+    - name: "Bug"
+      description: "Known bugs, issues, or problems encountered"
+    - name: "Dependency"
+      description: "External libraries, services, or system dependencies"

@@ -31,7 +31,7 @@ from models.response_types import (
     StatusResponse,
     SuccessResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import CrossEncoderFactory, DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
@@ -230,6 +230,16 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create cross-encoder/reranker based on LLM provider
+            cross_encoder = None
+            try:
+                cross_encoder = CrossEncoderFactory.create(
+                    self.config.llm.provider,
+                    self.config.llm
+                )
+            except Exception as e:
+                logger.warning(f'Failed to create cross-encoder: {e}')
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -269,6 +279,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -279,6 +290,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
