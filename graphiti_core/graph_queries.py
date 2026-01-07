@@ -1,8 +1,8 @@
 """
 Database query utilities for different graph database backends.
 
-This module provides database-agnostic query generation for Neo4j and FalkorDB,
-supporting index creation, fulltext search, and bulk operations.
+This module provides database-agnostic query generation for Neo4j, FalkorDB, Kuzu, and Neptune,
+supporting index creation, fulltext search, bulk operations, and Gremlin queries.
 """
 
 from typing_extensions import LiteralString
@@ -160,3 +160,184 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
+
+
+# Gremlin Query Generation Functions
+
+
+def gremlin_match_node_by_property(
+    label: str, property_name: str, property_value_param: str
+) -> str:
+    """
+    Generate a Gremlin query to match a node by label and property.
+
+    Args:
+        label: Node label (e.g., 'Entity', 'Episodic')
+        property_name: Property name to match on
+        property_value_param: Parameter name for the property value
+
+    Returns:
+        Gremlin traversal string
+    """
+    return f"g.V().hasLabel('{label}').has('{property_name}', {property_value_param})"
+
+
+def gremlin_match_nodes_by_uuids(label: str, uuids_param: str = 'uuids') -> str:
+    """
+    Generate a Gremlin query to match multiple nodes by UUIDs.
+
+    Args:
+        label: Node label (e.g., 'Entity', 'Episodic')
+        uuids_param: Parameter name containing list of UUIDs
+
+    Returns:
+        Gremlin traversal string
+    """
+    return f"g.V().hasLabel('{label}').has('uuid', within({uuids_param}))"
+
+
+def gremlin_match_edge_by_property(
+    edge_label: str, property_name: str, property_value_param: str
+) -> str:
+    """
+    Generate a Gremlin query to match an edge by label and property.
+
+    Args:
+        edge_label: Edge label (e.g., 'RELATES_TO', 'MENTIONS')
+        property_name: Property name to match on
+        property_value_param: Parameter name for the property value
+
+    Returns:
+        Gremlin traversal string
+    """
+    return f"g.E().hasLabel('{edge_label}').has('{property_name}', {property_value_param})"
+
+
+def gremlin_get_outgoing_edges(
+    source_label: str,
+    edge_label: str,
+    target_label: str,
+    source_uuid_param: str = 'source_uuid',
+) -> str:
+    """
+    Generate a Gremlin query to get outgoing edges from a node.
+
+    Args:
+        source_label: Source node label
+        edge_label: Edge label
+        target_label: Target node label
+        source_uuid_param: Parameter name for source UUID
+
+    Returns:
+        Gremlin traversal string
+    """
+    return (
+        f"g.V().hasLabel('{source_label}').has('uuid', {source_uuid_param})"
+        f".outE('{edge_label}').as('e')"
+        f".inV().hasLabel('{target_label}').as('target')"
+        f".select('e', 'target')"
+    )
+
+
+def gremlin_bfs_traversal(
+    start_label: str,
+    edge_labels: list[str],
+    max_depth: int,
+    start_uuids_param: str = 'start_uuids',
+) -> str:
+    """
+    Generate a Gremlin query for breadth-first search traversal.
+
+    Args:
+        start_label: Starting node label
+        edge_labels: List of edge labels to traverse
+        max_depth: Maximum traversal depth
+        start_uuids_param: Parameter name for starting UUIDs
+
+    Returns:
+        Gremlin traversal string
+    """
+    edge_labels_str = "', '".join(edge_labels)
+    return (
+        f"g.V().hasLabel('{start_label}').has('uuid', within({start_uuids_param}))"
+        f".repeat(bothE('{edge_labels_str}').otherV()).times({max_depth})"
+        f'.dedup()'
+    )
+
+
+def gremlin_delete_all_nodes() -> str:
+    """
+    Generate a Gremlin query to delete all nodes and edges.
+
+    Returns:
+        Gremlin traversal string
+    """
+    return 'g.V().drop()'
+
+
+def gremlin_delete_nodes_by_group_id(label: str, group_ids_param: str = 'group_ids') -> str:
+    """
+    Generate a Gremlin query to delete nodes by group_id.
+
+    Args:
+        label: Node label
+        group_ids_param: Parameter name for group IDs list
+
+    Returns:
+        Gremlin traversal string
+    """
+    return f"g.V().hasLabel('{label}').has('group_id', within({group_ids_param})).drop()"
+
+
+def gremlin_cosine_similarity_filter(
+    embedding_property: str, search_vector_param: str, min_score: float
+) -> str:
+    """
+    Generate a Gremlin query fragment for cosine similarity filtering.
+    Note: This is a placeholder as Neptune Gremlin doesn't have built-in vector similarity.
+    Vector similarity should be handled via OpenSearch integration.
+
+    Args:
+        embedding_property: Property name containing the embedding
+        search_vector_param: Parameter name for search vector
+        min_score: Minimum similarity score
+
+    Returns:
+        Gremlin query fragment (warning comment)
+    """
+    # Neptune Gremlin doesn't support vector similarity natively
+    # This should be handled via OpenSearch AOSS integration
+    return f"// Vector similarity for '{embedding_property}' must be handled via OpenSearch"
+
+
+def gremlin_retrieve_episodes(
+    reference_time_param: str = 'reference_time',
+    group_ids_param: str = 'group_ids',
+    limit_param: str = 'num_episodes',
+    source_param: str | None = None,
+) -> str:
+    """
+    Generate a Gremlin query to retrieve episodes filtered by time and optionally by group_id and source.
+
+    Args:
+        reference_time_param: Parameter name for reference timestamp
+        group_ids_param: Parameter name for group IDs list
+        limit_param: Parameter name for result limit
+        source_param: Optional parameter name for source filter
+
+    Returns:
+        Gremlin traversal string
+    """
+    query = f"g.V().hasLabel('Episodic').has('valid_at', lte({reference_time_param}))"
+
+    # Add group_id filter if specified
+    query += f".has('group_id', within({group_ids_param}))"
+
+    # Add source filter if specified
+    if source_param:
+        query += f".has('source', {source_param})"
+
+    # Order by valid_at descending and limit
+    query += f".order().by('valid_at', desc).limit({limit_param}).valueMap(true)"
+
+    return query
