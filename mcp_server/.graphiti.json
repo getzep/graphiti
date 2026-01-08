@@ -1,6 +1,6 @@
 {
-  "group_id": "graphiti-core",
-  "description": "Graphiti knowledge graph framework - core project",
+  "group_id": "graphiti-mcp-server",
+  "description": "Graphiti MCP Server development",
   "shared_group_ids": [
     "personal-prefs",
     "std-coding",

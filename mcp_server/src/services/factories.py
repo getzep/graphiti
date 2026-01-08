@@ -17,8 +17,8 @@ except ImportError:
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
 # Try to import additional providers if available
 try:
@@ -132,7 +132,9 @@ class LLMClientFactory:
                         temperature=config.temperature,
                         max_tokens=config.max_tokens,
                     )
-                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens or 16384)
+                    return OpenAIGenericClient(
+                        config=llm_config, max_tokens=config.max_tokens or 16384
+                    )
                 else:
                     # Use standard OpenAIClient for official OpenAI API
                     from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig

@@ -7,7 +7,6 @@ set, it correctly detects and uses the group_id from the project's .graphiti.jso
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -34,9 +33,10 @@ async def test_stdio_mode_uses_project_group_id():
         # This simulates what initialize_server() does
         config = find_project_config(project_dir)
 
-        assert config is not None, "Project config should be found"
-        assert config.group_id == 'test-project-123', \
+        assert config is not None, 'Project config should be found'
+        assert config.group_id == 'test-project-123', (
             f"Expected group_id 'test-project-123', got '{config.group_id}'"
+        )
 
 
 @pytest.mark.asyncio
@@ -71,6 +71,7 @@ async def test_multiple_projects_isolated():
         # Simulate starting server for project A
         os.environ['GRAPHITI_PROJECT_DIR'] = str(project_a)
         from src.utils.project_config import find_project_config
+
         config_a = find_project_config(project_a)
         assert config_a.group_id == 'project-a'
 
@@ -99,6 +100,7 @@ async def test_subdirectory_finds_project_config():
         os.environ['GRAPHITI_PROJECT_DIR'] = str(subdir)
 
         from src.utils.project_config import find_project_config
+
         config = find_project_config(subdir)
         assert config is not None
         assert config.group_id == 'my-app'
