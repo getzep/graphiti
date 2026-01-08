@@ -6,6 +6,7 @@ from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    RerankerConfig,
 )
 
 # Try to import FalkorDriver if available
@@ -458,3 +459,117 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class RerankerFactory:
+    """Factory for creating CrossEncoder/Reranker clients."""
+
+    # Local reranker types that don't require API clients
+    LOCAL_TYPES = {'rrf', 'mmr', 'node_distance', 'episode_mentions'}
+
+    @staticmethod
+    def create(config: RerankerConfig):
+        """Create a CrossEncoder client based on configuration.
+
+        Returns:
+            - None if using local reranker (RRF, MMR, etc.) or disabled
+            - CrossEncoderClient instance if using cross_encoder
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if not config.enabled:
+            logger.info('Reranker is disabled')
+            return None
+
+        reranker_type = config.type.lower()
+
+        # Check if it's a local reranker type
+        if reranker_type in RerankerFactory.LOCAL_TYPES:
+            logger.info(f'Using local reranker: {reranker_type}')
+            return None
+
+        # Need to create API client
+        if reranker_type != 'cross_encoder':
+            logger.warning(f'Unknown reranker type: {reranker_type}, using local RRF')
+            return None
+
+        # Create cross_encoder client
+        provider = config.provider.lower()
+        logger.info(f'Creating cross_encoder with provider: {provider}')
+
+        match provider:
+            case 'openai':
+                return RerankerFactory._create_openai(config, logger)
+            case 'gemini':
+                return RerankerFactory._create_gemini(config, logger)
+            case 'sentence_transformers':
+                return RerankerFactory._create_bge(config, logger)
+            case _:
+                logger.warning(f'Unknown cross_encoder provider: {provider}')
+                return None
+
+    @staticmethod
+    def _create_openai(config: RerankerConfig, logger):
+        """Create OpenAI-compatible Reranker client."""
+        from graphiti_core.cross_encoder import OpenAIRerankerClient
+        from graphiti_core.llm_client.config import LLMConfig
+
+        provider_config = config.providers.openai
+        if not provider_config:
+            raise ValueError('OpenAI provider configuration not found')
+
+        api_key = provider_config.api_key
+        if not api_key:
+            raise ValueError('Reranker OpenAI API key not configured')
+
+        _validate_api_key('Reranker OpenAI', api_key, logger)
+
+        llm_config = LLMConfig(
+            api_key=api_key,
+            base_url=provider_config.api_url,
+            model=config.model,
+        )
+        return OpenAIRerankerClient(config=llm_config)
+
+    @staticmethod
+    def _create_gemini(config: RerankerConfig, logger):
+        """Create Gemini Reranker client."""
+        try:
+            from graphiti_core.cross_encoder import GeminiRerankerClient
+        except ImportError:
+            raise ValueError(
+                'Gemini reranker not available. Install with: pip install graphiti-core[google-genai]'
+            )
+
+        from graphiti_core.llm_client.config import LLMConfig
+
+        provider_config = config.providers.gemini
+        if not provider_config:
+            raise ValueError('Gemini provider configuration not found')
+
+        api_key = provider_config.api_key
+        if not api_key:
+            raise ValueError('Reranker Gemini API key not configured')
+
+        _validate_api_key('Reranker Gemini', api_key, logger)
+
+        llm_config = LLMConfig(
+            api_key=api_key,
+            model=config.model or 'gemini-2.5-flash-lite',
+        )
+        return GeminiRerankerClient(config=llm_config)
+
+    @staticmethod
+    def _create_bge(config: RerankerConfig, logger):
+        """Create BGE local Reranker client."""
+        try:
+            from graphiti_core.cross_encoder import BGERerankerClient
+        except ImportError:
+            raise ValueError(
+                'BGE reranker not available. Install with: pip install graphiti-core[sentence-transformers]'
+            )
+
+        logger.info('Initializing BGE Reranker (local model)')
+        return BGERerankerClient()

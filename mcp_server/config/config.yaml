@@ -70,6 +70,24 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+reranker:
+  enabled: true  # Whether reranker is enabled
+  type: "rrf"  # Options: rrf, mmr, node_distance, episode_mentions, cross_encoder
+  provider: "openai"  # When type=cross_encoder: openai, gemini, sentence_transformers
+  model: "gpt-4.1-nano"  # Model name for cross_encoder
+  
+  local:
+    type: "rrf"  # Local reranker type
+    mmr_lambda: 0.5  # MMR lambda parameter
+  
+  providers:
+    openai:
+      api_key: ${RERANKER_OPENAI_API_KEY:}
+      api_url: ${RERANKER_OPENAI_API_URL:https://api.openai.com/v1}
+    
+    gemini:
+      api_key: ${GEMINI_API_KEY:}
+
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
 
