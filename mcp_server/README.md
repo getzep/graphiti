@@ -46,37 +46,37 @@ gh repo clone getzep/graphiti
 
 1. Note the full path to this directory.
 
-```bash
-cd graphiti && pwd
-```
+   ```bash
+   cd graphiti && pwd
+   ```
 
-1. Install the [Graphiti prerequisites](#prerequisites).
+2. Install the [Graphiti prerequisites](#prerequisites).
 
-2. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
+3. Configure Claude, Cursor, or other MCP client to use [Graphiti with a `stdio` transport](#integrating-with-mcp-clients). See the client documentation on where to find their MCP configuration files.
 
 ### For Cursor and other HTTP-enabled clients
 
 1. Change directory to the `mcp_server` directory
 
-```bash
-cd graphiti/mcp_server
-```
+   ```bash
+   cd graphiti/mcp_server
+   ```
 
-1. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
+2. Start the combined FalkorDB + MCP server using Docker Compose (recommended)
 
-```bash
-docker compose up
-```
+   ```bash
+   docker compose up
+   ```
 
-This starts both FalkorDB and the MCP server in a single container.
+   This starts both FalkorDB and the MCP server in a single container.
 
-**Alternative**: Run with separate containers using Neo4j:
+   **Alternative**: Run with separate containers using Neo4j:
 
-```bash
-docker compose -f docker/docker-compose-neo4j.yml up
-```
+   ```bash
+   docker compose -f docker/docker-compose-neo4j.yml up
+   ```
 
-1. Point your MCP client to `http://localhost:8000/mcp/`
+3. Point your MCP client to `http://localhost:8000/mcp/`
 
 ## Installation
 
@@ -271,27 +271,30 @@ Enable shared memory classification in your `.graphiti.json`:
 ### Configuration Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ----- | ---- | ----------- |
 | `group_id` | string | Your project's unique identifier (required) |
 | `shared_group_ids` | array | List of shared group IDs for cross-project knowledge |
 | `shared_entity_types` | array | Entity types that indicate shared knowledge |
 | `shared_patterns` | array | Keywords/patterns that indicate shared knowledge |
-| `write_strategy` | string | Strategy name (currently "simple" is supported) |
+| `write_strategy` | string | Strategy name: "simple" (rule-based) or "llm_based" (LLM classifier) |
 
 ### What Gets Classified as Shared
 
 **Automatically Shared** (when matched):
+
 - User preferences: "User preference: dark mode"
 - Coding conventions: "Convention: 4-space indentation"
 - Team procedures: "Procedure: run tests before committing"
 - Requirements: "Requirement: must support Python 3.10+"
 
 **Stays Project-Specific**:
+
 - API endpoints: "The API endpoint is at /api/v1/users"
 - Implementation details: "Project uses FastAPI framework"
 - Project-specific files: "Config file is in config/settings.yaml"
 
 **Mixed Content** (split automatically):
+
 - "User prefers dark mode. Project uses React at /api/v1/users."
 - Shared part: "User prefers dark mode" → stored in shared groups
 - Project part: "Project uses React at /api/v1/users" → stored in project group
@@ -305,15 +308,18 @@ The system supports multiple classification strategies:
 Fast, pattern-based classification using keyword matching and entity type detection.
 
 **Pros:**
+
 - Zero additional LLM cost
 - Fast response time
 - Predictable behavior
 
 **Cons:**
+
 - Limited to predefined patterns
 - May miss nuanced content
 
 **How it works:**
+
 - Checks for shared entity types (Preference, Procedure, Requirement)
 - Matches against shared patterns (keywords like "convention", "标准", "偏好")
 - Falls back to PROJECT_SPECIFIC if no patterns match
@@ -323,20 +329,24 @@ Fast, pattern-based classification using keyword matching and entity type detect
 Intelligent classification using language model analysis for higher accuracy.
 
 **Pros:**
+
 - More accurate classification
 - Understands context and nuance
 - Can split mixed content automatically
 
 **Cons:**
+
 - Additional LLM API cost per classification
 - Slower response time
 
 **How it works:**
+
 - Uses LLM to analyze content and determine category
 - For MIXED category, splits content into shared and project-specific parts
 - Falls back to PROJECT_SPECIFIC on errors
 
 **Configuration:**
+
 ```json
 {
   "group_id": "my-project",
@@ -356,15 +366,18 @@ When a memory is classified as **MIXED**, the LLM-based classifier can automatic
 **Example:**
 
 Original memory:
-```
+
+```text
 "User prefers dark mode UI. The API endpoint is at /api/v1/users for user data."
 ```
 
 After splitting:
+
 - **Shared Part** → stored in `user-common`: "User prefers dark mode UI"
 - **Project Part** → stored in `my-project`: "The API endpoint is at /api/v1/users for user data"
 
 **Benefits:**
+
 - Shared groups remain clean and relevant
 - Project groups contain only project-specific details
 - Better search results across projects
@@ -372,6 +385,7 @@ After splitting:
 ### Example Scenarios
 
 **Scenario 1: User Preferences (Rule-Based)**
+
 ```
 You: "User preference: I prefer 4-space indentation"
 → Classified as: SHARED (matches "preference" keyword)
@@ -380,6 +394,7 @@ You: "User preference: I prefer 4-space indentation"
 ```
 
 **Scenario 2: Project-Specific Knowledge (Rule-Based)**
+
 ```
 You: "The API endpoint is at /api/v1/users"
 → Classified as: PROJECT_SPECIFIC (no shared patterns matched)
@@ -388,6 +403,7 @@ You: "The API endpoint is at /api/v1/users"
 ```
 
 **Scenario 3: Mixed Content (LLM-Based with Splitting)**
+
 ```
 You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
 → Classified as: MIXED (LLM detects both shared and project-specific content)
@@ -410,6 +426,7 @@ You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
 ### Example .graphiti.json Files
 
 **Basic Setup** (minimal):
+
 ```json
 {
   "group_id": "my-app"
@@ -417,6 +434,7 @@ You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
 ```
 
 **With Shared Knowledge**:
+
 ```json
 {
   "group_id": "my-app",
@@ -425,6 +443,7 @@ You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
 ```
 
 **Full Configuration (Rule-Based)**:
+
 ```json
 {
   "group_id": "my-app",
@@ -437,6 +456,7 @@ You: "User prefers dark mode for all interfaces. The API is at /api/v1/users."
 ```
 
 **With LLM-Based Classification**:
+
 ```json
 {
   "group_id": "my-app",

@@ -35,7 +35,7 @@ from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClient
 from services.queue_service import QueueService
 from services.smart_writer import SmartMemoryWriter
 from utils.formatting import format_fact_result
-from utils.project_config import ProjectConfig, find_project_config, load_project_config
+from utils.project_config import ProjectConfig, find_project_config
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -391,7 +391,7 @@ async def add_memory(
                 name=name,
                 episode_body=episode_body,
                 project_config=project_config,
-                metadata={'timestamp': source_description, 'source': source}
+                metadata={'timestamp': source_description, 'source': source},
             )
 
             if result.success:
@@ -399,7 +399,7 @@ async def add_memory(
                     message=f"Episode '{name}' written to {len(result.written_to)} group(s): {', '.join(result.written_to)} (category: {result.category})"
                 )
             else:
-                return ErrorResponse(error=f"Smart writer error: {result.error}")
+                return ErrorResponse(error=f'Smart writer error: {result.error}')
 
         # === Standard Path (fallback or explicit group_id) ===
         # Use the provided group_id or fall back to the default from config
@@ -466,7 +466,7 @@ async def search_nodes(
         if group_ids is not None:
             # User explicitly specified group_ids - use them
             effective_group_ids = group_ids
-            logger.debug(f"Using explicit group_ids: {group_ids}")
+            logger.debug(f'Using explicit group_ids: {group_ids}')
         else:
             # No explicit group_ids - build from project config
             effective_group_ids = []
@@ -476,15 +476,13 @@ async def search_nodes(
             # Add shared groups if configured
             if project_config and project_config.has_shared_config:
                 effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(
-                    f"Auto-including shared groups: {project_config.shared_group_ids}"
-                )
+                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
             # Deduplicate while preserving order
             seen = set()
             effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f"Searching in groups: {effective_group_ids}")
+            logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Create search filters
         search_filters = SearchFilters(
@@ -569,7 +567,7 @@ async def search_memory_facts(
         if group_ids is not None:
             # User explicitly specified group_ids - use them
             effective_group_ids = group_ids
-            logger.debug(f"Using explicit group_ids: {group_ids}")
+            logger.debug(f'Using explicit group_ids: {group_ids}')
         else:
             # No explicit group_ids - build from project config
             effective_group_ids = []
@@ -579,15 +577,13 @@ async def search_memory_facts(
             # Add shared groups if configured
             if project_config and project_config.has_shared_config:
                 effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(
-                    f"Auto-including shared groups: {project_config.shared_group_ids}"
-                )
+                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
             # Deduplicate while preserving order
             seen = set()
             effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f"Searching in groups: {effective_group_ids}")
+            logger.debug(f'Searching in groups: {effective_group_ids}')
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -713,7 +709,7 @@ async def get_episodes(
         if group_ids is not None:
             # User explicitly specified group_ids - use them
             effective_group_ids = group_ids
-            logger.debug(f"Using explicit group_ids: {group_ids}")
+            logger.debug(f'Using explicit group_ids: {group_ids}')
         else:
             # No explicit group_ids - build from project config
             effective_group_ids = []
@@ -723,15 +719,13 @@ async def get_episodes(
             # Add shared groups if configured
             if project_config and project_config.has_shared_config:
                 effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(
-                    f"Auto-including shared groups: {project_config.shared_group_ids}"
-                )
+                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
             # Deduplicate while preserving order
             seen = set()
             effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f"Searching in groups: {effective_group_ids}")
+            logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
@@ -853,7 +847,14 @@ async def health_check(request) -> JSONResponse:
 
 async def initialize_server() -> ServerConfig:
     """Parse CLI arguments and initialize the Graphiti server configuration."""
-    global config, graphiti_service, queue_service, smart_writer, graphiti_client, semaphore, project_config
+    global \
+        config, \
+        graphiti_service, \
+        queue_service, \
+        smart_writer, \
+        graphiti_client, \
+        semaphore, \
+        project_config
 
     parser = argparse.ArgumentParser(
         description='Run the Graphiti MCP server with YAML configuration support'
@@ -934,22 +935,22 @@ async def initialize_server() -> ServerConfig:
     project_dir_str = os.environ.get('GRAPHITI_PROJECT_DIR')
     if project_dir_str:
         project_dir = Path(project_dir_str).resolve()
-        logger.info(f"Detecting project configuration starting from: {project_dir}")
+        logger.info(f'Detecting project configuration starting from: {project_dir}')
 
         # Try to find .graphiti.json in project directory hierarchy
         project_config = find_project_config(project_dir)
 
         if project_config:
             # Override group_id from project config
-            logger.info(f"Using project group_id: {project_config.group_id}")
-            logger.info(f"Project root: {project_config.project_root}")
+            logger.info(f'Using project group_id: {project_config.group_id}')
+            logger.info(f'Project root: {project_config.project_root}')
 
             # Set environment variable that will be picked up by GraphitiConfig
             # Note: We use GRAPHITI_GROUP_ID (single underscore) to match the config schema
             os.environ['GRAPHITI_GROUP_ID'] = project_config.group_id
         else:
-            logger.info(f"No .graphiti.json found in {project_dir} or parent directories")
-            logger.info("Using server default group_id or other configuration sources")
+            logger.info(f'No .graphiti.json found in {project_dir} or parent directories')
+            logger.info('Using server default group_id or other configuration sources')
     # === End Project Configuration Detection ===
 
     # Set config path in environment for the settings to pick up
@@ -1013,19 +1014,32 @@ async def initialize_server() -> ServerConfig:
     # === Smart Memory Writer Initialization ===
     # Initialize SmartMemoryWriter if project has shared config
     if project_config and project_config.has_shared_config:
-        from classifiers.rule_based import RuleBasedClassifier
+        # Select classifier based on write_strategy
+        write_strategy = project_config.write_strategy
 
-        classifier = RuleBasedClassifier()
-        smart_writer = SmartMemoryWriter(
-            classifier=classifier,
-            graphiti_client=graphiti_client
+        if write_strategy == 'llm_based':
+            from classifiers.llm_based import LLMClassifier
+
+            # Get LLM client from service
+            llm_client = graphiti_service.config.llm
+
+            classifier = LLMClassifier(llm_client=llm_client)
+            logger.info('Using LLMClassifier (write_strategy=llm_based)')
+        else:
+            from classifiers.rule_based import RuleBasedClassifier
+
+            classifier = RuleBasedClassifier()
+            logger.info(f'Using RuleBasedClassifier (write_strategy={write_strategy})')
+
+        smart_writer = SmartMemoryWriter(classifier=classifier, graphiti_client=graphiti_client)
+        logger.info(
+            f'SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}'
         )
-        logger.info(f"SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}")
-        logger.info(f"Shared entity types: {project_config.shared_entity_types or 'default'}")
+        logger.info(f'Shared entity types: {project_config.shared_entity_types or "default"}')
     else:
         smart_writer = None
         if project_config:
-            logger.info("Project config found but no shared config - SmartMemoryWriter disabled")
+            logger.info('Project config found but no shared config - SmartMemoryWriter disabled')
     # === End Smart Memory Writer Initialization ===
 
     # Set MCP server settings

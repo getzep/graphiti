@@ -1,9 +1,14 @@
 """Base classes and interfaces for memory classifiers."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utils.project_config import ProjectConfig
 
 
 class MemoryCategory(Enum):
@@ -15,9 +20,9 @@ class MemoryCategory(Enum):
     - MIXED: Both project and shared (with content splitting)
     """
 
-    PROJECT_SPECIFIC = "project_specific"
-    SHARED = "shared"
-    MIXED = "mixed"
+    PROJECT_SPECIFIC = 'project_specific'
+    SHARED = 'shared'
+    MIXED = 'mixed'
 
 
 @dataclass
@@ -34,14 +39,14 @@ class ClassificationResult:
 
     category: MemoryCategory
     confidence: float
-    reasoning: str = ""
-    shared_part: str = ""
-    project_part: str = ""
+    reasoning: str = ''
+    shared_part: str = ''
+    project_part: str = ''
 
     def __post_init__(self):
         """Validate confidence score."""
         if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(f"Confidence must be between 0.0 and 1.0, got {self.confidence}")
+            raise ValueError(f'Confidence must be between 0.0 and 1.0, got {self.confidence}')
 
     @property
     def is_shared(self) -> bool:
@@ -66,7 +71,7 @@ class MemoryClassifier(ABC):
     async def classify(
         self,
         episode_body: str,
-        project_config: 'ProjectConfig'  # type: ignore
+        project_config: ProjectConfig,
     ) -> ClassificationResult:
         """Classify a memory episode.
 

@@ -171,3 +171,5 @@ cache.db*
 # AI Agent
 .cursor/
 .claude/
+
+mcp_server/config/config-local.yaml

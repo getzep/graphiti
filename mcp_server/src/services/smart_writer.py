@@ -5,9 +5,11 @@ memory classification and writes to appropriate group_ids.
 """
 
 import logging
-from typing import Optional
+from datetime import datetime, timezone
 
-from classifiers.base import MemoryClassifier, MemoryCategory, ClassificationResult
+from graphiti_core.nodes import EpisodeType
+
+from classifiers.base import ClassificationResult, MemoryCategory, MemoryClassifier
 from utils.project_config import ProjectConfig
 
 logger = logging.getLogger(__name__)
@@ -29,8 +31,8 @@ class WriteResult:
         success: bool,
         written_to: list[str],
         category: str,
-        classification: Optional[ClassificationResult] = None,
-        error: Optional[str] = None
+        classification: ClassificationResult | None = None,
+        error: str | None = None,
     ):
         self.success = success
         self.written_to = written_to
@@ -40,9 +42,11 @@ class WriteResult:
 
     def __repr__(self) -> str:
         if self.success:
-            return f"WriteResult(success=True, written_to={self.written_to}, category={self.category})"
+            return (
+                f'WriteResult(success=True, written_to={self.written_to}, category={self.category})'
+            )
         else:
-            return f"WriteResult(success=False, error={self.error})"
+            return f'WriteResult(success=False, error={self.error})'
 
 
 class SmartMemoryWriter:
@@ -53,11 +57,7 @@ class SmartMemoryWriter:
     Graphiti client.
     """
 
-    def __init__(
-        self,
-        classifier: MemoryClassifier,
-        graphiti_client
-    ):
+    def __init__(self, classifier: MemoryClassifier, graphiti_client):
         """Initialize the smart memory writer.
 
         Args:
@@ -66,14 +66,14 @@ class SmartMemoryWriter:
         """
         self.classifier = classifier
         self.graphiti_client = graphiti_client
-        logger.info(f"SmartMemoryWriter initialized with {type(classifier).__name__}")
+        logger.info(f'SmartMemoryWriter initialized with {type(classifier).__name__}')
 
     async def add_memory(
         self,
         name: str,
         episode_body: str,
         project_config: ProjectConfig,
-        metadata: Optional[dict] = None
+        metadata: dict | None = None,
     ) -> WriteResult:
         """Intelligently write memory to appropriate groups.
 
@@ -88,16 +88,15 @@ class SmartMemoryWriter:
         """
         try:
             # Step 1: Classify the memory
-            logger.debug(f"Classifying memory: {name}")
+            logger.debug(f'Classifying memory: {name}')
             classification = await self.classifier.classify(
-                episode_body=episode_body,
-                project_config=project_config
+                episode_body=episode_body, project_config=project_config
             )
 
             logger.debug(
-                f"Classification result: {classification.category.value}, "
-                f"confidence={classification.confidence}, "
-                f"reasoning={classification.reasoning}"
+                f'Classification result: {classification.category.value}, '
+                f'confidence={classification.confidence}, '
+                f'reasoning={classification.reasoning}'
             )
 
             written_groups = []
@@ -107,13 +106,10 @@ class SmartMemoryWriter:
                 # Write to all shared groups
                 for shared_gid in project_config.shared_group_ids:
                     await self._write_to_group(
-                        name=name,
-                        episode_body=episode_body,
-                        group_id=shared_gid,
-                        metadata=metadata
+                        name=name, episode_body=episode_body, group_id=shared_gid, metadata=metadata
                     )
                     written_groups.append(shared_gid)
-                    logger.debug(f"Written to shared group: {shared_gid}")
+                    logger.debug(f'Written to shared group: {shared_gid}')
 
             elif classification.category == MemoryCategory.PROJECT_SPECIFIC:
                 # Write to project group only
@@ -121,10 +117,10 @@ class SmartMemoryWriter:
                     name=name,
                     episode_body=episode_body,
                     group_id=project_config.group_id,
-                    metadata=metadata
+                    metadata=metadata,
                 )
                 written_groups.append(project_config.group_id)
-                logger.debug(f"Written to project group: {project_config.group_id}")
+                logger.debug(f'Written to project group: {project_config.group_id}')
 
             elif classification.category == MemoryCategory.MIXED:
                 # Write to both project and shared groups with content splitting
@@ -137,8 +133,8 @@ class SmartMemoryWriter:
                     project_content = classification.project_part or episode_body
 
                     logger.debug(
-                        f"Using split content: shared={len(shared_content)} chars, "
-                        f"project={len(project_content)} chars"
+                        f'Using split content: shared={len(shared_content)} chars, '
+                        f'project={len(project_content)} chars'
                     )
 
                     # Write shared part to shared groups
@@ -147,33 +143,33 @@ class SmartMemoryWriter:
                             name=name,
                             episode_body=shared_content,
                             group_id=shared_gid,
-                            metadata=metadata
+                            metadata=metadata,
                         )
                         written_groups.append(shared_gid)
-                        logger.debug(f"Written shared part to: {shared_gid}")
+                        logger.debug(f'Written shared part to: {shared_gid}')
 
                     # Write project part to project group
                     await self._write_to_group(
                         name=name,
                         episode_body=project_content,
                         group_id=project_config.group_id,
-                        metadata=metadata
+                        metadata=metadata,
                     )
                     written_groups.append(project_config.group_id)
-                    logger.debug(f"Written project part to: {project_config.group_id}")
+                    logger.debug(f'Written project part to: {project_config.group_id}')
                 else:
                     # No split content available, write full content to both
-                    logger.debug("No split content available, writing full content to both")
+                    logger.debug('No split content available, writing full content to both')
 
                     # Write to project group
                     await self._write_to_group(
                         name=name,
                         episode_body=episode_body,
                         group_id=project_config.group_id,
-                        metadata=metadata
+                        metadata=metadata,
                     )
                     written_groups.append(project_config.group_id)
-                    logger.debug(f"Written to project group: {project_config.group_id}")
+                    logger.debug(f'Written to project group: {project_config.group_id}')
 
                     # Write to shared groups
                     for shared_gid in project_config.shared_group_ids:
@@ -181,10 +177,10 @@ class SmartMemoryWriter:
                             name=name,
                             episode_body=episode_body,
                             group_id=shared_gid,
-                            metadata=metadata
+                            metadata=metadata,
                         )
                         written_groups.append(shared_gid)
-                        logger.debug(f"Written to shared group: {shared_gid}")
+                        logger.debug(f'Written to shared group: {shared_gid}')
 
             logger.info(
                 f"Memory '{name}' written to {len(written_groups)} group(s): {written_groups}"
@@ -194,25 +190,16 @@ class SmartMemoryWriter:
                 success=True,
                 written_to=written_groups,
                 category=classification.category.value,
-                classification=classification
+                classification=classification,
             )
 
         except Exception as e:
-            error_msg = f"Error writing memory: {e}"
+            error_msg = f'Error writing memory: {e}'
             logger.error(error_msg, exc_info=True)
-            return WriteResult(
-                success=False,
-                written_to=[],
-                category="unknown",
-                error=error_msg
-            )
+            return WriteResult(success=False, written_to=[], category='unknown', error=error_msg)
 
     async def _write_to_group(
-        self,
-        name: str,
-        episode_body: str,
-        group_id: str,
-        metadata: Optional[dict] = None
+        self, name: str, episode_body: str, group_id: str, metadata: dict | None = None
     ):
         """Write to a specific group_id using Graphiti Core API.
 
@@ -220,12 +207,23 @@ class SmartMemoryWriter:
             name: Name of the episode
             episode_body: Content to store
             group_id: Target group_id
-            metadata: Optional metadata
+            metadata: Optional metadata (should include 'source' and 'source_description')
         """
         # Prepare metadata
         episode_metadata = {}
         if metadata:
             episode_metadata.update(metadata)
+
+        # Convert source string to EpisodeType enum
+        source_str = episode_metadata.get('source', 'text')
+        episode_type = EpisodeType.text  # Default
+        if source_str:
+            try:
+                episode_type = EpisodeType[source_str.lower()]
+            except (KeyError, AttributeError):
+                # If the source doesn't match any enum value, use text as default
+                logger.warning(f"Unknown source type '{source_str}', using 'text' as default")
+                episode_type = EpisodeType.text
 
         # Call Graphiti Core API
         # The graphiti_client should have add_episode method
@@ -233,7 +231,9 @@ class SmartMemoryWriter:
             name=name,
             episode_body=episode_body,
             group_id=group_id,
-            reference_time=episode_metadata.get('timestamp')
+            source_description=episode_metadata.get('source_description', 'Smart Memory Writer'),
+            source=episode_type,
+            reference_time=datetime.now(timezone.utc),
         )
 
     def should_use_smart_writer(self, project_config: ProjectConfig) -> bool:
