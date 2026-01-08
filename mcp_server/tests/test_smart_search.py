@@ -15,7 +15,6 @@ def test_search_nodes_auto_includes_shared_groups():
     print('\nTest: search_nodes auto-includes shared groups')
 
     async def run_test():
-
         from utils.project_config import ProjectConfig
 
         # Create project config with shared groups

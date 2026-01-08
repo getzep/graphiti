@@ -30,7 +30,10 @@ class TestRerankerE2E:
         assert config.reranker.provider == 'openai'
         assert config.reranker.model == 'qwen3-rerank'
         assert config.reranker.providers.openai is not None
-        assert config.reranker.providers.openai.api_url == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        assert (
+            config.reranker.providers.openai.api_url
+            == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        )
 
     def test_reranker_factory_with_config_local(self):
         """Test RerankerFactory creates client from config-local.yaml."""
@@ -49,7 +52,7 @@ class TestRerankerE2E:
             # If successful, should have a rank method
             if reranker_client is not None:
                 assert hasattr(reranker_client, 'rank')
-                assert callable(getattr(reranker_client, 'rank'))
+                assert callable(reranker_client.rank)
         except Exception as e:
             # If it fails, it should be a clear error message
             error_msg = str(e).lower()
@@ -88,7 +91,10 @@ class TestRerankerE2E:
 
         # Verify model is qwen3-rerank
         assert config.reranker.model == 'qwen3-rerank'
-        assert config.reranker.providers.openai.api_url == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        assert (
+            config.reranker.providers.openai.api_url
+            == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        )
 
         # Create reranker client
         reranker = RerankerFactory.create(config.reranker)
@@ -96,8 +102,12 @@ class TestRerankerE2E:
         # Should create OpenAIRerankerClient
         assert reranker is not None
         from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
         assert isinstance(reranker, OpenAIRerankerClient)
 
         # Verify the client has the correct model configured
         assert reranker.config.model == 'qwen3-rerank'
-        assert 'dashscope' in reranker.config.base_url or reranker.config.base_url == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        assert (
+            'dashscope' in reranker.config.base_url
+            or reranker.config.base_url == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        )
