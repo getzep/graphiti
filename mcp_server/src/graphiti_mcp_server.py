@@ -177,6 +177,7 @@ class GraphitiService:
         self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
+        self.llm_client = None  # Store LLM client for use by classifiers
         self.entity_types = None
 
     async def initialize(self) -> None:
@@ -189,6 +190,7 @@ class GraphitiService:
             # Create LLM client based on configured provider
             try:
                 llm_client = LLMClientFactory.create(self.config.llm)
+                self.llm_client = llm_client  # Store for use by classifiers
             except Exception as e:
                 logger.warning(f'Failed to create LLM client: {e}')
 
@@ -1060,10 +1062,17 @@ async def initialize_server() -> ServerConfig:
         if write_strategy == 'llm_based':
             from classifiers.llm_based import LLMClassifier
 
-            # Get LLM client from service
-            llm_client = graphiti_service.config.llm
+            # Get LLM client from service (must be an actual client instance, not config)
+            if graphiti_service.llm_client is None:
+                logger.error(
+                    'LLM client not initialized. Cannot use LLMClassifier. '
+                    'Falling back to RuleBasedClassifier.'
+                )
+                from classifiers.rule_based import RuleBasedClassifier
 
-            classifier = LLMClassifier(llm_client=llm_client)
+                classifier = RuleBasedClassifier()
+            else:
+                classifier = LLMClassifier(llm_client=graphiti_service.llm_client)
             logger.info('Using LLMClassifier (write_strategy=llm_based)')
         else:
             from classifiers.rule_based import RuleBasedClassifier

@@ -298,7 +298,7 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
-                    base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
+                    base_url=config.providers.openai.api_url,  # Pass api_url to support custom endpoints like Ollama, DashScope etc.
                     embedding_dim=config.dimensions,  # Support custom embedding dimensions
                 )
                 return OpenAIEmbedder(config=embedder_config)
