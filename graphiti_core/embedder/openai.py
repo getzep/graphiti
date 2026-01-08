@@ -64,9 +64,7 @@ class OpenAIEmbedder(EmbedderClient):
         # Split into batches if using DashScope and input exceeds limit
         batch_size = 10
         is_dashscope = (
-            self.config
-            and self.config.base_url
-            and 'dashscope' in self.config.base_url.lower()
+            self.config and self.config.base_url and 'dashscope' in self.config.base_url.lower()
         )
 
         if is_dashscope and len(input_data_list) > batch_size:

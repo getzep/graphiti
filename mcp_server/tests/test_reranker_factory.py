@@ -1,10 +1,7 @@
 """Tests for RerankerFactory."""
 
 import os
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 
 class TestRerankerConfig:
@@ -73,9 +70,7 @@ class TestRerankerFactory:
             type='cross_encoder',
             provider='openai',
             model='gpt-4.1-nano',
-            providers=RerankerProvidersConfig(
-                openai=OpenAIProviderConfig(api_key='test-key')
-            ),
+            providers=RerankerProvidersConfig(openai=OpenAIProviderConfig(api_key='test-key')),
         )
         # This will fail if API key is invalid, but that's expected
         # We just verify the factory method doesn't crash
@@ -101,9 +96,7 @@ class TestRerankerFactory:
             type='cross_encoder',
             provider='gemini',
             model='gemini-2.5-flash-lite',
-            providers=RerankerProvidersConfig(
-                gemini=GeminiProviderConfig(api_key='test-key')
-            ),
+            providers=RerankerProvidersConfig(gemini=GeminiProviderConfig(api_key='test-key')),
         )
         # This will fail if API key is invalid or dependency missing
         try:

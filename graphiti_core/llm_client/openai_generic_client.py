@@ -91,6 +91,7 @@ class OpenAIGenericClient(LLMClient):
             # Set timeout to prevent hanging requests
             # Default timeout: 30 seconds for connection, 120 seconds (2 minutes) for read
             import httpx
+
             timeout = httpx.Timeout(30.0, read=120.0)
             self.client = AsyncOpenAI(
                 api_key=config.api_key,
