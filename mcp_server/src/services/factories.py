@@ -299,6 +299,7 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
+                    base_url=config.providers.openai.api_url,  # Pass api_url to support DashScope
                 )
                 return OpenAIEmbedder(config=embedder_config)
 
