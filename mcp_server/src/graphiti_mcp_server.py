@@ -31,7 +31,12 @@ from models.response_types import (
     StatusResponse,
     SuccessResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+    RerankerFactory,
+)
 from services.queue_service import QueueService
 from services.smart_writer import SmartMemoryWriter
 from utils.formatting import format_fact_result
@@ -193,6 +198,21 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create reranker client based on configured provider
+            cross_encoder = None
+            try:
+                cross_encoder = RerankerFactory.create(self.config.reranker)
+                if cross_encoder:
+                    logger.info(
+                        f'Using cross_encoder: {self.config.reranker.provider} / {self.config.reranker.model}'
+                    )
+                else:
+                    logger.info(f'Using local reranker: {self.config.reranker.type}')
+            except ImportError as e:
+                logger.warning(f'Reranker dependency not available: {e}')
+            except Exception as e:
+                logger.warning(f'Failed to create Reranker client: {e}')
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -232,6 +252,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -242,6 +263,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -912,6 +934,24 @@ async def initialize_server() -> ServerConfig:
 
     # Embedder configuration arguments
     parser.add_argument('--embedder-model', help='Model name to use with the embedder')
+
+    # Reranker configuration arguments
+    parser.add_argument(
+        '--reranker-enabled',
+        type=lambda x: x.lower() in ('true', '1', 'yes', 'on'),
+        help='Enable reranker for search',
+    )
+    parser.add_argument(
+        '--reranker-type',
+        choices=['rrf', 'mmr', 'node_distance', 'episode_mentions', 'cross_encoder'],
+        help='Reranker type to use',
+    )
+    parser.add_argument(
+        '--reranker-provider',
+        choices=['openai', 'gemini', 'sentence_transformers'],
+        help='CrossEncoder provider (when type=cross_encoder)',
+    )
+    parser.add_argument('--reranker-model', help='Model name for CrossEncoder')
 
     # Graphiti-specific arguments
     parser.add_argument(
