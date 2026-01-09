@@ -179,9 +179,9 @@ def test_get_episodes_auto_includes_shared_groups():
     asyncio.run(run_test())
 
 
-def test_search_explicit_group_ids_not_modified():
-    """Test that explicit group_ids are not modified."""
-    print('\nTest: Explicit group_ids are not modified')
+def test_search_explicit_group_ids_includes_shared():
+    """Test that explicit group_ids also include shared groups."""
+    print('\nTest: Explicit group_ids also include shared groups')
 
     async def run_test():
         from utils.project_config import ProjectConfig
@@ -223,16 +223,20 @@ def test_search_explicit_group_ids_not_modified():
                 query='test query', group_ids=['explicit-group-1', 'explicit-group-2']
             )
 
-            # Verify search_ was called ONLY with explicit groups
+            # Verify search_ was called with: project + explicit + shared groups
             mock_client.search_.assert_called_once()
             call_kwargs = mock_client.search_.call_args.kwargs
 
             effective_group_ids = call_kwargs['group_ids']
-            assert effective_group_ids == ['explicit-group-1', 'explicit-group-2']
-            assert 'user-common' not in effective_group_ids
-            assert 'team-standards' not in effective_group_ids
+            # Should contain: detected project group_id + explicit group_ids + shared_group_ids
+            assert 'test-project' in effective_group_ids
+            assert 'explicit-group-1' in effective_group_ids
+            assert 'explicit-group-2' in effective_group_ids
+            assert 'user-common' in effective_group_ids
+            assert 'team-standards' in effective_group_ids
+            assert len(effective_group_ids) == 5
 
-            print('  ✓ Explicit group_ids are not modified when no .graphiti.json detected')
+            print('  ✓ Explicit group_ids correctly include project + shared groups')
 
     asyncio.run(run_test())
 
@@ -357,7 +361,7 @@ def run_all_tests():
         test_search_nodes_auto_includes_shared_groups,
         test_search_facts_auto_includes_shared_groups,
         test_get_episodes_auto_includes_shared_groups,
-        test_search_explicit_group_ids_not_modified,
+        test_search_explicit_group_ids_includes_shared,
         test_search_without_shared_config,
         test_search_deduplicates_groups,
     ]
