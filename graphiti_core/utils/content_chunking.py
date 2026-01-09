@@ -17,6 +17,8 @@ limitations under the License.
 import json
 import logging
 import re
+from itertools import combinations
+from typing import TypeVar
 
 from graphiti_core.helpers import (
     CHUNK_DENSITY_THRESHOLD,
@@ -700,3 +702,68 @@ def _chunk_by_lines(
         chunks.append('\n'.join(current_lines))
 
     return chunks if chunks else [content]
+
+
+T = TypeVar('T')
+
+
+def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list[int]]]:
+    """Generate chunks of items that cover all pairs using a greedy approach.
+
+    Based on the Handshake Flights Problem / Covering Design problem.
+    Each chunk of K items covers C(K,2) = K(K-1)/2 pairs. We greedily select
+    chunks to maximize coverage of uncovered pairs, minimizing the total number
+    of chunks needed to ensure every pair of items appears in at least one chunk.
+
+    Lower bound (Schönheim): F >= ceil(N/K * ceil((N-1)/(K-1)))
+
+    Args:
+        items: List of items to partition into covering chunks
+        k: Maximum number of items per chunk
+
+    Returns:
+        List of tuples (chunk_items, global_indices) where global_indices maps
+        each position in chunk_items to its index in the original items list.
+    """
+    n = len(items)
+    if n <= k:
+        return [(items, list(range(n)))]
+
+    # Track uncovered pairs using frozensets of indices
+    uncovered_pairs: set[frozenset[int]] = {
+        frozenset([i, j]) for i in range(n) for j in range(i + 1, n)
+    }
+
+    chunks: list[tuple[list[T], list[int]]] = []
+
+    while uncovered_pairs:
+        # Greedy selection: find the chunk that covers the most uncovered pairs
+        best_chunk_indices: tuple[int, ...] | None = None
+        best_covered_count = 0
+
+        # Try all possible chunks of size k
+        for chunk_indices in combinations(range(n), k):
+            # Count how many uncovered pairs this chunk covers
+            covered_count = sum(
+                1
+                for i, idx_i in enumerate(chunk_indices)
+                for idx_j in chunk_indices[i + 1 :]
+                if frozenset([idx_i, idx_j]) in uncovered_pairs
+            )
+
+            if covered_count > best_covered_count:
+                best_covered_count = covered_count
+                best_chunk_indices = chunk_indices
+
+        if best_chunk_indices is None or best_covered_count == 0:
+            break
+
+        # Mark pairs in this chunk as covered
+        for i, idx_i in enumerate(best_chunk_indices):
+            for idx_j in best_chunk_indices[i + 1 :]:
+                uncovered_pairs.discard(frozenset([idx_i, idx_j]))
+
+        chunk_items = [items[idx] for idx in best_chunk_indices]
+        chunks.append((chunk_items, list(best_chunk_indices)))
+
+    return chunks
