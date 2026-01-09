@@ -95,7 +95,10 @@ database:
     falkordb:
       uri: ${FALKORDB_URI:redis://localhost:6379}
       password: ${FALKORDB_PASSWORD:}
-      database: ${FALKORDB_DATABASE:default_db}
+      # NOTE: Using a single unified graph (GRAPHITI) for all group_ids.
+      # Data isolation is achieved via group_id property filtering, not separate graphs.
+      # This matches Neo4j driver behavior and enables cross-group_id queries.
+      database: ${FALKORDB_DATABASE:GRAPHITI}
 
     neo4j:
       uri: ${NEO4J_URI:bolt://localhost:7687}
@@ -108,6 +111,14 @@ graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}
   episode_id_prefix: ${EPISODE_ID_PREFIX:}
   user_id: ${USER_ID:mcp_user}
+
+  # Episode deduplication settings
+  deduplication:
+    enabled: true  # Enable/disable episode deduplication
+    strategy: "exact"  # Options: "exact" (exact match), "similarity" (content similarity), "hybrid" (both)
+    similarity_threshold: 0.95  # Minimum similarity score for similarity-based deduplication (0.0-1.0)
+    check_by_uuid_first: true  # If uuid is provided, check existing episode before processing
+
   entity_types:
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"

@@ -257,6 +257,7 @@ class GraphitiService:
                         embedder=embedder_client,
                         cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
+                        deduplication_config=self.config.graphiti.deduplication,
                     )
                 else:
                     # For Neo4j (default), use the original approach
@@ -268,6 +269,7 @@ class GraphitiService:
                         embedder=embedder_client,
                         cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
+                        deduplication_config=self.config.graphiti.deduplication,
                     )
             except Exception as db_error:
                 # Check for connection errors
