@@ -37,29 +37,32 @@ def test_search_nodes_auto_includes_shared_groups():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call search_nodes
-                from graphiti_mcp_server import search_nodes
+            # Import and call search_nodes
+            from graphiti_mcp_server import search_nodes
 
-                result = await search_nodes(query='test query')
+            await search_nodes(query='test query')
 
-                # Verify search_ was called with project + shared groups
-                mock_client.search_.assert_called_once()
-                call_kwargs = mock_client.search_.call_args.kwargs
+            # Verify search_ was called with project + shared groups
+            mock_client.search_.assert_called_once()
+            call_kwargs = mock_client.search_.call_args.kwargs
 
-                effective_group_ids = call_kwargs['group_ids']
-                assert 'test-project' in effective_group_ids
-                assert 'user-common' in effective_group_ids
-                assert 'team-standards' in effective_group_ids
-                assert len(effective_group_ids) == 3
+            effective_group_ids = call_kwargs['group_ids']
+            assert 'test-project' in effective_group_ids
+            assert 'user-common' in effective_group_ids
+            assert 'team-standards' in effective_group_ids
+            assert len(effective_group_ids) == 3
 
-                print('  ✓ search_nodes correctly auto-includes shared groups')
+            print('  ✓ search_nodes correctly auto-includes shared groups')
 
     asyncio.run(run_test())
 
@@ -89,28 +92,31 @@ def test_search_facts_auto_includes_shared_groups():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call search_memory_facts
-                from graphiti_mcp_server import search_memory_facts
+            # Import and call search_memory_facts
+            from graphiti_mcp_server import search_memory_facts
 
-                result = await search_memory_facts(query='test query')
+            await search_memory_facts(query='test query')
 
-                # Verify search was called with project + shared groups
-                mock_client.search.assert_called_once()
-                call_kwargs = mock_client.search.call_args.kwargs
+            # Verify search was called with project + shared groups
+            mock_client.search.assert_called_once()
+            call_kwargs = mock_client.search.call_args.kwargs
 
-                effective_group_ids = call_kwargs['group_ids']
-                assert 'test-project' in effective_group_ids
-                assert 'user-common' in effective_group_ids
-                assert len(effective_group_ids) == 2
+            effective_group_ids = call_kwargs['group_ids']
+            assert 'test-project' in effective_group_ids
+            assert 'user-common' in effective_group_ids
+            assert len(effective_group_ids) == 2
 
-                print('  ✓ search_memory_facts correctly auto-includes shared groups')
+            print('  ✓ search_memory_facts correctly auto-includes shared groups')
 
     asyncio.run(run_test())
 
@@ -143,29 +149,32 @@ def test_get_episodes_auto_includes_shared_groups():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call get_episodes
-                from graphiti_mcp_server import get_episodes
+            # Import and call get_episodes
+            from graphiti_mcp_server import get_episodes
 
-                result = await get_episodes()
+            await get_episodes()
 
-                # Verify get_by_group_ids was called with project + shared groups
-                EpisodicNode.get_by_group_ids.assert_called_once()
-                call_args = EpisodicNode.get_by_group_ids.call_args
+            # Verify get_by_group_ids was called with project + shared groups
+            EpisodicNode.get_by_group_ids.assert_called_once()
+            call_args = EpisodicNode.get_by_group_ids.call_args
 
-                effective_group_ids = call_args[0][1]  # Second positional arg
-                assert 'test-project' in effective_group_ids
-                assert 'user-common' in effective_group_ids
-                assert 'team-standards' in effective_group_ids
-                assert len(effective_group_ids) == 3
+            effective_group_ids = call_args[0][1]  # Second positional arg
+            assert 'test-project' in effective_group_ids
+            assert 'user-common' in effective_group_ids
+            assert 'team-standards' in effective_group_ids
+            assert len(effective_group_ids) == 3
 
-                print('  ✓ get_episodes correctly auto-includes shared groups')
+            print('  ✓ get_episodes correctly auto-includes shared groups')
 
     asyncio.run(run_test())
 
@@ -197,30 +206,33 @@ def test_search_explicit_group_ids_not_modified():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call search_nodes with explicit group_ids
-                from graphiti_mcp_server import search_nodes
+            # Import and call search_nodes with explicit group_ids
+            from graphiti_mcp_server import search_nodes
 
-                result = await search_nodes(
-                    query='test query', group_ids=['explicit-group-1', 'explicit-group-2']
-                )
+            await search_nodes(
+                query='test query', group_ids=['explicit-group-1', 'explicit-group-2']
+            )
 
-                # Verify search_ was called ONLY with explicit groups
-                mock_client.search_.assert_called_once()
-                call_kwargs = mock_client.search_.call_args.kwargs
+            # Verify search_ was called ONLY with explicit groups
+            mock_client.search_.assert_called_once()
+            call_kwargs = mock_client.search_.call_args.kwargs
 
-                effective_group_ids = call_kwargs['group_ids']
-                assert effective_group_ids == ['explicit-group-1', 'explicit-group-2']
-                assert 'user-common' not in effective_group_ids
-                assert 'team-standards' not in effective_group_ids
+            effective_group_ids = call_kwargs['group_ids']
+            assert effective_group_ids == ['explicit-group-1', 'explicit-group-2']
+            assert 'user-common' not in effective_group_ids
+            assert 'team-standards' not in effective_group_ids
 
-                print('  ✓ Explicit group_ids are not modified')
+            print('  ✓ Explicit group_ids are not modified when no .graphiti.json detected')
 
     asyncio.run(run_test())
 
@@ -251,26 +263,29 @@ def test_search_without_shared_config():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call search_nodes
-                from graphiti_mcp_server import search_nodes
+            # Import and call search_nodes
+            from graphiti_mcp_server import search_nodes
 
-                result = await search_nodes(query='test query')
+            await search_nodes(query='test query')
 
-                # Verify search_ was called only with project group
-                mock_client.search_.assert_called_once()
-                call_kwargs = mock_client.search_.call_args.kwargs
+            # Verify search_ was called only with project group
+            mock_client.search_.assert_called_once()
+            call_kwargs = mock_client.search_.call_args.kwargs
 
-                effective_group_ids = call_kwargs['group_ids']
-                assert effective_group_ids == ['test-project']
+            effective_group_ids = call_kwargs['group_ids']
+            assert effective_group_ids == ['test-project']
 
-                print('  ✓ Search works correctly without shared config')
+            print('  ✓ Search works correctly without shared config')
 
     asyncio.run(run_test())
 
@@ -302,29 +317,32 @@ def test_search_deduplicates_groups():
         mock_graphiti_service = AsyncMock()
         mock_graphiti_service.get_client = AsyncMock(return_value=mock_client)
 
-        with patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service):
-            with patch('graphiti_mcp_server.project_config', mock_project_config):
-                # Set the global config variable in the module
-                import graphiti_mcp_server
+        with (
+            patch('graphiti_mcp_server.graphiti_service', mock_graphiti_service),
+            patch('graphiti_mcp_server.project_config', mock_project_config),
+            patch('graphiti_mcp_server.find_project_config', return_value=None),
+        ):
+            # Set the global config variable in the module
+            import graphiti_mcp_server
 
-                graphiti_mcp_server.config = mock_config
+            graphiti_mcp_server.config = mock_config
 
-                # Import and call search_nodes
-                from graphiti_mcp_server import search_nodes
+            # Import and call search_nodes
+            from graphiti_mcp_server import search_nodes
 
-                result = await search_nodes(query='test query')
+            await search_nodes(query='test query')
 
-                # Verify deduplication
-                mock_client.search_.assert_called_once()
-                call_kwargs = mock_client.search_.call_args.kwargs
+            # Verify deduplication
+            mock_client.search_.assert_called_once()
+            call_kwargs = mock_client.search_.call_args.kwargs
 
-                effective_group_ids = call_kwargs['group_ids']
-                # Should have test-project only once despite being in both places
-                assert effective_group_ids.count('test-project') == 1
-                assert 'user-common' in effective_group_ids
-                assert len(effective_group_ids) == 2
+            effective_group_ids = call_kwargs['group_ids']
+            # Should have test-project only once despite being in both places
+            assert effective_group_ids.count('test-project') == 1
+            assert 'user-common' in effective_group_ids
+            assert len(effective_group_ids) == 2
 
-                print('  ✓ Duplicate group_ids are correctly deduplicated')
+            print('  ✓ Duplicate group_ids are correctly deduplicated')
 
     asyncio.run(run_test())
 
