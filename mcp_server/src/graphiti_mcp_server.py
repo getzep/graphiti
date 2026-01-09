@@ -426,10 +426,25 @@ async def add_memory(
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
 
+    # === Dynamic .graphiti.json Detection ===
+    # Always check for .graphiti.json on each call to get the current project's group_id
+    # This ensures .graphiti.json is the single source of truth, overriding any
+    # group_id value passed by the AI agent (which may use outdated defaults like "main")
+    detected_project_config = find_project_config()
+    if detected_project_config is not None:
+        # Override group_id with the one from .graphiti.json
+        logger.info(
+            f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+            f"group_id='{detected_project_config.group_id}' (overriding passed value: '{group_id}')"
+        )
+        group_id = detected_project_config.group_id
+        project_config = detected_project_config  # Update global project_config
+
     try:
         # === Smart Writer Path ===
-        # Use smart writer if available and no explicit group_id override
-        if smart_writer is not None and project_config is not None and group_id is None:
+        # Use smart writer if available and project_config was detected
+        # Note: project_config is now set dynamically on each call if .graphiti.json exists
+        if smart_writer is not None and project_config is not None:
             logger.debug(f"Using SmartMemoryWriter for episode '{name}'")
 
             result = await smart_writer.add_memory(
@@ -447,8 +462,9 @@ async def add_memory(
             else:
                 return ErrorResponse(error=f'Smart writer error: {result.error}')
 
-        # === Standard Path (fallback or explicit group_id) ===
-        # Use the provided group_id or fall back to the default from config
+        # === Standard Path (fallback or no smart writer) ===
+        # Use the group_id (which may have been overridden by .graphiti.json detection)
+        # or fall back to the default from config
         effective_group_id = group_id or config.graphiti.group_id
 
         # Try to parse the source as an EpisodeType enum, with fallback to text
