@@ -1120,7 +1120,11 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize services
     graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
-    queue_service = QueueService()
+    # Get queue max_concurrent from config
+    max_concurrent = (
+        config.graphiti.queue.max_concurrent_processing if hasattr(config.graphiti, 'queue') else 5
+    )
+    queue_service = QueueService(max_concurrent=max_concurrent)
     await graphiti_service.initialize()
 
     # Set global client for backward compatibility

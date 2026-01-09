@@ -119,6 +119,18 @@ graphiti:
     similarity_threshold: 0.95  # Minimum similarity score for similarity-based deduplication (0.0-1.0)
     check_by_uuid_first: true  # If uuid is provided, check existing episode before processing
 
+  # Queue concurrency settings
+  queue:
+    # Maximum number of episodes to process concurrently across all group_ids
+    # This prevents LLM API rate limit errors when processing multiple shared_group_ids
+    # - 1-3: Strict limit for low-tier APIs (OpenAI Free: 3 RPM, Anthropic Free: 50 RPM)
+    # - 5-8: Balanced for mid-tier APIs (OpenAI Tier 2-3: 60-500 RPM, Anthropic: default)
+    # - 10-20: High concurrency for high-tier APIs (OpenAI Tier 4+: 5,000+ RPM)
+    max_concurrent_processing: ${QUEUE_MAX_CONCURRENT:5}
+
+    # Maximum queue size per group_id before rejecting new episodes
+    max_queue_size_per_group: 100
+
   entity_types:
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
