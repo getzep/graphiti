@@ -153,15 +153,52 @@ async def extract_edges(
         chunk_edges_data = ExtractedEdges(**llm_response).edges
 
         # Map chunk-local indices to global indices in the original nodes list
+        valid_edges: list[ExtractedEdge] = []
         for edge_data in chunk_edges_data:
             source_local_idx = edge_data.source_entity_id
             target_local_idx = edge_data.target_entity_id
-            if 0 <= source_local_idx < len(global_indices):
-                edge_data.source_entity_id = global_indices[source_local_idx]
-            if 0 <= target_local_idx < len(global_indices):
-                edge_data.target_entity_id = global_indices[target_local_idx]
+            source_valid = False
+            target_valid = False
 
-        return chunk_edges_data
+            # Validate and map source index
+            if 0 <= source_local_idx < len(global_indices):
+                mapped_source = global_indices[source_local_idx]
+                if 0 <= mapped_source < len(nodes):
+                    edge_data.source_entity_id = mapped_source
+                    source_valid = True
+                else:
+                    logger.warning(
+                        f'Invalid mapped source index {mapped_source} for edge '
+                        f'{edge_data.relation_type}, nodes list has {len(nodes)} items'
+                    )
+            else:
+                logger.warning(
+                    f'Source index {source_local_idx} out of bounds for chunk of size '
+                    f'{len(global_indices)} in edge {edge_data.relation_type}'
+                )
+
+            # Validate and map target index
+            if 0 <= target_local_idx < len(global_indices):
+                mapped_target = global_indices[target_local_idx]
+                if 0 <= mapped_target < len(nodes):
+                    edge_data.target_entity_id = mapped_target
+                    target_valid = True
+                else:
+                    logger.warning(
+                        f'Invalid mapped target index {mapped_target} for edge '
+                        f'{edge_data.relation_type}, nodes list has {len(nodes)} items'
+                    )
+            else:
+                logger.warning(
+                    f'Target index {target_local_idx} out of bounds for chunk of size '
+                    f'{len(global_indices)} in edge {edge_data.relation_type}'
+                )
+
+            # Only include edges with valid source and target
+            if source_valid and target_valid:
+                valid_edges.append(edge_data)
+
+        return valid_edges
 
     # Extract edges from all chunks in parallel
     chunk_results: list[list[ExtractedEdge]] = list(
