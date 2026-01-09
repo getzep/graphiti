@@ -29,7 +29,7 @@ def compute_content_hash(content: str, name: str = '') -> str:
     normalized_content = content.strip()
 
     # Combine name and content for hashing
-    hash_input = f"{name}:{normalized_content}"
+    hash_input = f'{name}:{normalized_content}'
 
     return hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
 
@@ -215,7 +215,7 @@ async def find_similar_episodes_by_content(
     exact_matches = [e for e in episodes if e.content == content]
 
     if exact_matches:
-        logger.info(f"Found {len(exact_matches)} exact content matches")
+        logger.info(f'Found {len(exact_matches)} exact content matches')
         return exact_matches[:max_results]
 
     # For now, return all matches - similarity scoring could be enhanced with embeddings
@@ -254,9 +254,7 @@ async def check_duplicate_episode(
             # Check for exact content match
             for episode in similar_episodes:
                 if episode.content == content and episode.name == name:
-                    logger.info(
-                        f"Duplicate episode found by exact content match: {episode.uuid}"
-                    )
+                    logger.info(f'Duplicate episode found by exact content match: {episode.uuid}')
                     return episode
 
     # Method 2: Check by content hash (requires content_hash field to be populated)
