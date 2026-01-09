@@ -6,6 +6,7 @@ Graphiti configuration from .graphiti.json files in the project directory.
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -41,18 +42,28 @@ class ProjectConfig:
 
 def find_project_config(start_dir: Path | None = None) -> ProjectConfig | None:
     """
-    Find .graphiti.json by searching upward from start_dir (git-like approach).
+    Find .graphiti.json by searching upward from GRAPHITI_PROJECT_DIR.
+
+    IMPORTANT: Only searches from GRAPHITI_PROJECT_DIR environment variable.
+    If GRAPHITI_PROJECT_DIR is not set, returns None.
+
+    This ensures the MCP Server never searches in its own code directory,
+    only in the user's project directory specified by the client.
 
     Args:
-        start_dir: Directory to start search from (defaults to current working directory)
+        start_dir: Ignored (kept for backward compatibility). Use GRAPHITI_PROJECT_DIR.
 
     Returns:
         ProjectConfig if found, None otherwise
     """
-    if start_dir is None:
-        start_dir = Path.cwd()
+    # Only use GRAPHITI_PROJECT_DIR environment variable (set by clients)
+    project_dir_env = os.getenv('GRAPHITI_PROJECT_DIR')
+    if not project_dir_env:
+        logger.debug('GRAPHITI_PROJECT_DIR not set, skipping project config detection')
+        return None
 
-    current_dir = Path(start_dir).resolve()
+    logger.debug(f'Using GRAPHITI_PROJECT_DIR environment variable: {project_dir_env}')
+    current_dir = Path(project_dir_env).resolve()
 
     # Search upward until root or config found
     while current_dir != current_dir.parent:
