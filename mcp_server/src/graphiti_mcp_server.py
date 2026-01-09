@@ -524,15 +524,32 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+
         # Build effective group IDs
         if group_ids is not None:
-            # User explicitly specified group_ids - use them
-            effective_group_ids = group_ids
-            logger.debug(f'Using explicit group_ids: {group_ids}')
+            # User explicitly specified group_ids - add detected group_id
+            effective_group_ids = (
+                [detected_project_config.group_id] + list(group_ids)
+                if detected_project_config
+                else list(group_ids)
+            )
+            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
         else:
-            # No explicit group_ids - build from project config
+            # No explicit group_ids - build from detected config and shared groups
             effective_group_ids = []
-            if config.graphiti.group_id:
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
                 effective_group_ids.append(config.graphiti.group_id)
 
             # Add shared groups if configured
@@ -625,15 +642,32 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+
         # Build effective group IDs
         if group_ids is not None:
-            # User explicitly specified group_ids - use them
-            effective_group_ids = group_ids
-            logger.debug(f'Using explicit group_ids: {group_ids}')
+            # User explicitly specified group_ids - add detected group_id
+            effective_group_ids = (
+                [detected_project_config.group_id] + list(group_ids)
+                if detected_project_config
+                else list(group_ids)
+            )
+            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
         else:
-            # No explicit group_ids - build from project config
+            # No explicit group_ids - build from detected config and shared groups
             effective_group_ids = []
-            if config.graphiti.group_id:
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
                 effective_group_ids.append(config.graphiti.group_id)
 
             # Add shared groups if configured
@@ -767,15 +801,32 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
+        # === Dynamic .graphiti.json Detection ===
+        # Detect .graphiti.json to get the current project's group_id
+        detected_project_config = find_project_config()
+        if detected_project_config is not None:
+            logger.info(
+                f"Detected .graphiti.json at '{detected_project_config.config_path}': "
+                f"group_id='{detected_project_config.group_id}'"
+            )
+            # Update global project_config for this session
+            project_config = detected_project_config
+
         # Build effective group IDs
         if group_ids is not None:
-            # User explicitly specified group_ids - use them
-            effective_group_ids = group_ids
-            logger.debug(f'Using explicit group_ids: {group_ids}')
+            # User explicitly specified group_ids - add detected group_id
+            effective_group_ids = (
+                [detected_project_config.group_id] + list(group_ids)
+                if detected_project_config
+                else list(group_ids)
+            )
+            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
         else:
-            # No explicit group_ids - build from project config
+            # No explicit group_ids - build from detected config and shared groups
             effective_group_ids = []
-            if config.graphiti.group_id:
+            if detected_project_config:
+                effective_group_ids.append(detected_project_config.group_id)
+            elif config.graphiti.group_id:
                 effective_group_ids.append(config.graphiti.group_id)
 
             # Add shared groups if configured
