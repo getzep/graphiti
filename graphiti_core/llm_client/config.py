@@ -62,7 +62,7 @@ class LLMConfig:
         """
         self.base_url = base_url
         self.api_key = api_key
-        self.model = 'gpt-5-mini'
-        self.small_model = 'gpt-5-nano'
+        self.model = model
+        self.small_model = small_model
         self.temperature = temperature
         self.max_tokens = max_tokens
