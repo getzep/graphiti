@@ -536,32 +536,28 @@ async def search_nodes(
             project_config = detected_project_config
 
         # Build effective group IDs
+        # Start with detected project group_id
+        effective_group_ids = []
+        if detected_project_config:
+            effective_group_ids.append(detected_project_config.group_id)
+        elif config.graphiti.group_id:
+            effective_group_ids.append(config.graphiti.group_id)
+
+        # Add user-specified group_ids if provided
         if group_ids is not None:
-            # User explicitly specified group_ids - add detected group_id
-            effective_group_ids = (
-                [detected_project_config.group_id] + list(group_ids)
-                if detected_project_config
-                else list(group_ids)
-            )
-            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
-        else:
-            # No explicit group_ids - build from detected config and shared groups
-            effective_group_ids = []
-            if detected_project_config:
-                effective_group_ids.append(detected_project_config.group_id)
-            elif config.graphiti.group_id:
-                effective_group_ids.append(config.graphiti.group_id)
+            effective_group_ids.extend(list(group_ids))
+            logger.debug(f'Added explicit group_ids: {list(group_ids)}')
 
-            # Add shared groups if configured
-            if project_config and project_config.has_shared_config:
-                effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
+        # Add shared groups if configured (always added, regardless of explicit group_ids)
+        if project_config and project_config.has_shared_config:
+            effective_group_ids.extend(project_config.shared_group_ids)
+            logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
-            # Deduplicate while preserving order
-            seen = set()
-            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f'Searching in groups: {effective_group_ids}')
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Create search filters
         search_filters = SearchFilters(
@@ -654,32 +650,28 @@ async def search_memory_facts(
             project_config = detected_project_config
 
         # Build effective group IDs
+        # Start with detected project group_id
+        effective_group_ids = []
+        if detected_project_config:
+            effective_group_ids.append(detected_project_config.group_id)
+        elif config.graphiti.group_id:
+            effective_group_ids.append(config.graphiti.group_id)
+
+        # Add user-specified group_ids if provided
         if group_ids is not None:
-            # User explicitly specified group_ids - add detected group_id
-            effective_group_ids = (
-                [detected_project_config.group_id] + list(group_ids)
-                if detected_project_config
-                else list(group_ids)
-            )
-            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
-        else:
-            # No explicit group_ids - build from detected config and shared groups
-            effective_group_ids = []
-            if detected_project_config:
-                effective_group_ids.append(detected_project_config.group_id)
-            elif config.graphiti.group_id:
-                effective_group_ids.append(config.graphiti.group_id)
+            effective_group_ids.extend(list(group_ids))
+            logger.debug(f'Added explicit group_ids: {list(group_ids)}')
 
-            # Add shared groups if configured
-            if project_config and project_config.has_shared_config:
-                effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
+        # Add shared groups if configured (always added, regardless of explicit group_ids)
+        if project_config and project_config.has_shared_config:
+            effective_group_ids.extend(project_config.shared_group_ids)
+            logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
-            # Deduplicate while preserving order
-            seen = set()
-            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f'Searching in groups: {effective_group_ids}')
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -813,32 +805,28 @@ async def get_episodes(
             project_config = detected_project_config
 
         # Build effective group IDs
+        # Start with detected project group_id
+        effective_group_ids = []
+        if detected_project_config:
+            effective_group_ids.append(detected_project_config.group_id)
+        elif config.graphiti.group_id:
+            effective_group_ids.append(config.graphiti.group_id)
+
+        # Add user-specified group_ids if provided
         if group_ids is not None:
-            # User explicitly specified group_ids - add detected group_id
-            effective_group_ids = (
-                [detected_project_config.group_id] + list(group_ids)
-                if detected_project_config
-                else list(group_ids)
-            )
-            logger.debug(f'Using explicit group_ids + detected: {effective_group_ids}')
-        else:
-            # No explicit group_ids - build from detected config and shared groups
-            effective_group_ids = []
-            if detected_project_config:
-                effective_group_ids.append(detected_project_config.group_id)
-            elif config.graphiti.group_id:
-                effective_group_ids.append(config.graphiti.group_id)
+            effective_group_ids.extend(list(group_ids))
+            logger.debug(f'Added explicit group_ids: {list(group_ids)}')
 
-            # Add shared groups if configured
-            if project_config and project_config.has_shared_config:
-                effective_group_ids.extend(project_config.shared_group_ids)
-                logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
+        # Add shared groups if configured (always added, regardless of explicit group_ids)
+        if project_config and project_config.has_shared_config:
+            effective_group_ids.extend(project_config.shared_group_ids)
+            logger.debug(f'Auto-including shared groups: {project_config.shared_group_ids}')
 
-            # Deduplicate while preserving order
-            seen = set()
-            effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
+        # Deduplicate while preserving order
+        seen = set()
+        effective_group_ids = [x for x in effective_group_ids if not (x in seen or seen.add(x))]
 
-            logger.debug(f'Searching in groups: {effective_group_ids}')
+        logger.debug(f'Searching in groups: {effective_group_ids}')
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
