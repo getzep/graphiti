@@ -362,10 +362,15 @@ async def add_memory(
     This function returns immediately and processes the episode addition in the background.
     Episodes for the same group_id are processed sequentially to avoid race conditions.
 
-    When SmartMemoryWriter is enabled (via .graphiti.json shared config), memories will be
-    automatically classified and written to appropriate group_ids based on their content.
-    Shared knowledge (user preferences, procedures, requirements) is stored in shared groups
-    accessible across multiple projects.
+    When SmartMemoryWriter is enabled (via .graphiti.json shared config):
+    - The episode is queued for background classification and routing
+    - LLM-based classification (if write_strategy=llm_based) happens asynchronously
+    - Content is routed to appropriate groups (project, shared, or both) in the background
+    - Returns immediately with a task_id for tracking
+
+    Without SmartMemoryWriter or with explicit group_id:
+    - The episode is queued directly for the specified group
+    - Returns immediately with confirmation message
 
     Args:
         name (str): Name of the episode
@@ -416,11 +421,12 @@ async def add_memory(
                 episode_body=episode_body,
                 project_config=project_config,
                 metadata={'timestamp': source_description, 'source': source},
+                uuid=uuid,
             )
 
             if result.success:
                 return SuccessResponse(
-                    message=f"Episode '{name}' written to {len(result.written_to)} group(s): {', '.join(result.written_to)} (category: {result.category})"
+                    message=f"Episode '{name}' queued for background processing (task_id: {result.task_id[:20]}...)"
                 )
             else:
                 return ErrorResponse(error=f'Smart writer error: {result.error}')
@@ -1080,7 +1086,9 @@ async def initialize_server() -> ServerConfig:
             classifier = RuleBasedClassifier()
             logger.info(f'Using RuleBasedClassifier (write_strategy={write_strategy})')
 
-        smart_writer = SmartMemoryWriter(classifier=classifier, graphiti_client=graphiti_client)
+        smart_writer = SmartMemoryWriter(
+            classifier=classifier, graphiti_client=graphiti_client, queue_service=queue_service
+        )
         logger.info(
             f'SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}'
         )

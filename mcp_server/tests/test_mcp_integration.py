@@ -92,9 +92,12 @@ def test_smart_writer_initialization_with_shared_config():
                             from services.smart_writer import SmartMemoryWriter
 
                             mock_client = AsyncMock()
+                            mock_queue_service = AsyncMock()
                             classifier = RuleBasedClassifier()
                             smart_writer = SmartMemoryWriter(
-                                classifier=classifier, graphiti_client=mock_client
+                                classifier=classifier,
+                                graphiti_client=mock_client,
+                                queue_service=mock_queue_service,
                             )
 
                             # Verify smart writer was created
@@ -187,7 +190,7 @@ def test_add_memory_uses_smart_writer():
         # Create mock smart writer
         mock_smart_writer = AsyncMock()
         mock_smart_writer.add_memory.return_value = MagicMock(
-            success=True, written_to=['user-common'], category='shared'
+            success=True, task_id='test_task_id_12345'
         )
 
         # Mock the global services
@@ -217,9 +220,8 @@ def test_add_memory_uses_smart_writer():
                         # Verify result - check dict structure instead of isinstance
                         assert isinstance(result, dict)
                         assert 'message' in result
-                        assert 'written to 1 group(s)' in result['message']
-                        assert 'user-common' in result['message']
-                        assert 'shared' in result['message']
+                        assert 'queued for background processing' in result['message']
+                        assert 'test_task_id' in result['message']
 
                         print('  ✓ add_memory correctly uses SmartMemoryWriter')
 
