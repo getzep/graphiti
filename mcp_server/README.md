@@ -183,25 +183,38 @@ When the MCP client (Cursor/Claude Desktop) expands `${workspaceFolder}` to `/wo
 
 ### The `OPENAI_API_KEY` Environment Variable
 
-> **Required for initialization:** The `Graphiti` class creates a default `OpenAIRerankerClient` on startup, which requires this environment variable. However, the default search configuration uses RRF reranking (local computation), so the API key is never actually called.
+> **Not required when using local rerankers (RRF, MMR, etc.)**
 
-**Why is it needed?**
+**When is OPENAI_API_KEY required?**
 
-The `Graphiti` class unconditionally creates an `OpenAIRerankerClient` instance during initialization, which initializes an OpenAI SDK client. This requires `OPENAI_API_KEY` to be set (even if invalid), otherwise the initialization will fail.
+`OPENAI_API_KEY` is only required when using `cross_encoder` reranker type with OpenAI provider. The default configuration uses RRF (Reciprocal Rank Fusion), which is a local algorithm that doesn't make any API calls.
 
-**Search Configuration:**
+**Reranker Configuration:**
 
-The default `NODE_HYBRID_SEARCH_RRF` configuration uses **RRF (Reciprocal Rank Fusion)** reranking, which is a local mathematical algorithm. It does not make any LLM API calls, so the `OpenAIRerankerClient` is never actually used.
+| Reranker Type | OPENAI_API_KEY Required | API Calls |
+|---------------|-------------------------|-----------|
+| `rrf` (default) | ❌ No | Local computation only |
+| `mmr` | ❌ No | Local computation only |
+| `node_distance` | ❌ No | Local computation only |
+| `episode_mentions` | ❌ No | Local computation only |
+| `cross_encoder` (OpenAI) | ✅ Yes | Makes OpenAI API calls |
+| `cross_encoder` (Gemini) | ❌ No (uses GEMINI_API_KEY) | Makes Gemini API calls |
 
 **Component API Key Usage:**
 
-| Component | API Key Source | Notes |
-|-----------|---------------|-------|
-| LLM Client | Config file `llm.providers.openai.api_key` | Use Dashscope/Ollama/etc. as needed |
-| Embedder Client | Config file `embedder.providers.openai.api_key` | Use Dashscope/Ollama/etc. as needed |
-| Default Reranker | Environment variable `OPENAI_API_KEY` | **Required for init**, but not used by RRF |
+| Component | API Key Source | Required for Default Config? |
+|-----------|---------------|-------------------------------|
+| LLM Client | Config file `llm.providers.openai.api_key` | Only if using OpenAI LLM |
+| Embedder Client | Config file `embedder.providers.openai.api_key` | Only if using OpenAI Embedder |
+| Reranker (RRF/MMR) | None | ❌ Not required |
+| Reranker (CrossEncoder) | `reranker.providers.openai.api_key` or `OPENAI_API_KEY` | ✅ Required |
 
-**Alternative:** To avoid needing `OPENAI_API_KEY`, pass a custom reranker client (e.g., `BGERerankerClient` with sentence-transformers) during `Graphiti` initialization.
+**Note:** When using `cross_encoder` with OpenAI provider, you must provide an OpenAI API key through one of these sources:
+- Set `OPENAI_API_KEY` environment variable (used as fallback)
+- Set `RERANKER_OPENAI_API_KEY` environment variable
+- Set `reranker.providers.openai.api_key` directly in config.yaml
+
+Use local reranker types (RRF, MMR) to avoid the API key requirement.
 
 ### Fallback Behavior
 
