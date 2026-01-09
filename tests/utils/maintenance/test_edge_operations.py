@@ -237,7 +237,11 @@ async def test_resolve_extracted_edges_resets_unmapped_names(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
+async def test_resolve_extracted_edges_converts_unknown_names_to_default(monkeypatch):
+    """When custom edge_types are defined, unknown edge names should be converted to RELATES_TO.
+
+    This ensures strict schema enforcement - the LLM cannot invent arbitrary edge types.
+    """
     from graphiti_core.utils.maintenance import edge_operations as edge_ops
 
     monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
@@ -312,7 +316,8 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
         edge_type_map,
     )
 
-    assert resolved_edges[0].name == 'INTERACTED_WITH'
+    # Unknown edge types are converted to RELATES_TO when custom edge_types are defined
+    assert resolved_edges[0].name == DEFAULT_EDGE_NAME
     assert invalidated_edges == []
 
 

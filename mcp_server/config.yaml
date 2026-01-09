@@ -1,0 +1,51 @@
+# Graphiti MCP Server Configuration for FalkorDB
+
+server:
+  transport: "stdio"  # stdio for Claude Desktop
+  host: "127.0.0.1"
+  port: 8000
+
+llm:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: "https://api.openai.com/v1"
+
+embedder:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  dimensions: 1536
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: "https://api.openai.com/v1"
+
+database:
+  provider: "falkordb"
+
+  providers:
+    falkordb:
+      uri: "redis://localhost:6379"
+      username: "knowledge"
+      password: "knowledgeG3#"
+      database: "aviation-mode-hybrid"
+
+graphiti:
+  group_id: "\\_"
+  user_id: "claude_desktop"
+  entity_types:
+    - name: "Aircraft"
+      description: "Aircraft entity with registration and type information"
+    - name: "Occurrence"
+      description: "Aviation incident or occurrence"
+    - name: "Airport"
+      description: "Airport or aerodrome locations"
+    - name: "Airline"
+      description: "Airline operators"
+    - name: "Manufacturer"
+      description: "Aircraft manufacturers"

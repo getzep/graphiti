@@ -249,6 +249,30 @@ class FalkorDriver(GraphDriver):
         for query in index_queries:
             await self.execute_query(query)
 
+    async def ensure_edge_type_index(self, edge_type: str) -> None:
+        """
+        Ensure a fulltext index exists for a custom edge type.
+
+        This method creates a fulltext index on (name, fact, group_id) for the
+        specified edge type if it doesn't already exist. This enables BM25
+        fulltext search on custom relationship types.
+
+        Args:
+            edge_type: The relationship type name (e.g., 'SANCTION', 'OWNERSHIP')
+        """
+        if edge_type == 'RELATES_TO':
+            # RELATES_TO index is created by build_indices_and_constraints
+            return
+
+        query = f"""CREATE FULLTEXT INDEX FOR ()-[e:{edge_type}]-() ON (e.name, e.fact, e.group_id)"""
+        try:
+            await self.execute_query(query)
+            logger.info(f'Created fulltext index for edge type: {edge_type}')
+        except Exception as e:
+            # Index may already exist
+            if 'already indexed' not in str(e).lower() and 'already exists' not in str(e).lower():
+                logger.warning(f'Failed to create fulltext index for {edge_type}: {e}')
+
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
