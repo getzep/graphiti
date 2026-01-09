@@ -5,6 +5,7 @@ Graphiti MCP Server - Exposes Graphiti functionality through the Model Context P
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -351,7 +352,7 @@ class GraphitiService:
 @mcp.tool()
 async def add_memory(
     name: str,
-    episode_body: str,
+    episode_body: str | dict,
     group_id: str | None = None,
     source: str = 'text',
     source_description: str = '',
@@ -374,9 +375,10 @@ async def add_memory(
 
     Args:
         name (str): Name of the episode
-        episode_body (str): The content of the episode to persist to memory. When source='json', this must be a
-                           properly escaped JSON string, not a raw Python dictionary. The JSON data will be
-                           automatically processed to extract entities and relationships.
+        episode_body (str | dict): The content of the episode to persist to memory. Can be a string or a
+                                   dictionary. If a dictionary is provided, it will be automatically
+                                   converted to a JSON string. When source='json', the JSON data will be
+                                   automatically processed to extract entities and relationships.
         group_id (str, optional): A unique ID for this graph. If not provided, uses the default group_id from CLI
                                  or a generated one.
         source (str, optional): Source type, must be one of:
@@ -396,16 +398,28 @@ async def add_memory(
             group_id="some_arbitrary_string"
         )
 
-        # Adding structured JSON data
-        # NOTE: episode_body should be a JSON string (standard JSON escaping)
+        # Adding structured JSON data as dict (auto-converted to JSON string)
         add_memory(
             name="Customer Profile",
-            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}, {"id": "P002", "name": "DataMiner"}]}',
+            episode_body={"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}]},
+            source="json",
+            source_description="CRM data"
+        )
+
+        # Adding structured JSON data as string (also works)
+        add_memory(
+            name="Customer Profile",
+            episode_body='{"company": {"name": "Acme Technologies"}, "products": [{"id": "P001", "name": "CloudSync"}]}',
             source="json",
             source_description="CRM data"
         )
     """
     global graphiti_service, queue_service, smart_writer, project_config
+
+    # Auto-convert dict to JSON string for convenience
+    if isinstance(episode_body, dict):
+        episode_body = json.dumps(episode_body)
+        logger.debug(f"Auto-converted dict to JSON string for episode '{name}'")
 
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
