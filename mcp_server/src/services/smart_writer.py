@@ -66,7 +66,11 @@ class SmartMemoryWriter:
     """
 
     def __init__(
-        self, classifier: MemoryClassifier, graphiti_client, queue_service: 'QueueService'
+        self,
+        classifier: MemoryClassifier,
+        graphiti_client,
+        queue_service: 'QueueService',
+        entity_types: dict | None = None,
     ):
         """Initialize the smart memory writer.
 
@@ -74,10 +78,12 @@ class SmartMemoryWriter:
             classifier: The memory classifier to use
             graphiti_client: Graphiti client for storage operations
             queue_service: Queue service for background episode processing
+            entity_types: Custom entity types for episode processing
         """
         self.classifier = classifier
         self.graphiti_client = graphiti_client
         self.queue_service = queue_service
+        self.entity_types = entity_types or {}
         logger.info(f'SmartMemoryWriter initialized with {type(classifier).__name__}')
 
     async def add_memory(
@@ -254,9 +260,7 @@ class SmartMemoryWriter:
                         )
                         logger.debug(f'[{task_id[:20]}...] Queued for shared group: {shared_gid}')
 
-            logger.info(
-                f"[{task_id[:20]}...] Memory '{name}' classification and queuing complete"
-            )
+            logger.info(f"[{task_id[:20]}...] Memory '{name}' classification and queuing complete")
 
         except Exception as e:
             error_msg = f'Error in background task for memory {name}: {e}'
@@ -297,7 +301,7 @@ class SmartMemoryWriter:
             content=episode_body,
             source_description=episode_metadata.get('source_description', 'Smart Memory Writer'),
             episode_type=episode_type,
-            entity_types=self.graphiti_client.entity_types,
+            entity_types=self.entity_types,
             uuid=uuid,
         )
 
