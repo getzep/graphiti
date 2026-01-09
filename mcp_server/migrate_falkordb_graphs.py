@@ -9,18 +9,15 @@ Usage:
     python migrate_falkordb_graphs.py [--target-graph GRAPHITI]
 """
 
-import asyncio
 import argparse
+import asyncio
 import logging
-from typing import Any
-
 import sys
 from pathlib import Path
 
 # Add parent directory to path to import graphiti_core
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from falkordb import FalkorDB
 from falkordb.asyncio import FalkorDB as AsyncFalkorDB
 
 # Configure logging
@@ -123,15 +120,15 @@ class FalkorDBGraphMigrator:
             return
 
         # Migrate Episodic nodes
-        logger.info(f'  Migrating Episodic nodes...')
+        logger.info('  Migrating Episodic nodes...')
         await self._migrate_episodic_nodes(source_db, target_db)
 
         # Migrate Entity nodes
-        logger.info(f'  Migrating Entity nodes...')
+        logger.info('  Migrating Entity nodes...')
         await self._migrate_entity_nodes(source_db, target_db)
 
         # Migrate edges
-        logger.info(f'  Migrating edges...')
+        logger.info('  Migrating edges...')
         await self._migrate_edges(source_db, target_db)
 
         logger.info(f'  ✓ Migration complete for {source_graph}')
@@ -348,11 +345,11 @@ class FalkorDBGraphMigrator:
                 logger.warning('No source graphs found to migrate')
                 return
 
-            logger.info(f'\nMigration Plan:')
+            logger.info('\nMigration Plan:')
             logger.info(f'  Target graph: {self.target_graph}')
             logger.info(f'  Source graphs: {graphs}')
             if dry_run:
-                logger.info(f'  Mode: DRY RUN (no changes will be made)')
+                logger.info('  Mode: DRY RUN (no changes will be made)')
 
             # Migrate each graph
             for graph in graphs:
@@ -388,7 +385,7 @@ class FalkorDBGraphMigrator:
         )
 
         if result.result_set:
-            logger.info(f'  Episodes by group_id:')
+            logger.info('  Episodes by group_id:')
             for row in result.result_set:
                 logger.info(f'    {row[0]}: {row[1]} episodes')
 
