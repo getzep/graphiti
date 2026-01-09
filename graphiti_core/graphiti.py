@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing_extensions import LiteralString
 
+from graphiti_core.config import DeduplicationConfig
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.decorators import handle_multiple_group_ids
@@ -79,6 +80,7 @@ from graphiti_core.utils.bulk_utils import (
     retrieve_previous_episodes_bulk,
 )
 from graphiti_core.utils.datetime_utils import utc_now
+from graphiti_core.utils.episode_dedup import check_duplicate_episode
 from graphiti_core.utils.maintenance.community_operations import (
     build_communities,
     remove_communities,
@@ -143,6 +145,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        deduplication_config: DeduplicationConfig | None = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -179,6 +182,8 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        deduplication_config : DeduplicationConfig | None, optional
+            Configuration for episode deduplication. If not provided, a default DeduplicationConfig instance will be used.
 
         Returns
         -------
@@ -208,6 +213,7 @@ class Graphiti:
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
+        self.deduplication_config = deduplication_config or DeduplicationConfig()
         if llm_client:
             self.llm_client = llm_client
         else:
@@ -889,6 +895,41 @@ class Graphiti:
                         valid_at=reference_time,
                     )
                 )
+
+                # Check for duplicate episode if deduplication is enabled
+                if self.deduplication_config.enabled and uuid is None:
+                    # Only check for duplicates if this is a new episode (no uuid provided)
+                    enable_hash_check = self.deduplication_config.strategy not in [
+                        'similarity',
+                        'hybrid',
+                    ]
+                    enable_similarity_check = self.deduplication_config.strategy in [
+                        'exact',
+                        'hybrid',
+                    ]
+
+                    duplicate_episode = await check_duplicate_episode(
+                        self.driver,
+                        group_id,
+                        name,
+                        episode_body,
+                        enable_hash_check=enable_hash_check,
+                        enable_similarity_check=enable_similarity_check,
+                    )
+
+                    if duplicate_episode is not None:
+                        logger.info(
+                            f'Duplicate episode detected, skipping processing: {duplicate_episode.uuid}'
+                        )
+                        # Return empty results since we didn't process the duplicate
+                        return AddEpisodeResults(
+                            episode=duplicate_episode,
+                            episodic_edges=[],
+                            nodes=[],
+                            edges=[],
+                            communities=[],
+                            community_edges=[],
+                        )
 
                 # Create default edge type map
                 edge_type_map_default = (
