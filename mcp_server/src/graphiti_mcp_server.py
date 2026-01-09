@@ -1162,7 +1162,10 @@ async def initialize_server() -> ServerConfig:
             logger.info(f'Using RuleBasedClassifier (write_strategy={write_strategy})')
 
         smart_writer = SmartMemoryWriter(
-            classifier=classifier, graphiti_client=graphiti_client, queue_service=queue_service
+            classifier=classifier,
+            graphiti_client=graphiti_client,
+            queue_service=queue_service,
+            entity_types=graphiti_service.entity_types,
         )
         logger.info(
             f'SmartMemoryWriter initialized with shared groups: {project_config.shared_group_ids}'
