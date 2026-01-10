@@ -18,12 +18,20 @@ class AsyncWorker:
         self.graphiti_client = graphiti_client
 
     async def worker(self):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         while True:
             try:
-                print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
+                logger.info(f'Async worker waiting for job (queue size: {self.queue.qsize()})')
                 job = await self.queue.get()
+                logger.info(f'Async worker processing job (remaining queue size: {self.queue.qsize()})')
                 await job()
+                logger.info(f'Async worker completed job successfully')
+            except Exception as ex:
+                logger.error(f'Async worker error processing job: {ex}', exc_info=True)
             except asyncio.CancelledError:
+                logger.info('Async worker cancelled')
                 break
 
     async def start(self):
@@ -80,22 +88,40 @@ async def add_messages(
     request: AddMessagesRequest,
     graphiti: ZepGraphitiDep,
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Add messages request - group_id: {request.group_id}, message count: {len(request.messages)}")
+    for idx, m in enumerate(request.messages):
+        logger.debug(f"Message {idx + 1}: uuid={m.uuid}, name={m.name}, role_type={m.role_type}, content_length={len(m.content)}, source_description={m.source_description[:100] if m.source_description else 'N/A'}")
+    
     async def add_messages_task(m: Message):
         if async_worker is None:
             raise RuntimeError('Async worker not initialized')
-        await async_worker.graphiti_client.add_episode(
-            uuid=m.uuid,
-            group_id=request.group_id,
-            name=m.name,
-            episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
-            reference_time=m.timestamp,
-            source=EpisodeType.message,
-            source_description=m.source_description,
-        )
+        logger.info(f"Processing message - uuid: {m.uuid}, group_id: {request.group_id}, name: {m.name}")
+        try:
+            # Get organization-specific Graphiti client (uses group_id as database name for FalkorDB)
+            from graph_service.zep_graphiti import get_graphiti_for_group
+            org_graphiti = get_graphiti_for_group(request.group_id, async_worker.graphiti_client)
+            
+            await org_graphiti.add_episode(
+                uuid=m.uuid,
+                group_id=request.group_id,
+                name=m.name,
+                episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
+                reference_time=m.timestamp,
+                source=EpisodeType.message,
+                source_description=m.source_description,
+            )
+            logger.info(f"Successfully added episode - uuid: {m.uuid}, group_id: {request.group_id}")
+        except Exception as ex:
+            logger.error(f"Failed to add episode - uuid: {m.uuid}, group_id: {request.group_id}, error: {ex}", exc_info=True)
+            raise
 
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
 
+    logger.info(f"Queued {len(request.messages)} messages for processing")
     return Result(message='Messages added to processing queue', success=True)
 
 
