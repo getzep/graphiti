@@ -154,3 +154,28 @@ def get_fact_result_from_edge(edge: EntityEdge):
 
 
 ZepGraphitiDep = Annotated[ZepGraphiti, Depends(get_graphiti)]
+
+
+def get_graphiti_for_group(group_id: str, base_graphiti: ZepGraphiti) -> ZepGraphiti:
+    """
+    Get a Graphiti client for a specific group_id (organization).
+    For FalkorDB, this uses the group_id as the database/graph name.
+    For other providers, returns the base client.
+    """
+    import logging
+    from graphiti_core.driver.driver import GraphProvider
+    
+    logger = logging.getLogger(__name__)
+    
+    if base_graphiti.driver.provider == GraphProvider.FALKORDB:
+        # Clone the driver with the group_id as the database name
+        cloned_driver = base_graphiti.driver.clone(database=group_id)
+        logger.debug(f"Created driver clone for group_id={group_id}, database={getattr(cloned_driver, '_database', 'unknown')}")
+        # Create a new ZepGraphiti instance with the cloned driver
+        client = ZepGraphiti(graph_driver=cloned_driver, llm_client=base_graphiti.llm_client)
+        # Copy embedder reference (needed for entity node operations)
+        client.embedder = base_graphiti.embedder
+        return client
+    else:
+        # For other providers, use the base client (they don't support multi-tenant graphs)
+        return base_graphiti
