@@ -6,14 +6,16 @@ from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
+from graph_service.config import get_settings
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
-from graph_service.zep_graphiti import ZepGraphitiDep
+from graph_service.zep_graphiti import ZepGraphiti, ZepGraphitiDep, _create_graphiti_client
 
 
 class AsyncWorker:
-    def __init__(self):
+    def __init__(self, graphiti_client: ZepGraphiti):
         self.queue = asyncio.Queue()
         self.task = None
+        self.graphiti_client = graphiti_client
 
     async def worker(self):
         while True:
@@ -35,14 +37,39 @@ class AsyncWorker:
             self.queue.get_nowait()
 
 
-async_worker = AsyncWorker()
+async_worker: AsyncWorker | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Create a shared graphiti client for the async worker
+    settings = get_settings()
+    shared_client = _create_graphiti_client(settings)
+    
+    # Configure the shared client
+    api_key = settings.openai_api_key.strip() if settings.openai_api_key else None
+    if settings.openai_base_url is not None:
+        shared_client.llm_client.config.base_url = settings.openai_base_url
+    if api_key:
+        shared_client.llm_client.config.api_key = api_key
+        if hasattr(shared_client.embedder, 'client') and hasattr(shared_client.embedder.client, 'api_key'):
+            shared_client.embedder.client.api_key = api_key
+        if hasattr(shared_client.embedder, 'config') and hasattr(shared_client.embedder.config, 'api_key'):
+            shared_client.embedder.config.api_key = api_key
+    if settings.model_name is not None:
+        shared_client.llm_client.model = settings.model_name
+    if settings.embedding_model_name is not None and hasattr(shared_client.embedder, 'config'):
+        if hasattr(shared_client.embedder.config, 'embedding_model'):
+            shared_client.embedder.config.embedding_model = settings.embedding_model_name
+    
+    global async_worker
+    async_worker = AsyncWorker(shared_client)
     await async_worker.start()
+    
     yield
+    
     await async_worker.stop()
+    await shared_client.close()
 
 
 router = APIRouter(lifespan=lifespan)
@@ -54,7 +81,9 @@ async def add_messages(
     graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
-        await graphiti.add_episode(
+        if async_worker is None:
+            raise RuntimeError('Async worker not initialized')
+        await async_worker.graphiti_client.add_episode(
             uuid=m.uuid,
             group_id=request.group_id,
             name=m.name,
