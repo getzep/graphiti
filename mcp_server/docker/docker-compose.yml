@@ -1,44 +1,81 @@
+name: knowted_graphiti
+
 services:
-  graphiti-falkordb:
-    image: zepai/knowledge-graph-mcp:latest
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6380:6379" # Redis/FalkorDB port (map external 6380 to internal 6379)
+      - "8081:3000" # FalkorDB web UI
+    environment:
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - BROWSER=${BROWSER:-1} # Enable FalkorDB Browser UI (set to 0 to disable)
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "6379", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  graphiti-mcp:
+    image: zepai/knowledge-graph-mcp:standalone
+    # For specific versions, replace 'standalone' with a version tag:
+    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
+    # When building locally, the build section below will be used.
     build:
       context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.23.0}
-        MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.0.0}
-        BUILD_DATE: ${BUILD_DATE:-}
-        VCS_REF: ${VCS_REF:-}
+      dockerfile: docker/Dockerfile.standalone
     env_file:
       - path: ../.env
         required: false
+    depends_on:
+      falkordb:
+        condition: service_healthy
     environment:
-      # FalkorDB configuration
+      # Database configuration
+      - FALKORDB_URI=${FALKORDB_URI:-redis://falkordb:6379}
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
-      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
-      # MCP Server configuration
-      - FALKORDB_URI=redis://localhost:6379
       - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
+      # Application configuration
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:
-      - falkordb_data:/var/lib/falkordb/data
-      - mcp_logs:/var/log/graphiti
+      - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
     ports:
-      - "6379:6379"  # FalkorDB/Redis
-      - "3000:3000"  # FalkorDB web UI
-      - "8000:8000"  # MCP server HTTP
+      - "3002:8000" # Expose the MCP server via HTTP transport
+    command: [ "uv", "run", "main.py" ]
+
+  graph-service:
+    build:
+      context: ../.. # Go up to graphiti root directory (from docker/ to graphiti/)
+      dockerfile: Dockerfile
+      args:
+        INSTALL_FALKORDB: "true"
+    env_file:
+      - path: ../.env
+        required: false
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    environment:
+      # OPENAI_API_KEY is loaded from env_file (../.env)
+      - DATABASE_PROVIDER=falkordb
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
+    ports:
+      - "3003:8000" # Expose the graph-service REST API
     healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')" ]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 3
+      start_period: 30s
 
 volumes:
   falkordb_data:
-    driver: local
-  mcp_logs:
     driver: local

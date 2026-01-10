@@ -6,11 +6,11 @@ services:
       - "3000:3000" # FalkorDB web UI
     environment:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
-      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
+      - BROWSER=${BROWSER:-1} # Enable FalkorDB Browser UI (set to 0 to disable)
     volumes:
       - falkordb_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      test: [ "CMD", "redis-cli", "-p", "6379", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,7 +44,7 @@ services:
       - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP transport
-    command: ["uv", "run", "main.py"]
+    command: [ "uv", "run", "main.py" ]
 
 volumes:
   falkordb_data:

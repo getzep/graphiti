@@ -40,25 +40,32 @@ WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
 
-# Install server dependencies (without graphiti-core from lockfile)
-# Then install graphiti-core from PyPI at the desired version
-# This prevents the stale lockfile from pinning an old graphiti-core version
-ARG INSTALL_FALKORDB=false
+# Install server dependencies
+# The lockfile has an old graphiti-core version, so we install it separately with pip
+ARG INSTALL_FALKORDB=true
+ARG GRAPHITI_VERSION
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev && \
-    if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+    # Install dependencies without graphiti-core first
+    uv sync --no-dev --no-install-package graph-service && \
+    # Force remove old graphiti-core if installed from lockfile
+    uv pip uninstall -y graphiti-core 2>/dev/null || true && \
+    # Install graphiti-core with falkordb support using uv pip (to install in venv)
+    # Use --force-reinstall to ensure we get the latest version
+    if [ "$INSTALL_FALKORDB" = "true" ]; then \
+        if [ -n "$GRAPHITI_VERSION" ]; then \
+            uv pip install --force-reinstall --no-deps "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
         else \
-            uv pip install --system --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
+            uv pip install --force-reinstall --no-deps "graphiti-core[falkordb]"; \
         fi; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]"; \
+        if [ -n "$GRAPHITI_VERSION" ]; then \
+            uv pip install --force-reinstall --no-deps "graphiti-core==$GRAPHITI_VERSION"; \
         else \
-            uv pip install --system --upgrade graphiti-core; \
+            uv pip install --force-reinstall --no-deps "graphiti-core"; \
         fi; \
-    fi
+    fi && \
+    # Finally install the graph-service package itself
+    uv pip install -e .
 
 # Change ownership to app user
 RUN chown -R app:app /app
@@ -74,5 +81,5 @@ USER app
 ENV PORT=8000
 EXPOSE $PORT
 
-# Use uv run for execution
-CMD ["uv", "run", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use the venv Python directly to avoid uv run reinstalling from lockfile
+CMD [".venv/bin/python", "-m", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
