@@ -12,7 +12,7 @@ from graph_service.dto import (
     SearchQuery,
     SearchResults,
 )
-from graph_service.zep_graphiti import ZepGraphitiDep, get_fact_result_from_edge
+from graph_service.zep_graphiti import ZepGraphitiDep
 
 router = APIRouter()
 
@@ -71,12 +71,20 @@ async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
     logger.info(f"Search returned {len(relevant_edges)} edges")
     if relevant_edges:
         logger.debug(f"First edge sample: uuid={relevant_edges[0].uuid}, name={relevant_edges[0].name}, fact={relevant_edges[0].fact[:100] if relevant_edges[0].fact else 'N/A'}")
+        if relevant_edges[0].episodes:
+            logger.debug(f"First edge has {len(relevant_edges[0].episodes)} source episodes: {relevant_edges[0].episodes[:3]}")
     else:
         logger.warning(f"No edges found for query: '{query.query}' with group_ids: {query.group_ids}")
     
-    facts = [get_fact_result_from_edge(edge) for edge in relevant_edges]
+    # Convert edges to facts with source episode information
+    from graph_service.zep_graphiti import get_fact_result_from_edge
+    facts = []
+    graphiti_client = org_graphiti if query.group_ids and len(query.group_ids) > 0 else graphiti
+    for edge in relevant_edges:
+        fact = await get_fact_result_from_edge(edge, graphiti_client)
+        facts.append(fact)
     
-    logger.info(f"Returning {len(facts)} facts")
+    logger.info(f"Returning {len(facts)} facts with source information")
     return SearchResults(
         facts=facts,
     )
@@ -84,8 +92,9 @@ async def search(query: SearchQuery, graphiti: ZepGraphitiDep):
 
 @router.get('/entity-edge/{uuid}', status_code=status.HTTP_200_OK)
 async def get_entity_edge(uuid: str, graphiti: ZepGraphitiDep):
+    from graph_service.zep_graphiti import get_fact_result_from_edge
     entity_edge = await graphiti.get_entity_edge(uuid)
-    return get_fact_result_from_edge(entity_edge)
+    return await get_fact_result_from_edge(entity_edge, graphiti)
 
 
 @router.get('/episodes/{group_id}', status_code=status.HTTP_200_OK)
@@ -112,13 +121,18 @@ async def get_memory(
     request: GetMemoryRequest,
     graphiti: ZepGraphitiDep,
 ):
+    from graph_service.zep_graphiti import get_graphiti_for_group, get_fact_result_from_edge
+    
+    # Use organization-specific graph
+    org_graphiti = get_graphiti_for_group(request.group_id, graphiti)
+    
     combined_query = compose_query_from_messages(request.messages)
-    result = await graphiti.search(
+    result = await org_graphiti.search(
         group_ids=[request.group_id],
         query=combined_query,
         num_results=request.max_facts,
     )
-    facts = [get_fact_result_from_edge(edge) for edge in result]
+    facts = [await get_fact_result_from_edge(edge, org_graphiti) for edge in result]
     return GetMemoryResponse(facts=facts)
 
 

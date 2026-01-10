@@ -13,6 +13,19 @@ class SearchQuery(BaseModel):
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
 
 
+class SourceEpisode(BaseModel):
+    """Source episode information extracted from metadata"""
+    uuid: str
+    name: str
+    meeting_id: str | None = None
+    meeting_type_id: str | None = None
+    owner_id: str | None = None
+    valid_at: datetime | None = None
+
+    class Config:
+        json_encoders = {datetime: lambda v: v.astimezone(timezone.utc).isoformat()}
+
+
 class FactResult(BaseModel):
     uuid: str
     name: str
@@ -21,6 +34,10 @@ class FactResult(BaseModel):
     invalid_at: datetime | None
     created_at: datetime
     expired_at: datetime | None
+    source_episodes: list[SourceEpisode] = Field(
+        default_factory=list,
+        description='List of source episodes where this fact was extracted from, including meeting metadata'
+    )
 
     class Config:
         json_encoders = {datetime: lambda v: v.astimezone(timezone.utc).isoformat()}

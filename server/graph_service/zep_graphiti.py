@@ -141,7 +141,49 @@ async def initialize_graphiti(settings: ZepEnvDep):
     await client.build_indices_and_constraints()
 
 
-def get_fact_result_from_edge(edge: EntityEdge):
+async def get_fact_result_from_edge(edge: EntityEdge, graphiti: ZepGraphiti):
+    """
+    Convert EntityEdge to FactResult, including source episode information.
+    Extracts meeting metadata from episode source_description.
+    """
+    from graph_service.dto import SourceEpisode
+    import re
+    import json
+    
+    source_episodes = []
+    
+    # Fetch episodes if they exist
+    if edge.episodes and len(edge.episodes) > 0:
+        try:
+            episodes = await EpisodicNode.get_by_uuids(graphiti.driver, edge.episodes)
+            for episode in episodes:
+                # Extract metadata from source_description
+                # Format: "Meeting: {title} | METADATA: {\"meeting_id\":\"...\",...}"
+                metadata_match = re.search(r'METADATA:\s*({.*?})(?:\s*$|\s*\|)', episode.source_description or '')
+                meeting_id = None
+                meeting_type_id = None
+                owner_id = None
+                
+                if metadata_match:
+                    try:
+                        metadata = json.loads(metadata_match.group(1))
+                        meeting_id = metadata.get('meeting_id')
+                        meeting_type_id = metadata.get('meeting_type_id')
+                        owner_id = metadata.get('owner_id')
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                
+                source_episodes.append(SourceEpisode(
+                    uuid=episode.uuid,
+                    name=episode.name,
+                    meeting_id=meeting_id,
+                    meeting_type_id=meeting_type_id,
+                    owner_id=owner_id,
+                    valid_at=episode.valid_at,
+                ))
+        except Exception as ex:
+            logger.warning(f"Error fetching source episodes for edge {edge.uuid}: {ex}")
+    
     return FactResult(
         uuid=edge.uuid,
         name=edge.name,
@@ -150,6 +192,7 @@ def get_fact_result_from_edge(edge: EntityEdge):
         invalid_at=edge.invalid_at,
         created_at=edge.created_at,
         expired_at=edge.expired_at,
+        source_episodes=source_episodes,
     )
 
 
