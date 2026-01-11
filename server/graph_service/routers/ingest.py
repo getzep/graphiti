@@ -102,7 +102,22 @@ async def add_messages(
         try:
             # Get organization-specific Graphiti client (uses group_id as database name for FalkorDB)
             from graph_service.zep_graphiti import get_graphiti_for_group
+            from pydantic import BaseModel
+            
             org_graphiti = get_graphiti_for_group(request.group_id, async_worker.graphiti_client)
+            
+            # Convert edge types from JSON descriptions to Pydantic models
+            edge_types_dict = None
+            if request.edge_types:
+                edge_types_dict = {}
+                for edge_name, edge_description in request.edge_types.items():
+                    # Create a dynamic Pydantic model for each edge type
+                    edge_model = type(
+                        edge_name,
+                        (BaseModel,),
+                        {'__doc__': edge_description}
+                    )
+                    edge_types_dict[edge_name] = edge_model
             
             await org_graphiti.add_episode(
                 uuid=m.uuid,
@@ -112,6 +127,8 @@ async def add_messages(
                 reference_time=m.timestamp,
                 source=EpisodeType.message,
                 source_description=m.source_description,
+                edge_types=edge_types_dict,
+                custom_extraction_instructions=request.custom_extraction_instructions,
             )
             logger.info(f"Successfully added episode - uuid: {m.uuid}, group_id: {request.group_id}")
         except Exception as ex:

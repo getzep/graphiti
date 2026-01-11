@@ -11,6 +11,15 @@ class SearchQuery(BaseModel):
     )
     query: str
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
+    meeting_ids: list[str] | None = Field(
+        None, description='Optional: Filter results to specific meeting IDs'
+    )
+    meeting_type_ids: list[str] | None = Field(
+        None, description='Optional: Filter results to specific meeting type IDs'
+    )
+    user_ids: list[str] | None = Field(
+        None, description='Optional: Filter results to meetings where user is owner or has direct access'
+    )
 
 
 class SourceEpisode(BaseModel):
