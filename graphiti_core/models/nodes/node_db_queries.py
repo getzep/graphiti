@@ -211,10 +211,26 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
 def get_entity_node_save_bulk_query(
     provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
 ) -> str | Any:
+    # Core properties that are always present (excluding embeddings which need special handling)
+    CORE_PROPERTIES = {
+        'uuid', 'name', 'group_id', 'summary', 'created_at', 'labels',
+        'reasoning', 'type_scores', 'type_confidence',
+        'name_embedding', 'summary_embedding',  # These are handled separately
+    }
+
     match provider:
         case GraphProvider.FALKORDB:
             queries = []
             for node in nodes:
+                # Find custom attributes (properties not in CORE_PROPERTIES)
+                custom_attrs = [k for k in node.keys() if k not in CORE_PROPERTIES]
+
+                # Build custom attributes SET clause
+                custom_set_clause = ''
+                if custom_attrs:
+                    custom_set_parts = [f'n.{attr} = node.{attr}' for attr in custom_attrs]
+                    custom_set_clause = ',\n                                ' + ',\n                                '.join(custom_set_parts)
+
                 for label in node['labels']:
                     # EasyOps fix: Set properties individually to avoid List type for embeddings
                     # Using SET n = node would set embeddings as List, then vecf32() would fail
@@ -233,7 +249,7 @@ def get_entity_node_save_bulk_query(
                                 n.labels = node.labels,
                                 n.reasoning = node.reasoning,
                                 n.type_scores = node.type_scores,
-                                n.type_confidence = node.type_confidence
+                                n.type_confidence = node.type_confidence{custom_set_clause}
                             WITH n, node
                             SET n.name_embedding = vecf32(node.name_embedding)
                             SET n.summary_embedding = CASE WHEN node.summary_embedding IS NOT NULL THEN vecf32(node.summary_embedding) ELSE NULL END
