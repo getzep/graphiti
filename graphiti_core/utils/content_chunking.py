@@ -213,9 +213,9 @@ def _text_likely_dense(content: str, tokens: int) -> bool:
 
 
 def chunk_json_content(
-        content: str,
-        chunk_size_tokens: int | None = None,
-        overlap_tokens: int | None = None,
+    content: str,
+    chunk_size_tokens: int | None = None,
+    overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split JSON content into chunks while preserving structure.
 
@@ -252,9 +252,9 @@ def chunk_json_content(
 
 
 def _chunk_json_array(
-        data: list,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    data: list,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON array by splitting at element boundaries."""
     if not data:
@@ -310,9 +310,9 @@ def _get_overlap_elements(elements: list, overlap_chars: int) -> list:
 
 
 def _chunk_json_object(
-        data: dict,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    data: dict,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON object by splitting at top-level key boundaries."""
     if not data:
@@ -374,9 +374,9 @@ def _get_overlap_dict(data: dict, keys: list[str], overlap_chars: int) -> dict:
 
 
 def chunk_text_content(
-        content: str,
-        chunk_size_tokens: int | None = None,
-        overlap_tokens: int | None = None,
+    content: str,
+    chunk_size_tokens: int | None = None,
+    overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split text content at natural boundaries (paragraphs, sentences).
 
@@ -451,9 +451,9 @@ def chunk_text_content(
 
 
 def _chunk_by_sentences(
-        text: str,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    text: str,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Split text by sentence boundaries."""
     # Split on sentence-ending punctuation followed by whitespace
@@ -506,9 +506,9 @@ def _chunk_by_sentences(
 
 
 def _chunk_by_size(
-        text: str,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    text: str,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Split text by fixed character size (last resort)."""
     chunks: list[str] = []
@@ -542,14 +542,14 @@ def _get_overlap_text(text: str, overlap_chars: int) -> str:
     # Find the next word boundary after overlap_start
     space_idx = text.find(' ', overlap_start)
     if space_idx != -1:
-        return text[space_idx + 1:]
+        return text[space_idx + 1 :]
     return text[overlap_start:]
 
 
 def chunk_message_content(
-        content: str,
-        chunk_size_tokens: int | None = None,
-        overlap_tokens: int | None = None,
+    content: str,
+    chunk_size_tokens: int | None = None,
+    overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split conversation content preserving message boundaries.
 
@@ -594,9 +594,9 @@ def chunk_message_content(
 
 
 def _chunk_message_array(
-        messages: list,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    messages: list,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON array of message objects."""
     # Delegate to JSON array chunking
@@ -605,9 +605,9 @@ def _chunk_message_array(
 
 
 def _chunk_speaker_messages(
-        content: str,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    content: str,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Chunk messages in 'Speaker: message' format."""
     # Split on speaker patterns
@@ -670,9 +670,9 @@ def _get_overlap_messages(messages: list[str], overlap_chars: int) -> list[str]:
 
 
 def _chunk_by_lines(
-        content: str,
-        chunk_size_chars: int,
-        overlap_chars: int,
+    content: str,
+    chunk_size_chars: int,
+    overlap_chars: int,
 ) -> list[str]:
     """Chunk content by line boundaries."""
     lines = content.split('\n')
@@ -760,17 +760,26 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
         if use_sampling:
             # Sample random combinations when there are too many to enumerate
             seen_combinations: set[tuple[int, ...]] = set()
-            for _ in range(MAX_COMBINATIONS_TO_EVALUATE):
+            max_duplicate_attempts = MAX_COMBINATIONS_TO_EVALUATE * 2
+            duplicate_attempts = 0
+            samples_evaluated = 0
+            while samples_evaluated < MAX_COMBINATIONS_TO_EVALUATE:
                 chunk_indices = _random_combination(n, k)
                 if chunk_indices in seen_combinations:
+                    duplicate_attempts += 1
+                    if duplicate_attempts > max_duplicate_attempts:
+                        # Too many duplicates, likely exhausted unique combinations
+                        break
                     continue
                 seen_combinations.add(chunk_indices)
+                duplicate_attempts = 0
+                samples_evaluated += 1
 
                 # Count how many uncovered pairs this chunk covers
                 covered_count = sum(
                     1
                     for i, idx_i in enumerate(chunk_indices)
-                    for idx_j in chunk_indices[i + 1:]
+                    for idx_j in chunk_indices[i + 1 :]
                     if frozenset([idx_i, idx_j]) in uncovered_pairs
                 )
 
@@ -784,7 +793,7 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
                 covered_count = sum(
                     1
                     for i, idx_i in enumerate(chunk_indices)
-                    for idx_j in chunk_indices[i + 1:]
+                    for idx_j in chunk_indices[i + 1 :]
                     if frozenset([idx_i, idx_j]) in uncovered_pairs
                 )
 
@@ -800,7 +809,7 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
 
         # Mark pairs in this chunk as covered
         for i, idx_i in enumerate(best_chunk_indices):
-            for idx_j in best_chunk_indices[i + 1:]:
+            for idx_j in best_chunk_indices[i + 1 :]:
                 uncovered_pairs.discard(frozenset([idx_i, idx_j]))
 
         chunk_items = [items[idx] for idx in best_chunk_indices]
