@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ from transcript_parser import parse_podcast_messages
 from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
+from graphiti_core.utils.content_chunking import generate_covering_chunks
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
@@ -77,6 +79,11 @@ class IsPresidentOf(BaseModel):
 
 async def main(use_bulk: bool = False):
     setup_logging()
+
+    start = time.time()
+    generate_covering_chunks(list(range(30)), k=15)
+    print('Elapsed time: {}'.format(time.time() - start))
+    return
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()

@@ -16,8 +16,10 @@ limitations under the License.
 
 import json
 import logging
+import random
 import re
 from itertools import combinations
+from math import comb
 from typing import TypeVar
 
 from graphiti_core.helpers import (
@@ -211,9 +213,9 @@ def _text_likely_dense(content: str, tokens: int) -> bool:
 
 
 def chunk_json_content(
-    content: str,
-    chunk_size_tokens: int | None = None,
-    overlap_tokens: int | None = None,
+        content: str,
+        chunk_size_tokens: int | None = None,
+        overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split JSON content into chunks while preserving structure.
 
@@ -250,9 +252,9 @@ def chunk_json_content(
 
 
 def _chunk_json_array(
-    data: list,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        data: list,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON array by splitting at element boundaries."""
     if not data:
@@ -308,9 +310,9 @@ def _get_overlap_elements(elements: list, overlap_chars: int) -> list:
 
 
 def _chunk_json_object(
-    data: dict,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        data: dict,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON object by splitting at top-level key boundaries."""
     if not data:
@@ -372,9 +374,9 @@ def _get_overlap_dict(data: dict, keys: list[str], overlap_chars: int) -> dict:
 
 
 def chunk_text_content(
-    content: str,
-    chunk_size_tokens: int | None = None,
-    overlap_tokens: int | None = None,
+        content: str,
+        chunk_size_tokens: int | None = None,
+        overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split text content at natural boundaries (paragraphs, sentences).
 
@@ -449,9 +451,9 @@ def chunk_text_content(
 
 
 def _chunk_by_sentences(
-    text: str,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        text: str,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Split text by sentence boundaries."""
     # Split on sentence-ending punctuation followed by whitespace
@@ -504,9 +506,9 @@ def _chunk_by_sentences(
 
 
 def _chunk_by_size(
-    text: str,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        text: str,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Split text by fixed character size (last resort)."""
     chunks: list[str] = []
@@ -540,14 +542,14 @@ def _get_overlap_text(text: str, overlap_chars: int) -> str:
     # Find the next word boundary after overlap_start
     space_idx = text.find(' ', overlap_start)
     if space_idx != -1:
-        return text[space_idx + 1 :]
+        return text[space_idx + 1:]
     return text[overlap_start:]
 
 
 def chunk_message_content(
-    content: str,
-    chunk_size_tokens: int | None = None,
-    overlap_tokens: int | None = None,
+        content: str,
+        chunk_size_tokens: int | None = None,
+        overlap_tokens: int | None = None,
 ) -> list[str]:
     """Split conversation content preserving message boundaries.
 
@@ -592,9 +594,9 @@ def chunk_message_content(
 
 
 def _chunk_message_array(
-    messages: list,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        messages: list,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Chunk a JSON array of message objects."""
     # Delegate to JSON array chunking
@@ -603,9 +605,9 @@ def _chunk_message_array(
 
 
 def _chunk_speaker_messages(
-    content: str,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        content: str,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Chunk messages in 'Speaker: message' format."""
     # Split on speaker patterns
@@ -668,9 +670,9 @@ def _get_overlap_messages(messages: list[str], overlap_chars: int) -> list[str]:
 
 
 def _chunk_by_lines(
-    content: str,
-    chunk_size_chars: int,
-    overlap_chars: int,
+        content: str,
+        chunk_size_chars: int,
+        overlap_chars: int,
 ) -> list[str]:
     """Chunk content by line boundaries."""
     lines = content.split('\n')
@@ -706,6 +708,13 @@ def _chunk_by_lines(
 
 T = TypeVar('T')
 
+MAX_COMBINATIONS_TO_EVALUATE = 1000
+
+
+def _random_combination(n: int, k: int) -> tuple[int, ...]:
+    """Generate a random combination of k items from range(n)."""
+    return tuple(sorted(random.sample(range(n), k)))
+
 
 def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list[int]]]:
     """Generate chunks of items that cover all pairs using a greedy approach.
@@ -714,6 +723,9 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
     Each chunk of K items covers C(K,2) = K(K-1)/2 pairs. We greedily select
     chunks to maximize coverage of uncovered pairs, minimizing the total number
     of chunks needed to ensure every pair of items appears in at least one chunk.
+
+    For large inputs where C(n,k) > MAX_COMBINATIONS_TO_EVALUATE, random sampling
+    is used instead of exhaustive search to maintain performance.
 
     Lower bound (Schönheim): F >= ceil(N/K * ceil((N-1)/(K-1)))
 
@@ -736,34 +748,70 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
 
     chunks: list[tuple[list[T], list[int]]] = []
 
+    # Determine if we need to sample or can enumerate all combinations
+    total_combinations = comb(n, k)
+    use_sampling = total_combinations > MAX_COMBINATIONS_TO_EVALUATE
+
     while uncovered_pairs:
         # Greedy selection: find the chunk that covers the most uncovered pairs
         best_chunk_indices: tuple[int, ...] | None = None
         best_covered_count = 0
 
-        # Try all possible chunks of size k
-        for chunk_indices in combinations(range(n), k):
-            # Count how many uncovered pairs this chunk covers
-            covered_count = sum(
-                1
-                for i, idx_i in enumerate(chunk_indices)
-                for idx_j in chunk_indices[i + 1 :]
-                if frozenset([idx_i, idx_j]) in uncovered_pairs
-            )
+        if use_sampling:
+            # Sample random combinations when there are too many to enumerate
+            seen_combinations: set[tuple[int, ...]] = set()
+            for _ in range(MAX_COMBINATIONS_TO_EVALUATE):
+                chunk_indices = _random_combination(n, k)
+                if chunk_indices in seen_combinations:
+                    continue
+                seen_combinations.add(chunk_indices)
 
-            if covered_count > best_covered_count:
-                best_covered_count = covered_count
-                best_chunk_indices = chunk_indices
+                # Count how many uncovered pairs this chunk covers
+                covered_count = sum(
+                    1
+                    for i, idx_i in enumerate(chunk_indices)
+                    for idx_j in chunk_indices[i + 1:]
+                    if frozenset([idx_i, idx_j]) in uncovered_pairs
+                )
+
+                if covered_count > best_covered_count:
+                    best_covered_count = covered_count
+                    best_chunk_indices = chunk_indices
+        else:
+            # Enumerate all combinations when feasible
+            for chunk_indices in combinations(range(n), k):
+                # Count how many uncovered pairs this chunk covers
+                covered_count = sum(
+                    1
+                    for i, idx_i in enumerate(chunk_indices)
+                    for idx_j in chunk_indices[i + 1:]
+                    if frozenset([idx_i, idx_j]) in uncovered_pairs
+                )
+
+                if covered_count > best_covered_count:
+                    best_covered_count = covered_count
+                    best_chunk_indices = chunk_indices
 
         if best_chunk_indices is None or best_covered_count == 0:
+            # Greedy search couldn't find a chunk covering uncovered pairs.
+            # This can happen with random sampling. Fall back to creating
+            # small chunks that directly cover remaining pairs.
             break
 
         # Mark pairs in this chunk as covered
         for i, idx_i in enumerate(best_chunk_indices):
-            for idx_j in best_chunk_indices[i + 1 :]:
+            for idx_j in best_chunk_indices[i + 1:]:
                 uncovered_pairs.discard(frozenset([idx_i, idx_j]))
 
         chunk_items = [items[idx] for idx in best_chunk_indices]
         chunks.append((chunk_items, list(best_chunk_indices)))
+
+    # Handle any remaining uncovered pairs that the greedy algorithm missed.
+    # This can happen when random sampling fails to find covering chunks.
+    # Create minimal chunks (size 2) to guarantee all pairs are covered.
+    for pair in uncovered_pairs:
+        pair_indices = sorted(pair)
+        chunk_items = [items[idx] for idx in pair_indices]
+        chunks.append((chunk_items, pair_indices))
 
     return chunks

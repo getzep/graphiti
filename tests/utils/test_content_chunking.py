@@ -502,7 +502,7 @@ class TestGenerateCoveringChunks:
 
         # Collect all pairs from chunks
         covered_pairs = set()
-        for chunk_items, indices in result:
+        for _, indices in result:
             assert len(indices) == 2
             pair = frozenset(indices)
             covered_pairs.add(pair)
@@ -525,7 +525,7 @@ class TestGenerateCoveringChunks:
 
         # Collect all covered pairs
         covered_pairs: set[frozenset[int]] = set()
-        for chunk_items, indices in result:
+        for _, indices in result:
             assert len(indices) == 3
             # Each chunk of 3 covers C(3,2) = 3 pairs
             for i in range(len(indices)):
@@ -543,7 +543,7 @@ class TestGenerateCoveringChunks:
 
         # Collect all covered pairs
         covered_pairs: set[frozenset[int]] = set()
-        for chunk_items, indices in result:
+        for _, indices in result:
             assert len(indices) == 4
             for i in range(len(indices)):
                 for j in range(i + 1, len(indices)):
@@ -608,3 +608,39 @@ class TestGenerateCoveringChunks:
         for (chunk1, idx1), (chunk2, idx2) in zip(result1, result2, strict=True):
             assert chunk1 == chunk2
             assert idx1 == idx2
+
+    def test_all_pairs_covered_k15_n30(self):
+        """Verify all pairs covered for n=30, k=15 (realistic edge extraction scenario).
+
+        For n=30, k=15:
+        - Total pairs = C(30,2) = 435
+        - Pairs per chunk = C(15,2) = 105
+        - Lower bound = ceil(435/105) = 5 chunks
+        - Schönheim bound = ceil(30/15 * ceil(29/14)) = ceil(2 * 3) = 6 chunks
+        """
+        n = 30
+        k = 15
+        items = list(range(n))
+        result = generate_covering_chunks(items, k=k)
+
+        # Verify chunk sizes
+        for _, indices in result:
+            assert len(indices) == k, f'Expected chunk size {k}, got {len(indices)}'
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(30,2) = 435 pairs should be covered
+        expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+        assert len(expected_pairs) == 435, f'Expected 435 pairs, got {len(expected_pairs)}'
+        assert covered_pairs == expected_pairs, (
+            f'Missing {len(expected_pairs - covered_pairs)} pairs: {expected_pairs - covered_pairs}'
+        )
+
+        # Verify chunk count is within expected bounds
+        assert len(result) >= 5, f'Expected at least 5 chunks, got {len(result)}'
+        assert len(result) <= 6, f'Expected at most 6 chunks, got {len(result)}'
