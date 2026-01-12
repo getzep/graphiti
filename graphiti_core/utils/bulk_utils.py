@@ -266,9 +266,9 @@ async def extract_nodes_and_edges_bulk(
                 clients,
                 episode,
                 previous_episodes,
-                entity_types,
-                excluded_entity_types,
-                custom_extraction_instructions,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
         ]
