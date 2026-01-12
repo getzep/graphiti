@@ -79,11 +79,6 @@ class IsPresidentOf(BaseModel):
 
 async def main(use_bulk: bool = False):
     setup_logging()
-
-    start = time.time()
-    generate_covering_chunks(list(range(30)), k=15)
-    print('Elapsed time: {}'.format(time.time() - start))
-    return
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
