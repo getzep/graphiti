@@ -444,6 +444,7 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
+        custom_extraction_instructions: str | None = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
         dict[str, str],
@@ -458,6 +459,7 @@ class Graphiti:
             edge_types=edge_types,
             entity_types=entity_types,
             excluded_entity_types=excluded_entity_types,
+            custom_extraction_instructions=custom_extraction_instructions,
         )
 
         # Dedupe extracted nodes in memory
@@ -844,6 +846,7 @@ class Graphiti:
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        custom_extraction_instructions: str | None = None,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -857,6 +860,18 @@ class Graphiti:
             A list of RawEpisode objects to be processed and added to the graph.
         group_id : str | None
             An id for the graph partition the episode is a part of.
+        entity_types : dict[str, type[BaseModel]] | None
+            Optional. A dictionary mapping entity type names to Pydantic models.
+        excluded_entity_types : list[str] | None
+            Optional. A list of entity type names to exclude from extraction.
+        edge_types : dict[str, type[BaseModel]] | None
+            Optional. A dictionary mapping edge type names to Pydantic models.
+        edge_type_map : dict[tuple[str, str], list[str]] | None
+            Optional. A mapping of (source_type, target_type) to allowed edge types.
+        custom_extraction_instructions : str | None
+            Optional. Custom extraction instructions string to be included in the
+            extract entities and extract edges prompts. This allows for additional
+            instructions or context to guide the extraction process.
 
         Returns
         -------
@@ -945,6 +960,7 @@ class Graphiti:
                     edge_types,
                     entity_types,
                     excluded_entity_types,
+                    custom_extraction_instructions,
                 )
 
                 # Create Episodic Edges
