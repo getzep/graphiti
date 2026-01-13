@@ -190,9 +190,10 @@ class NeptuneDriver(GraphDriver):
 
     async def execute_query(
         self, cypher_query_, **kwargs: Any
-    ) -> tuple[dict[str, Any], None, None]:
+    ) -> tuple[list[dict[str, Any]], None, None]:
         params = dict(kwargs)
         if isinstance(cypher_query_, list):
+            result: list[dict[str, Any]] = []
             for q in cypher_query_:
                 result, _, _ = self._run_query(q[0], q[1])
             return result, None, None

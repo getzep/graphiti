@@ -101,6 +101,7 @@ async def main(use_bulk: bool = False):
             entity_types={'Person': Person, 'City': City},
             edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
             edge_type_map={('Person', 'Entity'): ['IS_PRESIDENT_OF']},
+            saga='Freakonomics Podcast',
         )
     else:
         for i, message in enumerate(messages[3:14]):
@@ -119,6 +120,7 @@ async def main(use_bulk: bool = False):
                 edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
                 edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
                 previous_episode_uuids=episode_uuids,
+                saga='Freakonomics Podcast',
             )
 
 
