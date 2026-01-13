@@ -38,10 +38,13 @@ from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN_NEPTUNE,
     EPISODIC_NODE_RETURN,
     EPISODIC_NODE_RETURN_NEPTUNE,
+    SAGA_NODE_RETURN,
+    SAGA_NODE_RETURN_NEPTUNE,
     get_community_node_save_query,
     get_entity_node_return_query,
     get_entity_node_save_query,
     get_episode_node_save_query,
+    get_saga_node_save_query,
 )
 from graphiti_core.utils.datetime_utils import utc_now
 
@@ -728,6 +731,115 @@ class CommunityNode(Node):
         return communities
 
 
+class SagaNode(Node):
+    async def save(self, driver: GraphDriver):
+        result = await driver.execute_query(
+            get_saga_node_save_query(driver.provider),
+            uuid=self.uuid,
+            name=self.name,
+            group_id=self.group_id,
+            created_at=self.created_at,
+        )
+
+        logger.debug(f'Saved Node to Graph: {self.uuid}')
+
+        return result
+
+    async def delete(self, driver: GraphDriver):
+        await driver.execute_query(
+            """
+            MATCH (n:Saga {uuid: $uuid})
+            DETACH DELETE n
+            """,
+            uuid=self.uuid,
+        )
+
+        logger.debug(f'Deleted Node: {self.uuid}')
+
+    @classmethod
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (s:Saga {uuid: $uuid})
+            RETURN
+            """
+            + (
+                SAGA_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else SAGA_NODE_RETURN
+            ),
+            uuid=uuid,
+            routing_='r',
+        )
+
+        nodes = [get_saga_node_from_record(record) for record in records]
+
+        if len(nodes) == 0:
+            raise NodeNotFoundError(uuid)
+
+        return nodes[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (s:Saga)
+            WHERE s.uuid IN $uuids
+            RETURN
+            """
+            + (
+                SAGA_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else SAGA_NODE_RETURN
+            ),
+            uuids=uuids,
+            routing_='r',
+        )
+
+        sagas = [get_saga_node_from_record(record) for record in records]
+
+        return sagas
+
+    @classmethod
+    async def get_by_group_ids(
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
+    ):
+        cursor_query: LiteralString = 'AND s.uuid < $uuid' if uuid_cursor else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (s:Saga)
+            WHERE s.group_id IN $group_ids
+            """
+            + cursor_query
+            + """
+            RETURN
+            """
+            + (
+                SAGA_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else SAGA_NODE_RETURN
+            )
+            + """
+            ORDER BY s.uuid DESC
+            """
+            + limit_query,
+            group_ids=group_ids,
+            uuid=uuid_cursor,
+            limit=limit,
+            routing_='r',
+        )
+
+        sagas = [get_saga_node_from_record(record) for record in records]
+
+        return sagas
+
+
 # Node helpers
 def get_episodic_node_from_record(record: Any) -> EpisodicNode:
     created_at = parse_db_date(record['created_at'])
@@ -791,6 +903,15 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name_embedding=record['name_embedding'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
+    )
+
+
+def get_saga_node_from_record(record: Any) -> SagaNode:
+    return SagaNode(
+        uuid=record['uuid'],
+        name=record['name'],
+        group_id=record['group_id'],
+        created_at=parse_db_date(record['created_at']),  # type: ignore
     )
 
 

@@ -33,6 +33,10 @@ from graphiti_core.models.edges.edge_db_queries import (
     COMMUNITY_EDGE_RETURN,
     EPISODIC_EDGE_RETURN,
     EPISODIC_EDGE_SAVE,
+    HAS_EPISODE_EDGE_RETURN,
+    HAS_EPISODE_EDGE_SAVE,
+    NEXT_EPISODE_EDGE_RETURN,
+    NEXT_EPISODE_EDGE_SAVE,
     get_community_edge_save_query,
     get_entity_edge_return_query,
     get_entity_edge_save_query,
@@ -561,6 +565,200 @@ class CommunityEdge(Edge):
         return edges
 
 
+class HasEpisodeEdge(Edge):
+    async def save(self, driver: GraphDriver):
+        result = await driver.execute_query(
+            HAS_EPISODE_EDGE_SAVE,
+            saga_uuid=self.source_node_uuid,
+            episode_uuid=self.target_node_uuid,
+            uuid=self.uuid,
+            group_id=self.group_id,
+            created_at=self.created_at,
+        )
+
+        logger.debug(f'Saved edge to Graph: {self.uuid}')
+
+        return result
+
+    async def delete(self, driver: GraphDriver):
+        await driver.execute_query(
+            """
+            MATCH (n:Saga)-[e:HAS_EPISODE {uuid: $uuid}]->(m:Episodic)
+            DELETE e
+            """,
+            uuid=self.uuid,
+        )
+
+        logger.debug(f'Deleted Edge: {self.uuid}')
+
+    @classmethod
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Saga)-[e:HAS_EPISODE {uuid: $uuid}]->(m:Episodic)
+            RETURN
+            """
+            + HAS_EPISODE_EDGE_RETURN,
+            uuid=uuid,
+            routing_='r',
+        )
+
+        edges = [get_has_episode_edge_from_record(record) for record in records]
+
+        if len(edges) == 0:
+            raise EdgeNotFoundError(uuid)
+        return edges[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Saga)-[e:HAS_EPISODE]->(m:Episodic)
+            WHERE e.uuid IN $uuids
+            RETURN
+            """
+            + HAS_EPISODE_EDGE_RETURN,
+            uuids=uuids,
+            routing_='r',
+        )
+
+        edges = [get_has_episode_edge_from_record(record) for record in records]
+
+        return edges
+
+    @classmethod
+    async def get_by_group_ids(
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Saga)-[e:HAS_EPISODE]->(m:Episodic)
+            WHERE e.group_id IN $group_ids
+            """
+            + cursor_query
+            + """
+            RETURN
+            """
+            + HAS_EPISODE_EDGE_RETURN
+            + """
+            ORDER BY e.uuid DESC
+            """
+            + limit_query,
+            group_ids=group_ids,
+            uuid=uuid_cursor,
+            limit=limit,
+            routing_='r',
+        )
+
+        edges = [get_has_episode_edge_from_record(record) for record in records]
+
+        return edges
+
+
+class NextEpisodeEdge(Edge):
+    async def save(self, driver: GraphDriver):
+        result = await driver.execute_query(
+            NEXT_EPISODE_EDGE_SAVE,
+            source_episode_uuid=self.source_node_uuid,
+            target_episode_uuid=self.target_node_uuid,
+            uuid=self.uuid,
+            group_id=self.group_id,
+            created_at=self.created_at,
+        )
+
+        logger.debug(f'Saved edge to Graph: {self.uuid}')
+
+        return result
+
+    async def delete(self, driver: GraphDriver):
+        await driver.execute_query(
+            """
+            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
+            DELETE e
+            """,
+            uuid=self.uuid,
+        )
+
+        logger.debug(f'Deleted Edge: {self.uuid}')
+
+    @classmethod
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
+            RETURN
+            """
+            + NEXT_EPISODE_EDGE_RETURN,
+            uuid=uuid,
+            routing_='r',
+        )
+
+        edges = [get_next_episode_edge_from_record(record) for record in records]
+
+        if len(edges) == 0:
+            raise EdgeNotFoundError(uuid)
+        return edges[0]
+
+    @classmethod
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
+            WHERE e.uuid IN $uuids
+            RETURN
+            """
+            + NEXT_EPISODE_EDGE_RETURN,
+            uuids=uuids,
+            routing_='r',
+        )
+
+        edges = [get_next_episode_edge_from_record(record) for record in records]
+
+        return edges
+
+    @classmethod
+    async def get_by_group_ids(
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
+    ):
+        cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
+        limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            """
+            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
+            WHERE e.group_id IN $group_ids
+            """
+            + cursor_query
+            + """
+            RETURN
+            """
+            + NEXT_EPISODE_EDGE_RETURN
+            + """
+            ORDER BY e.uuid DESC
+            """
+            + limit_query,
+            group_ids=group_ids,
+            uuid=uuid_cursor,
+            limit=limit,
+            routing_='r',
+        )
+
+        edges = [get_next_episode_edge_from_record(record) for record in records]
+
+        return edges
+
+
 # Edge helpers
 def get_episodic_edge_from_record(record: Any) -> EpisodicEdge:
     return EpisodicEdge(
@@ -612,6 +810,26 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
 
 def get_community_edge_from_record(record: Any):
     return CommunityEdge(
+        uuid=record['uuid'],
+        group_id=record['group_id'],
+        source_node_uuid=record['source_node_uuid'],
+        target_node_uuid=record['target_node_uuid'],
+        created_at=parse_db_date(record['created_at']),  # type: ignore
+    )
+
+
+def get_has_episode_edge_from_record(record: Any) -> HasEpisodeEdge:
+    return HasEpisodeEdge(
+        uuid=record['uuid'],
+        group_id=record['group_id'],
+        source_node_uuid=record['source_node_uuid'],
+        target_node_uuid=record['target_node_uuid'],
+        created_at=parse_db_date(record['created_at']),  # type: ignore
+    )
+
+
+def get_next_episode_edge_from_record(record: Any) -> NextEpisodeEdge:
+    return NextEpisodeEdge(
         uuid=record['uuid'],
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
