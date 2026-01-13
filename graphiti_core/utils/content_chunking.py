@@ -16,7 +16,11 @@ limitations under the License.
 
 import json
 import logging
+import random
 import re
+from itertools import combinations
+from math import comb
+from typing import TypeVar
 
 from graphiti_core.helpers import (
     CHUNK_DENSITY_THRESHOLD,
@@ -700,3 +704,123 @@ def _chunk_by_lines(
         chunks.append('\n'.join(current_lines))
 
     return chunks if chunks else [content]
+
+
+T = TypeVar('T')
+
+MAX_COMBINATIONS_TO_EVALUATE = 1000
+
+
+def _random_combination(n: int, k: int) -> tuple[int, ...]:
+    """Generate a random combination of k items from range(n)."""
+    return tuple(sorted(random.sample(range(n), k)))
+
+
+def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list[int]]]:
+    """Generate chunks of items that cover all pairs using a greedy approach.
+
+    Based on the Handshake Flights Problem / Covering Design problem.
+    Each chunk of K items covers C(K,2) = K(K-1)/2 pairs. We greedily select
+    chunks to maximize coverage of uncovered pairs, minimizing the total number
+    of chunks needed to ensure every pair of items appears in at least one chunk.
+
+    For large inputs where C(n,k) > MAX_COMBINATIONS_TO_EVALUATE, random sampling
+    is used instead of exhaustive search to maintain performance.
+
+    Lower bound (Schönheim): F >= ceil(N/K * ceil((N-1)/(K-1)))
+
+    Args:
+        items: List of items to partition into covering chunks
+        k: Maximum number of items per chunk
+
+    Returns:
+        List of tuples (chunk_items, global_indices) where global_indices maps
+        each position in chunk_items to its index in the original items list.
+    """
+    n = len(items)
+    if n <= k:
+        return [(items, list(range(n)))]
+
+    # Track uncovered pairs using frozensets of indices
+    uncovered_pairs: set[frozenset[int]] = {
+        frozenset([i, j]) for i in range(n) for j in range(i + 1, n)
+    }
+
+    chunks: list[tuple[list[T], list[int]]] = []
+
+    # Determine if we need to sample or can enumerate all combinations
+    total_combinations = comb(n, k)
+    use_sampling = total_combinations > MAX_COMBINATIONS_TO_EVALUATE
+
+    while uncovered_pairs:
+        # Greedy selection: find the chunk that covers the most uncovered pairs
+        best_chunk_indices: tuple[int, ...] | None = None
+        best_covered_count = 0
+
+        if use_sampling:
+            # Sample random combinations when there are too many to enumerate
+            seen_combinations: set[tuple[int, ...]] = set()
+            # Limit total attempts (including duplicates) to prevent infinite loops
+            max_total_attempts = MAX_COMBINATIONS_TO_EVALUATE * 3
+            total_attempts = 0
+            samples_evaluated = 0
+            while samples_evaluated < MAX_COMBINATIONS_TO_EVALUATE:
+                total_attempts += 1
+                if total_attempts > max_total_attempts:
+                    # Too many total attempts, break to avoid infinite loop
+                    break
+                chunk_indices = _random_combination(n, k)
+                if chunk_indices in seen_combinations:
+                    continue
+                seen_combinations.add(chunk_indices)
+                samples_evaluated += 1
+
+                # Count how many uncovered pairs this chunk covers
+                covered_count = sum(
+                    1
+                    for i, idx_i in enumerate(chunk_indices)
+                    for idx_j in chunk_indices[i + 1 :]
+                    if frozenset([idx_i, idx_j]) in uncovered_pairs
+                )
+
+                if covered_count > best_covered_count:
+                    best_covered_count = covered_count
+                    best_chunk_indices = chunk_indices
+        else:
+            # Enumerate all combinations when feasible
+            for chunk_indices in combinations(range(n), k):
+                # Count how many uncovered pairs this chunk covers
+                covered_count = sum(
+                    1
+                    for i, idx_i in enumerate(chunk_indices)
+                    for idx_j in chunk_indices[i + 1 :]
+                    if frozenset([idx_i, idx_j]) in uncovered_pairs
+                )
+
+                if covered_count > best_covered_count:
+                    best_covered_count = covered_count
+                    best_chunk_indices = chunk_indices
+
+        if best_chunk_indices is None or best_covered_count == 0:
+            # Greedy search couldn't find a chunk covering uncovered pairs.
+            # This can happen with random sampling. Fall back to creating
+            # small chunks that directly cover remaining pairs.
+            break
+
+        # Mark pairs in this chunk as covered
+        for i, idx_i in enumerate(best_chunk_indices):
+            for idx_j in best_chunk_indices[i + 1 :]:
+                uncovered_pairs.discard(frozenset([idx_i, idx_j]))
+
+        chunk_items = [items[idx] for idx in best_chunk_indices]
+        chunks.append((chunk_items, list(best_chunk_indices)))
+
+    # Handle any remaining uncovered pairs that the greedy algorithm missed.
+    # This can happen when random sampling fails to find covering chunks.
+    # Create minimal chunks (size 2) to guarantee all pairs are covered.
+    for pair in uncovered_pairs:
+        pair_indices = sorted(pair)
+        chunk_items = [items[idx] for idx in pair_indices]
+        chunks.append((chunk_items, pair_indices))
+
+    return chunks
