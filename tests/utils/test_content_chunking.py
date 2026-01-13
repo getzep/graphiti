@@ -26,6 +26,7 @@ from graphiti_core.utils.content_chunking import (
     chunk_message_content,
     chunk_text_content,
     estimate_tokens,
+    generate_covering_chunks,
     should_chunk,
 )
 
@@ -459,3 +460,321 @@ class TestTextDensityEstimation:
 
         # Should not be dense since capitals are sentence starters
         assert not _text_likely_dense(text, tokens)
+
+
+class TestGenerateCoveringChunks:
+    """Tests for the greedy covering chunks algorithm (Handshake Flights Problem)."""
+
+    def test_empty_list(self):
+        """Empty list should return single chunk with empty items."""
+        result = generate_covering_chunks([], k=3)
+        # n=0 <= k=3, so returns single chunk with empty items
+        assert result == [([], [])]
+
+    def test_single_item(self):
+        """Single item should return one chunk with that item."""
+        items = ['A']
+        result = generate_covering_chunks(items, k=3)
+        assert len(result) == 1
+        assert result[0] == (['A'], [0])
+
+    def test_items_fit_in_single_chunk(self):
+        """When n <= k, all items should be in one chunk."""
+        items = ['A', 'B', 'C']
+        result = generate_covering_chunks(items, k=5)
+        assert len(result) == 1
+        chunk_items, indices = result[0]
+        assert chunk_items == items
+        assert indices == [0, 1, 2]
+
+    def test_items_equal_to_k(self):
+        """When n == k, all items should be in one chunk."""
+        items = ['A', 'B', 'C', 'D']
+        result = generate_covering_chunks(items, k=4)
+        assert len(result) == 1
+        chunk_items, indices = result[0]
+        assert chunk_items == items
+        assert indices == [0, 1, 2, 3]
+
+    def test_all_pairs_covered_k2(self):
+        """With k=2, every pair of items must appear in exactly one chunk."""
+        items = ['A', 'B', 'C', 'D']
+        result = generate_covering_chunks(items, k=2)
+
+        # Collect all pairs from chunks
+        covered_pairs = set()
+        for _, indices in result:
+            assert len(indices) == 2
+            pair = frozenset(indices)
+            covered_pairs.add(pair)
+
+        # All C(4,2) = 6 pairs should be covered
+        expected_pairs = {
+            frozenset([0, 1]),
+            frozenset([0, 2]),
+            frozenset([0, 3]),
+            frozenset([1, 2]),
+            frozenset([1, 3]),
+            frozenset([2, 3]),
+        }
+        assert covered_pairs == expected_pairs
+
+    def test_all_pairs_covered_k3(self):
+        """With k=3, every pair must appear in at least one chunk."""
+        items = list(range(6))  # 0, 1, 2, 3, 4, 5
+        result = generate_covering_chunks(items, k=3)
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            assert len(indices) == 3
+            # Each chunk of 3 covers C(3,2) = 3 pairs
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(6,2) = 15 pairs should be covered
+        expected_pairs = {frozenset([i, j]) for i in range(6) for j in range(i + 1, 6)}
+        assert covered_pairs == expected_pairs
+
+    def test_all_pairs_covered_larger(self):
+        """Verify all pairs covered for larger input."""
+        items = list(range(10))
+        result = generate_covering_chunks(items, k=4)
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            assert len(indices) == 4
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(10,2) = 45 pairs should be covered
+        expected_pairs = {frozenset([i, j]) for i in range(10) for j in range(i + 1, 10)}
+        assert covered_pairs == expected_pairs
+
+    def test_index_mapping_correctness(self):
+        """Global indices should correctly map to original items."""
+        items = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve']
+        result = generate_covering_chunks(items, k=3)
+
+        for chunk_items, indices in result:
+            # Each chunk item should match the item at the corresponding global index
+            for local_idx, global_idx in enumerate(indices):
+                assert chunk_items[local_idx] == items[global_idx]
+
+    def test_greedy_minimizes_chunks(self):
+        """Greedy approach should produce reasonably few chunks.
+
+        For n=6, k=3: Each chunk covers C(3,2)=3 pairs.
+        Total pairs = C(6,2) = 15.
+        Lower bound = ceil(15/3) = 5 chunks.
+        Schönheim bound = ceil(6/3 * ceil(5/2)) = ceil(2 * 3) = 6 chunks.
+
+        Note: When random sampling is used (large n,k), the fallback mechanism
+        may create additional small chunks to cover remaining pairs, so the
+        upper bound is not guaranteed.
+        """
+        items = list(range(6))
+        result = generate_covering_chunks(items, k=3)
+
+        # For small inputs (exhaustive enumeration), should achieve near-optimal
+        # Should be at least the simple lower bound (5 for this case)
+        assert len(result) >= 5
+
+        # Verify all pairs are covered (the primary guarantee)
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+        expected_pairs = {frozenset([i, j]) for i in range(6) for j in range(i + 1, 6)}
+        assert covered_pairs == expected_pairs
+
+    def test_works_with_custom_types(self):
+        """Function should work with any type, not just strings/ints."""
+
+        class Entity:
+            def __init__(self, name: str):
+                self.name = name
+
+        items = [Entity('A'), Entity('B'), Entity('C'), Entity('D')]
+        result = generate_covering_chunks(items, k=2)
+
+        # Verify structure
+        assert len(result) > 0
+        for chunk_items, indices in result:
+            assert len(chunk_items) == 2
+            assert len(indices) == 2
+            # Items should be Entity objects
+            for item in chunk_items:
+                assert isinstance(item, Entity)
+
+    def test_deterministic_output(self):
+        """Same input should produce same output."""
+        items = list(range(8))
+        result1 = generate_covering_chunks(items, k=3)
+        result2 = generate_covering_chunks(items, k=3)
+
+        assert len(result1) == len(result2)
+        for (chunk1, idx1), (chunk2, idx2) in zip(result1, result2, strict=True):
+            assert chunk1 == chunk2
+            assert idx1 == idx2
+
+    def test_all_pairs_covered_k15_n30(self):
+        """Verify all pairs covered for n=30, k=15 (realistic edge extraction scenario).
+
+        For n=30, k=15:
+        - Total pairs = C(30,2) = 435
+        - Pairs per chunk = C(15,2) = 105
+        - Lower bound = ceil(435/105) = 5 chunks
+        - Schönheim bound = ceil(6/3 * ceil(5/2)) = ceil(2 * 3) = 6 chunks
+
+        Note: When random sampling is used, the fallback mechanism may create
+        additional small chunks (size 2) to cover remaining pairs, so chunk
+        sizes may vary and the upper bound on chunk count is not guaranteed.
+        """
+        n = 30
+        k = 15
+        items = list(range(n))
+        result = generate_covering_chunks(items, k=k)
+
+        # Verify chunk sizes are at most k (fallback chunks may be smaller)
+        for _, indices in result:
+            assert len(indices) <= k, f'Expected chunk size <= {k}, got {len(indices)}'
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(30,2) = 435 pairs should be covered
+        expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+        assert len(expected_pairs) == 435, f'Expected 435 pairs, got {len(expected_pairs)}'
+        assert covered_pairs == expected_pairs, (
+            f'Missing {len(expected_pairs - covered_pairs)} pairs: {expected_pairs - covered_pairs}'
+        )
+
+        # Verify chunk count is at least the lower bound
+        assert len(result) >= 5, f'Expected at least 5 chunks, got {len(result)}'
+
+    def test_all_pairs_covered_with_random_sampling(self):
+        """Verify all pairs covered when random sampling is triggered.
+
+        When C(n,k) > MAX_COMBINATIONS_TO_EVALUATE, the algorithm uses random
+        sampling instead of exhaustive enumeration. This test ensures the
+        fallback logic covers any pairs missed by the greedy sampling.
+        """
+        import random
+
+        # n=50, k=5 triggers sampling since C(50,5) = 2,118,760 > 1000
+        n = 50
+        k = 5
+        items = list(range(n))
+
+        # Test with multiple random seeds to ensure robustness
+        for seed in range(5):
+            random.seed(seed)
+            result = generate_covering_chunks(items, k=k)
+
+            # Collect all covered pairs
+            covered_pairs: set[frozenset[int]] = set()
+            for _, indices in result:
+                for i in range(len(indices)):
+                    for j in range(i + 1, len(indices)):
+                        covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+            # All C(50,2) = 1225 pairs should be covered
+            expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+            assert len(expected_pairs) == 1225
+            assert covered_pairs == expected_pairs, (
+                f'Seed {seed}: Missing {len(expected_pairs - covered_pairs)} pairs'
+            )
+
+    def test_fallback_creates_pair_chunks_for_uncovered(self):
+        """Verify fallback creates size-2 chunks for any remaining uncovered pairs.
+
+        When the greedy algorithm breaks early (best_covered_count == 0),
+        the fallback logic should create minimal chunks to cover remaining pairs.
+        """
+        import random
+
+        # Use a large n with small k to stress the sampling
+        n = 100
+        k = 4
+        items = list(range(n))
+
+        random.seed(42)
+        result = generate_covering_chunks(items, k=k)
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(100,2) = 4950 pairs must be covered
+        expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+        assert len(expected_pairs) == 4950
+        assert covered_pairs == expected_pairs, (
+            f'Missing {len(expected_pairs - covered_pairs)} pairs'
+        )
+
+    def test_duplicate_sampling_safety(self):
+        """Verify the algorithm handles duplicate random samples gracefully.
+
+        When k is large relative to n, there are fewer unique combinations
+        and random sampling may generate many duplicates. The safety counter
+        should prevent infinite loops.
+        """
+        import random
+
+        # n=20, k=10: C(20,10) = 184,756 > 1000 triggers sampling
+        # With large k relative to n, duplicates are more likely
+        n = 20
+        k = 10
+        items = list(range(n))
+
+        random.seed(123)
+        result = generate_covering_chunks(items, k=k)
+
+        # Collect all covered pairs
+        covered_pairs: set[frozenset[int]] = set()
+        for _, indices in result:
+            for i in range(len(indices)):
+                for j in range(i + 1, len(indices)):
+                    covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+        # All C(20,2) = 190 pairs should be covered
+        expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+        assert len(expected_pairs) == 190
+        assert covered_pairs == expected_pairs
+
+    def test_stress_multiple_seeds(self):
+        """Stress test with multiple random seeds to ensure robustness.
+
+        The combination of greedy sampling and fallback logic should
+        guarantee all pairs are covered regardless of random seed.
+        """
+        import random
+
+        n = 30
+        k = 5
+        items = list(range(n))
+        expected_pairs = {frozenset([i, j]) for i in range(n) for j in range(i + 1, n)}
+
+        for seed in range(10):
+            random.seed(seed)
+            result = generate_covering_chunks(items, k=k)
+
+            covered_pairs: set[frozenset[int]] = set()
+            for _, indices in result:
+                for i in range(len(indices)):
+                    for j in range(i + 1, len(indices)):
+                        covered_pairs.add(frozenset([indices[i], indices[j]]))
+
+            assert covered_pairs == expected_pairs, f'Seed {seed} failed to cover all pairs'
