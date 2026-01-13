@@ -473,6 +473,7 @@ class Graphiti:
         now: datetime,
         group_id: str,
         saga: str | SagaNode | None = None,
+        saga_previous_episode_uuid: str | None = None,
     ) -> tuple[list[EpisodicEdge], EpisodicNode]:
         """Process and save episode data to the graph.
 
@@ -492,6 +493,10 @@ class Graphiti:
             Optional. Either a saga name (str) or a SagaNode object to associate
             this episode with. If a string is provided, the saga will be looked up
             by name or created if it doesn't exist.
+        saga_previous_episode_uuid : str | None
+            Optional. UUID of the previous episode in the saga. If provided, skips
+            the database query to find the most recent episode. Useful for efficiently
+            adding multiple episodes to the same saga in sequence.
         """
         episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
         episode.entity_edges = [edge.uuid for edge in entity_edges]
@@ -516,23 +521,27 @@ class Graphiti:
             else:
                 saga_node = saga
 
-            # Find the most recent episode in the saga (excluding the current one)
-            previous_episode_records, _, _ = await self.driver.execute_query(
-                """
-                MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
-                WHERE e.uuid <> $current_episode_uuid
-                RETURN e.uuid AS uuid
-                ORDER BY e.valid_at DESC, e.created_at DESC
-                LIMIT 1
-                """,
-                saga_uuid=saga_node.uuid,
-                current_episode_uuid=episode.uuid,
-                routing_='r',
-            )
+            # Use provided previous episode UUID or query for it
+            previous_episode_uuid: str | None = saga_previous_episode_uuid
+            if previous_episode_uuid is None:
+                # Find the most recent episode in the saga (excluding the current one)
+                previous_episode_records, _, _ = await self.driver.execute_query(
+                    """
+                    MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
+                    WHERE e.uuid <> $current_episode_uuid
+                    RETURN e.uuid AS uuid
+                    ORDER BY e.valid_at DESC, e.created_at DESC
+                    LIMIT 1
+                    """,
+                    saga_uuid=saga_node.uuid,
+                    current_episode_uuid=episode.uuid,
+                    routing_='r',
+                )
+                if previous_episode_records:
+                    previous_episode_uuid = previous_episode_records[0]['uuid']
 
             # Create NEXT_EPISODE edge from the previous episode to the new one
-            if previous_episode_records:
-                previous_episode_uuid = previous_episode_records[0]['uuid']
+            if previous_episode_uuid is not None:
                 next_episode_edge = NextEpisodeEdge(
                     source_node_uuid=previous_episode_uuid,
                     target_node_uuid=episode.uuid,
@@ -805,6 +814,7 @@ class Graphiti:
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
+        saga_previous_episode_uuid: str | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -847,6 +857,11 @@ class Graphiti:
             If a string is provided and a saga with this name already exists in the group, the episode
             will be added to it. Otherwise, a new saga will be created. Sagas are connected to episodes
             via HAS_EPISODE edges, and consecutive episodes are linked via NEXT_EPISODE edges.
+        saga_previous_episode_uuid : str | None
+            Optional. UUID of the previous episode in the saga. If provided, skips the database
+            query to find the most recent episode. Useful for efficiently adding multiple episodes
+            to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
+            as this parameter for the next episode.
 
         Returns
         -------
@@ -963,7 +978,13 @@ class Graphiti:
 
                 # Process and save episode data (including saga association if provided)
                 episodic_edges, episode = await self._process_episode_data(
-                    episode, hydrated_nodes, entity_edges, now, group_id, saga
+                    episode,
+                    hydrated_nodes,
+                    entity_edges,
+                    now,
+                    group_id,
+                    saga,
+                    saga_previous_episode_uuid,
                 )
 
                 # Update communities if requested
