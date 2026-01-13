@@ -138,6 +138,47 @@ class GraphOperationsInterface(BaseModel):
     ) -> None:
         raise NotImplementedError
 
+    # -----------------------
+    # SagaNode: Save/Delete
+    # -----------------------
+
+    async def saga_node_save(self, node: Any, driver: Any) -> None:
+        """Persist (create or update) a single saga node."""
+        raise NotImplementedError
+
+    async def saga_node_delete(self, node: Any, driver: Any) -> None:
+        raise NotImplementedError
+
+    async def saga_node_save_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        nodes: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Persist (create or update) many saga nodes in batches."""
+        raise NotImplementedError
+
+    async def saga_node_delete_by_group_id(
+        self,
+        _cls: Any,
+        driver: Any,
+        group_id: str,
+        batch_size: int = 100,
+    ) -> None:
+        raise NotImplementedError
+
+    async def saga_node_delete_by_uuids(
+        self,
+        _cls: Any,
+        driver: Any,
+        uuids: list[str],
+        group_id: str | None = None,
+        batch_size: int = 100,
+    ) -> None:
+        raise NotImplementedError
+
     # -----------------
     # Edge: Save/Delete
     # -----------------
@@ -188,4 +229,66 @@ class GraphOperationsInterface(BaseModel):
         """
         Load embedding vectors for many edges in batches
         """
+        raise NotImplementedError
+
+    # ---------------------------
+    # HasEpisodeEdge: Save/Delete
+    # ---------------------------
+
+    async def has_episode_edge_save(self, edge: Any, driver: Any) -> None:
+        """Persist (create or update) a single has_episode edge."""
+        raise NotImplementedError
+
+    async def has_episode_edge_delete(self, edge: Any, driver: Any) -> None:
+        raise NotImplementedError
+
+    async def has_episode_edge_save_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        edges: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Persist (create or update) many has_episode edges in batches."""
+        raise NotImplementedError
+
+    async def has_episode_edge_delete_by_uuids(
+        self,
+        _cls: Any,
+        driver: Any,
+        uuids: list[str],
+        group_id: str | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    # ----------------------------
+    # NextEpisodeEdge: Save/Delete
+    # ----------------------------
+
+    async def next_episode_edge_save(self, edge: Any, driver: Any) -> None:
+        """Persist (create or update) a single next_episode edge."""
+        raise NotImplementedError
+
+    async def next_episode_edge_delete(self, edge: Any, driver: Any) -> None:
+        raise NotImplementedError
+
+    async def next_episode_edge_save_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        edges: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """Persist (create or update) many next_episode edges in batches."""
+        raise NotImplementedError
+
+    async def next_episode_edge_delete_by_uuids(
+        self,
+        _cls: Any,
+        driver: Any,
+        uuids: list[str],
+        group_id: str | None = None,
+    ) -> None:
         raise NotImplementedError
