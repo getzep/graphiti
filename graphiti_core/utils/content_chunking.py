@@ -760,19 +760,19 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
         if use_sampling:
             # Sample random combinations when there are too many to enumerate
             seen_combinations: set[tuple[int, ...]] = set()
-            max_duplicate_attempts = MAX_COMBINATIONS_TO_EVALUATE * 2
-            duplicate_attempts = 0
+            # Limit total attempts (including duplicates) to prevent infinite loops
+            max_total_attempts = MAX_COMBINATIONS_TO_EVALUATE * 3
+            total_attempts = 0
             samples_evaluated = 0
             while samples_evaluated < MAX_COMBINATIONS_TO_EVALUATE:
+                total_attempts += 1
+                if total_attempts > max_total_attempts:
+                    # Too many total attempts, break to avoid infinite loop
+                    break
                 chunk_indices = _random_combination(n, k)
                 if chunk_indices in seen_combinations:
-                    duplicate_attempts += 1
-                    if duplicate_attempts > max_duplicate_attempts:
-                        # Too many duplicates, likely exhausted unique combinations
-                        break
                     continue
                 seen_combinations.add(chunk_indices)
-                duplicate_attempts = 0
                 samples_evaluated += 1
 
                 # Count how many uncovered pairs this chunk covers
