@@ -116,11 +116,12 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Use the same model for both main and small model slots
-                small_model = config.model
+                # Use configured small_model if provided, otherwise use the same model for both slots
+                small_model = config.small_model if config.small_model else config.model
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
