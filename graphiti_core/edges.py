@@ -93,7 +93,9 @@ class Edge(BaseModel, ABC):
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.edge_delete_by_uuids(cls, driver, uuids)
+                return await driver.graph_operations_interface.edge_delete_by_uuids(
+                    cls, driver, uuids
+                )
             except NotImplementedError:
                 pass
 
@@ -817,7 +819,9 @@ class NextEpisodeEdge(Edge):
     async def delete(self, driver: GraphDriver):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.next_episode_edge_delete(self, driver)
+                return await driver.graph_operations_interface.next_episode_edge_delete(
+                    self, driver
+                )
             except NotImplementedError:
                 pass
 

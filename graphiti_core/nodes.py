@@ -95,8 +95,7 @@ class Node(BaseModel, ABC):
     created_at: datetime = Field(default_factory=lambda: utc_now())
 
     @abstractmethod
-    async def save(self, driver: GraphDriver):
-        ...
+    async def save(self, driver: GraphDriver): ...
 
     async def delete(self, driver: GraphDriver):
         if driver.graph_operations_interface:
@@ -299,12 +298,10 @@ class Node(BaseModel, ABC):
                     )
 
     @classmethod
-    async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
-        ...
+    async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
-        ...
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]): ...
 
 
 class EpisodicNode(Node):
@@ -408,11 +405,11 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_group_ids(
-            cls,
-            driver: GraphDriver,
-            group_ids: list[str],
-            limit: int | None = None,
-            uuid_cursor: str | None = None,
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
     ):
         if driver.graph_operations_interface:
             try:
@@ -605,12 +602,12 @@ class EntityNode(Node):
 
     @classmethod
     async def get_by_group_ids(
-            cls,
-            driver: GraphDriver,
-            group_ids: list[str],
-            limit: int | None = None,
-            uuid_cursor: str | None = None,
-            with_embeddings: bool = False,
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
+        with_embeddings: bool = False,
     ):
         if driver.graph_operations_interface:
             try:
@@ -780,11 +777,11 @@ class CommunityNode(Node):
 
     @classmethod
     async def get_by_group_ids(
-            cls,
-            driver: GraphDriver,
-            group_ids: list[str],
-            limit: int | None = None,
-            uuid_cursor: str | None = None,
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
     ):
         if driver.graph_operations_interface:
             try:
@@ -925,11 +922,11 @@ class SagaNode(Node):
 
     @classmethod
     async def get_by_group_ids(
-            cls,
-            driver: GraphDriver,
-            group_ids: list[str],
-            limit: int | None = None,
-            uuid_cursor: str | None = None,
+        cls,
+        driver: GraphDriver,
+        group_ids: list[str],
+        limit: int | None = None,
+        uuid_cursor: str | None = None,
     ):
         if driver.graph_operations_interface:
             try:
