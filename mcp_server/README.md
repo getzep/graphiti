@@ -166,6 +166,8 @@ server:
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
   model: "gpt-4.1"  # Default model
+  small_model: "gpt-4.1-mini"  # Optional: Override small model for lightweight tasks
+                               # Auto-detected if not set (gpt-4.1-mini or gpt-5-nano)
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -234,14 +236,27 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 ```yaml
 llm:
   provider: "openai"
-  model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
+  model: "qwen3:32b"  # or your preferred Ollama model
+  small_model: "qwen3:32b"  # IMPORTANT: Set to same model for Ollama
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: "ollama"  # dummy key required
+      api_url: "http://localhost:11434/v1"
 
 embedder:
-  provider: "sentence_transformers"  # recommended for local setup
-  model: "all-MiniLM-L6-v2"
+  provider: "openai"
+  model: "bge-m3"  # or another Ollama embedding model
+  dimensions: 1024
+
+  providers:
+    openai:
+      api_key: "ollama"
+      api_url: "http://localhost:11434/v1"
 ```
+
+**Important**: The `small_model` parameter is critical for local LLM setups. Graphiti uses a "small model" for lightweight tasks like entity deduplication. Without setting this, it defaults to `gpt-4.1-mini` which doesn't exist on Ollama.
 
 Make sure Ollama is running locally with: `ollama serve`
 

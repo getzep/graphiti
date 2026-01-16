@@ -163,6 +163,9 @@ class LLMConfig(BaseModel):
 
     provider: str = Field(default='openai', description='LLM provider')
     model: str = Field(default='gpt-4o-mini', description='Model name')
+    small_model: str | None = Field(
+        default=None, description='Small model for lightweight tasks (optional, auto-detected if not set)'
+    )
     temperature: float | None = Field(
         default=None, description='Temperature (optional, defaults to None for reasoning models)'
     )
