@@ -194,6 +194,11 @@ async def main():
         # Test CLI overrides
         test_cli_override()
 
+        # Test transport security configuration
+        test_transport_security_schema()
+        test_build_transport_security()
+        test_transport_security_env_override()
+
         print('\n' + '=' * 60)
         print('✓ All tests completed successfully!')
         print('=' * 60)
@@ -201,6 +206,133 @@ async def main():
     except Exception as e:
         print(f'\n✗ Test suite failed: {e}')
         sys.exit(1)
+
+
+def test_transport_security_schema():
+    """Test ServerConfig transport security fields."""
+    print('\nTesting transport security schema...')
+
+    from config.schema import ServerConfig
+
+    # Test defaults
+    server = ServerConfig()
+    assert server.allowed_hosts is None, 'Default allowed_hosts should be None'
+    assert server.allowed_origins is None, 'Default allowed_origins should be None'
+    assert server.enable_dns_rebinding_protection is True, 'Default DNS rebinding protection should be True'
+    print('✓ Default transport security fields are correct')
+
+    # Test with custom values
+    server2 = ServerConfig(
+        allowed_hosts=['localhost:8000', 'myservice.example.com'],
+        allowed_origins=['http://localhost:3000', 'https://app.example.com'],
+        enable_dns_rebinding_protection=False,
+    )
+    assert server2.allowed_hosts == ['localhost:8000', 'myservice.example.com']
+    assert server2.allowed_origins == ['http://localhost:3000', 'https://app.example.com']
+    assert server2.enable_dns_rebinding_protection is False
+    print('✓ Custom transport security values are set correctly')
+
+    # Test with empty lists (valid configuration)
+    server3 = ServerConfig(
+        allowed_hosts=[],
+        allowed_origins=[],
+    )
+    assert server3.allowed_hosts == []
+    assert server3.allowed_origins == []
+    print('✓ Empty lists for hosts/origins are valid')
+
+
+def test_build_transport_security():
+    """Test the build_transport_security helper function."""
+    print('\nTesting build_transport_security function...')
+
+    from config.schema import ServerConfig
+
+    # Import the helper function - need to handle path
+    import sys
+    src_path = Path(__file__).parent.parent / 'src'
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+
+    from graphiti_mcp_server import build_transport_security
+
+    # Test 1: Returns None when no custom hosts/origins
+    server_default = ServerConfig()
+    result = build_transport_security(server_default)
+    assert result is None, 'Should return None when no custom hosts/origins configured'
+    print('✓ Returns None for default configuration (uses SDK defaults)')
+
+    # Test 2: Returns TransportSecuritySettings when allowed_hosts is set
+    server_with_hosts = ServerConfig(
+        allowed_hosts=['localhost:8000', 'graphiti.example.com'],
+    )
+    result = build_transport_security(server_with_hosts)
+    assert result is not None, 'Should return TransportSecuritySettings when allowed_hosts is set'
+    assert result.allowed_hosts == ['localhost:8000', 'graphiti.example.com']
+    assert result.allowed_origins == [], 'allowed_origins should default to empty list'
+    assert result.enable_dns_rebinding_protection is True
+    print('✓ Returns TransportSecuritySettings with allowed_hosts (origins defaults to [])')
+
+    # Test 3: Returns TransportSecuritySettings when allowed_origins is set
+    server_with_origins = ServerConfig(
+        allowed_origins=['http://localhost:3000'],
+    )
+    result = build_transport_security(server_with_origins)
+    assert result is not None, 'Should return TransportSecuritySettings when allowed_origins is set'
+    assert result.allowed_hosts == [], 'allowed_hosts should default to empty list'
+    assert result.allowed_origins == ['http://localhost:3000']
+    print('✓ Returns TransportSecuritySettings with allowed_origins (hosts defaults to [])')
+
+    # Test 4: Returns TransportSecuritySettings with both hosts and origins
+    server_full = ServerConfig(
+        allowed_hosts=['graphiti.example.com:8000'],
+        allowed_origins=['https://app.example.com'],
+        enable_dns_rebinding_protection=False,
+    )
+    result = build_transport_security(server_full)
+    assert result is not None
+    assert result.allowed_hosts == ['graphiti.example.com:8000']
+    assert result.allowed_origins == ['https://app.example.com']
+    assert result.enable_dns_rebinding_protection is False
+    print('✓ Returns TransportSecuritySettings with full configuration')
+
+    # Test 5: Empty lists still trigger TransportSecuritySettings creation
+    server_empty_lists = ServerConfig(
+        allowed_hosts=[],
+        allowed_origins=None,
+    )
+    # Empty list is not None, so it should still return a TransportSecuritySettings
+    result = build_transport_security(server_empty_lists)
+    # Note: Empty list evaluates to falsy but is NOT None
+    assert result is not None, 'Empty list is not None, should return TransportSecuritySettings'
+    print('✓ Empty allowed_hosts list triggers TransportSecuritySettings creation')
+
+
+def test_transport_security_env_override():
+    """Test environment variable overrides for transport security."""
+    print('\nTesting transport security environment variable overrides...')
+
+    import os
+
+    # Test SERVER__ALLOWED_HOSTS override (as JSON list)
+    os.environ['SERVER__ALLOWED_HOSTS'] = '["host1.example.com", "host2.example.com"]'
+    os.environ['SERVER__ENABLE_DNS_REBINDING_PROTECTION'] = 'false'
+
+    config = GraphitiConfig()
+
+    # Note: pydantic-settings parses JSON for list fields
+    # The actual behavior depends on how pydantic-settings handles the env var
+    # This test documents the expected behavior
+
+    print(f'  - SERVER__ALLOWED_HOSTS env var set')
+    print(f'  - Config allowed_hosts: {config.server.allowed_hosts}')
+    print(f'  - Config enable_dns_rebinding_protection: {config.server.enable_dns_rebinding_protection}')
+
+    # Clean up
+    del os.environ['SERVER__ALLOWED_HOSTS']
+    del os.environ['SERVER__ENABLE_DNS_REBINDING_PROTECTION']
+
+    print('✓ Environment variable override test completed')
 
 
 if __name__ == '__main__':

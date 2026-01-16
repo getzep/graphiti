@@ -171,6 +171,62 @@ database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
 
+### Transport Security (Remote Access)
+
+When deploying the MCP server behind a reverse proxy (like Nginx, Traefik, or Caddy) or accessing it from a different host, you need to configure the transport security settings to allow the Host and Origin headers.
+
+By default, the MCP SDK enables DNS rebinding protection which only allows requests from localhost variants. This will cause "Invalid Host header" (421) errors when accessing the server via a custom domain.
+
+Configure allowed hosts and origins in `config.yaml`:
+
+```yaml
+server:
+  transport: "http"
+  host: "0.0.0.0"
+  port: 8000
+
+  # Transport security settings for remote access
+  allowed_hosts:
+    - "localhost:8000"
+    - "graphiti.example.com"
+    - "graphiti.example.com:8000"
+  allowed_origins:
+    - "http://localhost:3000"
+    - "https://app.example.com"
+  enable_dns_rebinding_protection: true  # Default: true
+```
+
+**Configuration Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allowed_hosts` | list | None | Allowed Host header values. If not set, uses SDK defaults (localhost variants only). |
+| `allowed_origins` | list | None | Allowed CORS origins. If not set, uses SDK defaults. |
+| `enable_dns_rebinding_protection` | bool | true | Enable DNS rebinding protection by validating Host headers. |
+
+**Environment Variables:**
+
+You can also configure these via environment variables:
+
+```bash
+SERVER__ALLOWED_HOSTS='["graphiti.example.com", "localhost:8000"]'
+SERVER__ALLOWED_ORIGINS='["https://app.example.com"]'
+SERVER__ENABLE_DNS_REBINDING_PROTECTION=true
+```
+
+**Example: Traefik Reverse Proxy:**
+
+If your Graphiti MCP server is accessible via `graphiti.marakanda.biz` through Traefik:
+
+```yaml
+server:
+  allowed_hosts:
+    - "graphiti.marakanda.biz"
+    - "localhost:8000"  # Keep for local development
+```
+
+**Security Note:** Only add hosts that you trust. The DNS rebinding protection helps prevent malicious websites from accessing your MCP server.
+
 ### Using Ollama for Local LLM
 
 To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
