@@ -19,6 +19,7 @@ except ImportError:
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
@@ -97,6 +98,23 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     return api_key
 
 
+def is_non_openai_provider(base_url: str | None) -> bool:
+    """
+    Detect if the base_url points to a non-OpenAI provider.
+
+    Returns True if base_url is set and doesn't point to OpenAI's official API.
+    This includes Ollama, LM Studio, vLLM, and other OpenAI-compatible providers.
+    """
+    if not base_url:
+        return False
+
+    # OpenAI's official endpoints
+    openai_domains = ['api.openai.com', 'openai.azure.com']
+
+    # Check if base_url contains any official OpenAI domain
+    return not any(domain in base_url for domain in openai_domains)
+
+
 class LLMClientFactory:
     """Factory for creating LLM clients based on configuration."""
 
@@ -126,8 +144,8 @@ class LLMClientFactory:
                     or config.model.startswith('o3')
                 )
                 small_model = (
-                    'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
-                )  # Use reasoning model for small tasks if main model is reasoning
+                    'gpt-5-nano' if is_reasoning_model else config.model
+                )  # Use reasoning model for small tasks if main model is reasoning, otherwise use same model
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
@@ -135,14 +153,24 @@ class LLMClientFactory:
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
+                    base_url=config.providers.openai.api_url,
                 )
 
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
+                use_generic_client = is_non_openai_provider(config.providers.openai.api_url)
+
+                if use_generic_client:
+                    # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
+                    # This uses the standard Chat Completions API instead of Responses API
+                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    # Use OpenAIClient for official OpenAI API (supports Responses API)
+                    # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
+                    if is_reasoning_model:
+                        return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    else:
+                        # For non-reasoning models, use default reasoning/verbosity
+                        return OpenAIClient(config=llm_config)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
@@ -275,6 +303,7 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
+                    base_url=config.providers.openai.api_url,
                 )
                 return OpenAIEmbedder(config=embedder_config)
 
