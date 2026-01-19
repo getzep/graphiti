@@ -329,3 +329,37 @@ COMMUNITY_NODE_RETURN_NEPTUNE = """
     n.summary AS summary,
     n.created_at AS created_at
 """
+
+
+def get_saga_node_save_query(provider: GraphProvider) -> str:
+    match provider:
+        case GraphProvider.KUZU:
+            return """
+                MERGE (n:Saga {uuid: $uuid})
+                SET
+                    n.name = $name,
+                    n.group_id = $group_id,
+                    n.created_at = $created_at
+                RETURN n.uuid AS uuid
+            """
+        case _:  # Neo4j, FalkorDB, Neptune
+            return """
+                MERGE (n:Saga {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at}
+                RETURN n.uuid AS uuid
+            """
+
+
+SAGA_NODE_RETURN = """
+    s.uuid AS uuid,
+    s.name AS name,
+    s.group_id AS group_id,
+    s.created_at AS created_at
+"""
+
+SAGA_NODE_RETURN_NEPTUNE = """
+    s.uuid AS uuid,
+    s.name AS name,
+    s.group_id AS group_id,
+    s.created_at AS created_at
+"""
