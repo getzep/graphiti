@@ -34,12 +34,18 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
             'CREATE INDEX FOR (n:Episodic) ON (n.uuid, n.group_id, n.created_at, n.valid_at)',
             # Community node
             'CREATE INDEX FOR (n:Community) ON (n.uuid)',
+            # Saga node
+            'CREATE INDEX FOR (n:Saga) ON (n.uuid, n.group_id, n.name)',
             # RELATES_TO edge
             'CREATE INDEX FOR ()-[e:RELATES_TO]-() ON (e.uuid, e.group_id, e.name, e.created_at, e.expired_at, e.valid_at, e.invalid_at)',
             # MENTIONS edge
             'CREATE INDEX FOR ()-[e:MENTIONS]-() ON (e.uuid, e.group_id)',
             # HAS_MEMBER edge
             'CREATE INDEX FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+            # HAS_EPISODE edge
+            'CREATE INDEX FOR ()-[e:HAS_EPISODE]-() ON (e.uuid, e.group_id)',
+            # NEXT_EPISODE edge
+            'CREATE INDEX FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid, e.group_id)',
         ]
 
     if provider == GraphProvider.KUZU:
@@ -49,15 +55,22 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
         'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
         'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
         'CREATE INDEX community_uuid IF NOT EXISTS FOR (n:Community) ON (n.uuid)',
+        'CREATE INDEX saga_uuid IF NOT EXISTS FOR (n:Saga) ON (n.uuid)',
         'CREATE INDEX relation_uuid IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.uuid)',
         'CREATE INDEX mention_uuid IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.uuid)',
         'CREATE INDEX has_member_uuid IF NOT EXISTS FOR ()-[e:HAS_MEMBER]-() ON (e.uuid)',
+        'CREATE INDEX has_episode_uuid IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.uuid)',
+        'CREATE INDEX next_episode_uuid IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.uuid)',
         'CREATE INDEX entity_group_id IF NOT EXISTS FOR (n:Entity) ON (n.group_id)',
         'CREATE INDEX episode_group_id IF NOT EXISTS FOR (n:Episodic) ON (n.group_id)',
         'CREATE INDEX community_group_id IF NOT EXISTS FOR (n:Community) ON (n.group_id)',
+        'CREATE INDEX saga_group_id IF NOT EXISTS FOR (n:Saga) ON (n.group_id)',
         'CREATE INDEX relation_group_id IF NOT EXISTS FOR ()-[e:RELATES_TO]-() ON (e.group_id)',
         'CREATE INDEX mention_group_id IF NOT EXISTS FOR ()-[e:MENTIONS]-() ON (e.group_id)',
+        'CREATE INDEX has_episode_group_id IF NOT EXISTS FOR ()-[e:HAS_EPISODE]-() ON (e.group_id)',
+        'CREATE INDEX next_episode_group_id IF NOT EXISTS FOR ()-[e:NEXT_EPISODE]-() ON (e.group_id)',
         'CREATE INDEX name_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.name)',
+        'CREATE INDEX saga_name IF NOT EXISTS FOR (n:Saga) ON (n.name)',
         'CREATE INDEX created_at_entity_index IF NOT EXISTS FOR (n:Entity) ON (n.created_at)',
         'CREATE INDEX created_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.created_at)',
         'CREATE INDEX valid_at_episodic_index IF NOT EXISTS FOR (n:Episodic) ON (n.valid_at)',
