@@ -21,7 +21,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
-- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
+- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, Azure OpenAI, and OpenAI-compatible APIs (LiteLLM, Ollama, vLLM)
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
@@ -164,23 +164,37 @@ server:
   transport: "http"  # Default. Options: stdio, http
 
 llm:
-  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
+  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai", "openai_generic"
   model: "gpt-4.1"  # Default model
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
 
-### Using Ollama for Local LLM
+### Using OpenAI-Compatible APIs (LiteLLM, Ollama, vLLM)
 
-To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
+The `openai_generic` provider supports any OpenAI-compatible API, including LiteLLM proxy, Ollama, and vLLM. It uses the standard `/chat/completions` endpoint with automatic fallback for providers that don't support `json_schema` response format.
 
+**LiteLLM Proxy Example:**
 ```yaml
 llm:
-  provider: "openai"
-  model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
+  provider: "openai_generic"
+  model: "gemini/gemini-2.0-flash"  # or any LiteLLM model
+  providers:
+    openai:
+      api_key: "your-litellm-key"
+      base_url: "http://localhost:4000/v1"
+```
+
+**Ollama Example:**
+```yaml
+llm:
+  provider: "openai_generic"
+  model: "llama3.2"  # or your preferred Ollama model
+  providers:
+    openai:
+      api_key: "ollama"  # dummy key required
+      base_url: "http://localhost:11434/v1"
 
 embedder:
   provider: "sentence_transformers"  # recommended for local setup
@@ -188,6 +202,8 @@ embedder:
 ```
 
 Make sure Ollama is running locally with: `ollama serve`
+
+> **Note:** The `openai_generic` provider automatically handles JSON response parsing for providers that return extra text after JSON output.
 
 ### Entity Types
 
