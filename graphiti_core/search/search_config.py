@@ -83,6 +83,11 @@ class EdgeSearchConfig(BaseModel):
     sim_min_score: float = Field(default=DEFAULT_MIN_SCORE)
     mmr_lambda: float = Field(default=DEFAULT_MMR_LAMBDA)
     bfs_max_depth: int = Field(default=MAX_SEARCH_DEPTH)
+    edge_types: list[str] | None = Field(
+        default=None,
+        description='List of edge types to search. If None, defaults to RELATES_TO. '
+        'Custom edge types must have fulltext indexes created.',
+    )
 
 
 class NodeSearchConfig(BaseModel):
