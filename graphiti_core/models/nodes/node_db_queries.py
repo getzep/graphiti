@@ -134,6 +134,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 SET n:{labels}
                 SET n = $entity_data
                 SET n.name_embedding = vecf32($entity_data.name_embedding)
+                SET n.summary_embedding = CASE WHEN $entity_data.summary_embedding IS NOT NULL THEN vecf32($entity_data.summary_embedding) ELSE NULL END
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
@@ -145,6 +146,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                     n.labels = $labels,
                     n.created_at = $created_at,
                     n.name_embedding = $name_embedding,
+                    n.summary_embedding = $summary_embedding,
                     n.summary = $summary,
                     n.attributes = $attributes
                 WITH n
@@ -157,13 +159,19 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
                 {label_subquery}
-                SET n = removeKeyFromMap(removeKeyFromMap($entity_data, "labels"), "name_embedding")
+                SET n = removeKeyFromMap(removeKeyFromMap(removeKeyFromMap($entity_data, "labels"), "name_embedding"), "summary_embedding")
                 SET n.name_embedding = join([x IN coalesce($entity_data.name_embedding, []) | toString(x) ], ",")
+                SET n.summary_embedding = CASE WHEN $entity_data.summary_embedding IS NOT NULL THEN join([x IN $entity_data.summary_embedding | toString(x) ], ",") ELSE NULL END
                 RETURN n.uuid AS uuid
             """
         case _:
             save_embedding_query = (
                 'WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.name_embedding)'
+                if not has_aoss
+                else ''
+            )
+            save_summary_embedding_query = (
+                ' WITH n CALL db.create.setNodeVectorProperty(n, "summary_embedding", $entity_data.summary_embedding)'
                 if not has_aoss
                 else ''
             )
@@ -174,6 +182,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 SET n = $entity_data
                 """
                 + save_embedding_query
+                + save_summary_embedding_query
                 + """
                 RETURN n.uuid AS uuid
             """
@@ -197,6 +206,7 @@ def get_entity_node_save_bulk_query(
                             SET n = node
                             WITH n, node
                             SET n.name_embedding = vecf32(node.name_embedding)
+                            SET n.summary_embedding = CASE WHEN node.summary_embedding IS NOT NULL THEN vecf32(node.summary_embedding) ELSE NULL END
                             RETURN n.uuid AS uuid
                             """,
                             {'nodes': [node]},
@@ -214,8 +224,9 @@ def get_entity_node_save_bulk_query(
                         UNWIND $nodes AS node
                         MERGE (n:Entity {{uuid: node.uuid}})
                         {labels}
-                        SET n = removeKeyFromMap(removeKeyFromMap(node, "labels"), "name_embedding")
+                        SET n = removeKeyFromMap(removeKeyFromMap(removeKeyFromMap(node, "labels"), "name_embedding"), "summary_embedding")
                         SET n.name_embedding = join([x IN coalesce(node.name_embedding, []) | toString(x) ], ",")
+                        SET n.summary_embedding = CASE WHEN node.summary_embedding IS NOT NULL THEN join([x IN node.summary_embedding | toString(x) ], ",") ELSE NULL END
                         RETURN n.uuid AS uuid
                     """
                 )
@@ -229,6 +240,7 @@ def get_entity_node_save_bulk_query(
                     n.labels = $labels,
                     n.created_at = $created_at,
                     n.name_embedding = $name_embedding,
+                    n.summary_embedding = $summary_embedding,
                     n.summary = $summary,
                     n.attributes = $attributes
                 RETURN n.uuid AS uuid
@@ -236,6 +248,11 @@ def get_entity_node_save_bulk_query(
         case _:  # Neo4j
             save_embedding_query = (
                 'WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)'
+                if not has_aoss
+                else ''
+            )
+            save_summary_embedding_query = (
+                ' WITH n, node CALL db.create.setNodeVectorProperty(n, "summary_embedding", node.summary_embedding)'
                 if not has_aoss
                 else ''
             )
@@ -247,6 +264,7 @@ def get_entity_node_save_bulk_query(
                     SET n = node
                     """
                 + save_embedding_query
+                + save_summary_embedding_query
                 + """
                 RETURN n.uuid AS uuid
             """
@@ -283,6 +301,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
             return """
                 MERGE (n:Community {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at, name_embedding: vecf32($name_embedding)}
+                SET n.summary_embedding = CASE WHEN $summary_embedding IS NOT NULL THEN vecf32($summary_embedding) ELSE NULL END
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.NEPTUNE:
@@ -290,6 +309,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                 MERGE (n:Community {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
                 SET n.name_embedding = join([x IN coalesce($name_embedding, []) | toString(x) ], ",")
+                SET n.summary_embedding = CASE WHEN $summary_embedding IS NOT NULL THEN join([x IN $summary_embedding | toString(x) ], ",") ELSE NULL END
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
@@ -300,6 +320,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                     n.group_id = $group_id,
                     n.created_at = $created_at,
                     n.name_embedding = $name_embedding,
+                    n.summary_embedding = $summary_embedding,
                     n.summary = $summary
                 RETURN n.uuid AS uuid
             """
@@ -308,6 +329,7 @@ def get_community_node_save_query(provider: GraphProvider) -> str:
                 MERGE (n:Community {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary, created_at: $created_at}
                 WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $name_embedding)
+                WITH n CALL db.create.setNodeVectorProperty(n, "summary_embedding", $summary_embedding)
                 RETURN n.uuid AS uuid
             """
 
@@ -318,6 +340,7 @@ COMMUNITY_NODE_RETURN = """
     c.group_id AS group_id,
     c.created_at AS created_at,
     c.name_embedding AS name_embedding,
+    c.summary_embedding AS summary_embedding,
     c.summary AS summary
 """
 
@@ -325,6 +348,7 @@ COMMUNITY_NODE_RETURN_NEPTUNE = """
     n.uuid AS uuid,
     n.name AS name,
     [x IN split(n.name_embedding, ",") | toFloat(x)] AS name_embedding,
+    CASE WHEN n.summary_embedding IS NOT NULL THEN [x IN split(n.summary_embedding, ",") | toFloat(x)] ELSE NULL END AS summary_embedding,
     n.group_id AS group_id,
     n.summary AS summary,
     n.created_at AS created_at
