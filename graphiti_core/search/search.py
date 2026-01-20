@@ -59,6 +59,7 @@ from graphiti_core.search.search_utils import (
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
+    node_summary_similarity_search,
     rrf,
 )
 
@@ -92,6 +93,8 @@ async def search(
         and EdgeReranker.mmr == config.edge_config.reranker
         or config.node_config
         and NodeSearchMethod.cosine_similarity in config.node_config.search_methods
+        or config.node_config
+        and NodeSearchMethod.summary_similarity in config.node_config.search_methods
         or config.node_config
         and NodeReranker.mmr == config.node_config.reranker
         or (
@@ -331,6 +334,17 @@ async def node_search(
     if NodeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(
             node_similarity_search(
+                driver,
+                query_vector,
+                search_filter,
+                group_ids,
+                2 * limit,
+                config.sim_min_score,
+            )
+        )
+    if NodeSearchMethod.summary_similarity in config.search_methods:
+        search_tasks.append(
+            node_summary_similarity_search(
                 driver,
                 query_vector,
                 search_filter,

@@ -473,6 +473,9 @@ class EpisodicNode(Node):
 
 class EntityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
+    summary_embedding: list[float] | None = Field(
+        default=None, description='embedding of the summary'
+    )
     summary: str = Field(description='regional summary of surrounding edges', default_factory=str)
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the node. Dependent on node labels'
@@ -486,6 +489,18 @@ class EntityNode(Node):
         logger.debug(f'embedded {text} in {end - start} ms')
 
         return self.name_embedding
+
+    async def generate_summary_embedding(self, embedder: EmbedderClient):
+        if not self.summary or not self.summary.strip():
+            return None
+
+        start = time()
+        text = self.summary.replace('\n', ' ')
+        self.summary_embedding = await embedder.create(input_data=[text])
+        end = time()
+        logger.debug(f'embedded summary for {self.name} in {end - start} ms')
+
+        return self.summary_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
         if driver.graph_operations_interface:
@@ -516,6 +531,28 @@ class EntityNode(Node):
 
         self.name_embedding = records[0]['name_embedding']
 
+    async def load_summary_embedding(self, driver: GraphDriver):
+        if driver.provider == GraphProvider.NEPTUNE:
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN [x IN split(n.summary_embedding, ",") | toFloat(x)] as summary_embedding
+            """
+        else:
+            query: LiteralString = """
+                MATCH (n:Entity {uuid: $uuid})
+                RETURN n.summary_embedding AS summary_embedding
+            """
+        records, _, _ = await driver.execute_query(
+            query,
+            uuid=self.uuid,
+            routing_='r',
+        )
+
+        if len(records) == 0:
+            raise NodeNotFoundError(self.uuid)
+
+        self.summary_embedding = records[0]['summary_embedding']
+
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
             try:
@@ -527,6 +564,7 @@ class EntityNode(Node):
             'uuid': self.uuid,
             'name': self.name,
             'name_embedding': self.name_embedding,
+            'summary_embedding': self.summary_embedding,
             'group_id': self.group_id,
             'summary': self.summary,
             'created_at': self.created_at,
@@ -655,6 +693,9 @@ class EntityNode(Node):
 
 class CommunityNode(Node):
     name_embedding: list[float] | None = Field(default=None, description='embedding of the name')
+    summary_embedding: list[float] | None = Field(
+        default=None, description='embedding of the summary'
+    )
     summary: str = Field(description='region summary of member nodes', default_factory=str)
 
     async def save(self, driver: GraphDriver):
@@ -676,6 +717,7 @@ class CommunityNode(Node):
             group_id=self.group_id,
             summary=self.summary,
             name_embedding=self.name_embedding,
+            summary_embedding=self.summary_embedding,
             created_at=self.created_at,
         )
 
@@ -691,6 +733,18 @@ class CommunityNode(Node):
         logger.debug(f'embedded {text} in {end - start} ms')
 
         return self.name_embedding
+
+    async def generate_summary_embedding(self, embedder: EmbedderClient):
+        if not self.summary or not self.summary.strip():
+            return None
+
+        start = time()
+        text = self.summary.replace('\n', ' ')
+        self.summary_embedding = await embedder.create(input_data=[text])
+        end = time()
+        logger.debug(f'embedded summary for {self.name} in {end - start} ms')
+
+        return self.summary_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
@@ -714,6 +768,29 @@ class CommunityNode(Node):
             raise NodeNotFoundError(self.uuid)
 
         self.name_embedding = records[0]['name_embedding']
+
+    async def load_summary_embedding(self, driver: GraphDriver):
+        if driver.provider == GraphProvider.NEPTUNE:
+            query: LiteralString = """
+                MATCH (c:Community {uuid: $uuid})
+                RETURN [x IN split(c.summary_embedding, ",") | toFloat(x)] as summary_embedding
+            """
+        else:
+            query: LiteralString = """
+            MATCH (c:Community {uuid: $uuid})
+            RETURN c.summary_embedding AS summary_embedding
+            """
+
+        records, _, _ = await driver.execute_query(
+            query,
+            uuid=self.uuid,
+            routing_='r',
+        )
+
+        if len(records) == 0:
+            raise NodeNotFoundError(self.uuid)
+
+        self.summary_embedding = records[0]['summary_embedding']
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str):
@@ -1000,6 +1077,7 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         attributes.pop('name', None)
         attributes.pop('group_id', None)
         attributes.pop('name_embedding', None)
+        attributes.pop('summary_embedding', None)
         attributes.pop('summary', None)
         attributes.pop('created_at', None)
         attributes.pop('labels', None)
@@ -1013,6 +1091,7 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         uuid=record['uuid'],
         name=record['name'],
         name_embedding=record.get('name_embedding'),
+        summary_embedding=record.get('summary_embedding'),
         group_id=group_id,
         labels=labels,
         created_at=parse_db_date(record['created_at']),  # type: ignore
@@ -1029,6 +1108,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         name=record['name'],
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
+        summary_embedding=record.get('summary_embedding'),
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
     )
@@ -1053,3 +1133,12 @@ async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[En
     name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
     for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding
+
+    # Generate summary embeddings for nodes with non-empty summaries
+    nodes_with_summary = [node for node in filtered_nodes if node.summary and node.summary.strip()]
+    if nodes_with_summary:
+        summary_embeddings = await embedder.create_batch(
+            [node.summary for node in nodes_with_summary]
+        )
+        for node, summary_embedding in zip(nodes_with_summary, summary_embeddings, strict=True):
+            node.summary_embedding = summary_embedding
