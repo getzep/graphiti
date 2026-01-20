@@ -37,7 +37,11 @@ COMBINED_HYBRID_SEARCH_RRF = SearchConfig(
         reranker=EdgeReranker.rrf,
     ),
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.rrf,
     ),
     episode_config=EpisodeSearchConfig(
@@ -60,7 +64,11 @@ COMBINED_HYBRID_SEARCH_MMR = SearchConfig(
         mmr_lambda=1,
     ),
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.mmr,
         mmr_lambda=1,
     ),
@@ -91,6 +99,7 @@ COMBINED_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
         search_methods=[
             NodeSearchMethod.bm25,
             NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
             NodeSearchMethod.bfs,
         ],
         reranker=NodeReranker.cross_encoder,
@@ -155,7 +164,11 @@ EDGE_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
 # performs a hybrid search over nodes with rrf reranking
 NODE_HYBRID_SEARCH_RRF = SearchConfig(
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.rrf,
     )
 )
@@ -163,7 +176,11 @@ NODE_HYBRID_SEARCH_RRF = SearchConfig(
 # performs a hybrid search over nodes with mmr reranking
 NODE_HYBRID_SEARCH_MMR = SearchConfig(
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.mmr,
     )
 )
@@ -171,7 +188,11 @@ NODE_HYBRID_SEARCH_MMR = SearchConfig(
 # performs a hybrid search over nodes with node distance reranking
 NODE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.node_distance,
     )
 )
@@ -179,17 +200,22 @@ NODE_HYBRID_SEARCH_NODE_DISTANCE = SearchConfig(
 # performs a hybrid search over nodes with episode mentions reranking
 NODE_HYBRID_SEARCH_EPISODE_MENTIONS = SearchConfig(
     node_config=NodeSearchConfig(
-        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        search_methods=[
+            NodeSearchMethod.bm25,
+            NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
+        ],
         reranker=NodeReranker.episode_mentions,
     )
 )
 
-# performs a hybrid search over nodes with episode mentions reranking
+# performs a hybrid search over nodes with cross encoder reranking
 NODE_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
     node_config=NodeSearchConfig(
         search_methods=[
             NodeSearchMethod.bm25,
             NodeSearchMethod.cosine_similarity,
+            NodeSearchMethod.summary_similarity,
             NodeSearchMethod.bfs,
         ],
         reranker=NodeReranker.cross_encoder,
