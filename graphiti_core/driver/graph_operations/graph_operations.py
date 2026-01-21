@@ -186,6 +186,18 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve episodic nodes by group IDs with optional pagination."""
         raise NotImplementedError
 
+    async def retrieve_episodes(
+        self,
+        driver: Any,
+        reference_time: Any,
+        last_n: int = 3,
+        group_ids: list[str] | None = None,
+        source: Any | None = None,
+        saga: str | None = None,
+    ) -> list[Any]:
+        """Retrieve the last n episodic nodes from the graph."""
+        raise NotImplementedError
+
     # -----------------------
     # CommunityNode: Save/Delete
     # -----------------------
