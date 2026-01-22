@@ -604,3 +604,102 @@ class GraphOperationsInterface(BaseModel):
     ) -> list[Any]:
         """Retrieve next_episode edges by group IDs with optional pagination."""
         raise NotImplementedError
+
+    # -----------------
+    # Search
+    # -----------------
+
+    async def get_mentioned_nodes(
+        self,
+        driver: Any,
+        episodes: list[Any],
+    ) -> list[Any]:
+        """Retrieve entity nodes mentioned by the given episodic nodes."""
+        raise NotImplementedError
+
+    async def get_communities_by_nodes(
+        self,
+        driver: Any,
+        nodes: list[Any],
+    ) -> list[Any]:
+        """Retrieve community nodes that contain the given entity nodes as members."""
+        raise NotImplementedError
+
+    # -----------------
+    # Maintenance
+    # -----------------
+
+    async def clear_data(
+        self,
+        driver: Any,
+        group_ids: list[str] | None = None,
+    ) -> None:
+        """Clear all data or group-specific data from the graph."""
+        raise NotImplementedError
+
+    async def get_community_clusters(
+        self,
+        driver: Any,
+        group_ids: list[str] | None,
+    ) -> list[list[Any]]:
+        """Retrieve all entity node clusters for community detection."""
+        raise NotImplementedError
+
+    async def remove_communities(
+        self,
+        driver: Any,
+    ) -> None:
+        """Delete all community nodes from the graph."""
+        raise NotImplementedError
+
+    async def determine_entity_community(
+        self,
+        driver: Any,
+        entity: Any,
+    ) -> tuple[Any | None, bool]:
+        """Determine which community an entity belongs to."""
+        raise NotImplementedError
+
+    # -----------------
+    # Additional Node Operations
+    # -----------------
+
+    async def episodic_node_get_by_entity_node_uuid(
+        self,
+        _cls: Any,
+        driver: Any,
+        entity_node_uuid: str,
+    ) -> list[Any]:
+        """Retrieve all episodes mentioning a specific entity."""
+        raise NotImplementedError
+
+    async def community_node_load_name_embedding(
+        self,
+        node: Any,
+        driver: Any,
+    ) -> None:
+        """Load the name embedding for a community node."""
+        raise NotImplementedError
+
+    # -----------------
+    # Additional Edge Operations
+    # -----------------
+
+    async def edge_get_between_nodes(
+        self,
+        _cls: Any,
+        driver: Any,
+        source_node_uuid: str,
+        target_node_uuid: str,
+    ) -> list[Any]:
+        """Get edges connecting two specific entity nodes."""
+        raise NotImplementedError
+
+    async def edge_get_by_node_uuid(
+        self,
+        _cls: Any,
+        driver: Any,
+        node_uuid: str,
+    ) -> list[Any]:
+        """Get all edges connected to a specific node."""
+        raise NotImplementedError

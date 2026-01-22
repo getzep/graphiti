@@ -78,6 +78,71 @@ class SearchInterface(BaseModel):
     ) -> list[Any]:
         raise NotImplementedError
 
+    async def edge_bfs_search(
+        self,
+        driver: Any,
+        bfs_origin_node_uuids: list[str] | None,
+        bfs_max_depth: int,
+        search_filter: Any,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        raise NotImplementedError
+
+    async def node_bfs_search(
+        self,
+        driver: Any,
+        bfs_origin_node_uuids: list[str] | None,
+        search_filter: Any,
+        bfs_max_depth: int,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        raise NotImplementedError
+
+    async def community_fulltext_search(
+        self,
+        driver: Any,
+        query: str,
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[Any]:
+        raise NotImplementedError
+
+    async def community_similarity_search(
+        self,
+        driver: Any,
+        search_vector: list[float],
+        group_ids: list[str] | None = None,
+        limit: int = 100,
+        min_score: float = 0.6,
+    ) -> list[Any]:
+        raise NotImplementedError
+
+    async def get_embeddings_for_communities(
+        self,
+        driver: Any,
+        communities: list[Any],
+    ) -> dict[str, list[float]]:
+        raise NotImplementedError
+
+    async def node_distance_reranker(
+        self,
+        driver: Any,
+        node_uuids: list[str],
+        center_node_uuid: str,
+        min_score: float = 0,
+    ) -> tuple[list[str], list[float]]:
+        raise NotImplementedError
+
+    async def episode_mentions_reranker(
+        self,
+        driver: Any,
+        node_uuids: list[list[str]],
+        min_score: float = 0,
+    ) -> tuple[list[str], list[float]]:
+        raise NotImplementedError
+
     # ---------- SEARCH FILTERS (sync) ----------
     def build_node_search_filters(self, search_filters: Any) -> Any:
         raise NotImplementedError
