@@ -204,7 +204,23 @@ class GraphOperationsInterface(BaseModel):
         source: Any | None = None,
         saga: str | None = None,
     ) -> list[Any]:
-        """Retrieve the last n episodic nodes from the graph."""
+        """
+        Retrieve the last n episodic nodes from the graph.
+
+        Args:
+            driver: GraphDriver instance
+            reference_time: datetime object. Only episodes with valid_at <= reference_time
+                are returned, allowing point-in-time queries.
+            last_n: Number of most recent episodes to retrieve (default: 3)
+            group_ids: Optional list of group IDs to filter by
+            source: Optional EpisodeType to filter by source type
+            saga: Optional saga name. If provided, only retrieves episodes
+                belonging to that saga.
+
+        Returns:
+            list[EpisodicNode]: List of EpisodicNode objects in chronological order
+                (oldest first)
+        """
         raise NotImplementedError
 
     # -----------------------
