@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.clear_data(driver, group_ids)
+        except NotImplementedError:
+            pass
+
     async with driver.session() as session:
 
         async def delete_all(tx):
@@ -82,6 +88,14 @@ async def retrieve_episodes(
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.retrieve_episodes(
+                driver, reference_time, last_n, group_ids, source, saga
+            )
+        except NotImplementedError:
+            pass
+
     # If saga is provided, retrieve episodes from that saga only
     if saga is not None:
         group_id = group_ids[0] if group_ids else None
