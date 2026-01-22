@@ -22,6 +22,15 @@ from pydantic import BaseModel
 class GraphOperationsInterface(BaseModel):
     """
     Interface for updating graph mutation behavior.
+
+    All methods use `Any` type hints to avoid circular imports. See docstrings
+    for expected concrete types.
+
+    Type reference:
+        - driver: GraphDriver
+        - EntityNode, EpisodicNode, CommunityNode, SagaNode from graphiti_core.nodes
+        - EntityEdge, EpisodicEdge, CommunityEdge from graphiti_core.edges
+        - EpisodeType from graphiti_core.nodes
     """
 
     # -----------------
@@ -614,7 +623,17 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         episodes: list[Any],
     ) -> list[Any]:
-        """Retrieve entity nodes mentioned by the given episodic nodes."""
+        """
+        Retrieve entity nodes mentioned by the given episodic nodes.
+
+        Args:
+            driver: GraphDriver instance
+            episodes: List of EpisodicNode objects
+
+        Returns:
+            list[EntityNode]: List of EntityNode objects that are mentioned
+                by the given episodes via MENTIONS relationships
+        """
         raise NotImplementedError
 
     async def get_communities_by_nodes(
@@ -622,7 +641,17 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         nodes: list[Any],
     ) -> list[Any]:
-        """Retrieve community nodes that contain the given entity nodes as members."""
+        """
+        Retrieve community nodes that contain the given entity nodes as members.
+
+        Args:
+            driver: GraphDriver instance
+            nodes: List of EntityNode objects
+
+        Returns:
+            list[CommunityNode]: List of CommunityNode objects that have
+                HAS_MEMBER relationships to the given entity nodes
+        """
         raise NotImplementedError
 
     # -----------------
@@ -634,7 +663,14 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         group_ids: list[str] | None = None,
     ) -> None:
-        """Clear all data or group-specific data from the graph."""
+        """
+        Clear all data or group-specific data from the graph.
+
+        Args:
+            driver: GraphDriver instance
+            group_ids: If provided, only delete data in these groups.
+                If None, deletes ALL data in the graph.
+        """
         raise NotImplementedError
 
     async def get_community_clusters(
@@ -642,14 +678,35 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         group_ids: list[str] | None,
     ) -> list[list[Any]]:
-        """Retrieve all entity node clusters for community detection."""
+        """
+        Retrieve all entity node clusters for community detection.
+
+        Uses label propagation algorithm internally to identify clusters
+        of related entities based on their edge connections.
+
+        Args:
+            driver: GraphDriver instance
+            group_ids: List of group IDs to process. If None, processes
+                all groups found in the graph.
+
+        Returns:
+            list[list[EntityNode]]: List of clusters, where each cluster
+                is a list of EntityNode objects that belong together
+        """
         raise NotImplementedError
 
     async def remove_communities(
         self,
         driver: Any,
     ) -> None:
-        """Delete all community nodes from the graph."""
+        """
+        Delete all community nodes from the graph.
+
+        This removes all Community-labeled nodes and their relationships.
+
+        Args:
+            driver: GraphDriver instance
+        """
         raise NotImplementedError
 
     async def determine_entity_community(
@@ -657,7 +714,22 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         entity: Any,
     ) -> tuple[Any | None, bool]:
-        """Determine which community an entity belongs to."""
+        """
+        Determine which community an entity belongs to.
+
+        First checks if the entity is already a member of a community.
+        If not, finds the most common community among neighboring entities.
+
+        Args:
+            driver: GraphDriver instance
+            entity: EntityNode object to find community for
+
+        Returns:
+            tuple[CommunityNode | None, bool]: Tuple of (community, is_new) where:
+                - community: The CommunityNode the entity belongs to, or None
+                - is_new: True if this is a new membership (entity wasn't already
+                  in this community), False if entity was already a member
+        """
         raise NotImplementedError
 
     # -----------------
@@ -670,7 +742,18 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         entity_node_uuid: str,
     ) -> list[Any]:
-        """Retrieve all episodes mentioning a specific entity."""
+        """
+        Retrieve all episodes mentioning a specific entity.
+
+        Args:
+            _cls: The EpisodicNode class (for interface consistency)
+            driver: GraphDriver instance
+            entity_node_uuid: UUID of the EntityNode to find episodes for
+
+        Returns:
+            list[EpisodicNode]: List of EpisodicNode objects that have
+                MENTIONS relationships to the specified entity
+        """
         raise NotImplementedError
 
     async def community_node_load_name_embedding(
@@ -678,7 +761,15 @@ class GraphOperationsInterface(BaseModel):
         node: Any,
         driver: Any,
     ) -> None:
-        """Load the name embedding for a community node."""
+        """
+        Load the name embedding for a community node.
+
+        Populates the node.name_embedding field in-place.
+
+        Args:
+            node: CommunityNode object to load embedding for
+            driver: GraphDriver instance
+        """
         raise NotImplementedError
 
     # -----------------
@@ -692,7 +783,19 @@ class GraphOperationsInterface(BaseModel):
         source_node_uuid: str,
         target_node_uuid: str,
     ) -> list[Any]:
-        """Get edges connecting two specific entity nodes."""
+        """
+        Get edges connecting two specific entity nodes.
+
+        Args:
+            _cls: The EntityEdge class (for interface consistency)
+            driver: GraphDriver instance
+            source_node_uuid: UUID of the source EntityNode
+            target_node_uuid: UUID of the target EntityNode
+
+        Returns:
+            list[EntityEdge]: List of EntityEdge objects connecting the two nodes.
+                Note: Only returns edges in the source->target direction.
+        """
         raise NotImplementedError
 
     async def edge_get_by_node_uuid(
@@ -701,5 +804,16 @@ class GraphOperationsInterface(BaseModel):
         driver: Any,
         node_uuid: str,
     ) -> list[Any]:
-        """Get all edges connected to a specific node."""
+        """
+        Get all edges connected to a specific node.
+
+        Args:
+            _cls: The EntityEdge class (for interface consistency)
+            driver: GraphDriver instance
+            node_uuid: UUID of the EntityNode to find edges for
+
+        Returns:
+            list[EntityEdge]: List of EntityEdge objects where the node
+                is either the source or target
+        """
         raise NotImplementedError
