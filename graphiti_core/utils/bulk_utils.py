@@ -181,6 +181,14 @@ async def add_nodes_and_edges_bulk_tx(
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
+        elif driver.provider == GraphProvider.FALKORDB:
+            # FalkorDB needs complex types JSON-serialized
+            if node.attributes:
+                for k, v in node.attributes.items():
+                    if isinstance(v, (dict, list)):
+                        entity_data[k] = json.dumps(v)
+                    else:
+                        entity_data[k] = v
         else:
             entity_data.update(node.attributes or {})
 
@@ -208,6 +216,14 @@ async def add_nodes_and_edges_bulk_tx(
         if driver.provider == GraphProvider.KUZU:
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes)
+        elif driver.provider == GraphProvider.FALKORDB:
+            # FalkorDB needs complex types JSON-serialized
+            if edge.attributes:
+                for k, v in edge.attributes.items():
+                    if isinstance(v, (dict, list)):
+                        edge_data[k] = json.dumps(v)
+                    else:
+                        edge_data[k] = v
         else:
             edge_data.update(edge.attributes or {})
 
@@ -245,10 +261,35 @@ async def add_nodes_and_edges_bulk_tx(
             get_episodic_edge_save_bulk_query(driver.provider),
             episodic_edges=[edge.model_dump() for edge in episodic_edges],
         )
-        await tx.run(
-            get_entity_edge_save_bulk_query(driver.provider),
-            entity_edges=edges,
-        )
+        # FalkorDB: group edges by type and run separate queries to support custom edge types
+        if driver.provider == GraphProvider.FALKORDB:
+            from collections import defaultdict
+
+            edges_by_type: dict[str, list] = defaultdict(list)
+            for edge in edges:
+                edge_type = edge.get('name', 'RELATES_TO') or 'RELATES_TO'
+                edges_by_type[edge_type].append(edge)
+
+            for edge_type, typed_edges in edges_by_type.items():
+                # Sanitize edge type to prevent injection
+                safe_edge_type = ''.join(c for c in edge_type if c.isalnum() or c == '_')
+                if not safe_edge_type:
+                    safe_edge_type = 'RELATES_TO'
+                query = f"""
+                    UNWIND $entity_edges AS edge
+                    MATCH (source:Entity {{uuid: edge.source_node_uuid}})
+                    MATCH (target:Entity {{uuid: edge.target_node_uuid}})
+                    MERGE (source)-[r:{safe_edge_type} {{uuid: edge.uuid}}]->(target)
+                    SET r = edge
+                    SET r.fact_embedding = vecf32(edge.fact_embedding)
+                    RETURN edge.uuid AS uuid
+                """
+                await tx.run(query, entity_edges=typed_edges)
+        else:
+            await tx.run(
+                get_entity_edge_save_bulk_query(driver.provider),
+                entity_edges=edges,
+            )
 
 
 async def extract_nodes_and_edges_bulk(

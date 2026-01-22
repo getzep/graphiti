@@ -110,13 +110,57 @@ async def search(
 
     # if group_ids is empty, set it to None
     group_ids = group_ids if group_ids and group_ids != [''] else None
-    (
-        (edges, edge_reranker_scores),
-        (nodes, node_reranker_scores),
-        (episodes, episode_reranker_scores),
-        (communities, community_reranker_scores),
-    ) = await semaphore_gather(
-        edge_search(
+
+    # Two-phase search when bfs_origin_node_uuids is not provided:
+    # 1. First, run node search to find relevant nodes
+    # 2. Then, run edge search using those nodes as BFS origins
+    # This ensures edge BFS can traverse from nodes found by BM25/cosine similarity
+    if bfs_origin_node_uuids is None and config.node_config is not None:
+        # Phase 1: Find nodes first (in parallel with episode/community search)
+        (
+            (nodes, node_reranker_scores),
+            (episodes, episode_reranker_scores),
+            (communities, community_reranker_scores),
+        ) = await semaphore_gather(
+            node_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.node_config,
+                search_filter,
+                center_node_uuid,
+                None,
+                config.limit,
+                config.reranker_min_score,
+            ),
+            episode_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.episode_config,
+                search_filter,
+                config.limit,
+                config.reranker_min_score,
+            ),
+            community_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.community_config,
+                config.limit,
+                config.reranker_min_score,
+            ),
+        )
+
+        # Phase 2: Run edge search with found nodes as BFS origins
+        node_uuids_for_edge_bfs = [node.uuid for node in nodes]
+        (edges, edge_reranker_scores) = await edge_search(
             driver,
             cross_encoder,
             query,
@@ -125,45 +169,66 @@ async def search(
             config.edge_config,
             search_filter,
             center_node_uuid,
-            bfs_origin_node_uuids,
+            node_uuids_for_edge_bfs,
             config.limit,
             config.reranker_min_score,
-        ),
-        node_search(
-            driver,
-            cross_encoder,
-            query,
-            search_vector,
-            group_ids,
-            config.node_config,
-            search_filter,
-            center_node_uuid,
-            bfs_origin_node_uuids,
-            config.limit,
-            config.reranker_min_score,
-        ),
-        episode_search(
-            driver,
-            cross_encoder,
-            query,
-            search_vector,
-            group_ids,
-            config.episode_config,
-            search_filter,
-            config.limit,
-            config.reranker_min_score,
-        ),
-        community_search(
-            driver,
-            cross_encoder,
-            query,
-            search_vector,
-            group_ids,
-            config.community_config,
-            config.limit,
-            config.reranker_min_score,
-        ),
-    )
+        )
+    else:
+        # Original parallel search when bfs_origin_node_uuids is provided or no node config
+        (
+            (edges, edge_reranker_scores),
+            (nodes, node_reranker_scores),
+            (episodes, episode_reranker_scores),
+            (communities, community_reranker_scores),
+        ) = await semaphore_gather(
+            edge_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.edge_config,
+                search_filter,
+                center_node_uuid,
+                bfs_origin_node_uuids,
+                config.limit,
+                config.reranker_min_score,
+            ),
+            node_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.node_config,
+                search_filter,
+                center_node_uuid,
+                bfs_origin_node_uuids,
+                config.limit,
+                config.reranker_min_score,
+            ),
+            episode_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.episode_config,
+                search_filter,
+                config.limit,
+                config.reranker_min_score,
+            ),
+            community_search(
+                driver,
+                cross_encoder,
+                query,
+                search_vector,
+                group_ids,
+                config.community_config,
+                config.limit,
+                config.reranker_min_score,
+            ),
+        )
 
     results = SearchResults(
         edges=edges,
@@ -203,7 +268,9 @@ async def edge_search(
     search_tasks = []
     if EdgeSearchMethod.bm25 in config.search_methods:
         search_tasks.append(
-            edge_fulltext_search(driver, query, search_filter, group_ids, 2 * limit)
+            edge_fulltext_search(
+                driver, query, search_filter, group_ids, 2 * limit, config.edge_types
+            )
         )
     if EdgeSearchMethod.cosine_similarity in config.search_methods:
         search_tasks.append(

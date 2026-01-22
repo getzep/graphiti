@@ -1016,6 +1016,95 @@ async def test_edge_fulltext_search(
 
 
 @pytest.mark.asyncio
+async def test_edge_fulltext_search_custom_edge_types(
+    graph_driver, mock_embedder, mock_llm_client, mock_cross_encoder_client
+):
+    """Test edge_fulltext_search with custom edge types parameter."""
+    if graph_driver.provider != GraphProvider.FALKORDB:
+        pytest.skip('Custom edge types only supported for FalkorDB')
+
+    graphiti = Graphiti(
+        graph_driver=graph_driver,
+        llm_client=mock_llm_client,
+        embedder=mock_embedder,
+        cross_encoder=mock_cross_encoder_client,
+    )
+    await graphiti.build_indices_and_constraints()
+
+    # Create entity nodes (using names that mock_embedder recognizes)
+    entity_node_1 = EntityNode(
+        name='test_entity_1',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_1.generate_name_embedding(mock_embedder)
+    entity_node_2 = EntityNode(
+        name='test_entity_2',
+        labels=[],
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_node_2.generate_name_embedding(mock_embedder)
+
+    # Create entity edge with RELATES_TO (standard type)
+    # Using predefined fact that mock_embedder recognizes
+    entity_edge_1 = EntityEdge(
+        source_node_uuid=entity_node_1.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        name='RELATES_TO',
+        fact='test_entity_1 relates to test_entity_2',
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await entity_edge_1.generate_embedding(mock_embedder)
+
+    # Save the graph
+    await entity_node_1.save(graph_driver)
+    await entity_node_2.save(graph_driver)
+    await entity_edge_1.save(graph_driver)
+
+    search_filters = SearchFilters(node_labels=['Entity'], edge_types=['RELATES_TO'])
+
+    # Test with explicit edge_types parameter (should find the edge)
+    edges = await edge_fulltext_search(
+        graph_driver,
+        'test_entity_1 relates to test_entity_2',
+        search_filters,
+        group_ids=[group_id],
+        edge_types=['RELATES_TO'],
+    )
+    assert len(edges) >= 1
+    assert any(e.name == 'RELATES_TO' for e in edges)
+
+    # Test with non-existent edge type (should find nothing)
+    edges = await edge_fulltext_search(
+        graph_driver,
+        'test_entity_1 relates to test_entity_2',
+        search_filters,
+        group_ids=[group_id],
+        edge_types=['NONEXISTENT_TYPE'],
+    )
+    assert len(edges) == 0
+
+
+@pytest.mark.asyncio
+async def test_ensure_edge_type_index(graph_driver):
+    """Test ensure_edge_type_index creates fulltext indexes for custom edge types."""
+    if graph_driver.provider != GraphProvider.FALKORDB:
+        pytest.skip('ensure_edge_type_index only implemented for FalkorDB')
+
+    # Test creating index for a custom edge type (should succeed)
+    await graph_driver.ensure_edge_type_index('CUSTOM_TYPE')
+
+    # Test calling it again is idempotent (should not fail)
+    await graph_driver.ensure_edge_type_index('CUSTOM_TYPE')
+
+    # Test that RELATES_TO is a no-op (index already exists from build_indices_and_constraints)
+    await graph_driver.ensure_edge_type_index('RELATES_TO')
+
+
+@pytest.mark.asyncio
 async def test_edge_similarity_search(graph_driver, mock_embedder):
     if graph_driver.provider == GraphProvider.FALKORDB:
         pytest.skip('Skipping as tests fail on Falkordb')
