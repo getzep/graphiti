@@ -553,6 +553,13 @@ class CrossEncoderFactory:
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found for cross_encoder')
 
+                # Model is required for generic providers (no default assumed)
+                if not config.model:
+                    raise ValueError(
+                        'Model must be specified for openai_generic cross-encoder provider. '
+                        'Set CROSS_ENCODER_MODEL environment variable.'
+                    )
+
                 api_key = config.providers.openai.api_key
                 base_url = config.providers.openai.api_url
                 _validate_api_key('OpenAI Generic Cross-Encoder', api_key, logger)
