@@ -66,6 +66,29 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+cross_encoder:
+  enabled: true  # Set to false to disable reranking entirely
+  provider: "openai"  # Options: openai, openai_generic, azure_openai, gemini, bge, none
+  model: ${CROSS_ENCODER_MODEL:}  # Leave empty to use provider default (gpt-4.1-nano for OpenAI)
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      organization_id: ${OPENAI_ORGANIZATION_ID:}
+
+    azure_openai:
+      api_key: ${AZURE_OPENAI_API_KEY}
+      api_url: ${AZURE_OPENAI_ENDPOINT}
+      api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
+      deployment_name: ${AZURE_OPENAI_CROSS_ENCODER_DEPLOYMENT}
+      use_azure_ad: ${USE_AZURE_AD:false}
+
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_PROJECT_ID:}
+      location: ${GOOGLE_LOCATION:us-central1}
+
 database:
   provider: "falkordb"  # Using FalkorDB for this configuration
 
