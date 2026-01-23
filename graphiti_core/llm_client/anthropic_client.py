@@ -141,10 +141,14 @@ class AnthropicClient(LLMClient):
         self.model = typing.cast(AnthropicModel, config.model)
 
         if not client:
-            self.client = AsyncAnthropic(
-                api_key=config.api_key,
-                max_retries=1,
-            )
+            client_kwargs: dict[str, typing.Any] = {
+                'api_key': config.api_key,
+                'max_retries': 1,
+            }
+            # Support custom base_url for proxies (e.g., CLIProxyAPI) or local LLMs
+            if config.base_url:
+                client_kwargs['base_url'] = config.base_url
+            self.client = AsyncAnthropic(**client_kwargs)
         else:
             self.client = client
 

@@ -53,6 +53,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-group dev
 
 # Install anthropic for Claude support (not in default deps)
+# IMPORTANT: When changing dependencies, check Dockerfile.standalone too!
+# - Dockerfile: Combined FalkorDB + MCP (embedded DB)
+# - Dockerfile.standalone: MCP only (external DB)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install anthropic>=0.49.0
 
