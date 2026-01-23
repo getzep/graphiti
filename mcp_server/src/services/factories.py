@@ -1,6 +1,16 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from openai import AsyncAzureOpenAI
+
+if TYPE_CHECKING:
+    from graphiti_core.cross_encoder import CrossEncoderClient
+
 from config.schema import (
+    CrossEncoderConfig,
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
@@ -76,13 +86,27 @@ try:
 except ImportError:
     HAS_OPENAI_GENERIC = False
 
+# Cross-encoder imports
+try:
+    from graphiti_core.cross_encoder import OpenAIRerankerClient
+
+    HAS_CROSS_ENCODER = True
+except ImportError:
+    HAS_CROSS_ENCODER = False
 
 try:
-    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+    from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
 
-    HAS_OPENAI_GENERIC = True
+    HAS_BGE_RERANKER = True
 except ImportError:
-    HAS_OPENAI_GENERIC = False
+    HAS_BGE_RERANKER = False
+
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
 
 from utils.utils import create_azure_credential_token_provider
 
@@ -489,3 +513,159 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating Cross-Encoder (reranker) clients based on configuration.
+
+    The cross-encoder is used for reranking search results. When disabled or unavailable,
+    Graphiti will fall back to simpler ranking methods (e.g., RRF).
+    """
+
+    @staticmethod
+    def create(config: CrossEncoderConfig) -> CrossEncoderClient | None:
+        """Create a Cross-Encoder client based on the configured provider.
+
+        Returns None if cross_encoder is disabled or unavailable.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if not config.enabled:
+            logger.info('Cross-encoder is disabled via configuration')
+            return None
+
+        if not HAS_CROSS_ENCODER:
+            logger.warning(
+                'Cross-encoder not available in current graphiti-core version, '
+                'search results will use fallback ranking'
+            )
+            return None
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'openai':
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found for cross_encoder')
+
+                # Model is required when using non-OpenAI API endpoints
+                # (e.g., LiteLLM proxy) where default 'gpt-4.1-nano' won't exist
+                api_url = config.providers.openai.api_url
+                if not config.model and api_url != 'https://api.openai.com/v1':
+                    raise ValueError(
+                        'Model must be specified for cross-encoder when using custom API URL. '
+                        'Set CROSS_ENCODER_MODEL environment variable.'
+                    )
+
+                api_key = config.providers.openai.api_key
+                _validate_api_key('OpenAI Cross-Encoder', api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=config.providers.openai.api_url,
+                    model=config.model,  # None uses default 'gpt-4.1-nano'
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'openai_generic':
+                # OpenAI-compatible API (LiteLLM, Ollama, vLLM, etc.)
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found for cross_encoder')
+
+                # Model is required for generic providers (no default assumed)
+                if not config.model:
+                    raise ValueError(
+                        'Model must be specified for openai_generic cross-encoder provider. '
+                        'Set CROSS_ENCODER_MODEL environment variable.'
+                    )
+
+                api_key = config.providers.openai.api_key
+                base_url = config.providers.openai.api_url
+                _validate_api_key('OpenAI Generic Cross-Encoder', api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=config.model,
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'azure_openai':
+                if not config.providers.azure_openai:
+                    raise ValueError(
+                        'Azure OpenAI provider configuration not found for cross_encoder'
+                    )
+                azure_config = config.providers.azure_openai
+
+                if not azure_config.api_url:
+                    raise ValueError('Azure OpenAI API URL is required for cross_encoder')
+
+                # Handle Azure AD authentication if enabled
+                api_key: str | None = None
+                azure_ad_token_provider = None
+                if azure_config.use_azure_ad:
+                    logger.info('Creating Azure OpenAI Cross-Encoder with Azure AD authentication')
+                    azure_ad_token_provider = create_azure_credential_token_provider()
+                else:
+                    api_key = azure_config.api_key
+                    _validate_api_key('Azure OpenAI Cross-Encoder', api_key, logger)
+
+                # Create the Azure OpenAI client
+                azure_client = AsyncAzureOpenAI(
+                    api_key=api_key,
+                    azure_endpoint=azure_config.api_url,
+                    api_version=azure_config.api_version,
+                    azure_deployment=azure_config.deployment_name,
+                    azure_ad_token_provider=azure_ad_token_provider,
+                )
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=azure_config.api_url,
+                    model=config.model,
+                )
+                return OpenAIRerankerClient(config=llm_config, client=azure_client)
+
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    raise ValueError(
+                        'Gemini reranker not available. '
+                        'Install with: pip install graphiti-core[google-genai]'
+                    )
+                if not config.providers.gemini:
+                    raise ValueError('Gemini provider configuration not found for cross_encoder')
+
+                api_key = config.providers.gemini.api_key
+                _validate_api_key('Gemini Cross-Encoder', api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    model=config.model,
+                )
+                return GeminiRerankerClient(config=llm_config)
+
+            case 'bge':
+                if not HAS_BGE_RERANKER:
+                    raise ValueError(
+                        'BGE reranker not available. '
+                        'Install with: pip install graphiti-core[sentence-transformers]'
+                    )
+                logger.info('Creating BGE Cross-Encoder (local model, no API required)')
+                return BGERerankerClient()
+
+            case 'none' | 'disabled':
+                logger.info('Cross-encoder explicitly disabled via provider setting')
+                return None
+
+            case _:
+                raise ValueError(f'Unsupported Cross-Encoder provider: {provider}')
