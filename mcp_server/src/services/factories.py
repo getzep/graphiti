@@ -536,6 +536,15 @@ class CrossEncoderFactory:
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found for cross_encoder')
 
+                # Model is required when using non-OpenAI API endpoints
+                # (e.g., LiteLLM proxy) where default 'gpt-4.1-nano' won't exist
+                api_url = config.providers.openai.api_url
+                if not config.model and api_url != 'https://api.openai.com/v1':
+                    raise ValueError(
+                        'Model must be specified for cross-encoder when using custom API URL. '
+                        'Set CROSS_ENCODER_MODEL environment variable.'
+                    )
+
                 api_key = config.providers.openai.api_key
                 _validate_api_key('OpenAI Cross-Encoder', api_key, logger)
 
