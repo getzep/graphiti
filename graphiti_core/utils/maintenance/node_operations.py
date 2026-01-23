@@ -56,9 +56,6 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _build_candidate_indexes,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.maintenance.edge_operations import (
-    filter_existing_duplicate_of_edges,
-)
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
 
 logger = logging.getLogger(__name__)
@@ -500,7 +497,6 @@ async def resolve_extracted_nodes(
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Search for existing nodes, resolve deterministic matches, then escalate holdouts to the LLM dedupe prompt."""
     llm_client = clients.llm_client
-    driver = clients.driver
     existing_nodes = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
@@ -537,14 +533,10 @@ async def resolve_extracted_nodes(
         [(node.name, node.uuid) for node in state.resolved_nodes if node is not None],
     )
 
-    new_node_duplicates: list[
-        tuple[EntityNode, EntityNode]
-    ] = await filter_existing_duplicate_of_edges(driver, state.duplicate_pairs)
-
     return (
         [node for node in state.resolved_nodes if node is not None],
         state.uuid_map,
-        new_node_duplicates,
+        state.duplicate_pairs,
     )
 
 

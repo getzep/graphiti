@@ -591,6 +591,14 @@
       "created_at": "2026-01-16T14:20:28Z",
       "repoId": 840056306,
       "pullRequestNo": 1156
+    },
+    {
+      "name": "himorishige",
+      "id": 71954454,
+      "comment_id": 3782334689,
+      "created_at": "2026-01-22T03:30:17Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1170
     }
   ]
 }

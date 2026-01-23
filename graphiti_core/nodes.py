@@ -452,6 +452,14 @@ class EpisodicNode(Node):
 
     @classmethod
     async def get_by_entity_node_uuid(cls, driver: GraphDriver, entity_node_uuid: str):
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.episodic_node_get_by_entity_node_uuid(
+                    cls, driver, entity_node_uuid
+                )
+            except NotImplementedError:
+                pass
+
         records, _, _ = await driver.execute_query(
             """
             MATCH (e:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $entity_node_uuid})
@@ -693,6 +701,14 @@ class CommunityNode(Node):
         return self.name_embedding
 
     async def load_name_embedding(self, driver: GraphDriver):
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.community_node_load_name_embedding(
+                    self, driver
+                )
+            except NotImplementedError:
+                pass
+
         if driver.provider == GraphProvider.NEPTUNE:
             query: LiteralString = """
                 MATCH (c:Community {uuid: $uuid})
