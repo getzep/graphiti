@@ -752,56 +752,15 @@ class Graphiti:
         if driver is None:
             driver = self.clients.driver
 
-        # If saga is provided, retrieve episodes from that saga only
-        if saga is not None:
-            from graphiti_core.helpers import parse_db_date
-
-            group_id = group_ids[0] if group_ids else None
-            source_filter = 'AND e.source = $source' if source is not None else ''
-
-            records, _, _ = await driver.execute_query(
-                f"""
-                MATCH (s:Saga {{name: $saga_name, group_id: $group_id}})-[:HAS_EPISODE]->(e:Episodic)
-                WHERE e.valid_at <= $reference_time
-                {source_filter}
-                RETURN e.uuid AS uuid,
-                       e.name AS name,
-                       e.group_id AS group_id,
-                       e.source AS source,
-                       e.source_description AS source_description,
-                       e.content AS content,
-                       e.created_at AS created_at,
-                       e.valid_at AS valid_at,
-                       e.entity_edges AS entity_edges
-                ORDER BY e.valid_at DESC
-                LIMIT $last_n
-                """,
-                saga_name=saga,
-                group_id=group_id,
-                reference_time=reference_time,
-                source=source.value if source else None,
-                last_n=last_n,
-                routing_='r',
-            )
-
-            episodes = []
-            for record in records:
-                episodes.append(
-                    EpisodicNode(
-                        uuid=record['uuid'],
-                        name=record['name'],
-                        group_id=record['group_id'],
-                        source=EpisodeType.from_str(record['source']),
-                        source_description=record['source_description'],
-                        content=record['content'],
-                        created_at=parse_db_date(record['created_at']),  # type: ignore
-                        valid_at=parse_db_date(record['valid_at']),  # type: ignore
-                        entity_edges=record['entity_edges'] or [],
-                    )
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.retrieve_episodes(
+                    driver, reference_time, last_n, group_ids, source, saga
                 )
-            return episodes
+            except NotImplementedError:
+                pass
 
-        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source)
+        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source, saga)
 
     async def add_episode(
         self,

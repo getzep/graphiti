@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 
 async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.clear_data(driver, group_ids)
+        except NotImplementedError:
+            pass
+
     async with driver.session() as session:
 
         async def delete_all(tx):
@@ -64,6 +70,7 @@ async def retrieve_episodes(
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
     source: EpisodeType | None = None,
+    saga: str | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -75,10 +82,50 @@ async def retrieve_episodes(
                                    querying the graph's state at a specific point in time.
         last_n (int, optional): The number of most recent episodes to retrieve, relative to the reference_time.
         group_ids (list[str], optional): The list of group ids to return data from.
+        source (EpisodeType, optional): Filter episodes by source type.
+        saga (str, optional): If provided, only retrieve episodes that belong to the saga with this name.
 
     Returns:
         list[EpisodicNode]: A list of EpisodicNode objects representing the retrieved episodes.
     """
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.retrieve_episodes(
+                driver, reference_time, last_n, group_ids, source, saga
+            )
+        except NotImplementedError:
+            pass
+
+    # If saga is provided, retrieve episodes from that saga only
+    if saga is not None:
+        group_id = group_ids[0] if group_ids else None
+        source_filter = 'AND e.source = $source' if source is not None else ''
+
+        records, _, _ = await driver.execute_query(
+            f"""
+            MATCH (s:Saga {{name: $saga_name, group_id: $group_id}})-[:HAS_EPISODE]->(e:Episodic)
+            WHERE e.valid_at <= $reference_time
+            {source_filter}
+            RETURN
+            """
+            + (
+                EPISODIC_NODE_RETURN_NEPTUNE
+                if driver.provider == GraphProvider.NEPTUNE
+                else EPISODIC_NODE_RETURN
+            )
+            + """
+            ORDER BY e.valid_at DESC
+            LIMIT $num_episodes
+            """,
+            saga_name=saga,
+            group_id=group_id,
+            reference_time=reference_time,
+            source=source.name if source else None,
+            num_episodes=last_n,
+        )
+
+        episodes = [get_episodic_node_from_record(record) for record in records]
+        return list(reversed(episodes))  # Return in chronological order
 
     query_params: dict = {}
     query_filter = ''

@@ -402,6 +402,14 @@ class EntityEdge(Edge):
     async def get_between_nodes(
         cls, driver: GraphDriver, source_node_uuid: str, target_node_uuid: str
     ):
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.edge_get_between_nodes(
+                    cls, driver, source_node_uuid, target_node_uuid
+                )
+            except NotImplementedError:
+                pass
+
         match_query = """
             MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})
         """
@@ -525,6 +533,14 @@ class EntityEdge(Edge):
 
     @classmethod
     async def get_by_node_uuid(cls, driver: GraphDriver, node_uuid: str):
+        if driver.graph_operations_interface:
+            try:
+                return await driver.graph_operations_interface.edge_get_by_node_uuid(
+                    cls, driver, node_uuid
+                )
+            except NotImplementedError:
+                pass
+
         match_query = """
             MATCH (n:Entity {uuid: $node_uuid})-[e:RELATES_TO]-(m:Entity)
         """
