@@ -76,10 +76,6 @@ async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
     )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
-    )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
@@ -116,10 +112,6 @@ async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
     )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
-    )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
@@ -146,10 +138,6 @@ async def test_resolve_nodes_fuzzy_match(monkeypatch):
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
     )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
