@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# Standalone MCP Server with LOCAL graphiti-core
+# BUILD FROM GRAPHITI ROOT: docker build -f mcp_server/docker/Dockerfile.standalone-local -t graphiti-mcp:local .
+
+FROM python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+ENV PATH="/root/.local/bin:${PATH}" \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    MCP_SERVER_HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copy graphiti-core source
+COPY graphiti_core/ ./graphiti_core/
+COPY pyproject.toml README.md ./
+
+# Install graphiti-core from local source with falkordb
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -e .[falkordb]
+
+WORKDIR /app/mcp
+
+# Copy MCP server
+COPY mcp_server/pyproject.toml ./
+
+# Remove local source reference, use installed graphiti-core
+RUN sed -i '/\[tool\.uv\.sources\]/,/^$/d' pyproject.toml && \
+    rm -f uv.lock && uv lock
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-group dev
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install anthropic>=0.49.0
+
+COPY mcp_server/main.py ./
+COPY mcp_server/src/ ./src/
+COPY mcp_server/config/ ./config/
+
+RUN mkdir -p /var/log/graphiti
+RUN echo "local-fix-$(date +%Y%m%d)" > .graphiti-core-version
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uv", "run", "--no-sync", "main.py"]
