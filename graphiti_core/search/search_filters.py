@@ -87,7 +87,13 @@ def node_search_filter_query_constructor(
         if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.FALKORDB:
+            # FalkorDB doesn't support Neo4j's pipe syntax for multiple labels (n:Label1|Label2)
+            # Use OR conditions instead: (n:Label1 OR n:Label2 OR n:Label3)
+            label_conditions = ' OR '.join([f'n:{label}' for label in filters.node_labels])
+            node_label_filter = f'({label_conditions})'
         else:
+            # Neo4j supports pipe syntax: n:Label1|Label2|Label3
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
@@ -130,7 +136,14 @@ def edge_search_filter_query_constructor(
                 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
             )
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.FALKORDB:
+            # FalkorDB doesn't support Neo4j's pipe syntax for multiple labels
+            # Use OR conditions: ((n:Label1 OR n:Label2) AND (m:Label1 OR m:Label2))
+            n_conditions = ' OR '.join([f'n:{label}' for label in filters.node_labels])
+            m_conditions = ' OR '.join([f'm:{label}' for label in filters.node_labels])
+            node_label_filter = f'(({n_conditions}) AND ({m_conditions}))'
         else:
+            # Neo4j supports pipe syntax
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
         filter_queries.append(node_label_filter)
