@@ -2,6 +2,48 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Fork Information
+
+This is a fork of [getzep/graphiti](https://github.com/getzep/graphiti) with additional features:
+
+### Fork-Specific Features
+
+| Feature | Files | Description |
+|---------|-------|-------------|
+| **Summary Similarity Search** | `search/search.py`, `search/search_utils.py` | New `NodeSearchMethod.summary_similarity` for semantic search via node summaries |
+| **Base URL Pass-through** | `mcp_server/src/services/factories.py` | Custom API endpoints for Anthropic/OpenAI (e.g., proxies, local LLMs) |
+| **Small Model Config** | `mcp_server/config/*.yaml` | Configurable `small_model` for lightweight tasks (useful for Ollama) |
+| **Transport Security** | `mcp_server/src/config/schema.py` | `allowed_hosts`, `allowed_origins` for secure remote access |
+| **FalkorDB Single Group-ID Fix** | `decorators.py`, `search/search_filters.py` | Fix for searches with single `group_id` returning empty results |
+| **FalkorDB Label Syntax** | `search/search_filters.py` | Use OR conditions instead of Neo4j's pipe syntax for multi-label queries |
+
+### Changelog
+
+#### 2026-01-24: FalkorDB Multi-Graph Search Fix
+
+**Problem:** `search_nodes` with a single `group_id` returned empty results, while searches with 2+ group_ids worked correctly.
+
+**Root Cause:** The `@handle_multiple_group_ids` decorator in `decorators.py` only triggered when `len(group_ids) > 1`. Since FalkorDB uses separate Redis graphs per group_id, the decorator must clone the driver for ANY group_id (including single ones) to point at the correct graph.
+
+**Fix:**
+1. `graphiti_core/decorators.py` line 59: Changed `len(group_ids) > 1` to `len(group_ids) >= 1`
+2. `graphiti_core/search/search_filters.py`: Added FalkorDB-specific label syntax (OR conditions instead of Neo4j's pipe syntax `n:Label1|Label2`)
+
+**Deployment:** Built wheel locally, transferred to Ubuntu VM, installed via `uv pip install` in Docker image.
+
+### Upstream Sync
+
+```bash
+# Fetch upstream changes
+git fetch upstream
+
+# Check what's new
+git log HEAD..upstream/main --oneline
+
+# Merge (after reviewing)
+git merge upstream/main
+```
+
 ## Project Overview
 
 Graphiti is a Python framework for building temporally-aware knowledge graphs designed for AI agents. It enables real-time incremental updates to knowledge graphs without batch recomputation, making it suitable for dynamic environments.
@@ -180,3 +222,54 @@ When working with the MCP server, follow the patterns established in `mcp_server
 - Use specific entity type filters (`Preference`, `Procedure`, `Requirement`)
 - Store new information immediately using `add_memory`
 - Follow discovered procedures and respect established preferences
+
+## Docker Deployment
+
+### Build Standalone Image
+
+```bash
+cd mcp_server
+docker build -f docker/Dockerfile.standalone -t graphiti-mcp:local \
+  --build-arg GRAPHITI_CORE_VERSION=0.26.3 .
+```
+
+### Configuration
+
+The MCP server uses `config.yaml` with environment variable expansion:
+
+```yaml
+llm:
+  provider: anthropic
+  model: claude-opus-4-5
+  small_model: claude-sonnet-4-5  # Optional: for lightweight tasks
+  providers:
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      api_url: ${ANTHROPIC_BASE_URL}  # Custom endpoint support
+
+server:
+  allowed_hosts:
+    - "localhost:*"
+    - "your-domain.com"
+```
+
+### Run with FalkorDB
+
+```bash
+# Start FalkorDB
+docker run -d --name falkordb -p 6379:6379 falkordb/falkordb:latest
+
+# Start MCP Server
+docker run -d --name graphiti \
+  -p 8000:8000 \
+  -e ANTHROPIC_API_KEY=your-key \
+  -v ./config.yaml:/app/mcp/config/config.yaml:ro \
+  graphiti-mcp:local
+```
+
+### Health Check
+
+```bash
+curl http://localhost:8000/health
+# {"status":"healthy","service":"graphiti-mcp"}
+```
