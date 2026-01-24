@@ -17,31 +17,29 @@ ENV PATH="/root/.local/bin:${PATH}" \
     MCP_SERVER_HOST="0.0.0.0" \
     PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
-# Copy graphiti-core source
-COPY graphiti_core/ ./graphiti_core/
-COPY pyproject.toml README.md ./
-
-# Install graphiti-core from local source with falkordb
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -e .[falkordb]
-
 WORKDIR /app/mcp
 
-# Copy MCP server
+# Copy MCP server pyproject.toml first
 COPY mcp_server/pyproject.toml ./
 
-# Remove local source reference, use installed graphiti-core
-RUN sed -i '/\[tool\.uv\.sources\]/,/^$/d' pyproject.toml && \
+# Copy graphiti-core source (for local installation)
+COPY graphiti_core/ /app/graphiti_core/
+COPY pyproject.toml /app/pyproject.toml
+COPY README.md /app/README.md
+
+# Update pyproject.toml to point to correct local path and remove uv.sources
+RUN sed -i 's|path = "\.\./"|path = "/app"|' pyproject.toml && \
     rm -f uv.lock && uv lock
 
+# Sync all dependencies (this installs graphiti-core from /app with all its deps)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-group dev
 
+# Install anthropic for Claude support
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install anthropic>=0.49.0
 
+# Copy MCP server application code
 COPY mcp_server/main.py ./
 COPY mcp_server/src/ ./src/
 COPY mcp_server/config/ ./config/
