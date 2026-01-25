@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: NEVER Reset Graphiti!
+
+**ABSOLUTE PROHIBITION:** Never execute `clear_graph` or similar destructive operations on Graphiti without explicit user instruction!
+
+- **NEVER** on your own initiative
+- **NEVER** "just quickly" or "to be safe"
+- **NEVER** as part of a debugging attempt
+- Data loss is IRREVERSIBLE
+- This rule applies ALWAYS, without exception
+
+**Background:** On 2026-01-25, valuable episodes were lost due to an autonomous reset. This must NEVER happen again.
+
 ## Fork Information
 
 This is a fork of [getzep/graphiti](https://github.com/getzep/graphiti) with additional features:
