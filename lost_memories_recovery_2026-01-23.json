@@ -1,0 +1,98 @@
+[
+  {
+    "name": "Learning: GitHub-Flow - Nie direkt auf main committen",
+    "episode_body": "Auch bei 'kleinen' Änderungen wie Submodule-Updates IMMER den GitHub-Flow befolgen: Feature-Branch erstellen → Push → PR erstellen. Ich habe initial direkt auf main committed und musste das mit git reset korrigieren. Die Regel '!!main_schutz: NIEMALS direct push to main' gilt IMMER, auch wenn das Deployment bereits läuft.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Update",
+    "group_id": "main"
+  },
+  {
+    "name": "Procedure: Graphiti Fork Update & Deployment Workflow",
+    "episode_body": "Workflow für Graphiti-Updates vom Upstream (getzep/graphiti): 1) git fetch upstream, 2) git merge upstream/main (Dry-Run mit --no-commit --no-ff prüfen), 3) git push origin deploy, 4) cd mcp_server && docker build -f docker/Dockerfile.standalone -t graphiti-mcp:local --build-arg GRAPHITI_CORE_VERSION=X.Y.Z ., 5) docker save graphiti-mcp:local | ssh -p 2222 dockeradmin@192.168.1.10 'docker load', 6) ssh zur VM und docker compose -f docker-compose.graphiti.yml up -d --force-recreate graphiti, 7) Health-Check: curl https://graphiti.marakanda.biz/health",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Update",
+    "group_id": "Milofax-infrastructure"
+  },
+  {
+    "name": "Learning: Upstream Merge Breaking-Change Analyse",
+    "episode_body": "Systematische Prüfung vor Upstream-Merge auf Breaking Changes: 1) git log HEAD..upstream/main für Commits, 2) git diff --name-only für betroffene Dateien identifizieren, 3) git merge --no-commit --no-ff upstream/main als Dry-Run, 4) Bei Überlappung: grep/read für tatsächliche Nutzung der geänderten Funktionen im eigenen Code prüfen, 5) Besonders auf entfernte Funktionen achten (wie filter_existing_duplicate_of_edges) und prüfen ob sie im eigenen Code verwendet werden. Idempotente Operationen und ignorierte Rückgabewerte (_) bedeuten oft keine praktische Auswirkung.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Merge-Analyse",
+    "group_id": "main"
+  },
+  {
+    "name": "GitHub-Flow: Nie direkt auf main committen",
+    "episode_body": "Auch bei 'kleinen' Änderungen wie Submodule-Updates IMMER den GitHub-Flow befolgen: Feature-Branch erstellen → Push → PR erstellen. Ich habe initial direkt auf main committed und musste das mit git reset korrigieren. Die Regel '!!main_schutz: NIEMALS direct push to main' gilt IMMER, auch wenn das Deployment bereits läuft.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Update",
+    "group_id": "main"
+  },
+  {
+    "name": "Graphiti Fork Update & Deployment Workflow",
+    "episode_body": "Workflow für Graphiti-Updates vom Upstream (getzep/graphiti): 1) git fetch upstream, 2) git merge upstream/main (Dry-Run mit --no-commit --no-ff prüfen), 3) git push origin deploy, 4) cd mcp_server && docker build -f docker/Dockerfile.standalone -t graphiti-mcp:local --build-arg GRAPHITI_CORE_VERSION=X.Y.Z ., 5) docker save graphiti-mcp:local | ssh -p 2222 dockeradmin@192.168.1.10 'docker load', 6) ssh zur VM und docker compose -f docker-compose.graphiti.yml up -d --force-recreate graphiti, 7) Health-Check: curl https://graphiti.marakanda.biz/health",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Update",
+    "group_id": "Milofax-infrastructure"
+  },
+  {
+    "name": "Upstream Merge Breaking-Change Analyse",
+    "episode_body": "Systematische Prüfung vor Upstream-Merge auf Breaking Changes: 1) git log HEAD..upstream/main für Commits, 2) git diff --name-only für betroffene Dateien identifizieren, 3) git merge --no-commit --no-ff upstream/main als Dry-Run, 4) Bei Überlappung: grep/read für tatsächliche Nutzung der geänderten Funktionen im eigenen Code prüfen, 5) Besonders auf entfernte Funktionen achten und prüfen ob sie im eigenen Code verwendet werden. Idempotente Operationen und ignorierte Rückgabewerte (_) bedeuten oft keine praktische Auswirkung.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Merge-Analyse",
+    "group_id": "main"
+  },
+  {
+    "name": "GitHub-Flow (2026): Nie direkt auf main committen",
+    "episode_body": "Auch bei 'kleinen' Änderungen wie Submodule-Updates IMMER den GitHub-Flow befolgen: Feature-Branch erstellen → Push → PR erstellen. Ich habe initial direkt auf main committed und musste das mit git reset korrigieren. Die Regel '!!main_schutz: NIEMALS direct push to main' gilt IMMER, auch wenn das Deployment bereits läuft.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Update",
+    "group_id": "main"
+  },
+  {
+    "name": "Fork-Merge Analyse (2026): Breaking-Changes systematisch prüfen",
+    "episode_body": "Systematische Prüfung vor Upstream-Merge auf Breaking Changes: 1) Commits vergleichen mit log HEAD..upstream/main, 2) Betroffene Dateien identifizieren mit diff --name-only, 3) Dry-Run Merge mit --no-commit --no-ff, 4) Bei Überlappung: grep/read für tatsächliche Nutzung der geänderten Funktionen im eigenen Code prüfen, 5) Besonders auf entfernte Funktionen achten und prüfen ob sie im eigenen Code verwendet werden. Idempotente Operationen und ignorierte Rückgabewerte (_) bedeuten oft keine praktische Auswirkung.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Merge-Analyse",
+    "group_id": "main"
+  },
+  {
+    "name": "Nie direkt auf main Branch committen",
+    "episode_body": "Auch bei 'kleinen' Änderungen wie Submodule-Updates IMMER den GitHub-Flow befolgen: Feature-Branch erstellen → Push → PR erstellen. Ich habe initial direkt auf main committed und musste das korrigieren. Die Regel '!!main_schutz: NIEMALS direct push to main' gilt IMMER, auch wenn das Deployment bereits läuft.",
+    "source_description": "Eigene Erfahrung 2026-01-23",
+    "group_id": "main"
+  },
+  {
+    "name": "Fork-Merge: Breaking-Changes prüfen",
+    "episode_body": "Systematische Prüfung vor Upstream-Merge: 1) Commits vergleichen, 2) Betroffene Dateien identifizieren, 3) Dry-Run Merge, 4) Bei Überlappung: Nutzung der geänderten Funktionen im eigenen Code prüfen, 5) Auf entfernte Funktionen achten. Idempotente Operationen und ignorierte Rückgabewerte (_) bedeuten oft keine praktische Auswirkung.",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Merge-Analyse",
+    "group_id": "main"
+  },
+  {
+    "name": "Immer Feature-Branch vor Commit",
+    "episode_body": "Auch bei kleinen Änderungen wie Submodule-Updates IMMER Feature-Branch erstellen, dann Push, dann PR. In dieser Session habe ich direkt auf main committed und musste mit git reset korrigieren. Die Regel gilt immer, auch wenn das Deployment schon läuft.",
+    "source_description": "Eigene Erfahrung 2026-01-23",
+    "group_id": "main"
+  },
+  {
+    "name": "Upstream-Merge Analyse Methode",
+    "episode_body": "Vor Upstream-Merge systematisch prüfen: 1) Commits vergleichen mit log HEAD..upstream/main, 2) Betroffene Dateien mit diff --name-only, 3) Dry-Run Merge mit --no-commit --no-ff, 4) Nutzung geänderter Funktionen im eigenen Code prüfen, 5) Ignorierte Rückgabewerte (_) bedeuten oft keine Auswirkung.",
+    "source_description": "Eigene Erfahrung 2026-01-23",
+    "group_id": "main"
+  },
+  {
+    "name": "GitHub-Flow: Feature-Branch auch bei kleinen Änderungen",
+    "episode_body": "Auch bei vermeintlich kleinen Änderungen wie Submodule-Updates IMMER Feature-Branch erstellen und PR machen. Nie direkt auf main committen. Wenn versehentlich auf main committed: git reset --soft HEAD~1 && git stash && git checkout -b feature/name && git stash pop",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti Submodule Update",
+    "group_id": "main"
+  },
+  {
+    "name": "Graphiti Deployment Workflow",
+    "episode_body": "Vollständiger Workflow für Graphiti-Updates: 1) Im Submodule: git fetch upstream && git merge upstream/main, 2) git push origin deploy, 3) cd mcp_server && docker build -f docker/Dockerfile.standalone -t graphiti-mcp:local --build-arg GRAPHITI_CORE_VERSION=X.X.X ., 4) docker save graphiti-mcp:local | ssh -p 2222 dockeradmin@192.168.1.10 'docker load', 5) ssh -p 2222 dockeradmin@192.168.1.10 'cd marakanda-infrastructure/stacks/services/graphiti && docker compose -f docker-compose.graphiti.yml up -d --force-recreate graphiti', 6) Health-Check: curl https://graphiti.marakanda.biz/health",
+    "source_description": "Eigene Erfahrung 2026-01-23 - Graphiti v0.26.3 Deployment",
+    "group_id": "Milofax-infrastructure"
+  },
+  {
+    "name": "Claude Code Projekt-Setup Best Practices",
+    "episode_body": "Best Practices für Claude Code in GitHub-Projekten: 1) CLAUDE.md im Root mit Project Overview, Development Commands, Code Architecture. 2) .claude/commands/ für Custom Slash-Commands (.md Dateien). 3) Lokale State-Dateien mit .local.md Endung und in .gitignore. 4) Keine hardcoded Pfade - relative Pfade oder ${CLAUDE_PLUGIN_ROOT} nutzen. 5) Fork-spezifische Infos in CLAUDE.md dokumentieren (was anders ist als upstream). 6) Commands für wiederkehrende Tasks erstellen (/deploy, /test, /sync-upstream).",
+    "source_description": "Context7 Claude Code Docs + eigene Erfahrung 2026-01-23",
+    "group_id": "main"
+  },
+  {
+    "name": "Claude Code Projekt-Setup",
+    "episode_body": "Setup für Claude Code in GitHub-Projekten: 1) CLAUDE.md im Root mit Project Overview, Development Commands, Code Architecture. 2) .claude/commands/ für Custom Slash-Commands (.md Dateien). 3) Lokale State-Dateien mit .local.md Endung und in .gitignore. 4) Keine hardcoded Pfade - relative Pfade oder ${CLAUDE_PLUGIN_ROOT} nutzen. 5) Fork-spezifische Infos in CLAUDE.md dokumentieren (was anders ist als upstream). 6) Commands für wiederkehrende Tasks erstellen (/deploy, /test, /sync-upstream).",
+    "source_description": "Context7 Claude Code Docs + eigene Erfahrung 2026-01-23",
+    "group_id": "main"
+  }
+]
