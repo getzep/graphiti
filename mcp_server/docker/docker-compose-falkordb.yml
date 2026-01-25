@@ -8,7 +8,8 @@ services:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
       - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
     volumes:
-      - falkordb_data:/data
+      # WICHTIG: FalkorDB speichert in /var/lib/falkordb/data, NICHT in /data!
+      - falkordb_data:/var/lib/falkordb/data
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 10s

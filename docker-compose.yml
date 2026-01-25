@@ -53,7 +53,8 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - falkordb_data:/data
+      # WICHTIG: FalkorDB speichert in /var/lib/falkordb/data, NICHT in /data!
+      - falkordb_data:/var/lib/falkordb/data
     environment:
       - FALKORDB_ARGS=--port 6379 --cluster-enabled no
     healthcheck:
