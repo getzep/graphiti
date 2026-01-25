@@ -235,6 +235,69 @@ When working with the MCP server, follow the patterns established in `mcp_server
 - Store new information immediately using `add_memory`
 - Follow discovered procedures and respect established preferences
 
+## Local Test Environment
+
+**WICHTIG:** Für Tests existiert eine isolierte Docker-Umgebung im INFRASTRUCTURE Repository.
+
+### Warum Testumgebung?
+
+- **Keine Produktionsdaten gefährden** - Separates Volume
+- **Unabhängig von externer Infra** - Direkter Ollama-Zugriff, kein CLIProxyAPI
+- **Schnelles Cleanup** - `down -v` löscht alle Testdaten
+
+### Testumgebung starten
+
+```bash
+# Im INFRASTRUCTURE Repository
+cd /Volumes/DATEN/Coding/INFRASTRUCTURE/stacks/services/graphiti
+
+# Test-Environment starten
+docker compose -f docker-compose.test.yml up -d
+
+# Logs verfolgen
+docker compose -f docker-compose.test.yml logs -f
+
+# Status prüfen
+curl http://localhost:8002/health
+```
+
+### Test-Ports
+
+| Service | Test-Port | Produktions-Port |
+|---------|-----------|------------------|
+| Graphiti MCP | 8002 | 8001 |
+| FalkorDB | 6380 | 6379 |
+| FalkorDB UI | 3002 | 3001 |
+
+### Tests ausführen
+
+```bash
+# Python-Tests gegen Testumgebung
+FALKORDB_URI=redis://localhost:6380 pytest tests/
+
+# Manueller API-Test
+curl -X POST http://localhost:8002/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"method": "get_status"}'
+```
+
+### Testdaten löschen
+
+```bash
+# Container stoppen UND Volumes löschen
+docker compose -f docker-compose.test.yml down -v
+```
+
+### Testumgebung vs Produktion
+
+| Aspekt | Test | Produktion |
+|--------|------|------------|
+| LLM | Ollama (llama3.3:70b) | CLIProxyAPI (Claude) |
+| Volume | falkordb-test-data | falkordb-data |
+| Netzwerk | graphiti-test | graphiti + proxy |
+| group_id | test | main |
+| Persistenz | Temporär | Permanent |
+
 ## Docker Deployment
 
 ### Build Standalone Image
