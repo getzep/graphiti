@@ -20,6 +20,8 @@ from typing import Any
 
 import redis.asyncio as redis
 
+from graphiti_core.nodes import EpisodeType
+
 logger = logging.getLogger(__name__)
 
 
@@ -270,7 +272,7 @@ class QueueService:
                 name=episode.name,
                 episode_body=episode.content,
                 source_description=episode.source_description,
-                source=episode.episode_type,
+                source=EpisodeType.from_str(episode.episode_type),
                 group_id=group_id,
                 reference_time=datetime.now(timezone.utc),
                 uuid=episode.uuid,
