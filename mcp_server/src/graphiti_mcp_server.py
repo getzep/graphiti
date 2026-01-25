@@ -33,7 +33,7 @@ from models.response_types import (
     SuccessResponse,
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
-from services.queue_service import QueueService
+from services.queue_service import QueueConfig, QueueService
 from utils.formatting import format_fact_result
 
 # Load .env file from mcp_server directory
@@ -905,7 +905,15 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize services
     graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
-    queue_service = QueueService()
+
+    # Get Redis URL from FalkorDB config for the queue service
+    redis_url = 'redis://localhost:6379'  # default
+    if config.database.provider == 'falkordb' and config.database.providers.falkordb:
+        redis_url = config.database.providers.falkordb.uri
+
+    queue_config = QueueConfig(redis_url=redis_url)
+    queue_service = QueueService(config=queue_config)
+
     await graphiti_service.initialize()
 
     # Set global client for backward compatibility
