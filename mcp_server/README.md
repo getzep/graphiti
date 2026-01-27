@@ -279,13 +279,13 @@ export NEO4J_USER="neo4j"
 export NEO4J_PASSWORD="your_password"
 
 # Run with Neo4j
-uv run graphiti_mcp_server.py --database-provider neo4j
+uv run main.py --database-provider neo4j
 ```
 
 Or use the Neo4j configuration file:
 
 ```bash
-uv run graphiti_mcp_server.py --config config/config-docker-neo4j.yaml
+uv run main.py --config config/config-docker-neo4j.yaml
 ```
 
 ### Running with FalkorDB
@@ -305,13 +305,13 @@ export FALKORDB_URI="redis://localhost:6379"
 export FALKORDB_PASSWORD=""  # If password protected
 
 # Run with FalkorDB
-uv run graphiti_mcp_server.py --database-provider falkordb
+uv run main.py --database-provider falkordb
 ```
 
 Or use the FalkorDB configuration file:
 
 ```bash
-uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
+uv run main.py --config config/config-docker-falkordb.yaml
 ```
 
 ### Available Command-Line Arguments
@@ -507,7 +507,7 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
         "/Users/<user>>/dev/zep/graphiti/mcp_server",
         "--project",
         ".",
-        "graphiti_mcp_server.py",
+        "main.py",
         "--transport",
         "stdio"
       ],
@@ -573,7 +573,7 @@ To integrate the Graphiti MCP Server with the Cursor IDE, follow these steps:
 1. Run the Graphiti MCP server using the default HTTP transport:
 
 ```bash
-uv run graphiti_mcp_server.py --group-id <your_group_id>
+uv run main.py --group-id <your_group_id>
 ```
 
 Hint: specify a `group_id` to namespace graph data. If you do not specify a `group_id`, the server will use "main" as the group_id.
@@ -612,7 +612,7 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
     ```bash
     docker compose up
     # Or run directly with uv:
-    uv run graphiti_mcp_server.py
+    uv run main.py
     ```
 
 2.  **(Optional) Install `mcp-remote` globally**:
