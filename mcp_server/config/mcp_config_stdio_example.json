@@ -5,7 +5,7 @@
       "command": "uv",
       "args": [
         "run",
-        "/ABSOLUTE/PATH/TO/graphiti_mcp_server.py",
+        "/ABSOLUTE/PATH/TO/main.py",
         "--transport",
         "stdio"
       ],
