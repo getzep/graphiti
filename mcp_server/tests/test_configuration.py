@@ -10,7 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from config.schema import GraphitiConfig
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+    RerankerFactory,
+)
 
 
 def test_config_loading():
@@ -145,6 +150,57 @@ async def test_database_factory(config: GraphitiConfig):
         print(f'⚠ Skipping Database factory test (no configuration for {config.database.provider})')
 
 
+def test_reranker_factory(config: GraphitiConfig):
+    """Test Reranker client factory creation."""
+    print('\nTesting Reranker client factory...')
+
+    # Test disabled reranker
+    test_config = config.reranker.model_copy()
+    test_config.provider = 'none'
+    try:
+        client = RerankerFactory.create(test_config)
+        assert client is None
+        print('✓ Reranker disabled correctly (returns None)')
+    except Exception as e:
+        print(f'✗ Failed to disable reranker: {e}')
+
+    # Test OpenAI reranker creation (if API key is set)
+    if (
+        config.reranker.provider == 'openai'
+        and config.reranker.providers.openai
+        and config.reranker.providers.openai.api_key
+    ):
+        try:
+            client = RerankerFactory.create(config.reranker)
+            print(f'✓ Created {config.reranker.provider} Reranker client successfully')
+            print(f'  - Configured model: {config.reranker.model}')
+        except ValueError as e:
+            if 'not available' in str(e):
+                print(f'⚠ Skipping OpenAI Reranker test (graphiti-core version too old): {e}')
+            else:
+                print(f'✗ Failed to create Reranker client: {e}')
+        except Exception as e:
+            print(f'✗ Failed to create Reranker client: {e}')
+    else:
+        print(
+            f'⚠ Skipping Reranker factory test (no API key configured for {config.reranker.provider})'
+        )
+
+    # Test unsupported provider error
+    test_config = config.reranker.model_copy()
+    test_config.provider = 'unsupported_provider'  # type: ignore
+    try:
+        RerankerFactory.create(test_config)
+        print('✗ Should have raised ValueError for unsupported provider')
+    except ValueError as e:
+        if 'Unsupported' in str(e):
+            print('✓ Correctly raises ValueError for unsupported provider')
+        else:
+            print(f'✗ Wrong error message: {e}')
+    except Exception as e:
+        print(f'✗ Wrong exception type: {e}')
+
+
 def test_cli_override():
     """Test CLI argument override functionality."""
     print('\nTesting CLI argument override...')
@@ -189,6 +245,7 @@ async def main():
         # Test factories
         test_llm_factory(config)
         test_embedder_factory(config)
+        test_reranker_factory(config)
         await test_database_factory(config)
 
         # Test CLI overrides
