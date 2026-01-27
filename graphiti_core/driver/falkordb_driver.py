@@ -288,10 +288,21 @@ class FalkorDriver(GraphDriver):
 
     def sanitize(self, query: str) -> str:
         """
-        Replace FalkorDB special characters with whitespace.
-        Based on FalkorDB tokenization rules: ,.<>{}[]"':;!@#$%^&*()-+=~
+        Replace FalkorDB/RediSearch special characters with whitespace.
+
+        This method is designed for full-text search queries where text is split
+        into searchable words. Not suitable for exact path matching (e.g., file
+        paths like '/home/user/file.txt' will become 'home user file txt').
+
+        RediSearch (used by FalkorDB for full-text search) has reserved characters
+        that must be sanitized to prevent query syntax errors:
+        - Tokenization separators: ,.<>{}[]"':;!@#$%^&*()-+=~?
+        - Query operators: | (OR), / and \\ (path separators that break queries)
+
+        See: https://redis.io/docs/latest/develop/interact/search-and-query/advanced-concepts/escaping/
+        Related: https://github.com/getzep/graphiti/issues/1144
         """
-        # FalkorDB separator characters that break text into tokens
+        # RediSearch separator and operator characters
         separator_map = str.maketrans(
             {
                 ',': ' ',
@@ -321,6 +332,9 @@ class FalkorDriver(GraphDriver):
                 '=': ' ',
                 '~': ' ',
                 '?': ' ',
+                '/': ' ',  # Forward slash - causes query syntax errors
+                '\\': ' ',  # Backslash - escape character in RediSearch
+                '|': ' ',  # Pipe - OR operator in RediSearch
             }
         )
         sanitized = query.translate(separator_map)
