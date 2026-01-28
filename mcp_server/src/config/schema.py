@@ -83,6 +83,21 @@ class ServerConfig(BaseModel):
     host: str = Field(default='0.0.0.0', description='Server host')
     port: int = Field(default=8000, description='Server port')
 
+    # Transport security settings (for HTTP transport)
+    allowed_hosts: list[str] | None = Field(
+        default=None,
+        description='Allowed Host header values (e.g., ["localhost:8000", "myservice.example.com"]). '
+        'If None, defaults to localhost variants only.',
+    )
+    allowed_origins: list[str] | None = Field(
+        default=None,
+        description='Allowed CORS origins. If None, defaults to localhost variants only.',
+    )
+    enable_dns_rebinding_protection: bool = Field(
+        default=True,
+        description='Enable DNS rebinding protection by validating Host headers.',
+    )
+
 
 class OpenAIProviderConfig(BaseModel):
     """OpenAI provider configuration."""

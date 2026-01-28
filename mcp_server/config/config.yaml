@@ -9,7 +9,17 @@ server:
   transport: "http"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
   port: 8000
-  
+
+  # Transport security settings for remote access (behind reverse proxy)
+  # Uncomment and configure if accessing via custom domain:
+  # allowed_hosts:
+  #   - "localhost:8000"
+  #   - "graphiti.example.com"
+  # allowed_origins:
+  #   - "http://localhost:3000"
+  #   - "https://app.example.com"
+  # enable_dns_rebinding_protection: true  # Default: true
+
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
   model: "gpt-4o-mini"
