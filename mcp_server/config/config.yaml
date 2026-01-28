@@ -22,10 +22,12 @@ server:
 
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
-  # small_model: "gpt-4o-mini"  # Optional: Override the small model used for lightweight tasks
-                                # If not set, auto-detects based on main model (gpt-4.1-mini or gpt-5-nano)
-                                # Useful for Ollama/local LLMs: set to same model as main model
+  model: ${LLM_MODEL:gpt-4o-mini}
+  small_model: ${LLM_SMALL_MODEL:}  # Optional: Model for lightweight tasks (defaults to main model)
+                                     # For Ollama/local LLMs: set to same as main model
+  is_reasoning: ${LLM_IS_REASONING:}  # Optional: Set true for reasoning models
+                                       # Auto-detected for gpt-5/o1/o3 if not set
+  small_is_reasoning: ${LLM_SMALL_IS_REASONING:}  # Optional: Set true if small model is a reasoning model
   max_tokens: 4096
   
   providers:
@@ -57,8 +59,8 @@ llm:
 
 embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
-  dimensions: 1536
+  model: ${EMBEDDING_MODEL:text-embedding-3-small}
+  dimensions: ${EMBEDDING_DIM:1536}
   
   providers:
     openai:

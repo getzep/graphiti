@@ -55,6 +55,8 @@ class BaseOpenAIClient(LLMClient):
         max_tokens: int = DEFAULT_MAX_TOKENS,
         reasoning: str | None = DEFAULT_REASONING,
         verbosity: str | None = DEFAULT_VERBOSITY,
+        small_reasoning: str | None = None,
+        small_verbosity: str | None = None,
     ):
         if cache:
             raise NotImplementedError('Caching is not implemented for OpenAI-based clients')
@@ -66,6 +68,9 @@ class BaseOpenAIClient(LLMClient):
         self.max_tokens = max_tokens
         self.reasoning = reasoning
         self.verbosity = verbosity
+        # Small model reasoning defaults to None (disabled) if not explicitly set
+        self.small_reasoning = small_reasoning
+        self.small_verbosity = small_verbosity
 
     @abstractmethod
     async def _create_completion(
@@ -140,6 +145,14 @@ class BaseOpenAIClient(LLMClient):
         openai_messages = self._convert_messages_to_openai_format(messages)
         model = self._get_model_for_size(model_size)
 
+        # Use small model reasoning/verbosity settings when using small model
+        if model_size == ModelSize.small:
+            effective_reasoning = self.small_reasoning
+            effective_verbosity = self.small_verbosity
+        else:
+            effective_reasoning = self.reasoning
+            effective_verbosity = self.verbosity
+
         try:
             if response_model:
                 response = await self._create_structured_completion(
@@ -148,8 +161,8 @@ class BaseOpenAIClient(LLMClient):
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
                     response_model=response_model,
-                    reasoning=self.reasoning,
-                    verbosity=self.verbosity,
+                    reasoning=effective_reasoning,
+                    verbosity=effective_verbosity,
                 )
                 return self._handle_structured_response(response)
             else:

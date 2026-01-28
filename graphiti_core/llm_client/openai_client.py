@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import typing
 
 from openai import AsyncOpenAI
@@ -22,6 +23,8 @@ from pydantic import BaseModel
 
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(BaseOpenAIClient):
@@ -41,8 +44,10 @@ class OpenAIClient(BaseOpenAIClient):
         cache: bool = False,
         client: typing.Any = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
-        reasoning: str = DEFAULT_REASONING,
-        verbosity: str = DEFAULT_VERBOSITY,
+        reasoning: str | None = DEFAULT_REASONING,
+        verbosity: str | None = DEFAULT_VERBOSITY,
+        small_reasoning: str | None = None,
+        small_verbosity: str | None = None,
     ):
         """
         Initialize the OpenAIClient with the provided configuration, cache setting, and client.
@@ -51,8 +56,10 @@ class OpenAIClient(BaseOpenAIClient):
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
             cache (bool): Whether to use caching for responses. Defaults to False.
             client (Any | None): An optional async client instance to use. If not provided, a new AsyncOpenAI client is created.
+            small_reasoning: Reasoning effort for small model (None to disable).
+            small_verbosity: Verbosity for small model (None to disable).
         """
-        super().__init__(config, cache, max_tokens, reasoning, verbosity)
+        super().__init__(config, cache, max_tokens, reasoning, verbosity, small_reasoning, small_verbosity)
 
         if config is None:
             config = LLMConfig()

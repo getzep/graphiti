@@ -166,8 +166,8 @@ server:
 llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
   model: "gpt-4.1"  # Default model
-  small_model: "gpt-4.1-mini"  # Optional: Override small model for lightweight tasks
-                               # Auto-detected if not set (gpt-4.1-mini or gpt-5-nano)
+  small_model: "gpt-4.1-mini"  # Optional: Model for lightweight tasks (defaults to main model)
+  is_reasoning: false          # Optional: Set true for reasoning models (auto-detected for gpt-5/o1/o3)
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -237,7 +237,8 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 llm:
   provider: "openai"
   model: "qwen3:32b"  # or your preferred Ollama model
-  small_model: "qwen3:32b"  # IMPORTANT: Set to same model for Ollama
+  # small_model defaults to main model, no need to set for Ollama
+  is_reasoning: false  # Explicitly disable reasoning mode for local models
   max_tokens: 4096
 
   providers:
@@ -256,7 +257,7 @@ embedder:
       api_url: "http://localhost:11434/v1"
 ```
 
-**Important**: The `small_model` parameter is critical for local LLM setups. Graphiti uses a "small model" for lightweight tasks like entity deduplication. Without setting this, it defaults to `gpt-4.1-mini` which doesn't exist on Ollama.
+**Note**: The `small_model` now defaults to the main model if not set, making Ollama configuration simpler. The `is_reasoning` parameter controls whether reasoning-specific parameters are passed to the model (auto-detected for gpt-5/o1/o3 models, but can be explicitly set for other models).
 
 Make sure Ollama is running locally with: `ollama serve`
 

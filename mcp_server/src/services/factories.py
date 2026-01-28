@@ -119,24 +119,22 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Use configured small_model, or auto-detect based on main model type
-                if config.small_model:
-                    small_model = config.small_model
-                    is_reasoning_model = (
-                        config.model.startswith('gpt-5')
-                        or config.model.startswith('o1')
-                        or config.model.startswith('o3')
-                    )
+                # Use configured small_model, or fall back to main model
+                small_model = config.small_model or config.model
+
+                # Check if using a reasoning model (for special parameters)
+                # Use explicit config if set, otherwise auto-detect from model name
+                if config.is_reasoning is not None:
+                    is_reasoning_model = config.is_reasoning
                 else:
-                    # Determine appropriate small model based on main model type
                     is_reasoning_model = (
                         config.model.startswith('gpt-5')
                         or config.model.startswith('o1')
                         or config.model.startswith('o3')
                     )
-                    small_model = (
-                        'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
-                    )  # Use reasoning model for small tasks if main model is reasoning
+
+                # Check if small model uses reasoning (defaults to False if not set)
+                small_is_reasoning = config.small_is_reasoning if config.small_is_reasoning is not None else False
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
@@ -147,12 +145,31 @@ class LLMClientFactory:
                     max_tokens=config.max_tokens,
                 )
 
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
+                # Determine reasoning/verbosity for main model
                 if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    main_reasoning = 'minimal'
+                    main_verbosity = 'low'
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    main_reasoning = None
+                    main_verbosity = None
+
+                # Determine reasoning/verbosity for small model
+                if small_is_reasoning:
+                    small_reasoning = 'minimal'
+                    small_verbosity = 'low'
+                else:
+                    small_reasoning = None
+                    small_verbosity = None
+
+                logger.info(f'LLM config: is_reasoning={is_reasoning_model}, small_is_reasoning={small_is_reasoning}')
+                logger.info(f'Creating OpenAI client with reasoning={main_reasoning}, small_reasoning={small_reasoning}')
+                return OpenAIClient(
+                    config=llm_config,
+                    reasoning=main_reasoning,
+                    verbosity=main_verbosity,
+                    small_reasoning=small_reasoning,
+                    small_verbosity=small_verbosity,
+                )
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
