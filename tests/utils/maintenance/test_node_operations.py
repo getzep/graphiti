@@ -465,8 +465,8 @@ async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monk
 
 
 @pytest.mark.asyncio
-async def test_extract_attributes_without_callback_generates_summary():
-    """Test that summary is generated when no callback is provided (default behavior)."""
+async def test_extract_attributes_without_callback_keeps_short_summary():
+    """Test that short summaries are kept as-is without LLM call (optimization)."""
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
         return_value={'summary': 'Generated summary', 'attributes': {}}
@@ -484,10 +484,10 @@ async def test_extract_attributes_without_callback_generates_summary():
         should_summarize_node=None,  # No callback provided
     )
 
-    # Summary should be generated
-    assert result.summary == 'Generated summary'
-    # LLM should have been called for summary
-    assert llm_client.generate_response.call_count == 1
+    # Short summary should be kept as-is without LLM call
+    assert result.summary == 'Old summary'
+    # LLM should NOT have been called (summary is short enough)
+    assert llm_client.generate_response.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -521,8 +521,8 @@ async def test_extract_attributes_with_callback_skip_summary():
 
 
 @pytest.mark.asyncio
-async def test_extract_attributes_with_callback_generate_summary():
-    """Test that summary is regenerated when callback returns True."""
+async def test_extract_attributes_with_callback_keeps_short_summary():
+    """Test that short summaries are kept as-is even when callback returns True."""
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
         return_value={'summary': 'New generated summary', 'attributes': {}}
@@ -544,10 +544,10 @@ async def test_extract_attributes_with_callback_generate_summary():
         should_summarize_node=generate_summary_filter,
     )
 
-    # Summary should be updated
-    assert result.summary == 'New generated summary'
-    # LLM should have been called for summary
-    assert llm_client.generate_response.call_count == 1
+    # Short summary should be kept as-is (optimization skips LLM)
+    assert result.summary == 'Old summary'
+    # LLM should NOT have been called (summary is short enough)
+    assert llm_client.generate_response.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -587,12 +587,12 @@ async def test_extract_attributes_with_selective_callback():
         should_summarize_node=selective_filter,
     )
 
-    # User summary should remain unchanged
+    # User summary should remain unchanged (callback returned False)
     assert result_user.summary == 'Old'
-    # Topic summary should be generated
-    assert result_topic.summary == 'Generated summary'
-    # LLM should have been called only once (for topic)
-    assert llm_client.generate_response.call_count == 1
+    # Topic summary should also remain unchanged (short summary optimization)
+    assert result_topic.summary == 'Old'
+    # LLM should NOT have been called (summaries are short enough)
+    assert llm_client.generate_response.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -631,9 +631,61 @@ async def test_extract_attributes_from_nodes_with_callback():
     assert 'Node1' in call_tracker
     assert 'Node2' in call_tracker
 
-    # Node1 (User) should keep old summary, Node2 (Topic) should get new summary
+    # Both nodes should keep old summaries (short summary optimization skips LLM)
     node1_result = next(n for n in results if n.name == 'Node1')
     node2_result = next(n for n in results if n.name == 'Node2')
 
     assert node1_result.summary == 'Old1'
-    assert node2_result.summary == 'New summary'
+    assert node2_result.summary == 'Old2'
+
+
+@pytest.mark.asyncio
+async def test_extract_attributes_calls_llm_for_long_summary():
+    """Test that LLM is called when summary exceeds character limit."""
+    from graphiti_core.edges import EntityEdge
+    from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'summary': 'Condensed summary', 'attributes': {}}
+    )
+
+    node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Short')
+    episode = _make_episode()
+
+    # Create edges with long facts that exceed the threshold
+    long_fact = 'x' * (MAX_SUMMARY_CHARS * 2)
+    edges = [
+        EntityEdge(
+            uuid='edge1',
+            group_id='group',
+            source_node_uuid=node.uuid,
+            target_node_uuid='other-uuid',
+            name='test_edge',
+            fact=long_fact,
+            created_at=utc_now(),
+        ),
+        EntityEdge(
+            uuid='edge2',
+            group_id='group',
+            source_node_uuid=node.uuid,
+            target_node_uuid='other-uuid2',
+            name='test_edge2',
+            fact=long_fact,
+            created_at=utc_now(),
+        ),
+    ]
+
+    result = await extract_attributes_from_node(
+        llm_client,
+        node,
+        episode=episode,
+        previous_episodes=[],
+        entity_type=None,
+        should_summarize_node=None,
+        edges=edges,
+    )
+
+    # LLM should have been called to condense the long summary
+    assert llm_client.generate_response.call_count == 1
+    assert result.summary == 'Condensed summary'
