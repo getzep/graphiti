@@ -38,7 +38,6 @@ from graphiti_core.prompts.extract_nodes import (
     EntitySummary,
     ExtractedEntities,
     ExtractedEntity,
-    MissedEntities,
 )
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
