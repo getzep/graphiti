@@ -54,13 +54,11 @@ class MissingFacts(BaseModel):
 
 class Prompt(Protocol):
     edge: PromptVersion
-    reflexion: PromptVersion
     extract_attributes: PromptVersion
 
 
 class Versions(TypedDict):
     edge: PromptFunction
-    reflexion: PromptFunction
     extract_attributes: PromptFunction
 
 
@@ -136,34 +134,6 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
     ]
 
 
-def reflexion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that determines which facts have not been extracted from the given context"""
-
-    user_prompt = f"""
-<PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
-</PREVIOUS MESSAGES>
-<CURRENT MESSAGE>
-{context['episode_content']}
-</CURRENT MESSAGE>
-
-<EXTRACTED ENTITIES>
-{context['nodes']}
-</EXTRACTED ENTITIES>
-
-<EXTRACTED FACTS>
-{context['extracted_facts']}
-</EXTRACTED FACTS>
-
-Given the above MESSAGES, list of EXTRACTED ENTITIES entities, and list of EXTRACTED FACTS; 
-determine if any facts haven't been extracted.
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
 def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
@@ -198,6 +168,5 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
 
 versions: Versions = {
     'edge': edge,
-    'reflexion': reflexion,
     'extract_attributes': extract_attributes,
 }
