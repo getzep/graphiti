@@ -515,15 +515,19 @@ async def resolve_extracted_nodes(
     )
 
 
-def _filter_edges_for_node(node: EntityNode, edges: list[EntityEdge] | None) -> list[EntityEdge]:
-    """Filter edges to only those connected to the given node."""
+def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[EntityEdge]]:
+    """Build a dictionary mapping node UUIDs to their connected edges."""
+    edges_by_node: dict[str, list[EntityEdge]] = {}
     if not edges:
-        return []
-    return [
-        edge
-        for edge in edges
-        if edge.source_node_uuid == node.uuid or edge.target_node_uuid == node.uuid
-    ]
+        return edges_by_node
+    for edge in edges:
+        if edge.source_node_uuid not in edges_by_node:
+            edges_by_node[edge.source_node_uuid] = []
+        if edge.target_node_uuid not in edges_by_node:
+            edges_by_node[edge.target_node_uuid] = []
+        edges_by_node[edge.source_node_uuid].append(edge)
+        edges_by_node[edge.target_node_uuid].append(edge)
+    return edges_by_node
 
 
 async def extract_attributes_from_nodes(
@@ -537,6 +541,10 @@ async def extract_attributes_from_nodes(
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
+
+    # Pre-build edges lookup for O(E + N) instead of O(N * E)
+    edges_by_node = _build_edges_by_node(edges)
+
     updated_nodes: list[EntityNode] = await semaphore_gather(
         *[
             extract_attributes_from_node(
@@ -550,7 +558,7 @@ async def extract_attributes_from_nodes(
                     else None
                 ),
                 should_summarize_node,
-                _filter_edges_for_node(node, edges),
+                edges_by_node.get(node.uuid, []),
             )
             for node in nodes
         ]
