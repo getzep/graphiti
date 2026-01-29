@@ -1978,9 +1978,7 @@ async def get_embeddings_for_communities(
 ) -> dict[str, list[float]]:
     if driver.search_interface:
         try:
-            return await driver.search_interface.get_embeddings_for_communities(
-                driver, communities
-            )
+            return await driver.search_interface.get_embeddings_for_communities(driver, communities)
         except NotImplementedError:
             pass
 
