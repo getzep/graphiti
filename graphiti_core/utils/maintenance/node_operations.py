@@ -635,7 +635,7 @@ async def _extract_entity_summary(
     # Build summary with edge facts appended
     summary_with_edges = node.summary
     if edges:
-        edge_facts = '\n'.join(edge.fact for edge in edges)
+        edge_facts = '\n'.join(edge.fact for edge in edges if edge.fact)
         summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
 
     # Only Summarize with an LLM if the facts make the summary too long
@@ -646,7 +646,7 @@ async def _extract_entity_summary(
     summary_context = _build_episode_context(
         node_data={
             'name': node.name,
-            'summary': summary_with_edges,
+            'summary': node.summary,
             'entity_types': node.labels,
             'attributes': node.attributes,
         },
