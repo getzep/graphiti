@@ -64,31 +64,6 @@ logger = logging.getLogger(__name__)
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 
-async def extract_nodes_reflexion(
-        llm_client: LLMClient,
-        episode: EpisodicNode,
-        previous_episodes: list[EpisodicNode],
-        node_names: list[str],
-        group_id: str | None = None,
-) -> list[str]:
-    # Prepare context for LLM
-    context = {
-        'episode_content': episode.content,
-        'previous_episodes': [ep.content for ep in previous_episodes],
-        'extracted_entities': node_names,
-    }
-
-    llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.reflexion(context),
-        MissedEntities,
-        group_id=group_id,
-        prompt_name='extract_nodes.reflexion',
-    )
-    missed_entities = llm_response.get('missed_entities', [])
-
-    return missed_entities
-
-
 async def extract_nodes(
         clients: GraphitiClients,
         episode: EpisodicNode,

@@ -29,45 +29,11 @@ class InvalidatedEdges(BaseModel):
 
 
 class Prompt(Protocol):
-    v1: PromptVersion
     v2: PromptVersion
 
 
 class Versions(TypedDict):
-    v1: PromptFunction
     v2: PromptFunction
-
-
-def v1(context: dict[str, Any]) -> list[Message]:
-    return [
-        Message(
-            role='system',
-            content='You are an AI assistant that helps determine which relationships in a knowledge graph should be invalidated based solely on explicit contradictions in newer information.',
-        ),
-        Message(
-            role='user',
-            content=f"""
-               Based on the provided existing edges and new edges with their timestamps, determine which relationships, if any, should be marked as expired due to contradictions or updates in the newer edges.
-               Use the start and end dates of the edges to determine which edges are to be marked expired.
-                Only mark a relationship as invalid if there is clear evidence from other edges that the relationship is no longer true.
-                Do not invalidate relationships merely because they weren't mentioned in the episodes. You may use the current episode and previous episodes as well as the facts of each edge to understand the context of the relationships.
-
-                Previous Episodes:
-                {context['previous_episodes']}
-
-                Current Episode:
-                {context['current_episode']}
-
-                Existing Edges (sorted by timestamp, newest first):
-                {context['existing_edges']}
-
-                New Edges:
-                {context['new_edges']}
-
-                Each edge is formatted as: "UUID | SOURCE_NODE - EDGE_NAME - TARGET_NODE (fact: EDGE_FACT), START_DATE (END_DATE, optional))"
-            """,
-        ),
-    ]
 
 
 def v2(context: dict[str, Any]) -> list[Message]:
@@ -95,4 +61,4 @@ def v2(context: dict[str, Any]) -> list[Message]:
     ]
 
 
-versions: Versions = {'v1': v1, 'v2': v2}
+versions: Versions = {'v2': v2}

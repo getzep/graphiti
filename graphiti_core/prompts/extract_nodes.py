@@ -67,7 +67,6 @@ class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion
     extract_text: PromptVersion
-    reflexion: PromptVersion
     classify_nodes: PromptVersion
     extract_attributes: PromptVersion
     extract_summary: PromptVersion
@@ -77,7 +76,6 @@ class Versions(TypedDict):
     extract_message: PromptFunction
     extract_json: PromptFunction
     extract_text: PromptFunction
-    reflexion: PromptFunction
     classify_nodes: PromptFunction
     extract_attributes: PromptFunction
     extract_summary: PromptFunction
@@ -196,30 +194,6 @@ Guidelines:
     ]
 
 
-def reflexion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context"""
-
-    user_prompt = f"""
-<PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
-</PREVIOUS MESSAGES>
-<CURRENT MESSAGE>
-{context['episode_content']}
-</CURRENT MESSAGE>
-
-<EXTRACTED ENTITIES>
-{context['extracted_entities']}
-</EXTRACTED ENTITIES>
-
-Given the above previous messages, current message, and list of extracted entities; determine if any entities haven't been
-extracted.
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
 def classify_nodes(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that classifies entity nodes given the context from which they were extracted"""
 
@@ -312,7 +286,6 @@ versions: Versions = {
     'extract_message': extract_message,
     'extract_json': extract_json,
     'extract_text': extract_text,
-    'reflexion': reflexion,
     'extract_summary': extract_summary,
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
