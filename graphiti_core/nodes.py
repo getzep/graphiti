@@ -454,8 +454,10 @@ class EpisodicNode(Node):
     async def get_by_entity_node_uuid(cls, driver: GraphDriver, entity_node_uuid: str):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.episodic_node_get_by_entity_node_uuid(
-                    cls, driver, entity_node_uuid
+                return (
+                    await driver.graph_operations_interface.episodic_node_get_by_entity_node_uuid(
+                        cls, driver, entity_node_uuid
+                    )
                 )
             except NotImplementedError:
                 pass

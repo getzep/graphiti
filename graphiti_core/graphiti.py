@@ -932,7 +932,12 @@ class Graphiti:
 
                 # Extract node attributes
                 hydrated_nodes = await extract_attributes_from_nodes(
-                    self.clients, nodes, episode, previous_episodes, entity_types, edges=entity_edges
+                    self.clients,
+                    nodes,
+                    episode,
+                    previous_episodes,
+                    entity_types,
+                    edges=entity_edges,
                 )
 
                 # Process and save episode data (including saga association if provided)
