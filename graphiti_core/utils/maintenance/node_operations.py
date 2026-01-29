@@ -21,6 +21,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
@@ -64,11 +65,11 @@ NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 
 async def extract_nodes_reflexion(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-    node_names: list[str],
-    group_id: str | None = None,
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        node_names: list[str],
+        group_id: str | None = None,
 ) -> list[str]:
     # Prepare context for LLM
     context = {
@@ -89,12 +90,12 @@ async def extract_nodes_reflexion(
 
 
 async def extract_nodes(
-    clients: GraphitiClients,
-    episode: EpisodicNode,
-    previous_episodes: list[EpisodicNode],
-    entity_types: dict[str, type[BaseModel]] | None = None,
-    excluded_entity_types: list[str] | None = None,
-    custom_extraction_instructions: str | None = None,
+        clients: GraphitiClients,
+        episode: EpisodicNode,
+        previous_episodes: list[EpisodicNode],
+        entity_types: dict[str, type[BaseModel]] | None = None,
+        excluded_entity_types: list[str] | None = None,
+        custom_extraction_instructions: str | None = None,
 ) -> list[EntityNode]:
     """Extract entity nodes from an episode with adaptive chunking.
 
@@ -139,7 +140,7 @@ async def extract_nodes(
 
 
 def _build_entity_types_context(
-    entity_types: dict[str, type[BaseModel]] | None,
+        entity_types: dict[str, type[BaseModel]] | None,
 ) -> list[dict]:
     """Build entity types context with ID mappings."""
     entity_types_context = [
@@ -167,9 +168,9 @@ def _build_entity_types_context(
 
 
 async def _extract_nodes_single(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    context: dict,
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        context: dict,
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
     llm_response = await _call_extraction_llm(llm_client, episode, context)
@@ -178,9 +179,9 @@ async def _extract_nodes_single(
 
 
 async def _extract_nodes_chunked(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    context: dict,
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        context: dict,
 ) -> list[ExtractedEntity]:
     """Extract entities from large content using chunking."""
     # Chunk the content based on episode type
@@ -208,10 +209,10 @@ async def _extract_nodes_chunked(
 
 
 async def _extract_from_chunk(
-    llm_client: LLMClient,
-    chunk: str,
-    base_context: dict,
-    episode: EpisodicNode,
+        llm_client: LLMClient,
+        chunk: str,
+        base_context: dict,
+        episode: EpisodicNode,
 ) -> list[ExtractedEntity]:
     """Extract entities from a single chunk."""
     chunk_context = {**base_context, 'episode_content': chunk}
@@ -220,9 +221,9 @@ async def _extract_from_chunk(
 
 
 async def _call_extraction_llm(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    context: dict,
+        llm_client: LLMClient,
+        episode: EpisodicNode,
+        context: dict,
 ) -> dict:
     """Call the appropriate extraction prompt based on episode type."""
     if episode.source == EpisodeType.message:
@@ -248,7 +249,7 @@ async def _call_extraction_llm(
 
 
 def _merge_extracted_entities(
-    chunk_results: list[list[ExtractedEntity]],
+        chunk_results: list[list[ExtractedEntity]],
 ) -> list[ExtractedEntity]:
     """Merge entities from multiple chunks, deduplicating by normalized name.
 
@@ -268,10 +269,10 @@ def _merge_extracted_entities(
 
 
 def _create_entity_nodes(
-    extracted_entities: list[ExtractedEntity],
-    entity_types_context: list[dict],
-    excluded_entity_types: list[str] | None,
-    episode: EpisodicNode,
+        extracted_entities: list[ExtractedEntity],
+        entity_types_context: list[dict],
+        excluded_entity_types: list[str] | None,
+        episode: EpisodicNode,
 ) -> list[EntityNode]:
     """Convert ExtractedEntity objects to EntityNode objects."""
     extracted_nodes = []
@@ -304,9 +305,9 @@ def _create_entity_nodes(
 
 
 async def _collect_candidate_nodes(
-    clients: GraphitiClients,
-    extracted_nodes: list[EntityNode],
-    existing_nodes_override: list[EntityNode] | None,
+        clients: GraphitiClients,
+        extracted_nodes: list[EntityNode],
+        existing_nodes_override: list[EntityNode] | None,
 ) -> list[EntityNode]:
     """Search per extracted name and return unique candidates with overrides honored in order."""
     search_results: list[SearchResults] = await semaphore_gather(
@@ -339,13 +340,13 @@ async def _collect_candidate_nodes(
 
 
 async def _resolve_with_llm(
-    llm_client: LLMClient,
-    extracted_nodes: list[EntityNode],
-    indexes: DedupCandidateIndexes,
-    state: DedupResolutionState,
-    episode: EpisodicNode | None,
-    previous_episodes: list[EpisodicNode] | None,
-    entity_types: dict[str, type[BaseModel]] | None,
+        llm_client: LLMClient,
+        extracted_nodes: list[EntityNode],
+        indexes: DedupCandidateIndexes,
+        state: DedupResolutionState,
+        episode: EpisodicNode | None,
+        previous_episodes: list[EpisodicNode] | None,
+        entity_types: dict[str, type[BaseModel]] | None,
 ) -> None:
     """Escalate unresolved nodes to the dedupe prompt so the LLM can select or reject duplicates.
 
@@ -367,7 +368,7 @@ async def _resolve_with_llm(
             'entity_type_description': entity_types_dict.get(
                 next((item for item in node.labels if item != 'Entity'), '')
             ).__doc__
-            or 'Default Entity Type',
+                                       or 'Default Entity Type',
         }
         for i, node in enumerate(llm_extracted_nodes)
     ]
@@ -488,12 +489,12 @@ async def _resolve_with_llm(
 
 
 async def resolve_extracted_nodes(
-    clients: GraphitiClients,
-    extracted_nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, type[BaseModel]] | None = None,
-    existing_nodes_override: list[EntityNode] | None = None,
+        clients: GraphitiClients,
+        extracted_nodes: list[EntityNode],
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_types: dict[str, type[BaseModel]] | None = None,
+        existing_nodes_override: list[EntityNode] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
     """Search for existing nodes, resolve deterministic matches, then escalate holdouts to the LLM dedupe prompt."""
     llm_client = clients.llm_client
@@ -540,13 +541,25 @@ async def resolve_extracted_nodes(
     )
 
 
+def _filter_edges_for_node(node: EntityNode, edges: list[EntityEdge] | None) -> list[EntityEdge]:
+    """Filter edges to only those connected to the given node."""
+    if not edges:
+        return []
+    return [
+        edge
+        for edge in edges
+        if edge.source_node_uuid == node.uuid or edge.target_node_uuid == node.uuid
+    ]
+
+
 async def extract_attributes_from_nodes(
-    clients: GraphitiClients,
-    nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_types: dict[str, type[BaseModel]] | None = None,
-    should_summarize_node: NodeSummaryFilter | None = None,
+        clients: GraphitiClients,
+        nodes: list[EntityNode],
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_types: dict[str, type[BaseModel]] | None = None,
+        should_summarize_node: NodeSummaryFilter | None = None,
+        edges: list[EntityEdge] | None = None,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -563,6 +576,7 @@ async def extract_attributes_from_nodes(
                     else None
                 ),
                 should_summarize_node,
+                _filter_edges_for_node(node, edges),
             )
             for node in nodes
         ]
@@ -574,12 +588,13 @@ async def extract_attributes_from_nodes(
 
 
 async def extract_attributes_from_node(
-    llm_client: LLMClient,
-    node: EntityNode,
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_type: type[BaseModel] | None = None,
-    should_summarize_node: NodeSummaryFilter | None = None,
+        llm_client: LLMClient,
+        node: EntityNode,
+        episode: EpisodicNode | None = None,
+        previous_episodes: list[EpisodicNode] | None = None,
+        entity_type: type[BaseModel] | None = None,
+        should_summarize_node: NodeSummaryFilter | None = None,
+        edges: list[EntityEdge] | None = None,
 ) -> EntityNode:
     # Extract attributes if entity type is defined and has attributes
     llm_response = await _extract_entity_attributes(
@@ -588,7 +603,7 @@ async def extract_attributes_from_node(
 
     # Extract summary if needed
     await _extract_entity_summary(
-        llm_client, node, episode, previous_episodes, should_summarize_node
+        llm_client, node, episode, previous_episodes, should_summarize_node, edges
     )
 
     node.attributes.update(llm_response)
@@ -597,11 +612,11 @@ async def extract_attributes_from_node(
 
 
 async def _extract_entity_attributes(
-    llm_client: LLMClient,
-    node: EntityNode,
-    episode: EpisodicNode | None,
-    previous_episodes: list[EpisodicNode] | None,
-    entity_type: type[BaseModel] | None,
+        llm_client: LLMClient,
+        node: EntityNode,
+        episode: EpisodicNode | None,
+        previous_episodes: list[EpisodicNode] | None,
+        entity_type: type[BaseModel] | None,
 ) -> dict[str, Any]:
     if entity_type is None or len(entity_type.model_fields) == 0:
         return {}
@@ -632,19 +647,31 @@ async def _extract_entity_attributes(
 
 
 async def _extract_entity_summary(
-    llm_client: LLMClient,
-    node: EntityNode,
-    episode: EpisodicNode | None,
-    previous_episodes: list[EpisodicNode] | None,
-    should_summarize_node: NodeSummaryFilter | None,
+        llm_client: LLMClient,
+        node: EntityNode,
+        episode: EpisodicNode | None,
+        previous_episodes: list[EpisodicNode] | None,
+        should_summarize_node: NodeSummaryFilter | None,
+        edges: list[EntityEdge] | None = None,
 ) -> None:
     if should_summarize_node is not None and not await should_summarize_node(node):
+        return
+
+    # Build summary with edge facts appended
+    summary_with_edges = node.summary
+    if edges:
+        edge_facts = '\n'.join(edge.fact for edge in edges)
+        summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
+
+    # Only Summarize with an LLM if the facts make the summary too long
+    if len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
+        node.summary = summary_with_edges
         return
 
     summary_context = _build_episode_context(
         node_data={
             'name': node.name,
-            'summary': truncate_at_sentence(node.summary, MAX_SUMMARY_CHARS),
+            'summary': summary_with_edges,
             'entity_types': node.labels,
             'attributes': node.attributes,
         },
@@ -664,9 +691,9 @@ async def _extract_entity_summary(
 
 
 def _build_episode_context(
-    node_data: dict[str, Any],
-    episode: EpisodicNode | None,
-    previous_episodes: list[EpisodicNode] | None,
+        node_data: dict[str, Any],
+        episode: EpisodicNode | None,
+        previous_episodes: list[EpisodicNode] | None,
 ) -> dict[str, Any]:
     return {
         'node': node_data,
