@@ -129,6 +129,63 @@ class QueueService:
 
         logger.info(f'Queue service initialized with consumer: {self._consumer_name}')
 
+        # Eager startup: resume workers for streams that have unprocessed messages
+        await self._resume_pending_streams()
+
+    async def _resume_pending_streams(self) -> None:
+        """Resume workers for any streams that have unprocessed messages.
+
+        This runs at startup to ensure no episodes are lost after a crash or restart.
+        Scans all graphiti:queue:* streams and starts workers for any with lag > 0
+        or pending (unacknowledged) messages.
+        """
+        if self._redis is None:
+            return
+
+        try:
+            # Find all queue streams
+            keys: list[str] = []
+            async for key in self._redis.scan_iter(match='graphiti:queue:*', count=100):
+                # Skip DLQ keys
+                if ':dlq' not in key:
+                    keys.append(key)
+
+            if not keys:
+                return
+
+            resumed = 0
+            for stream_key in keys:
+                group_id = stream_key.removeprefix('graphiti:queue:')
+
+                try:
+                    # Check if consumer group exists and has lag or pending
+                    groups = await self._redis.xinfo_groups(stream_key)
+                    for group in groups:
+                        if group.get('name') != self._config.consumer_group:
+                            continue
+                        lag = group.get('lag', 0) or 0
+                        pending = group.get('pending', 0) or 0
+                        if lag > 0 or pending > 0:
+                            logger.info(
+                                f'Resuming worker for {group_id}: '
+                                f'lag={lag}, pending={pending}'
+                            )
+                            await self._ensure_worker_running(group_id)
+                            resumed += 1
+                except redis.ResponseError:
+                    # Stream exists but no consumer group yet — skip
+                    pass
+
+            if resumed > 0:
+                logger.info(f'Resumed {resumed} workers for streams with pending messages')
+            else:
+                logger.info('No pending streams found at startup')
+
+        except redis.ConnectionError as e:
+            logger.error(f'Redis connection error during startup scan: {e}')
+        except Exception as e:
+            logger.warning(f'Error scanning pending streams: {e}')
+
     async def add_episode(
         self,
         group_id: str,
@@ -290,27 +347,45 @@ class QueueService:
             # Could add DLQ logic here for max_retries exceeded
 
     async def _claim_abandoned(self, group_id: str) -> None:
-        """Claim and reprocess abandoned messages from previous crashes."""
+        """Claim and reprocess abandoned messages from previous crashes.
+
+        Loops until all abandoned messages are claimed (not just 10).
+        """
         if self._redis is None:
             return
 
         stream_key = self._stream_key(group_id)
+        total_claimed = 0
+        cursor = '0'
 
         try:
-            result = await self._redis.xautoclaim(
-                stream_key,
-                self._config.consumer_group,
-                self._consumer_name,
-                min_idle_time=self._config.claim_min_idle_ms,
-                start_id='0',
-                count=10,
-            )
+            while True:
+                result = await self._redis.xautoclaim(
+                    stream_key,
+                    self._config.consumer_group,
+                    self._consumer_name,
+                    min_idle_time=self._config.claim_min_idle_ms,
+                    start_id=cursor,
+                    count=50,
+                )
 
-            if result and len(result) > 1 and result[1]:
+                if not result or len(result) < 2 or not result[1]:
+                    break
+
+                next_cursor = result[0]
                 claimed_messages = result[1]
-                logger.info(f'Claimed {len(claimed_messages)} abandoned messages for {group_id}')
+
                 for message_id, data in claimed_messages:
                     await self._process_message(group_id, message_id, data)
+                    total_claimed += 1
+
+                # If cursor is '0-0', we've scanned everything
+                if next_cursor == '0-0' or next_cursor == '0':
+                    break
+                cursor = next_cursor
+
+            if total_claimed > 0:
+                logger.info(f'Claimed and processed {total_claimed} abandoned messages for {group_id}')
 
         except redis.ResponseError as e:
             # XAUTOCLAIM might fail if stream doesn't exist yet
