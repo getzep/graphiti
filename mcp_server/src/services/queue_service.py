@@ -285,7 +285,16 @@ class QueueService:
             # First: Claim any abandoned messages from previous crashes
             await self._claim_abandoned(group_id)
 
+            reclaim_counter = 0
+            RECLAIM_EVERY = 12  # ~60s bei 5s block_ms
+
             while not self._shutting_down:
+                # Periodically reclaim abandoned/failed messages
+                reclaim_counter += 1
+                if reclaim_counter >= RECLAIM_EVERY:
+                    reclaim_counter = 0
+                    await self._claim_abandoned(group_id)
+
                 try:
                     messages = await self._redis.xreadgroup(
                         groupname=self._config.consumer_group,
