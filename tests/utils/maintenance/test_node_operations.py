@@ -96,9 +96,8 @@ async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
         'entity_resolutions': [
             {
                 'id': 0,
-                'duplicate_idx': -1,
                 'name': 'Joe',
-                'duplicates': [],
+                'duplicate_name': '',
             }
         ]
     }
@@ -307,9 +306,8 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 0,
                     'name': 'Dizzy Gillespie',
-                    'duplicates': [0],
+                    'duplicate_name': 'Dizzy Gillespie',
                 }
             ]
         }
@@ -329,7 +327,6 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
     assert state.uuid_map[extracted.uuid] == candidate.uuid
-    assert captured_context['existing_nodes'][0]['idx'] == 0
     assert isinstance(captured_context['existing_nodes'], list)
     assert state.duplicate_pairs == [(extracted, candidate)]
 
@@ -352,9 +349,8 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
             'entity_resolutions': [
                 {
                     'id': 5,
-                    'duplicate_idx': -1,
                     'name': 'Dexter',
-                    'duplicates': [],
+                    'duplicate_name': '',
                 }
             ]
         }
@@ -394,15 +390,13 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 0,
                     'name': 'Dizzy Gillespie',
-                    'duplicates': [0],
+                    'duplicate_name': 'Dizzy Gillespie',
                 },
                 {
                     'id': 0,
-                    'duplicate_idx': -1,
                     'name': 'Dizzy',
-                    'duplicates': [],
+                    'duplicate_name': '',
                 },
             ]
         }
@@ -424,7 +418,7 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monkeypatch):
+async def test_resolve_with_llm_invalid_duplicate_name_defaults_to_extracted(monkeypatch):
     extracted = EntityNode(name='Dexter', group_id='group', labels=['Entity'])
 
     indexes = _build_candidate_indexes([])
@@ -441,9 +435,8 @@ async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monk
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 10,
                     'name': 'Dexter',
-                    'duplicates': [],
+                    'duplicate_name': 'NonExistent Entity',
                 }
             ]
         }

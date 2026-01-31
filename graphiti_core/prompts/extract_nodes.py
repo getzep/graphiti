@@ -29,7 +29,7 @@ class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
         description='ID of the classified entity type. '
-        'Must be one of the provided entity_type_id integers.',
+                    'Must be one of the provided entity_type_id integers.',
     )
 
 
@@ -37,30 +37,8 @@ class ExtractedEntities(BaseModel):
     extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
 
 
-class MissedEntities(BaseModel):
-    missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
-
-
-class EntityClassificationTriple(BaseModel):
-    uuid: str = Field(description='UUID of the entity')
-    name: str = Field(description='Name of the entity')
-    entity_type: str | None = Field(
-        default=None,
-        description='Type of the entity. Must be one of the provided types or None',
-    )
-
-
-class EntityClassification(BaseModel):
-    entity_classifications: list[EntityClassificationTriple] = Field(
-        ..., description='List of entities classification triples.'
-    )
-
-
 class EntitySummary(BaseModel):
-    summary: str = Field(
-        ...,
-        description=f'Summary containing the important information about the entity. Under {MAX_SUMMARY_CHARS} characters.',
-    )
+    summary: str = Field(..., description='Summary of the entity')
 
 
 class Prompt(Protocol):
@@ -265,7 +243,7 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
-        from the messages and relevant information from the existing summary.
+        from the messages and relevant information from the existing summary. Summary must be under {MAX_SUMMARY_CHARS} characters.
 
         {summary_instructions}
 
