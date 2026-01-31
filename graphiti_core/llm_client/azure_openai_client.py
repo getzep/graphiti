@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -63,26 +63,42 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         reasoning: str | None,
         verbosity: str | None,
     ):
-        """Create a structured completion using Azure OpenAI's responses.parse API."""
+        """Create a structured completion using Azure OpenAI.
+
+        For reasoning models (GPT-5, o1, o3): uses responses.parse API
+        For regular models (GPT-4o, etc): uses chat.completions with response_format
+        """
         supports_reasoning = self._supports_reasoning_features(model)
-        request_kwargs = {
-            'model': model,
-            'input': messages,
-            'max_output_tokens': max_tokens,
-            'text_format': response_model,  # type: ignore
-        }
 
-        temperature_value = temperature if not supports_reasoning else None
-        if temperature_value is not None:
-            request_kwargs['temperature'] = temperature_value
+        if supports_reasoning:
+            # Use responses.parse for reasoning models
+            request_kwargs = {
+                'model': model,
+                'input': messages,
+                'max_output_tokens': max_tokens,
+                'text_format': response_model,  # type: ignore
+            }
 
-        if supports_reasoning and reasoning:
-            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+            if reasoning:
+                request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
 
-        if supports_reasoning and verbosity:
-            request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
+            if verbosity:
+                request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
 
-        return await self.client.responses.parse(**request_kwargs)
+            return await self.client.responses.parse(**request_kwargs)
+        else:
+            # Use standard chat completions for non-reasoning models
+            request_kwargs = {
+                'model': model,
+                'messages': messages,
+                'max_tokens': max_tokens,
+                'response_format': response_model,  # Structured output
+            }
+
+            if temperature is not None:
+                request_kwargs['temperature'] = temperature
+
+            return await self.client.beta.chat.completions.parse(**request_kwargs)
 
     async def _create_completion(
         self,
@@ -107,6 +123,41 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             request_kwargs['temperature'] = temperature_value
 
         return await self.client.chat.completions.create(**request_kwargs)
+
+    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
+        """Handle structured response parsing for both reasoning and non-reasoning models.
+
+        For reasoning models (responses.parse): uses response.output_text
+        For regular models (beta.chat.completions.parse): uses response.choices[0].message.parsed
+        """
+        # Check if this is a ParsedChatCompletion (from beta.chat.completions.parse)
+        if hasattr(response, 'choices') and response.choices:
+            # Standard ParsedChatCompletion format
+            message = response.choices[0].message
+            if hasattr(message, 'parsed') and message.parsed:
+                # The parsed object is already a Pydantic model, convert to dict
+                return message.parsed.model_dump()
+            elif hasattr(message, 'refusal') and message.refusal:
+                from graphiti_core.llm_client.errors import RefusalError
+
+                raise RefusalError(message.refusal)
+            else:
+                raise Exception(f'Invalid response from LLM: {response.model_dump()}')
+        elif hasattr(response, 'output_text'):
+            # Reasoning model response format (responses.parse)
+            import json
+
+            response_object = response.output_text
+            if response_object:
+                return json.loads(response_object)
+            elif hasattr(response, 'refusal') and response.refusal:
+                from graphiti_core.llm_client.errors import RefusalError
+
+                raise RefusalError(response.refusal)
+            else:
+                raise Exception(f'Invalid response from LLM: {response.model_dump()}')
+        else:
+            raise Exception(f'Unknown response format: {type(response)}')
 
     @staticmethod
     def _supports_reasoning_features(model: str) -> bool:
