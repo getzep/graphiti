@@ -37,6 +37,10 @@ class ExtractedEntities(BaseModel):
     extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
 
 
+class EntitySummary(BaseModel):
+    summary: str = Field(..., description='Summary of the entity')
+
+
 class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion

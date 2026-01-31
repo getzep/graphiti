@@ -35,6 +35,7 @@ from graphiti_core.nodes import (
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
+    EntitySummary,
     ExtractedEntities,
     ExtractedEntity,
 )
@@ -670,12 +671,13 @@ async def _extract_entity_summary(
 
     summary_response = await llm_client.generate_response(
         prompt_library.extract_nodes.extract_summary(summary_context),
+        response_model=EntitySummary,
         model_size=ModelSize.small,
         group_id=node.group_id,
         prompt_name='extract_nodes.extract_summary',
     )
 
-    node.summary = truncate_at_sentence(summary_response.get('content', ''), MAX_SUMMARY_CHARS)
+    node.summary = truncate_at_sentence(summary_response.get('summary', ''), MAX_SUMMARY_CHARS)
 
 
 def _build_episode_context(
