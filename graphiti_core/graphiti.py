@@ -1503,7 +1503,6 @@ class Graphiti:
                 group_id=edge.group_id,
             ),
             None,
-            None,
         )
 
         edges: list[EntityEdge] = [resolved_edge] + invalidated_edges

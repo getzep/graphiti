@@ -35,7 +35,6 @@ from graphiti_core.nodes import (
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
-    EntitySummary,
     ExtractedEntities,
     ExtractedEntity,
 )
@@ -371,14 +370,18 @@ async def _resolve_with_llm(
     existing_nodes_context = [
         {
             **{
-                'idx': i,
                 'name': candidate.name,
                 'entity_types': candidate.labels,
             },
             **candidate.attributes,
         }
-        for i, candidate in enumerate(indexes.existing_nodes)
+        for candidate in indexes.existing_nodes
     ]
+
+    # Build name -> node mapping for resolving duplicates by name
+    existing_nodes_by_name: dict[str, EntityNode] = {
+        node.name: node for node in indexes.existing_nodes
+    }
 
     context = {
         'extracted_nodes': extracted_nodes_context,
@@ -424,7 +427,7 @@ async def _resolve_with_llm(
 
     for resolution in node_resolutions:
         relative_id: int = resolution.id
-        duplicate_idx: int = resolution.duplicate_idx
+        duplicate_name: str = resolution.duplicate_name
 
         if relative_id not in valid_relative_range:
             logger.warning(
@@ -444,14 +447,14 @@ async def _resolve_with_llm(
         extracted_node = extracted_nodes[original_index]
 
         resolved_node: EntityNode
-        if duplicate_idx == -1:
+        if not duplicate_name:
             resolved_node = extracted_node
-        elif 0 <= duplicate_idx < len(indexes.existing_nodes):
-            resolved_node = indexes.existing_nodes[duplicate_idx]
+        elif duplicate_name in existing_nodes_by_name:
+            resolved_node = existing_nodes_by_name[duplicate_name]
         else:
             logger.warning(
-                'Invalid duplicate_idx %s for extracted node %s; treating as no duplicate.',
-                duplicate_idx,
+                'Invalid duplicate_name %r for extracted node %s; treating as no duplicate.',
+                duplicate_name,
                 extracted_node.uuid,
             )
             resolved_node = extracted_node
@@ -667,13 +670,12 @@ async def _extract_entity_summary(
 
     summary_response = await llm_client.generate_response(
         prompt_library.extract_nodes.extract_summary(summary_context),
-        response_model=EntitySummary,
         model_size=ModelSize.small,
         group_id=node.group_id,
         prompt_name='extract_nodes.extract_summary',
     )
 
-    node.summary = truncate_at_sentence(summary_response.get('summary', ''), MAX_SUMMARY_CHARS)
+    node.summary = truncate_at_sentence(summary_response.get('content', ''), MAX_SUMMARY_CHARS)
 
 
 def _build_episode_context(
