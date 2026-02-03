@@ -874,34 +874,29 @@ async def list_graphs() -> dict[str, Any] | ErrorResponse:
                 # Clone driver to access this specific graph
                 graph_driver = client.driver.clone(database=graph_name)
 
-                # Get node count
-                async with graph_driver.session() as session:
-                    result = await session.run('MATCH (n) RETURN count(n) as count')
-                    node_count = 0
-                    if result:
-                        async for record in result:
-                            node_count = record[0] if record else 0
-                            break
+                # Get node count using execute_query (more reliable than session.run)
+                result = await graph_driver.execute_query('MATCH (n) RETURN count(n) as count')
+                node_count = 0
+                if result and len(result) > 0 and 'count' in result[0]:
+                    node_count = result[0]['count']
 
                 # Get edge count
-                async with graph_driver.session() as session:
-                    result = await session.run('MATCH ()-[r]->() RETURN count(r) as count')
-                    edge_count = 0
-                    if result:
-                        async for record in result:
-                            edge_count = record[0] if record else 0
-                            break
+                result = await graph_driver.execute_query(
+                    'MATCH ()-[r]->() RETURN count(r) as count'
+                )
+                edge_count = 0
+                if result and len(result) > 0 and 'count' in result[0]:
+                    edge_count = result[0]['count']
 
                 # Get group_ids present
-                async with graph_driver.session() as session:
-                    result = await session.run(
-                        'MATCH (n) WHERE n.group_id IS NOT NULL RETURN DISTINCT n.group_id LIMIT 10'
-                    )
-                    group_ids = []
-                    if result:
-                        async for record in result:
-                            if record and len(record) > 0:
-                                group_ids.append(record[0])
+                result = await graph_driver.execute_query(
+                    'MATCH (n) WHERE n.group_id IS NOT NULL RETURN DISTINCT n.group_id as group_id LIMIT 10'
+                )
+                group_ids = []
+                if result:
+                    for record in result:
+                        if 'group_id' in record:
+                            group_ids.append(record['group_id'])
 
                 graphs_info.append(
                     {
