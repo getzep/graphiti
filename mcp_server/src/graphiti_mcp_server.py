@@ -803,6 +803,107 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 
 
 @mcp.tool()
+async def list_graphs() -> dict[str, Any] | ErrorResponse:
+    """List all available FalkorDB graphs/databases with their statistics.
+
+    Returns information about all graphs including node counts, edge counts, and group_ids.
+    Only works with FalkorDB provider.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        from graphiti_core.driver.driver import GraphProvider
+
+        # Only works with FalkorDB
+        if client.driver.provider != GraphProvider.FALKORDB:
+            return ErrorResponse(
+                error='list_graphs only works with FalkorDB provider. '
+                'For Neo4j, databases must be managed through Neo4j directly.'
+            )
+
+        # Get list of all graphs using Redis command
+        async with client.driver.session() as session:
+            # FalkorDB stores graphs as Redis keys, use GRAPH.LIST command
+            result = await session.run('GRAPH.LIST')
+            graph_names = []
+            if result:
+                async for record in result:
+                    if record and len(record) > 0:
+                        graph_names.append(record[0])
+
+        if not graph_names:
+            return {'message': 'No graphs found', 'graphs': []}
+
+        # Get statistics for each graph
+        graphs_info = []
+        for graph_name in graph_names:
+            try:
+                # Clone driver to access this specific graph
+                graph_driver = client.driver.clone(database=graph_name)
+
+                # Get node count
+                async with graph_driver.session() as session:
+                    result = await session.run('MATCH (n) RETURN count(n) as count')
+                    node_count = 0
+                    if result:
+                        async for record in result:
+                            node_count = record[0] if record else 0
+                            break
+
+                # Get edge count
+                async with graph_driver.session() as session:
+                    result = await session.run('MATCH ()-[r]->() RETURN count(r) as count')
+                    edge_count = 0
+                    if result:
+                        async for record in result:
+                            edge_count = record[0] if record else 0
+                            break
+
+                # Get group_ids present
+                async with graph_driver.session() as session:
+                    result = await session.run(
+                        'MATCH (n) WHERE n.group_id IS NOT NULL RETURN DISTINCT n.group_id LIMIT 10'
+                    )
+                    group_ids = []
+                    if result:
+                        async for record in result:
+                            if record and len(record) > 0:
+                                group_ids.append(record[0])
+
+                graphs_info.append(
+                    {
+                        'name': graph_name,
+                        'node_count': node_count,
+                        'edge_count': edge_count,
+                        'group_ids': group_ids,
+                        'is_empty': node_count == 0 and edge_count == 0,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f'Error getting stats for graph {graph_name}: {e}')
+                graphs_info.append(
+                    {
+                        'name': graph_name,
+                        'error': str(e),
+                    }
+                )
+
+        return {
+            'message': f'Found {len(graphs_info)} graphs',
+            'graphs': graphs_info,
+        }
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error listing graphs: {error_msg}')
+        return ErrorResponse(error=f'Error listing graphs: {error_msg}')
+
+
+@mcp.tool()
 async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and database connection."""
     global graphiti_service
