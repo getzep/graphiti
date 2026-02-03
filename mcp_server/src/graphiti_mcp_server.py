@@ -803,6 +803,99 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 
 
 @mcp.tool()
+async def list_group_ids() -> dict[str, Any] | ErrorResponse:
+    """List all available group IDs across all databases for searching.
+
+    This shows you what groups you can search, which is more useful than database names.
+    Use this before searching to see available topics/projects.
+
+    Returns group IDs with their node counts and which databases they're in.
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        client = await graphiti_service.get_client()
+
+        from graphiti_core.driver.driver import GraphProvider
+
+        # Only works with FalkorDB
+        if client.driver.provider != GraphProvider.FALKORDB:
+            return ErrorResponse(error='list_group_ids only works with FalkorDB provider.')
+
+        # Get list of all graphs
+        import subprocess
+
+        result = subprocess.run(
+            ['redis-cli', '-p', '6379', 'GRAPH.LIST'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        if result.returncode != 0:
+            return ErrorResponse(error='Failed to get graph list')
+
+        graph_names = [
+            line.strip()
+            for line in result.stdout.strip().split('\n')
+            if line.strip() and not line.startswith('(empty')
+        ]
+
+        # Collect group_ids from all graphs
+        group_id_info = {}
+
+        for graph_name in graph_names:
+            try:
+                graph_driver = client.driver.clone(database=graph_name)
+
+                # Get all group_ids in this graph
+                result = await graph_driver.execute_query(
+                    'MATCH (n) WHERE n.group_id IS NOT NULL '
+                    'RETURN n.group_id as group_id, count(n) as count'
+                )
+
+                if result:
+                    for record in result:
+                        if 'group_id' in record and 'count' in record:
+                            group_id = record['group_id']
+                            count = record['count']
+
+                            if group_id not in group_id_info:
+                                group_id_info[group_id] = {
+                                    'group_id': group_id,
+                                    'total_nodes': 0,
+                                    'databases': [],
+                                }
+
+                            group_id_info[group_id]['total_nodes'] += count
+                            group_id_info[group_id]['databases'].append(
+                                {'name': graph_name, 'nodes': count}
+                            )
+
+            except Exception as e:
+                logger.warning(f'Error getting group_ids from {graph_name}: {e}')
+                continue
+
+        # Sort by total nodes descending
+        group_ids_list = sorted(
+            group_id_info.values(), key=lambda x: x['total_nodes'], reverse=True
+        )
+
+        return {
+            'message': f'Found {len(group_ids_list)} group IDs',
+            'group_ids': group_ids_list,
+        }
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error listing group IDs: {error_msg}')
+        return ErrorResponse(error=f'Error listing group IDs: {error_msg}')
+
+
+@mcp.tool()
 async def list_graphs() -> dict[str, Any] | ErrorResponse:
     """List all available FalkorDB graphs/databases with their statistics.
 
