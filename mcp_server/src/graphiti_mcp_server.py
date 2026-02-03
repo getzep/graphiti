@@ -226,6 +226,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=None,  # Disable reranker to avoid OpenAI API dependency
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -236,6 +237,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=None,  # Disable reranker to avoid OpenAI API dependency
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -442,17 +444,45 @@ async def search_nodes(
         )
 
         # Use the search_ method with node search config
+        from graphiti_core.driver.driver import GraphProvider
         from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
-        results = await client.search_(
-            query=query,
-            config=NODE_HYBRID_SEARCH_RRF,
-            group_ids=effective_group_ids,
-            search_filter=search_filters,
-        )
+        # For FalkorDB, we need to search each group_id in its own database/graph
+        # because FalkorDB uses separate graphs for multi-tenancy
+        all_nodes = []
 
-        # Extract nodes from results
-        nodes = results.nodes[:max_nodes] if results.nodes else []
+        if client.driver.provider == GraphProvider.FALKORDB and effective_group_ids:
+            # Search each group_id's database separately
+            for group_id in effective_group_ids:
+                # Clone the driver to point to the specific database for this group_id
+                if group_id != client.driver._database:
+                    cloned_driver = client.driver.clone(database=group_id)
+                else:
+                    cloned_driver = client.driver
+
+                # Search in this specific database
+                results = await client.search_(
+                    query=query,
+                    config=NODE_HYBRID_SEARCH_RRF,
+                    group_ids=[group_id],
+                    search_filter=search_filters,
+                    driver=cloned_driver,
+                )
+
+                if results.nodes:
+                    all_nodes.extend(results.nodes)
+        else:
+            # For other providers (Neo4j, etc.), use normal search with group_ids filter
+            results = await client.search_(
+                query=query,
+                config=NODE_HYBRID_SEARCH_RRF,
+                group_ids=effective_group_ids,
+                search_filter=search_filters,
+            )
+            all_nodes = results.nodes if results.nodes else []
+
+        # Limit to max_nodes
+        nodes = all_nodes[:max_nodes]
 
         if not nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
@@ -520,12 +550,42 @@ async def search_memory_facts(
             else []
         )
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
-            query=query,
-            num_results=max_facts,
-            center_node_uuid=center_node_uuid,
-        )
+        from graphiti_core.driver.driver import GraphProvider
+
+        # For FalkorDB, we need to search each group_id in its own database/graph
+        all_edges = []
+
+        if client.driver.provider == GraphProvider.FALKORDB and effective_group_ids:
+            # Search each group_id's database separately
+            for group_id in effective_group_ids:
+                # Clone the driver to point to the specific database for this group_id
+                if group_id != client.driver._database:
+                    cloned_driver = client.driver.clone(database=group_id)
+                else:
+                    cloned_driver = client.driver
+
+                # Search in this specific database
+                edges = await client.search(
+                    group_ids=[group_id],
+                    query=query,
+                    num_results=max_facts,
+                    center_node_uuid=center_node_uuid,
+                    driver=cloned_driver,
+                )
+
+                if edges:
+                    all_edges.extend(edges)
+        else:
+            # For other providers (Neo4j, etc.), use normal search with group_ids filter
+            all_edges = await client.search(
+                group_ids=effective_group_ids,
+                query=query,
+                num_results=max_facts,
+                center_node_uuid=center_node_uuid,
+            )
+
+        # Limit to max_facts
+        relevant_edges = all_edges[:max_facts]
 
         if not relevant_edges:
             return FactSearchResponse(message='No relevant facts found', facts=[])
@@ -646,16 +706,38 @@ async def get_episodes(
         )
 
         # Get episodes from the driver directly
+        from graphiti_core.driver.driver import GraphProvider
         from graphiti_core.nodes import EpisodicNode
 
-        if effective_group_ids:
-            episodes = await EpisodicNode.get_by_group_ids(
+        all_episodes = []
+
+        if client.driver.provider == GraphProvider.FALKORDB and effective_group_ids:
+            # For FalkorDB, retrieve episodes from each group_id's database separately
+            for group_id in effective_group_ids:
+                # Clone the driver to point to the specific database for this group_id
+                if group_id != client.driver._database:
+                    cloned_driver = client.driver.clone(database=group_id)
+                else:
+                    cloned_driver = client.driver
+
+                # Get episodes from this specific database
+                episodes = await EpisodicNode.get_by_group_ids(
+                    cloned_driver, [group_id], limit=max_episodes
+                )
+
+                if episodes:
+                    all_episodes.extend(episodes)
+        elif effective_group_ids:
+            # For other providers (Neo4j, etc.), use normal retrieval with group_ids filter
+            all_episodes = await EpisodicNode.get_by_group_ids(
                 client.driver, effective_group_ids, limit=max_episodes
             )
         else:
-            # If no group IDs, we need to use a different approach
-            # For now, return empty list when no group IDs specified
-            episodes = []
+            # If no group IDs specified, return empty list
+            all_episodes = []
+
+        # Limit to max_episodes
+        episodes = all_episodes[:max_episodes]
 
         if not episodes:
             return EpisodeSearchResponse(message='No episodes found', episodes=[])
