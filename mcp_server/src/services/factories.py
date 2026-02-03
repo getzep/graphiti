@@ -45,7 +45,9 @@ except ImportError:
     HAS_VOYAGE_EMBEDDER = False
 
 try:
-    from graphiti_core.cross_encoder.voyage_reranker_client import VoyageRerankerClient
+    from graphiti_core.cross_encoder.voyage_reranker_client import (
+        VoyageRerankerClient,  # noqa: F401
+    )
 
     HAS_VOYAGE_RERANKER = True
 except ImportError:
@@ -456,8 +458,6 @@ class RerankerFactory:
         """
         import logging
 
-        from graphiti_core.cross_encoder import CrossEncoderClient
-
         logger = logging.getLogger(__name__)
 
         if not config.enabled:
@@ -473,9 +473,7 @@ class RerankerFactory:
 
             case 'voyage':
                 if not HAS_VOYAGE_RERANKER:
-                    raise ValueError(
-                        'Voyage reranker not available. Install voyageai package.'
-                    )
+                    raise ValueError('Voyage reranker not available. Install voyageai package.')
                 if not config.providers.voyage:
                     raise ValueError('Voyage provider configuration not found')
 

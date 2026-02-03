@@ -75,7 +75,7 @@ class VoyageRerankerClient(CrossEncoderClient):
         if config is None:
             config = VoyageRerankerConfig()
         self.config = config
-        self.client = voyageai.AsyncClient(api_key=config.api_key)
+        self.client = voyageai.AsyncClient(api_key=config.api_key)  # type: ignore[reportUnknownMemberType]
 
     async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
         """

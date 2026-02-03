@@ -24,9 +24,6 @@ from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
-
-# Sentinel value to indicate "use default" for cross_encoder parameter
-_CROSS_ENCODER_DEFAULT = object()
 from graphiti_core.decorators import handle_multiple_group_ids
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
@@ -140,12 +137,13 @@ class Graphiti:
         password: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
-        cross_encoder: CrossEncoderClient | None | object = _CROSS_ENCODER_DEFAULT,
+        cross_encoder: CrossEncoderClient | None = None,
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        use_default_cross_encoder: bool = True,
     ):
         """
         Initialize a Graphiti instance.
@@ -169,7 +167,8 @@ class Graphiti:
             If not provided, a default OpenAIEmbedder will be initialized.
         cross_encoder : CrossEncoderClient | None, optional
             An instance of CrossEncoderClient for reranking tasks.
-            If not provided, a default OpenAIRerankerClient will be initialized.
+            If not provided and use_default_cross_encoder is True, a default
+            OpenAIRerankerClient will be initialized.
         store_raw_episode_content : bool, optional
             Whether to store the raw content of episodes. Defaults to True.
         graph_driver : GraphDriver | None, optional
@@ -182,6 +181,9 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        use_default_cross_encoder : bool, optional
+            Whether to use the default OpenAIRerankerClient when cross_encoder is None.
+            Set to False to disable reranking entirely. Defaults to True.
 
         Returns
         -------
@@ -219,12 +221,15 @@ class Graphiti:
             self.embedder = embedder
         else:
             self.embedder = OpenAIEmbedder()
-        if cross_encoder is _CROSS_ENCODER_DEFAULT:
+        if cross_encoder is not None:
+            # Use provided cross encoder
+            self.cross_encoder: CrossEncoderClient | None = cross_encoder
+        elif use_default_cross_encoder:
             # Use default OpenAI reranker
             self.cross_encoder = OpenAIRerankerClient()
         else:
-            # Use provided client or None (disables reranking)
-            self.cross_encoder = cross_encoder
+            # Explicitly disable reranking
+            self.cross_encoder = None
 
         # Initialize tracer
         self.tracer = create_tracer(tracer, trace_span_prefix)

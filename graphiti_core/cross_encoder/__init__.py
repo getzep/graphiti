@@ -14,21 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from typing import TYPE_CHECKING
+
 from .client import CrossEncoderClient
 from .openai_reranker_client import OpenAIRerankerClient
 
-# Lazy import for VoyageRerankerClient to avoid requiring voyageai
+if TYPE_CHECKING:
+    from .voyage_reranker_client import (
+        VoyageRateLimitError as VoyageRateLimitError,
+    )
+    from .voyage_reranker_client import (
+        VoyageRerankerClient as VoyageRerankerClient,
+    )
+    from .voyage_reranker_client import (
+        VoyageRerankerConfig as VoyageRerankerConfig,
+    )
+
+
+# Lazy import for VoyageRerankerClient to avoid requiring voyageai at runtime
 def __getattr__(name: str):
     if name == 'VoyageRerankerClient':
         from .voyage_reranker_client import VoyageRerankerClient
+
         return VoyageRerankerClient
     if name == 'VoyageRerankerConfig':
         from .voyage_reranker_client import VoyageRerankerConfig
+
         return VoyageRerankerConfig
     if name == 'VoyageRateLimitError':
         from .voyage_reranker_client import VoyageRateLimitError
+
         return VoyageRateLimitError
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 __all__ = [
     'CrossEncoderClient',
