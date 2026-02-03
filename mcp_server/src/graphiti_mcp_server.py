@@ -827,14 +827,42 @@ async def list_graphs() -> dict[str, Any] | ErrorResponse:
             )
 
         # Get list of all graphs using Redis command
-        async with client.driver.session() as session:
-            # FalkorDB stores graphs as Redis keys, use GRAPH.LIST command
-            result = await session.run('GRAPH.LIST')
+        # FalkorDB stores graphs as Redis keys
+        # The Python FalkorDB client doesn't expose GRAPH.LIST directly,
+        # so we need to use the underlying Redis connection
+        import subprocess
+
+        try:
+            # Get FalkorDB connection details from the driver
+            # For Docker deployments, we'll use localhost as it's exposed
+            result = subprocess.run(
+                ['redis-cli', '-p', '6379', 'GRAPH.LIST'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+                # Parse the output - redis-cli returns one graph name per line
+                graph_names = [
+                    line.strip()
+                    for line in result.stdout.strip().split('\n')
+                    if line.strip() and not line.startswith('(empty')
+                ]
+            else:
+                logger.warning(f'redis-cli GRAPH.LIST failed: {result.stderr}')
+                graph_names = []
+        except subprocess.TimeoutExpired:
+            logger.warning('redis-cli GRAPH.LIST timed out')
             graph_names = []
-            if result:
-                async for record in result:
-                    if record and len(record) > 0:
-                        graph_names.append(record[0])
+        except FileNotFoundError:
+            logger.warning('redis-cli not found, cannot list graphs')
+            return ErrorResponse(
+                error='redis-cli not available. Use the explore_graphs.sh script instead.'
+            )
+        except Exception as e:
+            logger.warning(f'Error running redis-cli: {e}')
+            graph_names = []
 
         if not graph_names:
             return {'message': 'No graphs found', 'graphs': []}
