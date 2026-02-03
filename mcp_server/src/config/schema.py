@@ -131,6 +131,7 @@ class VoyageProviderConfig(BaseModel):
     api_key: str | None = None
     api_url: str = 'https://api.voyageai.com/v1'
     model: str = 'voyage-3'
+    rerank_model: str = 'rerank-2'  # Options: rerank-2, rerank-2-lite
 
 
 class LLMProvidersConfig(BaseModel):
@@ -171,6 +172,22 @@ class EmbedderConfig(BaseModel):
     model: str = Field(default='text-embedding-3-small', description='Model name')
     dimensions: int = Field(default=1536, description='Embedding dimensions')
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
+
+
+class RerankerProvidersConfig(BaseModel):
+    """Reranker providers configuration."""
+
+    openai: OpenAIProviderConfig | None = None
+    voyage: VoyageProviderConfig | None = None
+
+
+class RerankerConfig(BaseModel):
+    """Reranker (cross-encoder) configuration."""
+
+    enabled: bool = Field(default=False, description='Enable reranking')
+    provider: str = Field(default='voyage', description='Reranker provider: voyage, openai, or none')
+    model: str | None = Field(default=None, description='Model name (uses provider default if not set)')
+    providers: RerankerProvidersConfig = Field(default_factory=RerankerProvidersConfig)
 
 
 class Neo4jProviderConfig(BaseModel):
@@ -232,6 +249,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 

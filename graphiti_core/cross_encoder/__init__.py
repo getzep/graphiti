@@ -17,4 +17,23 @@ limitations under the License.
 from .client import CrossEncoderClient
 from .openai_reranker_client import OpenAIRerankerClient
 
-__all__ = ['CrossEncoderClient', 'OpenAIRerankerClient']
+# Lazy import for VoyageRerankerClient to avoid requiring voyageai
+def __getattr__(name: str):
+    if name == 'VoyageRerankerClient':
+        from .voyage_reranker_client import VoyageRerankerClient
+        return VoyageRerankerClient
+    if name == 'VoyageRerankerConfig':
+        from .voyage_reranker_client import VoyageRerankerConfig
+        return VoyageRerankerConfig
+    if name == 'VoyageRateLimitError':
+        from .voyage_reranker_client import VoyageRateLimitError
+        return VoyageRateLimitError
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+__all__ = [
+    'CrossEncoderClient',
+    'OpenAIRerankerClient',
+    'VoyageRerankerClient',
+    'VoyageRerankerConfig',
+    'VoyageRateLimitError',
+]

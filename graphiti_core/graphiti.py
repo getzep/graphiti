@@ -24,6 +24,9 @@ from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
+# Sentinel value to indicate "use default" for cross_encoder parameter
+_CROSS_ENCODER_DEFAULT = object()
 from graphiti_core.decorators import handle_multiple_group_ids
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
@@ -137,7 +140,7 @@ class Graphiti:
         password: str | None = None,
         llm_client: LLMClient | None = None,
         embedder: EmbedderClient | None = None,
-        cross_encoder: CrossEncoderClient | None = None,
+        cross_encoder: CrossEncoderClient | None | object = _CROSS_ENCODER_DEFAULT,
         store_raw_episode_content: bool = True,
         graph_driver: GraphDriver | None = None,
         max_coroutines: int | None = None,
@@ -216,10 +219,12 @@ class Graphiti:
             self.embedder = embedder
         else:
             self.embedder = OpenAIEmbedder()
-        if cross_encoder:
-            self.cross_encoder = cross_encoder
-        else:
+        if cross_encoder is _CROSS_ENCODER_DEFAULT:
+            # Use default OpenAI reranker
             self.cross_encoder = OpenAIRerankerClient()
+        else:
+            # Use provided client or None (disables reranking)
+            self.cross_encoder = cross_encoder
 
         # Initialize tracer
         self.tracer = create_tracer(tracer, trace_span_prefix)
