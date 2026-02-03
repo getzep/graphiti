@@ -473,7 +473,6 @@ async def dedupe_edges_bulk(
                 candidates,
                 episode,
                 edge_types,
-                set(edge_types),
             )
             for episode, edge, candidates in dedupe_tuples
         ]

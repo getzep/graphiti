@@ -24,17 +24,13 @@ from .prompt_helpers import to_prompt_json
 
 class NodeDuplicate(BaseModel):
     id: int = Field(..., description='integer id of the entity')
-    duplicate_idx: int = Field(
-        ...,
-        description='idx of the duplicate entity. If no duplicate entities are found, default to -1.',
-    )
     name: str = Field(
         ...,
         description='Name of the entity. Should be the most complete and descriptive name of the entity. Do not include any JSON formatting in the Entity name such as {}.',
     )
-    duplicates: list[int] = Field(
+    duplicate_name: str = Field(
         ...,
-        description='idx of all entities that are a duplicate of the entity with the above id.',
+        description='Name of the duplicate entity from EXISTING ENTITIES. If no duplicate entity is found, use an empty string.',
     )
 
 
@@ -91,10 +87,8 @@ def node(context: dict[str, Any]) -> list[Message]:
         - They have similar names or purposes but refer to separate instances or concepts.
 
          TASK:
-         1. Compare `new_entity` against each item in `existing_entities`.
-         2. If it refers to the same real-world object or concept, collect its index.
-         3. Let `duplicate_idx` = the smallest collected index, or -1 if none.
-         4. Let `duplicates` = the sorted list of all collected indices (empty list if none).
+         1. Compare the NEW ENTITY against each entity in EXISTING ENTITIES.
+         2. If it refers to the same real-world object or concept, identify the matching entity by name.
 
         Respond with a JSON object containing an "entity_resolutions" array with a single entry:
         {{
@@ -102,13 +96,12 @@ def node(context: dict[str, Any]) -> list[Message]:
                 {{
                     "id": integer id from NEW ENTITY,
                     "name": the best full name for the entity,
-                    "duplicate_idx": integer index of the best duplicate in EXISTING ENTITIES, or -1 if none,
-                    "duplicates": sorted list of all duplicate indices you collected (deduplicate the list, use [] when none)
+                    "duplicate_name": the name of the matching entity from EXISTING ENTITIES, or empty string if none
                 }}
             ]
         }}
 
-        Only reference indices that appear in EXISTING ENTITIES, and return [] / -1 when unsure.
+        Only use names that appear in EXISTING ENTITIES, and return empty string when unsure.
         """,
         ),
     ]
@@ -151,7 +144,6 @@ def nodes(context: dict[str, Any]) -> list[Message]:
 
         Each entry in EXISTING ENTITIES is an object with the following structure:
         {{
-            idx: integer index of the candidate entity (use this when referencing a duplicate),
             name: "name of the candidate entity",
             entity_types: ["Entity", "<optional additional label>", ...],
             ...<additional attributes such as summaries or metadata>
@@ -173,13 +165,12 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         {{
             "id": integer id from ENTITIES,
             "name": the best full name for the entity (preserve the original name unless a duplicate has a more complete name),
-            "duplicate_idx": the idx of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate,
-            "duplicates": a sorted list of all idx values from EXISTING ENTITIES that refer to duplicates (deduplicate the list, use [] when none or unsure)
+            "duplicate_name": the name of the EXISTING ENTITY that is the best duplicate match, or empty string if there is no duplicate
         }}
 
-        - Only use idx values that appear in EXISTING ENTITIES.
-        - Set duplicate_idx to the smallest idx you collected for that entity, or -1 if duplicates is empty.
-        - Never fabricate entities or indices.
+        - Only use names that appear in EXISTING ENTITIES.
+        - Use empty string if there is no duplicate.
+        - Never fabricate entity names.
         """,
         ),
     ]
