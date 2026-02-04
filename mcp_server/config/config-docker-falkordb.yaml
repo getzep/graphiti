@@ -9,6 +9,9 @@ server:
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
   model: "gpt-4o-mini"
+  # small_model: "gpt-4o-mini"  # Optional: Override the small model used for lightweight tasks
+                                # If not set, auto-detects based on main model (gpt-4.1-mini or gpt-5-nano)
+                                # Useful for Ollama/local LLMs: set to same model as main model
   max_tokens: 4096
   
   providers:
