@@ -94,8 +94,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Create a virtual environment and install dependencies in one step
 uv sync
 
-# Optional: Install additional LLM providers (anthropic, gemini, groq, voyage, sentence-transformers)
-uv sync --extra providers
+# Optional: Install additional LLM providers individually
+uv sync --extra google-genai    # For Google Gemini
+uv sync --extra anthropic        # For Anthropic Claude
+uv sync --extra groq             # For Groq
+uv sync --extra voyageai         # For Voyage embeddings
+uv sync --extra sentence-transformers  # For local embeddings
+
+# Or install all providers at once
+uv sync --extra google-genai --extra anthropic --extra groq --extra voyageai --extra sentence-transformers
 ```
 
 ## Configuration
@@ -228,7 +235,8 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `NEO4J_PASSWORD`: Neo4j password (default: `demodemo`)
 - `OPENAI_API_KEY`: OpenAI API key (required for OpenAI LLM/embedder)
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
-- `GOOGLE_API_KEY`: Google API key (for Gemini models)
+- `GOOGLE_API_KEY`: Google API key (for Gemini models - optional if using ADC, see below)
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account JSON (for Gemini ADC authentication)
 - `GROQ_API_KEY`: Groq API key (for Groq models)
 - `AZURE_OPENAI_API_KEY`: Azure OpenAI API key
 - `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint URL
@@ -240,6 +248,26 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
 
 You can set these variables in a `.env` file in the project directory.
+
+### Gemini Authentication with Application Default Credentials (ADC)
+
+Gemini supports two authentication methods:
+
+**Option 1: API Key** (default)
+```bash
+export GOOGLE_API_KEY=your_api_key
+```
+
+**Option 2: Application Default Credentials (ADC)** (recommended for production)
+```bash
+# For local development
+gcloud auth application-default login
+
+# Or for production with service account
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+```
+
+When using ADC, you can omit the `GOOGLE_API_KEY` environment variable. The Gemini client will automatically use your Google Cloud credentials. This is the recommended approach for production deployments as it avoids hardcoding API keys.
 
 ## Running the Server
 
@@ -465,6 +493,47 @@ env_file:
 ```
 
 However, **running from the `mcp_server/` directory is recommended** to avoid confusion.
+
+#### Building Custom Docker Images
+
+By default, the Docker image only includes dependencies for OpenAI. To reduce image size or customize which LLM providers are installed, you can use build arguments:
+
+```bash
+# Build with only Google Gemini support
+docker build \
+  --build-arg INSTALL_GOOGLE_GENAI=true \
+  -f docker/Dockerfile \
+  -t graphiti-mcp-gemini .
+
+# Build with Anthropic Claude support
+docker build \
+  --build-arg INSTALL_ANTHROPIC=true \
+  -f docker/Dockerfile \
+  -t graphiti-mcp-anthropic .
+
+# Build with multiple providers
+docker build \
+  --build-arg INSTALL_GOOGLE_GENAI=true \
+  --build-arg INSTALL_ANTHROPIC=true \
+  --build-arg INSTALL_VOYAGEAI=true \
+  -f docker/Dockerfile \
+  -t graphiti-mcp-multi .
+```
+
+**Available build arguments:**
+- `INSTALL_GOOGLE_GENAI` - Install `google-genai` for Gemini models (default: `false`)
+- `INSTALL_ANTHROPIC` - Install `anthropic` for Claude models (default: `false`)
+- `INSTALL_GROQ` - Install `groq` for Groq models (default: `false`)
+- `INSTALL_VOYAGEAI` - Install `voyageai` for Voyage embeddings (default: `false`)
+- `INSTALL_SENTENCE_TRANSFORMERS` - Install `sentence-transformers` for local embeddings (default: `false`)
+
+You can also override the graphiti-core version:
+```bash
+docker build \
+  --build-arg GRAPHITI_CORE_VERSION=0.27.0 \
+  -f docker/Dockerfile \
+  -t graphiti-mcp:custom .
+```
 
 ## Integrating with MCP Clients
 

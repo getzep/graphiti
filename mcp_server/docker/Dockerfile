@@ -35,6 +35,13 @@ WORKDIR /app/mcp
 # Accept graphiti-core version as build argument
 ARG GRAPHITI_CORE_VERSION=0.23.1
 
+# Install optional deps to support additional providers as build arguments (default to none for backward compatibility)
+ARG INSTALL_GOOGLE_GENAI=false
+ARG INSTALL_ANTHROPIC=false
+ARG INSTALL_GROQ=false
+ARG INSTALL_VOYAGEAI=false
+ARG INSTALL_SENTENCE_TRANSFORMERS=false
+
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
 
@@ -49,8 +56,16 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     uv lock
 
 # Install Python dependencies (exclude dev dependency group)
+# Build conditional extras list based on enabled providers
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    EXTRAS=""; \
+    if [ "${INSTALL_GOOGLE_GENAI}" = "true" ]; then EXTRAS="${EXTRAS} --extra google-genai"; fi; \
+    if [ "${INSTALL_ANTHROPIC}" = "true" ]; then EXTRAS="${EXTRAS} --extra anthropic"; fi; \
+    if [ "${INSTALL_GROQ}" = "true" ]; then EXTRAS="${EXTRAS} --extra groq"; fi; \
+    if [ "${INSTALL_VOYAGEAI}" = "true" ]; then EXTRAS="${EXTRAS} --extra voyageai"; fi; \
+    if [ "${INSTALL_SENTENCE_TRANSFORMERS}" = "true" ]; then EXTRAS="${EXTRAS} --extra sentence-transformers"; fi; \
+    echo "Installing with extras: ${EXTRAS}"; \
+    uv sync --no-group dev ${EXTRAS}
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
@@ -61,6 +76,7 @@ COPY src/ ./src/
 COPY config/ ./config/
 
 # Copy FalkorDB combined config (uses localhost since both services in same container)
+# Overload this config file if you're using Gemini, Anthropic, etc (see docker-compose.yml)
 COPY config/config-docker-falkordb-combined.yaml /app/mcp/config/config.yaml
 
 # Create log and data directories
