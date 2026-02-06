@@ -649,13 +649,13 @@ async def _extract_entity_summary(
         edge_facts = '\n'.join(edge.fact for edge in edges if edge.fact)
         summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
 
-    # Skip if no summary content
-    if not summary_with_edges:
+    # If we have summary content and it's short enough, use it directly
+    if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
+        node.summary = summary_with_edges
         return
 
-    # Only Summarize with an LLM if the facts make the summary too long
-    if len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
-        node.summary = summary_with_edges
+    # Skip if no summary content and no episode to generate from
+    if not summary_with_edges and episode is None:
         return
 
     summary_context = _build_episode_context(
