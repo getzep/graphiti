@@ -28,6 +28,9 @@ embedder:
 
   providers:
     gemini:
+      # Using Vertex AI with Application Default Credentials (ADC)
+      # For ADC: Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS
+      # vertexai: true
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_CLOUD_PROJECT:-}
       location: ${GOOGLE_CLOUD_LOCATION:-us-central1}
