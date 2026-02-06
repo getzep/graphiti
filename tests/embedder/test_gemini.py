@@ -80,7 +80,7 @@ def gemini_embedder(mock_gemini_client: Any) -> GeminiEmbedder:
 class TestGeminiEmbedderInitialization:
     """Tests for GeminiEmbedder initialization."""
 
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_with_config(self, mock_client):
         """Test initialization with a config object."""
         config = GeminiEmbedderConfig(
@@ -93,7 +93,8 @@ class TestGeminiEmbedderInitialization:
         assert embedder.config.api_key == 'test_api_key'
         assert embedder.config.embedding_dim == 768
 
-    @patch('google.genai.Client')
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_without_config(self, mock_client):
         """Test initialization without a config uses defaults."""
         embedder = GeminiEmbedder()
@@ -101,7 +102,7 @@ class TestGeminiEmbedderInitialization:
         assert embedder.config is not None
         assert embedder.config.embedding_model == DEFAULT_EMBEDDING_MODEL
 
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_with_partial_config(self, mock_client):
         """Test initialization with partial config."""
         config = GeminiEmbedderConfig(api_key='test_api_key')
@@ -109,6 +110,53 @@ class TestGeminiEmbedderInitialization:
 
         assert embedder.config.api_key == 'test_api_key'
         assert embedder.config.embedding_model == DEFAULT_EMBEDDING_MODEL
+
+    @patch.dict('os.environ', {'GOOGLE_API_KEY': 'env_api_key'})
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_with_env_var(self, mock_client):
+        """Test initialization with GOOGLE_API_KEY environment variable."""
+        embedder = GeminiEmbedder()
+
+        # Verify the client was created with the env var API key
+        mock_client.assert_called_once_with(api_key='env_api_key')
+        assert embedder.config.api_key == 'env_api_key'
+
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_with_adc_fallback(self, mock_client):
+        """Test initialization falls back to ADC when no API key is provided."""
+        embedder = GeminiEmbedder()
+
+        # Verify the client was created with Vertex AI (ADC mode)
+        mock_client.assert_called_once_with(
+            vertexai=True, project='test-project', location='us-central1'
+        )
+        assert embedder.config.api_key is None
+
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_explicit_api_key_overrides_env(self, mock_client):
+        """Test that explicit API key in config overrides environment variable."""
+        with patch.dict('os.environ', {'GOOGLE_API_KEY': 'env_api_key'}):
+            config = GeminiEmbedderConfig(api_key='explicit_api_key')
+            embedder = GeminiEmbedder(config=config)
+
+            # Explicit config should take precedence
+            mock_client.assert_called_once_with(api_key='explicit_api_key')
+            assert embedder.config.api_key == 'explicit_api_key'
+
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_auth_error_helpful_message(self, mock_client):
+        """Test that authentication errors provide helpful setup instructions."""
+        mock_client.side_effect = Exception('Authentication failed: invalid credentials')
+
+        with pytest.raises(Exception) as exc_info:
+            GeminiEmbedder()
+
+        error_message = str(exc_info.value)
+        assert 'Google authentication failed' in error_message
+        assert 'GOOGLE_API_KEY' in error_message
+        assert 'gcloud auth application-default login' in error_message
 
 
 class TestGeminiEmbedderCreate:
@@ -138,7 +186,7 @@ class TestGeminiEmbedderCreate:
         assert result == mock_gemini_response.embeddings[0].values
 
     @pytest.mark.asyncio
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     async def test_create_with_custom_model(
         self, mock_client_class, mock_gemini_client: Any, mock_gemini_response: MagicMock
     ) -> None:
@@ -157,7 +205,7 @@ class TestGeminiEmbedderCreate:
         assert kwargs['model'] == 'custom-model'
 
     @pytest.mark.asyncio
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     async def test_create_with_custom_dimension(
         self, mock_client_class, mock_gemini_client: Any
     ) -> None:
@@ -358,7 +406,7 @@ class TestGeminiEmbedderCreateBatch:
         assert 'Empty embedding values returned' in str(exc_info.value)
 
     @pytest.mark.asyncio
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     async def test_create_batch_with_custom_model_and_dimension(
         self, mock_client_class, mock_gemini_client: Any
     ) -> None:

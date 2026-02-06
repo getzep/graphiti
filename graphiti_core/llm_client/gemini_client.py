@@ -16,6 +16,7 @@ limitations under the License.
 
 import json
 import logging
+import os
 import re
 import typing
 from typing import TYPE_CHECKING, ClassVar
@@ -26,6 +27,7 @@ from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
+from .gemini_utils import create_gemini_client
 
 if TYPE_CHECKING:
     from google import genai
@@ -105,6 +107,7 @@ class GeminiClient(LLMClient):
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, temperature, and max tokens.
+                If api_key is None, will use GOOGLE_API_KEY environment variable or fall back to Application Default Credentials.
             cache (bool): Whether to use caching for responses. Defaults to False.
             thinking_config (types.ThinkingConfig | None): Optional thinking configuration for models that support it.
                 Only use with models that support thinking (gemini-2.5+). Defaults to None.
@@ -112,13 +115,14 @@ class GeminiClient(LLMClient):
         """
         if config is None:
             config = LLMConfig()
+            config.api_key = os.getenv('GOOGLE_API_KEY')
 
         super().__init__(config, cache)
 
         self.model = config.model
 
         if client is None:
-            self.client = genai.Client(api_key=config.api_key)
+            self.client = create_gemini_client(config.api_key, client_type='client')
         else:
             self.client = client
 
