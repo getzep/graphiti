@@ -14,6 +14,14 @@ try:
 except ImportError:
     HAS_FALKOR = False
 
+# Try to import NeptuneDriver if available
+try:
+    from graphiti_core.driver.neptune_driver import NeptuneDriver  # noqa: F401
+
+    HAS_NEPTUNE = True
+except ImportError:
+    HAS_NEPTUNE = False
+
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
@@ -429,6 +437,104 @@ class DatabaseDriverFactory:
                     'port': port,
                     'password': password,
                     'database': falkor_config.database,
+                }
+
+            case 'neptune':
+                if not HAS_NEPTUNE:
+                    raise ValueError(
+                        'Neptune driver not available. Install with:\n'
+                        '  pip install graphiti-core[neptune]\n'
+                        'or:\n'
+                        '  uv add graphiti-core[neptune]'
+                    )
+
+                # Validate AWS credentials early
+                import boto3
+
+                try:
+                    session = boto3.Session()
+                    credentials = session.get_credentials()
+                    if not credentials:
+                        raise ValueError(
+                            'AWS credentials not configured for Neptune.\n'
+                            'Configure using one of:\n'
+                            '  1. AWS CLI: aws configure\n'
+                            '  2. Environment: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY\n'
+                            '  3. IAM role (if running on AWS)\n'
+                            '  4. Credentials file: ~/.aws/credentials'
+                        )
+
+                    region = session.region_name
+                    if not region:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning('AWS region not detected, using default from config')
+                except Exception as e:
+                    raise ValueError(f'AWS credential error: {e}') from e
+
+                # Load Neptune config and environment variables
+                import os
+
+                # Read environment variables first
+                env_host = os.environ.get('NEPTUNE_HOST')
+                env_aoss_host = os.environ.get('AOSS_HOST')
+                env_port = os.environ.get('NEPTUNE_PORT')
+                env_aoss_port = os.environ.get('AOSS_PORT')
+                env_region = os.environ.get('AWS_REGION')
+
+                if config.providers.neptune:
+                    neptune_config = config.providers.neptune
+                    # Apply environment overrides
+                    host = env_host or neptune_config.host
+                    aoss_host = env_aoss_host or neptune_config.aoss_host
+                    port = int(env_port) if env_port else neptune_config.port
+                    aoss_port = int(env_aoss_port) if env_aoss_port else neptune_config.aoss_port
+                    region_override = env_region or region or neptune_config.region
+                else:
+                    # No config provided, use environment variables with defaults
+                    from config.schema import NeptuneProviderConfig
+
+                    host = env_host or 'neptune-db://localhost'
+                    aoss_host = env_aoss_host
+                    port = int(env_port) if env_port else 8182
+                    aoss_port = int(env_aoss_port) if env_aoss_port else 443
+                    region_override = env_region or region
+
+                    # Create config with values to trigger validation
+                    neptune_config = NeptuneProviderConfig(
+                        host=host,
+                        aoss_host=aoss_host,
+                        port=port,
+                        aoss_port=aoss_port,
+                        region=region_override,
+                    )
+
+                    # Use normalized values from config (protocol may have been auto-added)
+                    host = neptune_config.host
+                    aoss_host = neptune_config.aoss_host
+                    port = neptune_config.port
+                    aoss_port = neptune_config.aoss_port
+                    region_override = neptune_config.region
+
+                if not aoss_host:
+                    raise ValueError(
+                        'Neptune requires AOSS_HOST for full-text search.\n'
+                        'Set it in config or environment variable.'
+                    )
+
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.info(f'Creating Neptune driver for {host} with region {region_override}')
+
+                return {
+                    'driver': 'neptune',
+                    'host': host,
+                    'aoss_host': aoss_host,
+                    'port': port,
+                    'aoss_port': aoss_port,
+                    'region': region_override,
                 }
 
             case _:

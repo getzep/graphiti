@@ -1119,7 +1119,7 @@ async def community_similarity_search(
                         comm.name AS name,
                         comm.created_at AS created_at,
                         comm.summary AS summary,
-                        comm.name_embedding AS name_embedding
+                        [x IN split(comm.name_embedding, ",") | toFloat(x)] AS name_embedding
                     ORDER BY i.score DESC
                     LIMIT $limit
                 """
@@ -1947,7 +1947,7 @@ async def get_embeddings_for_nodes(
         WHERE n.uuid IN $node_uuids
         RETURN DISTINCT
             n.uuid AS uuid,
-            split(n.name_embedding, ",") AS name_embedding
+            [x IN split(n.name_embedding, ",") | toFloat(x)] AS name_embedding
         """
     else:
         query = """
@@ -1988,7 +1988,7 @@ async def get_embeddings_for_communities(
         WHERE c.uuid IN $community_uuids
         RETURN DISTINCT
             c.uuid AS uuid,
-            split(c.name_embedding, ",") AS name_embedding
+            [x IN split(c.name_embedding, ",") | toFloat(x)] AS name_embedding
         """
     else:
         query = """
@@ -2025,7 +2025,7 @@ async def get_embeddings_for_edges(
         WHERE e.uuid IN $edge_uuids
         RETURN DISTINCT
             e.uuid AS uuid,
-            split(e.fact_embedding, ",") AS fact_embedding
+            [x IN split(e.fact_embedding, ",") | toFloat(x)] AS fact_embedding
         """
     else:
         match_query = """
