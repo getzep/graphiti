@@ -27,7 +27,7 @@ from graphiti_core.llm_client import LLMConfig, RateLimitError
 @pytest.fixture
 def mock_gemini_client():
     """Fixture to mock the Google Gemini client."""
-    with patch('google.genai.Client') as mock_client:
+    with patch('graphiti_core.llm_client.gemini_utils.genai.Client') as mock_client:
         # Setup mock instance and its methods
         mock_instance = mock_client.return_value
         mock_instance.aio = MagicMock()
@@ -63,12 +63,17 @@ class TestGeminiRerankerClientInitialization:
 
         assert client.config == config
 
-    @patch('google.genai.Client')
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_without_config(self, mock_client):
         """Test initialization without a config uses defaults."""
         client = GeminiRerankerClient()
 
         assert client.config is not None
+        # Verify the client was created with Vertex AI (ADC mode)
+        mock_client.assert_called_once_with(
+            vertexai=True, project='test-project', location='us-central1'
+        )
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom client."""

@@ -15,11 +15,13 @@ limitations under the License.
 """
 
 import logging
+import os
 import re
 from typing import TYPE_CHECKING
 
 from ..helpers import semaphore_gather
 from ..llm_client import LLMConfig, RateLimitError
+from ..llm_client.gemini_utils import create_gemini_client
 from .client import CrossEncoderClient
 
 if TYPE_CHECKING:
@@ -59,14 +61,16 @@ class GeminiRerankerClient(CrossEncoderClient):
 
         Args:
             config (LLMConfig | None): The configuration for the LLM client, including API key, model, base URL, temperature, and max tokens.
+                If api_key is None, will use GOOGLE_API_KEY environment variable or fall back to Application Default Credentials.
             client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
         """
         if config is None:
             config = LLMConfig()
+            config.api_key = os.getenv('GOOGLE_API_KEY')
 
         self.config = config
         if client is None:
-            self.client = genai.Client(api_key=config.api_key)
+            self.client = create_gemini_client(config.api_key, client_type='reranker')
         else:
             self.client = client
 
