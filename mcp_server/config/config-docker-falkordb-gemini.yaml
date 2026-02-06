@@ -2,14 +2,15 @@
 # This configuration is optimized for running with docker-compose-falkordb.yml
 
 server:
-  transport: "http" # HTTP transport (SSE is deprecated)
+  transport: "http" # Use SSE for HTTP-based MCP connection
   host: "0.0.0.0"
   port: 8000
 
 llm:
   provider: "gemini"
   model: "gemini-3-flash-preview"
-  max_tokens: 4096
+  max_tokens: 8192
+  temperature: 1.0
 
   providers:
     gemini:
