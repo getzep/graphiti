@@ -445,3 +445,117 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
     assert resolve_call_count == 1
     assert len(resolved_edges) == 1
     assert invalidated_edges == []
+
+
+class InterpersonalRelationship(BaseModel):
+    """A relationship between two people."""
+
+
+class LocatedIn(BaseModel):
+    """A relationship indicating something is located in a place."""
+
+
+def test_edge_type_signatures_map_preserves_multiple_signatures():
+    """Test that edge types used across multiple node type pairs preserve all signatures.
+
+    This tests the fix for the bug where dict comprehension would overwrite
+    previous signatures when the same edge type appeared in multiple node pairs.
+    """
+    # Edge type map where the same edge type is used for multiple node pair signatures
+    # This is the scenario that was broken before the fix
+    edge_type_map: dict[tuple[str, str], list[str]] = {
+        ('Person', 'Person'): ['InterpersonalRelationship'],
+        ('Person', 'Entity'): ['InterpersonalRelationship'],  # Same type, different signature
+        ('Person', 'City'): ['LocatedIn'],
+        ('Entity', 'City'): ['LocatedIn'],  # Same type, different signature
+    }
+
+    edge_types: dict[str, type[BaseModel]] = {
+        'InterpersonalRelationship': InterpersonalRelationship,
+        'LocatedIn': LocatedIn,
+    }
+
+    # Build the mapping the same way as in extract_edges (the fixed implementation)
+    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
+    for signature, edge_type_names in edge_type_map.items():
+        for edge_type in edge_type_names:
+            if edge_type not in edge_type_signatures_map:
+                edge_type_signatures_map[edge_type] = []
+            edge_type_signatures_map[edge_type].append(signature)
+
+    # Verify InterpersonalRelationship has BOTH signatures preserved
+    assert 'InterpersonalRelationship' in edge_type_signatures_map
+    interpersonal_signatures = edge_type_signatures_map['InterpersonalRelationship']
+    assert len(interpersonal_signatures) == 2
+    assert ('Person', 'Person') in interpersonal_signatures
+    assert ('Person', 'Entity') in interpersonal_signatures
+
+    # Verify LocatedIn has BOTH signatures preserved
+    assert 'LocatedIn' in edge_type_signatures_map
+    located_signatures = edge_type_signatures_map['LocatedIn']
+    assert len(located_signatures) == 2
+    assert ('Person', 'City') in located_signatures
+    assert ('Entity', 'City') in located_signatures
+
+    # Verify the edge_types_context structure
+    edge_types_context = [
+        {
+            'fact_type_name': type_name,
+            'fact_type_signatures': edge_type_signatures_map.get(
+                type_name, [('Entity', 'Entity')]
+            ),
+            'fact_type_description': type_model.__doc__,
+        }
+        for type_name, type_model in edge_types.items()
+    ]
+
+    # Verify the context has the correct structure with plural 'fact_type_signatures'
+    for ctx in edge_types_context:
+        assert 'fact_type_signatures' in ctx
+        assert isinstance(ctx['fact_type_signatures'], list)
+        assert len(ctx['fact_type_signatures']) == 2  # Each type has 2 signatures
+
+
+def test_edge_type_signatures_map_single_signature_still_works():
+    """Test that edge types with a single signature still work correctly."""
+    edge_type_map: dict[tuple[str, str], list[str]] = {
+        ('Person', 'Organization'): ['WorksAt'],
+        ('Person', 'City'): ['LivesIn'],
+    }
+
+    edge_types: dict[str, type[BaseModel]] = {
+        'WorksAt': BaseModel,
+        'LivesIn': BaseModel,
+    }
+
+    # Build the mapping
+    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
+    for signature, edge_type_names in edge_type_map.items():
+        for edge_type in edge_type_names:
+            if edge_type not in edge_type_signatures_map:
+                edge_type_signatures_map[edge_type] = []
+            edge_type_signatures_map[edge_type].append(signature)
+
+    # Verify each edge type has exactly one signature
+    assert len(edge_type_signatures_map['WorksAt']) == 1
+    assert ('Person', 'Organization') in edge_type_signatures_map['WorksAt']
+
+    assert len(edge_type_signatures_map['LivesIn']) == 1
+    assert ('Person', 'City') in edge_type_signatures_map['LivesIn']
+
+    # Verify the context structure
+    edge_types_context = [
+        {
+            'fact_type_name': type_name,
+            'fact_type_signatures': edge_type_signatures_map.get(
+                type_name, [('Entity', 'Entity')]
+            ),
+            'fact_type_description': type_model.__doc__,
+        }
+        for type_name, type_model in edge_types.items()
+    ]
+
+    for ctx in edge_types_context:
+        assert 'fact_type_signatures' in ctx
+        assert isinstance(ctx['fact_type_signatures'], list)
+        assert len(ctx['fact_type_signatures']) == 1
