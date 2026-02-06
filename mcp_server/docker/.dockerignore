@@ -1,0 +1,41 @@
+# Ignore virtual environments (from any location in the repo)
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Ignore local development files
+**/.env
+**/.env.local
+**/*.log
+
+# Ignore git and IDE files
+.git/
+.gitignore
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+
+# Ignore test and documentation
+**/tests/
+**/docs/
+**/*.md
+!README.md
+
+# Ignore build artifacts
+**/*.egg-info/
+**/dist/
+**/build/
+**/.pytest_cache/
+**/.ruff_cache/
+
+# Ignore Neo4j and FalkorDB data directories
+**/neo4j_data/
+**/falkordb_data/
+
+# Ignore lock files from local dev (will be regenerated in container)
+# Note: We actually want to keep uv.lock for reproducible builds
+# uv.lock

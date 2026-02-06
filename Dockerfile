@@ -44,17 +44,35 @@ COPY ./server/graph_service ./graph_service
 # Then install graphiti-core from PyPI at the desired version
 # This prevents the stale lockfile from pinning an old graphiti-core version
 ARG INSTALL_FALKORDB=false
+ARG INSTALL_GOOGLE_GENAI=false
+ARG INSTALL_ANTHROPIC=false
+ARG INSTALL_GROQ=false
+ARG INSTALL_VOYAGEAI=false
+ARG INSTALL_SENTENCE_TRANSFORMERS=false
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev && \
+    # Build extras list based on enabled providers
+    EXTRAS=""; \
+    if [ "$INSTALL_FALKORDB" = "true" ]; then EXTRAS="${EXTRAS},falkordb"; fi; \
+    if [ "$INSTALL_GOOGLE_GENAI" = "true" ]; then EXTRAS="${EXTRAS},google-genai"; fi; \
+    if [ "$INSTALL_ANTHROPIC" = "true" ]; then EXTRAS="${EXTRAS},anthropic"; fi; \
+    if [ "$INSTALL_GROQ" = "true" ]; then EXTRAS="${EXTRAS},groq"; fi; \
+    if [ "$INSTALL_VOYAGEAI" = "true" ]; then EXTRAS="${EXTRAS},voyageai"; fi; \
+    if [ "$INSTALL_SENTENCE_TRANSFORMERS" = "true" ]; then EXTRAS="${EXTRAS},sentence-transformers"; fi; \
+    # Remove leading comma if present
+    EXTRAS=$(echo "$EXTRAS" | sed 's/^,//'); \
+    # Install graphiti-core with selected extras
     if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
+        if [ -n "$EXTRAS" ]; then \
+            echo "Installing graphiti-core==$GRAPHITI_VERSION with extras: $EXTRAS"; \
+            uv pip install --system --upgrade "graphiti-core[$EXTRAS]==$GRAPHITI_VERSION"; \
         else \
             uv pip install --system --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
         fi; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]"; \
+        if [ -n "$EXTRAS" ]; then \
+            echo "Installing graphiti-core with extras: $EXTRAS"; \
+            uv pip install --system --upgrade "graphiti-core[$EXTRAS]"; \
         else \
             uv pip install --system --upgrade graphiti-core; \
         fi; \
