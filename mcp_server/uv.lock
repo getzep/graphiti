@@ -1143,14 +1143,29 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-azure = [
-    { name = "azure-identity" },
-]
-providers = [
+all-providers = [
     { name = "anthropic" },
     { name = "google-genai" },
     { name = "groq" },
     { name = "sentence-transformers" },
+    { name = "voyageai" },
+]
+anthropic = [
+    { name = "anthropic" },
+]
+azure = [
+    { name = "azure-identity" },
+]
+google-genai = [
+    { name = "google-genai" },
+]
+groq = [
+    { name = "groq" },
+]
+sentence-transformers = [
+    { name = "sentence-transformers" },
+]
+voyageai = [
     { name = "voyageai" },
 ]
 
@@ -1169,20 +1184,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.49.0" },
+    { name = "anthropic", marker = "extra == 'all-providers'", specifier = ">=0.49.0" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.62.0" },
     { name = "graphiti-core", extras = ["falkordb"], specifier = "==0.26.3" },
-    { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
+    { name = "groq", marker = "extra == 'all-providers'", specifier = ">=0.2.0" },
+    { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
     { name = "mcp", specifier = ">=1.9.4" },
     { name = "openai", specifier = ">=1.91.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "sentence-transformers", marker = "extra == 'providers'", specifier = ">=2.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'all-providers'", specifier = ">=2.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=2.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
-    { name = "voyageai", marker = "extra == 'providers'", specifier = ">=0.2.3" },
+    { name = "voyageai", marker = "extra == 'all-providers'", specifier = ">=0.2.3" },
+    { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["azure", "providers"]
+provides-extras = ["azure", "google-genai", "anthropic", "groq", "voyageai", "sentence-transformers", "all-providers"]
 
 [package.metadata.requires-dev]
 dev = [

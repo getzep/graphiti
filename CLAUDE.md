@@ -96,9 +96,29 @@ docker-compose up
 
 ### Environment Variables
 
-- `OPENAI_API_KEY` - Required for LLM inference and embeddings
+- `OPENAI_API_KEY` - Required for LLM inference and embeddings (when using OpenAI)
 - `USE_PARALLEL_RUNTIME` - Optional boolean for Neo4j parallel runtime (enterprise only)
 - Provider-specific keys: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GROQ_API_KEY`, `VOYAGE_API_KEY`
+
+#### Gemini Authentication
+
+Gemini supports two authentication methods:
+
+**API Key (Google AI Platform)**:
+- Set `GOOGLE_API_KEY` environment variable, or
+- Pass `api_key` parameter to `LLMConfig` or `GeminiEmbedderConfig`
+- Suitable for development and free tier usage
+
+**Application Default Credentials (Vertex AI)**:
+- For local development: Run `gcloud auth application-default login`
+- For production: Set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json`
+- No API key needed when ADC is configured
+- Suitable for enterprise deployments with GCP service accounts
+
+**Authentication precedence**:
+1. Explicit `api_key` parameter in config (highest priority)
+2. `GOOGLE_API_KEY` environment variable
+3. Application Default Credentials (ADC) (lowest priority)
 
 ### Database Setup
 

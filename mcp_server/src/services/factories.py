@@ -214,7 +214,13 @@ class LLMClientFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_api_key('Gemini', api_key, logger)
+                # Gemini supports Vertex AI with ADC, so API key is optional
+                if api_key:
+                    logger.info('Creating Gemini client with API key (Google AI)')
+                else:
+                    logger.info(
+                        'Creating Gemini client with Vertex AI (using Application Default Credentials)'
+                    )
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
@@ -323,7 +329,13 @@ class EmbedderFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_api_key('Gemini Embedder', api_key, logger)
+                # Gemini supports Vertex AI with ADC, so API key is optional
+                if api_key:
+                    logger.info('Creating Gemini embedder with API key (Google AI)')
+                else:
+                    logger.info(
+                        'Creating Gemini embedder with Vertex AI (using Application Default Credentials)'
+                    )
 
                 from graphiti_core.embedder.gemini import GeminiEmbedderConfig
 
