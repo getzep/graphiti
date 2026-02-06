@@ -1,12 +1,20 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
+
 from openai import AsyncAzureOpenAI
 
 from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    RerankerConfig,
 )
+
+if TYPE_CHECKING:
+    from graphiti_core.cross_encoder import CrossEncoderClient
 
 # Try to import FalkorDriver if available
 try:
@@ -70,6 +78,22 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+
+# Try to import cross-encoder/reranker clients
+try:
+    from graphiti_core.cross_encoder import OpenAIRerankerClient
+
+    HAS_OPENAI_RERANKER = True
+except ImportError:
+    HAS_OPENAI_RERANKER = False
+
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
 from utils.utils import create_azure_credential_token_provider
 
 
@@ -435,3 +459,68 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class RerankerFactory:
+    """Factory for creating Cross-encoder/Reranker clients based on configuration.
+
+    The reranker (cross-encoder) is used for 2-stage retrieval:
+    1. Embeddings find candidate passages (fast, but approximate)
+    2. Reranker scores each passage against the query (slower, but precise)
+    """
+
+    @staticmethod
+    def create(config: RerankerConfig) -> CrossEncoderClient | None:
+        """Create a Reranker client based on the configured provider.
+
+        Args:
+            config: RerankerConfig with provider, model, and provider-specific settings
+
+        Returns:
+            CrossEncoderClient instance or None if provider is 'none'
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'none' | 'disabled':
+                logger.info('Reranker disabled')
+                return None
+
+            case 'openai':
+                if not HAS_OPENAI_RERANKER:
+                    raise ValueError(
+                        'OpenAI Reranker not available in current graphiti-core version'
+                    )
+
+                api_key = config.providers.openai.api_key
+                _validate_api_key('OpenAI Reranker', api_key, logger)
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    model=config.model,
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    raise ValueError(
+                        'Gemini Reranker not available in current graphiti-core version'
+                    )
+                if not config.providers.gemini:
+                    raise ValueError('Gemini provider configuration not found for reranker')
+
+                api_key = config.providers.gemini.api_key
+                _validate_api_key('Gemini Reranker', api_key, logger)
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    model=config.model,
+                )
+                return GeminiRerankerClient(config=llm_config)
+
+            case _:
+                raise ValueError(f'Unsupported Reranker provider: {provider}')

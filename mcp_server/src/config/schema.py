@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -173,6 +173,28 @@ class EmbedderConfig(BaseModel):
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
+class RerankerProvidersConfig(BaseModel):
+    """Reranker providers configuration."""
+
+    # Default to OpenAIProviderConfig so env vars like RERANKER__PROVIDERS__OPENAI__API_KEY work
+    openai: OpenAIProviderConfig = Field(default_factory=OpenAIProviderConfig)
+    gemini: GeminiProviderConfig | None = None
+
+
+# Type alias for reranker provider
+RerankerProvider = Literal['openai', 'gemini', 'none', 'disabled']
+
+
+class RerankerConfig(BaseModel):
+    """Reranker/Cross-encoder configuration."""
+
+    provider: RerankerProvider = Field(
+        default='openai', description='Reranker provider: openai, gemini, or none'
+    )
+    model: str = Field(default='gpt-4.1-nano', description='Model name for reranking')
+    providers: RerankerProvidersConfig = Field(default_factory=RerankerProvidersConfig)
+
+
 class Neo4jProviderConfig(BaseModel):
     """Neo4j provider configuration."""
 
@@ -232,6 +254,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
