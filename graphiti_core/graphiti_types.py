@@ -27,7 +27,7 @@ class GraphitiClients(BaseModel):
     driver: GraphDriver
     llm_client: LLMClient
     embedder: EmbedderClient
-    cross_encoder: CrossEncoderClient
+    cross_encoder: CrossEncoderClient | None  # None disables reranking
     tracer: Tracer
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
