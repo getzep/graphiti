@@ -103,17 +103,21 @@ async def extract_edges(
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
-    edge_type_signature_map: dict[str, tuple[str, str]] = {
-        edge_type: signature
-        for signature, edge_types in edge_type_map.items()
-        for edge_type in edge_types
-    }
+    # Build mapping from edge type name to list of valid signatures
+    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
+    for signature, edge_type_names in edge_type_map.items():
+        for edge_type in edge_type_names:
+            if edge_type not in edge_type_signatures_map:
+                edge_type_signatures_map[edge_type] = []
+            edge_type_signatures_map[edge_type].append(signature)
 
     edge_types_context = (
         [
             {
                 'fact_type_name': type_name,
-                'fact_type_signature': edge_type_signature_map.get(type_name, ('Entity', 'Entity')),
+                'fact_type_signatures': edge_type_signatures_map.get(
+                    type_name, [('Entity', 'Entity')]
+                ),
                 'fact_type_description': type_model.__doc__,
             }
             for type_name, type_model in edge_types.items()
