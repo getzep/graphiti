@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 from typing import Any, ClassVar
 
@@ -71,7 +72,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         supports_reasoning = self._supports_reasoning_features(model)
 
         if supports_reasoning:
-            # Use responses.parse for reasoning models
+            # Use responses.parse for reasoning models (o1, o3, gpt-5)
             request_kwargs = {
                 'model': model,
                 'input': messages,
@@ -87,7 +88,9 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
 
             return await self.client.responses.parse(**request_kwargs)
         else:
-            # Use standard chat completions for non-reasoning models
+            # Use beta.chat.completions.parse for non-reasoning models (gpt-4o, etc.)
+            # Azure's v1 compatibility endpoint doesn't fully support responses.parse
+            # for non-reasoning models, so we use the structured output API instead
             request_kwargs = {
                 'model': model,
                 'messages': messages,
@@ -145,8 +148,6 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
                 raise Exception(f'Invalid response from LLM: {response.model_dump()}')
         elif hasattr(response, 'output_text'):
             # Reasoning model response format (responses.parse)
-            import json
-
             response_object = response.output_text
             if response_object:
                 return json.loads(response_object)

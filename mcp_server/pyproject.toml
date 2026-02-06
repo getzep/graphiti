@@ -59,9 +59,6 @@ quote-style = "single"
 indent-style = "space"
 docstring-code-format = true
 
-[tool.uv.sources]
-graphiti-core = { path = "../", editable = true }
-
 [dependency-groups]
 dev = [
     "faker>=37.12.0",
