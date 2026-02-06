@@ -20,7 +20,7 @@ llm:
 
 embedder:
   provider: "gemini"
-  model: "models/text-embedding-004"
+  model: "models/gemini-embedding-001"
   dimensions: 768
 
   providers:
