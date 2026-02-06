@@ -116,8 +116,7 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # For Azure OpenAI, use the same deployment for both main and small models
-                # since Azure uses deployment names, not model names
+                # Use the same model for both main and small model slots
                 small_model = config.model
 
                 llm_config = CoreLLMConfig(

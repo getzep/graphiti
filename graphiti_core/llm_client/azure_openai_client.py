@@ -109,7 +109,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         messages: list[ChatCompletionMessageParam],
         temperature: float | None,
         max_tokens: int,
-        response_model: type[BaseModel] | None = None,
+        response_model: type[BaseModel] | None = None,  # noqa: ARG002 - inherited from abstract method
     ):
         """Create a regular completion with JSON format using Azure OpenAI."""
         supports_reasoning = self._supports_reasoning_features(model)
