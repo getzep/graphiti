@@ -14,11 +14,12 @@ llm:
 
   providers:
     gemini:
-      # API key is optional - uses Application Default Credentials (ADC) if not set
+      # Using Vertex AI with Application Default Credentials (ADC)
       # For ADC: Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS
+      vertexai: true
       api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT:}
-      location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+      project_id: ${GOOGLE_CLOUD_PROJECT:-}
+      location: ${GOOGLE_CLOUD_LOCATION:-us-central1}
 
 embedder:
   provider: "gemini"
@@ -27,27 +28,27 @@ embedder:
 
   providers:
     gemini:
-      # API key is optional - uses Application Default Credentials (ADC) if not set
+      # Using Vertex AI with Application Default Credentials (ADC)
       # For ADC: Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS
-      api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT:}
-      location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+      vertexai: true
+      project_id: ${GOOGLE_CLOUD_PROJECT:-}
+      location: ${GOOGLE_CLOUD_LOCATION:-us-central1}
 
 database:
   provider: "neo4j"
 
   providers:
     neo4j:
-      uri: ${NEO4J_URI:bolt://neo4j:7687}
-      username: ${NEO4J_USER:neo4j}
-      password: ${NEO4J_PASSWORD:demodemo}
-      database: ${NEO4J_DATABASE:neo4j}
-      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+      uri: ${NEO4J_URI:-bolt://neo4j:7687}
+      username: ${NEO4J_USER:-neo4j}
+      password: ${NEO4J_PASSWORD:-demodemo}
+      database: ${NEO4J_DATABASE:-neo4j}
+      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:-false}
 
 graphiti:
-  group_id: ${GRAPHITI_GROUP_ID:main}
-  episode_id_prefix: ${EPISODE_ID_PREFIX:}
-  user_id: ${USER_ID:mcp_user}
+  group_id: ${GRAPHITI_GROUP_ID:-main}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:-}
+  user_id: ${USER_ID:-mcp_user}
   entity_types:
     - name: "Preference"
       description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
