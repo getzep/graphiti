@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,7 @@ else:
 
 from pydantic import Field
 
+from ..llm_client.gemini_utils import create_gemini_client
 from .client import EmbedderClient, EmbedderConfig
 
 logger = logging.getLogger(__name__)
@@ -63,16 +65,18 @@ class GeminiEmbedder(EmbedderClient):
 
         Args:
             config (GeminiEmbedderConfig | None): The configuration for the GeminiEmbedder, including API key, model, base URL, temperature, and max tokens.
+                If api_key is None, will use GOOGLE_API_KEY environment variable or fall back to Application Default Credentials.
             client (genai.Client | None): An optional async client instance to use. If not provided, a new genai.Client is created.
             batch_size (int | None): An optional batch size to use. If not provided, the default batch size will be used.
         """
         if config is None:
             config = GeminiEmbedderConfig()
+            config.api_key = os.getenv('GOOGLE_API_KEY')
 
         self.config = config
 
         if client is None:
-            self.client = genai.Client(api_key=config.api_key)
+            self.client = create_gemini_client(config.api_key, client_type='embedder')
         else:
             self.client = client
 

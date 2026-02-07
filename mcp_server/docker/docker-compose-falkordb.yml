@@ -6,7 +6,7 @@ services:
       - "3000:3000" # FalkorDB web UI
     environment:
       - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
-      - BROWSER=${BROWSER:-1}  # Enable FalkorDB Browser UI (set to 0 to disable)
+      - BROWSER=${BROWSER:-1} # Enable FalkorDB Browser UI (set to 0 to disable)
     volumes:
       - falkordb_data:/data
     healthcheck:
@@ -40,8 +40,23 @@ services:
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
+      # LLM Provider API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      # Google Cloud ADC configuration (optional - for Gemini without API key)
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-}
     volumes:
-      - ../config/config-docker-falkordb.yaml:/app/mcp/config/config.yaml:ro
+      # Uncomment this line to use Gemini by setting GOOGLE_API_KEY, GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION
+      # - ../config/config-docker-falkordb-gemini.yaml:/app/mcp/config/config.yaml:ro
+      # To use GCP Application Default Credentials or a service account json:
+      # Mount Google Cloud credentials for ADC (if available)
+      # - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+      # Or mount a service account key file:
+      # - ${GOOGLE_APPLICATION_CREDENTIALS}:/credentials/google-credentials.json:ro
     ports:
       - "8000:8000" # Expose the MCP server via HTTP transport
     command: ["uv", "run", "main.py"]

@@ -31,8 +31,8 @@ llm:
 
     gemini:
       api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_PROJECT_ID:}
-      location: ${GOOGLE_LOCATION:us-central1}
+      project_id: ${GOOGLE_CLOUD_PROJECT:}
+      location: ${GOOGLE_CLOUD_LOCATION:us-central1}
 
     groq:
       api_key: ${GROQ_API_KEY}
@@ -58,8 +58,8 @@ embedder:
 
     gemini:
       api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_PROJECT_ID:}
-      location: ${GOOGLE_LOCATION:us-central1}
+      project_id: ${GOOGLE_CLOUD_PROJECT:}
+      location: ${GOOGLE_CLOUD_LOCATION:us-central1}
 
     voyage:
       api_key: ${VOYAGE_API_KEY}

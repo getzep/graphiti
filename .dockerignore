@@ -1,0 +1,36 @@
+# Python virtual environments
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.ruff_cache/
+
+# Local environment files
+**/.env
+**/.env.local
+**/*.log
+
+# Git and IDE files
+.git/
+.gitignore
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+
+# Neo4j data (if running locally)
+**/neo4j_data/
+**/falkordb_data/
+
+# Build artifacts
+**/*.egg-info/
+**/dist/
+**/build/
+
+# Documentation and tests (optional - uncomment if you want smaller images)
+# **/tests/
+# **/*.md
+# **/docs/
