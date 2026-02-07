@@ -177,6 +177,11 @@ pip install graphiti-core[falkordb]
 
 # or with uv
 uv add graphiti-core[falkordb]
+
+# or embedded version (requires Python 3.12+)
+pip install graphiti-core[falkordblite]
+# or with uv
+uv add graphiti-core[falkordblite]
 ```
 
 ### Installing with Kuzu Support
@@ -344,6 +349,11 @@ driver = FalkorDriver(
     password="falkor_password",  # Optional
     database="my_custom_graph"  # Custom database name
 )
+
+# Or use embedded FalkorDB Lite (requires Python 3.12+)
+# from redislite.async_falkordb_client import AsyncFalkorDB
+# falkordb_client = AsyncFalkorDB(dbfilename='/path/to/database.db')
+# driver = FalkorDriver(falkor_db=falkordb_client)
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
