@@ -2,7 +2,7 @@
 # This configuration is optimized for running with docker-compose-falkordb.yml
 
 server:
-  transport: "http" # Use SSE for HTTP-based MCP connection
+  transport: "http" # Use HTTP for MCP connection
   host: "0.0.0.0"
   port: 8000
 
@@ -14,12 +14,18 @@ llm:
 
   providers:
     gemini:
-      # Using Vertex AI with Application Default Credentials (ADC)
-      # For ADC: Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS
-      # vertexai: true
+      # Option 1: Use Google AI API with API key
+      # Get your free API key from: https://aistudio.google.com/app/apikey
       api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT:-}
-      location: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+
+      # Option 2: Use Vertex AI with Application Default Credentials (ADC)
+      # Set these if using ADC instead of API key:
+      # - GOOGLE_GENAI_USE_VERTEXAI=true environment variable
+      # - GOOGLE_CLOUD_PROJECT environment variable
+      # - GOOGLE_CLOUD_LOCATION environment variable
+      # - Run: gcloud auth application-default login
+      # project_id: ${GOOGLE_CLOUD_PROJECT}
+      # location: ${GOOGLE_CLOUD_LOCATION}
 
 embedder:
   provider: "gemini"
@@ -28,12 +34,10 @@ embedder:
 
   providers:
     gemini:
-      # Using Vertex AI with Application Default Credentials (ADC)
-      # For ADC: Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS
-      # vertexai: true
+      # Same authentication options as LLM provider above
       api_key: ${GOOGLE_API_KEY}
-      project_id: ${GOOGLE_CLOUD_PROJECT:-}
-      location: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+      project_id: ${GOOGLE_CLOUD_PROJECT}
+      location: ${GOOGLE_CLOUD_LOCATION}
 
 database:
   provider: "falkordb" # Using FalkorDB for this configuration

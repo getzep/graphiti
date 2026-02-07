@@ -31,6 +31,13 @@ else:
 
 logger = logging.getLogger(__name__)
 
+# Try to import google.auth for ADC support
+try:
+    from google import auth
+    HAS_GOOGLE_AUTH = True
+except ImportError:
+    HAS_GOOGLE_AUTH = False
+
 
 def create_gemini_client(
     api_key: str | None,
@@ -81,6 +88,12 @@ def create_gemini_client(
             f'Creating Gemini {client_type} with Vertex AI using project={project}, location={location}'
         )
         try:
+            # Load credentials explicitly to support ADC
+            if HAS_GOOGLE_AUTH:
+                credentials, _ = auth.default()
+                logger.debug('DEBUG: Loaded credentials from google.auth.default()')
+
+            logger.debug(f'DEBUG: Calling genai.Client with vertexai=True, project={project}, location={location}')
             return genai.Client(vertexai=True, project=project, location=location)
         except Exception as e:
             error_msg = str(e).lower()

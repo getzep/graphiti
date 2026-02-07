@@ -9,6 +9,7 @@ services:
         MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.0.0}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-}
+        INSTALL_GOOGLE_GENAI: true
     env_file:
       - path: ../.env
         required: false
@@ -39,10 +40,10 @@ services:
       - falkordb_data:/var/lib/falkordb/data
       - mcp_logs:/var/log/graphiti
       # Required for Gemini: uncomment this line and either set GOOGLE_API_KEY or configure ADC by mounting creds into the container and setting the appropriate envvars
-      # - ../config/config-docker-falkordb-gemini.yaml:/app/mcp/config/config.yaml:ro
+      - ../config/config-docker-falkordb-gemini.yaml:/app/mcp/config/config.yaml:ro
       # To use GCP Application Default Credentials or a service account json:
       # Mount Google Cloud credentials for ADC (if available)
-      # - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
       # Or mount a service account key file:
       # - ${GOOGLE_APPLICATION_CREDENTIALS}:/credentials/google-credentials.json:ro
     ports:
