@@ -228,6 +228,14 @@ class LLMClientFactory:
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+
+                # Set Vertex AI project and location in environment for ADC
+                import os
+                if not api_key and config.providers.gemini.project_id:
+                    os.environ.setdefault('GOOGLE_CLOUD_PROJECT', config.providers.gemini.project_id)
+                if not api_key and config.providers.gemini.location:
+                    os.environ.setdefault('GOOGLE_CLOUD_LOCATION', config.providers.gemini.location)
+
                 return GeminiClient(config=llm_config)
 
             case 'groq':
@@ -344,6 +352,14 @@ class EmbedderFactory:
                     embedding_model=config.model or 'models/text-embedding-004',
                     embedding_dim=config.dimensions or 768,
                 )
+
+                # Set Vertex AI project and location in environment for ADC
+                import os
+                if not api_key and config.providers.gemini.project_id:
+                    os.environ.setdefault('GOOGLE_CLOUD_PROJECT', config.providers.gemini.project_id)
+                if not api_key and config.providers.gemini.location:
+                    os.environ.setdefault('GOOGLE_CLOUD_LOCATION', config.providers.gemini.location)
+
                 return GeminiEmbedder(config=gemini_config)
 
             case 'voyage':
