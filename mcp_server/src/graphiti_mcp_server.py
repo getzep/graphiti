@@ -157,6 +157,7 @@ API keys are provided for any language model operations.
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    stateless_http=True,
 )
 
 # Global services
