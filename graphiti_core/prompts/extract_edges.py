@@ -74,8 +74,8 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are an expert fact extractor that extracts fact triples from text. '
-                    '1. Extracted fact triples should also be extracted with relevant date information.'
-                    '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
+            '1. Extracted fact triples should also be extracted with relevant date information.'
+            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
         ),
         Message(
             role='user',
