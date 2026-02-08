@@ -349,7 +349,9 @@ class EmbedderFactory:
                     base_url += 'openai/v1/'
 
                 if azure_config.use_azure_ad:
-                    logger.info('Creating Azure OpenAI Embedder client with Azure AD authentication')
+                    logger.info(
+                        'Creating Azure OpenAI Embedder client with Azure AD authentication'
+                    )
                     token_provider = create_azure_credential_token_provider()
                     azure_client = AsyncOpenAI(
                         base_url=base_url,
