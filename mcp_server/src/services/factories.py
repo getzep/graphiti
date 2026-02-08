@@ -1,11 +1,11 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
-from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig
-
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig
 
 # Try to import FalkorDriver if available
 try:
