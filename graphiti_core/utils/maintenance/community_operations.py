@@ -29,6 +29,12 @@ class Neighbor(BaseModel):
 async def get_community_clusters(
     driver: GraphDriver, group_ids: list[str] | None
 ) -> list[list[EntityNode]]:
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.get_community_clusters(driver, group_ids)
+        except NotImplementedError:
+            pass
+
     community_clusters: list[list[EntityNode]] = []
 
     if group_ids is None:
@@ -235,6 +241,12 @@ async def build_communities(
 
 
 async def remove_communities(driver: GraphDriver):
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.remove_communities(driver)
+        except NotImplementedError:
+            pass
+
     await driver.execute_query(
         """
         MATCH (c:Community)
@@ -246,6 +258,14 @@ async def remove_communities(driver: GraphDriver):
 async def determine_entity_community(
     driver: GraphDriver, entity: EntityNode
 ) -> tuple[CommunityNode | None, bool]:
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.determine_entity_community(
+                driver, entity
+            )
+        except NotImplementedError:
+            pass
+
     # Check if the node is already part of a community
     records, _, _ = await driver.execute_query(
         """

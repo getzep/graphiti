@@ -128,6 +128,12 @@ async def get_episodes_by_mentions(
 async def get_mentioned_nodes(
     driver: GraphDriver, episodes: list[EpisodicNode]
 ) -> list[EntityNode]:
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.get_mentioned_nodes(driver, episodes)
+        except NotImplementedError:
+            pass
+
     episode_uuids = [episode.uuid for episode in episodes]
 
     records, _, _ = await driver.execute_query(
@@ -149,6 +155,12 @@ async def get_mentioned_nodes(
 async def get_communities_by_nodes(
     driver: GraphDriver, nodes: list[EntityNode]
 ) -> list[CommunityNode]:
+    if driver.graph_operations_interface:
+        try:
+            return await driver.graph_operations_interface.get_communities_by_nodes(driver, nodes)
+        except NotImplementedError:
+            pass
+
     node_uuids = [node.uuid for node in nodes]
 
     records, _, _ = await driver.execute_query(
@@ -438,6 +450,14 @@ async def edge_bfs_search(
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityEdge]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.edge_bfs_search(
+                driver, bfs_origin_node_uuids, bfs_max_depth, search_filter, group_ids, limit
+            )
+        except NotImplementedError:
+            pass
+
     # vector similarity search over embedded facts
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0:
         return []
@@ -772,6 +792,14 @@ async def node_bfs_search(
     group_ids: list[str] | None = None,
     limit: int = RELEVANT_SCHEMA_LIMIT,
 ) -> list[EntityNode]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.node_bfs_search(
+                driver, bfs_origin_node_uuids, search_filter, bfs_max_depth, group_ids, limit
+            )
+        except NotImplementedError:
+            pass
+
     if bfs_origin_node_uuids is None or len(bfs_origin_node_uuids) == 0 or bfs_max_depth < 1:
         return []
 
@@ -944,6 +972,14 @@ async def community_fulltext_search(
     group_ids: list[str] | None = None,
     limit=RELEVANT_SCHEMA_LIMIT,
 ) -> list[CommunityNode]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.community_fulltext_search(
+                driver, query, group_ids, limit
+            )
+        except NotImplementedError:
+            pass
+
     # BM25 search to get top communities
     fuzzy_query = fulltext_query(query, group_ids, driver)
     if fuzzy_query == '':
@@ -1026,6 +1062,14 @@ async def community_similarity_search(
     limit=RELEVANT_SCHEMA_LIMIT,
     min_score=DEFAULT_MIN_SCORE,
 ) -> list[CommunityNode]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.community_similarity_search(
+                driver, search_vector, group_ids, limit, min_score
+            )
+        except NotImplementedError:
+            pass
+
     # vector similarity search over entity names
     query_params: dict[str, Any] = {}
 
@@ -1754,6 +1798,14 @@ async def node_distance_reranker(
     center_node_uuid: str,
     min_score: float = 0,
 ) -> tuple[list[str], list[float]]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.node_distance_reranker(
+                driver, node_uuids, center_node_uuid, min_score
+            )
+        except NotImplementedError:
+            pass
+
     # filter out node_uuid center node node uuid
     filtered_uuids = list(filter(lambda node_uuid: node_uuid != center_node_uuid, node_uuids))
     scores: dict[str, float] = {center_node_uuid: 0.0}
@@ -1805,6 +1857,14 @@ async def node_distance_reranker(
 async def episode_mentions_reranker(
     driver: GraphDriver, node_uuids: list[list[str]], min_score: float = 0
 ) -> tuple[list[str], list[float]]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.episode_mentions_reranker(
+                driver, node_uuids, min_score
+            )
+        except NotImplementedError:
+            pass
+
     # use rrf as a preliminary ranker
     sorted_uuids, _ = rrf(node_uuids)
     scores: dict[str, float] = {}
@@ -1916,6 +1976,12 @@ async def get_embeddings_for_nodes(
 async def get_embeddings_for_communities(
     driver: GraphDriver, communities: list[CommunityNode]
 ) -> dict[str, list[float]]:
+    if driver.search_interface:
+        try:
+            return await driver.search_interface.get_embeddings_for_communities(driver, communities)
+        except NotImplementedError:
+            pass
+
     if driver.provider == GraphProvider.NEPTUNE:
         query = """
         MATCH (c:Community)

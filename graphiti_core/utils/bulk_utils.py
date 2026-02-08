@@ -258,10 +258,18 @@ async def extract_nodes_and_edges_bulk(
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     edge_types: dict[str, type[BaseModel]] | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> tuple[list[list[EntityNode]], list[list[EntityEdge]]]:
     extracted_nodes_bulk: list[list[EntityNode]] = await semaphore_gather(
         *[
-            extract_nodes(clients, episode, previous_episodes, entity_types, excluded_entity_types)
+            extract_nodes(
+                clients,
+                episode,
+                previous_episodes,
+                entity_types=entity_types,
+                excluded_entity_types=excluded_entity_types,
+                custom_extraction_instructions=custom_extraction_instructions,
+            )
             for episode, previous_episodes in episode_tuples
         ]
     )
@@ -276,6 +284,7 @@ async def extract_nodes_and_edges_bulk(
                 edge_type_map=edge_type_map,
                 group_id=episode.group_id,
                 edge_types=edge_types,
+                custom_extraction_instructions=custom_extraction_instructions,
             )
             for i, (episode, previous_episodes) in enumerate(episode_tuples)
         ]
@@ -464,7 +473,6 @@ async def dedupe_edges_bulk(
                 candidates,
                 episode,
                 edge_types,
-                set(edge_types),
             )
             for episode, edge, candidates in dedupe_tuples
         ]
