@@ -928,12 +928,17 @@ class Graphiti:
                     custom_extraction_instructions,
                 )
 
+                entity_edges = resolved_edges + invalidated_edges
+
                 # Extract node attributes
                 hydrated_nodes = await extract_attributes_from_nodes(
-                    self.clients, nodes, episode, previous_episodes, entity_types
+                    self.clients,
+                    nodes,
+                    episode,
+                    previous_episodes,
+                    entity_types,
+                    edges=entity_edges,
                 )
-
-                entity_edges = resolved_edges + invalidated_edges
 
                 # Process and save episode data (including saga association if provided)
                 episodic_edges, episode = await self._process_episode_data(
@@ -1497,7 +1502,6 @@ class Graphiti:
                 entity_edges=[],
                 group_id=edge.group_id,
             ),
-            None,
             None,
         )
 

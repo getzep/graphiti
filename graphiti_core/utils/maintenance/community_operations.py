@@ -31,9 +31,7 @@ async def get_community_clusters(
 ) -> list[list[EntityNode]]:
     if driver.graph_operations_interface:
         try:
-            return await driver.graph_operations_interface.get_community_clusters(
-                driver, group_ids
-            )
+            return await driver.graph_operations_interface.get_community_clusters(driver, group_ids)
         except NotImplementedError:
             pass
 

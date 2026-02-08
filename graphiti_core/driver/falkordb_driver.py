@@ -321,6 +321,9 @@ class FalkorDriver(GraphDriver):
                 '=': ' ',
                 '~': ' ',
                 '?': ' ',
+                '|': ' ',
+                '/': ' ',
+                '\\': ' ',
             }
         )
         sanitized = query.translate(separator_map)
@@ -343,14 +346,17 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            group_values = '|'.join(group_ids)
+            # Escape group_ids with quotes to prevent RediSearch syntax errors
+            # with reserved words like "main" or special characters like hyphens
+            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 
         sanitized_query = self.sanitize(query)
 
-        # Remove stopwords from the sanitized query
+        # Remove stopwords and empty tokens from the sanitized query
         query_words = sanitized_query.split()
-        filtered_words = [word for word in query_words if word.lower() not in STOPWORDS]
+        filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
         sanitized_query = ' | '.join(filtered_words)
 
         # If the query is too long return no query
