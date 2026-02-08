@@ -5,6 +5,10 @@ from config.schema import (
     EmbedderConfig,
     LLMConfig,
 )
+from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
 # Try to import FalkorDriver if available
 try:
@@ -13,12 +17,6 @@ try:
     HAS_FALKOR = True
 except ImportError:
     HAS_FALKOR = False
-
-# Kuzu support removed - FalkorDB is now the default
-from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
-from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
-from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
 try:
