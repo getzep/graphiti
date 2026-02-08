@@ -83,12 +83,12 @@ def _create_graphiti_client(settings: ZepEnvDep) -> ZepGraphiti:
     if settings.db_backend == 'falkordb':
         from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-        driver = FalkorDriver(
-            host=settings.falkordb_host or 'localhost',
-            port=settings.falkordb_port or 6379,
-            database=settings.falkordb_database or 'default_db',
+        driver = FalkorDriver(  # type: ignore
+            host=settings.falkordb_host or 'localhost',  # type: ignore
+            port=settings.falkordb_port or 6379,  # type: ignore
+            database=settings.falkordb_database or 'default_db',  # type: ignore
         )
-        return ZepGraphiti(graph_driver=driver)
+        return ZepGraphiti(graph_driver=driver)  # type: ignore
     else:
         # Validate Neo4j settings are present
         if not all([settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password]):
