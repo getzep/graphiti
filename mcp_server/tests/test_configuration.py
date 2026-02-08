@@ -84,6 +84,28 @@ def test_llm_factory(config: GraphitiConfig):
     except Exception as e:
         print(f'✗ Factory provider switching failed: {e}')
 
+    # Test openai_generic provider
+    generic_config = config.llm.model_copy()
+    generic_config.provider = 'openai_generic'
+    if not generic_config.providers.openai:
+        from config.schema import OpenAIProviderConfig
+
+        generic_config.providers.openai = OpenAIProviderConfig(
+            api_key='dummy_key', api_url='http://localhost:11434/v1'
+        )
+    else:
+        generic_config.providers.openai.api_key = 'dummy_key'
+        generic_config.providers.openai.api_url = 'http://localhost:11434/v1'
+
+    try:
+        from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+        client = LLMClientFactory.create(generic_config)
+        assert isinstance(client, OpenAIGenericClient)
+        print('✓ Factory supports openai_generic provider')
+    except Exception as e:
+        print(f'✗ Factory openai_generic provider failed: {e}')
+
 
 def test_embedder_factory(config: GraphitiConfig):
     """Test Embedder client factory creation."""

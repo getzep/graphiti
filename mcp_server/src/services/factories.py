@@ -69,6 +69,23 @@ try:
 except ImportError:
     HAS_GROQ = False
 
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
+
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
+from utils.utils import create_azure_credential_token_provider
+
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
@@ -150,11 +167,6 @@ class LLMClientFactory:
                 if not azure_config.api_url:
                     raise ValueError('Azure OpenAI API URL is required')
 
-                # Currently using API key authentication
-                # TODO: Add Azure AD authentication support for v1 API compatibility
-                api_key = azure_config.api_key
-                _validate_api_key('Azure OpenAI', api_key, logger)
-
                 # Azure OpenAI should use the standard AsyncOpenAI client with v1 compatibility endpoint
                 # See: https://github.com/getzep/graphiti README Azure OpenAI section
                 from openai import AsyncOpenAI
@@ -166,10 +178,21 @@ class LLMClientFactory:
                 if not base_url.endswith('openai/v1/'):
                     base_url += 'openai/v1/'
 
-                azure_client = AsyncOpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                )
+                if azure_config.use_azure_ad:
+                    logger.info('Creating Azure OpenAI client with Azure AD authentication')
+                    token_provider = create_azure_credential_token_provider()
+                    azure_client = AsyncOpenAI(
+                        base_url=base_url,
+                        azure_ad_token_provider=token_provider,
+                    )
+                    api_key = None
+                else:
+                    api_key = azure_config.api_key
+                    _validate_api_key('Azure OpenAI', api_key, logger)
+                    azure_client = AsyncOpenAI(
+                        base_url=base_url,
+                        api_key=api_key,
+                    )
 
                 # Then create the LLMConfig
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
@@ -242,6 +265,32 @@ class LLMClientFactory:
                 )
                 return GroqClient(config=llm_config)
 
+            case 'openai_generic':
+                # OpenAI Generic client - uses /chat/completions with response_format
+                # instead of /responses endpoint. Compatible with LiteLLM, Ollama, vLLM, etc.
+                if not HAS_OPENAI_GENERIC:
+                    raise ValueError(
+                        'OpenAI Generic client not available in current graphiti-core version'
+                    )
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found')
+
+                api_key = config.providers.openai.api_key
+                base_url = config.providers.openai.api_url
+                _validate_api_key('OpenAI Generic', api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=config.model,
+                    small_model='gpt-4.1-mini',
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                return OpenAIGenericClient(config=llm_config)
+
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
 
@@ -288,11 +337,6 @@ class EmbedderFactory:
                 if not azure_config.api_url:
                     raise ValueError('Azure OpenAI API URL is required')
 
-                # Currently using API key authentication
-                # TODO: Add Azure AD authentication support for v1 API compatibility
-                api_key = azure_config.api_key
-                _validate_api_key('Azure OpenAI Embedder', api_key, logger)
-
                 # Azure OpenAI should use the standard AsyncOpenAI client with v1 compatibility endpoint
                 # See: https://github.com/getzep/graphiti README Azure OpenAI section
                 from openai import AsyncOpenAI
@@ -304,10 +348,22 @@ class EmbedderFactory:
                 if not base_url.endswith('openai/v1/'):
                     base_url += 'openai/v1/'
 
-                azure_client = AsyncOpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                )
+                if azure_config.use_azure_ad:
+                    logger.info(
+                        'Creating Azure OpenAI Embedder client with Azure AD authentication'
+                    )
+                    token_provider = create_azure_credential_token_provider()
+                    azure_client = AsyncOpenAI(
+                        base_url=base_url,
+                        azure_ad_token_provider=token_provider,
+                    )
+                else:
+                    api_key = azure_config.api_key
+                    _validate_api_key('Azure OpenAI Embedder', api_key, logger)
+                    azure_client = AsyncOpenAI(
+                        base_url=base_url,
+                        api_key=api_key,
+                    )
 
                 return AzureOpenAIEmbedderClient(
                     azure_client=azure_client,
