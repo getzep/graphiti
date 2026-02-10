@@ -159,6 +159,17 @@ For stdio-based clients (Claude Desktop, Cursor), pass the project directory via
 
 The `${workspaceFolder}` variable is automatically expanded by the MCP client to your project directory.
 
+**Note**: `workspaceFolder` is a built-in environment variable in VS Code. When the MCP server is started in VS Code or Cursor, this variable exists automatically. However, if you start the MCP server in a pure CLI environment, such as running Claude Code configured with the Graphiti MCP server in an independent Terminal, the `workspaceFolder` environment variable will not be found. In this case, you need to explicitly pass this variable.
+
+**Example methods**:
+
+Add the following to your `~/.bash_profile`:
+
+```bash
+alias happy='command happy --claude-env workspaceFolder="$(pwd)"'
+alias claude='workspaceFolder="$(pwd)" command claude'
+```
+
 ### The `GRAPHITI_PROJECT_DIR` Environment Variable
 
 The `GRAPHITI_PROJECT_DIR` environment variable tells the MCP server **where to start searching** for the `.graphiti.json` configuration file.
@@ -217,6 +228,7 @@ When the MCP client (Cursor/Claude Desktop) expands `${workspaceFolder}` to `/wo
 | Reranker (CrossEncoder) | `reranker.providers.openai.api_key` or `OPENAI_API_KEY` | ✅ Required |
 
 **Note:** When using `cross_encoder` with OpenAI provider, you must provide an OpenAI API key through one of these sources:
+
 - Set `OPENAI_API_KEY` environment variable (used as fallback)
 - Set `RERANKER_OPENAI_API_KEY` environment variable
 - Set `reranker.providers.openai.api_key` directly in config.yaml
