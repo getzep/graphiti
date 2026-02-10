@@ -6,7 +6,7 @@ When I first joined this project, I was overwhelmed trying to figure out where t
 
 We've restructured our contribution paths to solve this problem:
 
-# Four Ways to Get Involved
+## Four Ways to Get Involved
 
 ### Pick Up Existing Issues
 
@@ -37,6 +37,7 @@ Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and p
 ## What happens next?
 
 ### Notes for Large Changes
+
 > Please keep the changes as concise as possible. For major architectural changes (>500 LOC), we would expect a GitHub issue (RFC) discussing the technical design and justification. Otherwise, we will tag it with rfc-required and might not go through the PR.
 
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
@@ -49,21 +50,25 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 
 1. Fork the repository on GitHub.
 2. Clone your fork locally:
-   ```
+
+   ```bash
    git clone https://github.com/getzep/graphiti
    cd graphiti
    ```
+
 3. Set up your development environment:
 
    - Ensure you have Python 3.10+ installed.
-   - Install uv: https://docs.astral.sh/uv/getting-started/installation/
+   - Install uv: <https://docs.astral.sh/uv/getting-started/installation/>
    - Install project dependencies:
-     ```
+
+     ```bash
      make install
      ```
+
    - To run integration tests, set the appropriate environment variables
 
-     ```
+     ```bash
      export TEST_OPENAI_API_KEY=...
      export TEST_OPENAI_MODEL=...
      export TEST_ANTHROPIC_API_KEY=...
@@ -77,35 +82,46 @@ Once you've found an issue tagged with "good first issue" or "help wanted," or p
 ## Making Changes
 
 1. Create a new branch for your changes:
-   ```
+
+   ```bash
    git checkout -b your-branch-name
    ```
+
 2. Make your changes in the codebase.
 3. Write or update tests as necessary.
 4. Run the tests to ensure they pass:
-   ```
+
+   ```bash
    make test
    ```
+
 5. Format your code:
-   ```
+
+   ```bash
    make format
    ```
+
 6. Run linting checks:
-   ```
+
+   ```bash
    make lint
    ```
 
 ## Submitting Changes
 
 1. Commit your changes:
-   ```
+
+   ```bash
    git commit -m "Your detailed commit message"
    ```
+
 2. Push to your fork:
-   ```
+
+   ```bash
    git push origin your-branch-name
    ```
-3. Submit a pull request through the GitHub website to https://github.com/getzep/graphiti.
+
+3. Submit a pull request through the GitHub website to <https://github.com/getzep/graphiti>.
 
 ## Pull Request Guidelines
 
@@ -124,7 +140,7 @@ We use several tools to maintain code quality:
 
 Before submitting a pull request, please run:
 
-```
+```bash
 make check
 ```
 
@@ -139,6 +155,7 @@ When contributing integrations for third-party services (LLM providers, embeddin
 All third-party integrations must be optional dependencies to keep the core library lightweight. Follow this pattern:
 
 1. **Add to `pyproject.toml`**: Define your dependency as an optional extra AND include it in the dev extra:
+
    ```toml
    [project.optional-dependencies]
    your-service = ["your-package>=1.0.0"]
@@ -150,6 +167,7 @@ All third-party integrations must be optional dependencies to keep the core libr
    ```
 
 2. **Use TYPE_CHECKING pattern**: In your integration module, import dependencies conditionally:
+
    ```python
    from typing import TYPE_CHECKING
    
@@ -191,7 +209,7 @@ All third-party integrations must be optional dependencies to keep the core libr
 - Mark integration tests with `_int` suffix if they require external services
 - Include both unit tests and integration tests where applicable
 
-# Questions?
+## Questions?
 
 Stuck on a contribution or have a half-formed idea? Come say hello in our [Discord server](https://discord.com/invite/W8Kw6bsgXQ). Whether you're ready to contribute or just want to learn more, we're happy to have you! It's faster than GitHub issues and you'll find both maintainers and fellow contributors ready to help.
 

@@ -70,6 +70,24 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+reranker:
+  enabled: true  # Whether reranker is enabled
+  type: "rrf"  # Options: rrf, mmr, node_distance, episode_mentions, cross_encoder
+  provider: "openai"  # When type=cross_encoder: openai, gemini, sentence_transformers
+  model: "gpt-4.1-nano"  # Model name for cross_encoder
+  
+  local:
+    type: "rrf"  # Local reranker type
+    mmr_lambda: 0.5  # MMR lambda parameter
+  
+  providers:
+    openai:
+      api_key: ${RERANKER_OPENAI_API_KEY:}
+      api_url: ${RERANKER_OPENAI_API_URL:https://api.openai.com/v1}
+    
+    gemini:
+      api_key: ${GEMINI_API_KEY:}
+
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
 
@@ -77,7 +95,10 @@ database:
     falkordb:
       uri: ${FALKORDB_URI:redis://localhost:6379}
       password: ${FALKORDB_PASSWORD:}
-      database: ${FALKORDB_DATABASE:default_db}
+      # NOTE: Using a single unified graph (GRAPHITI) for all group_ids.
+      # Data isolation is achieved via group_id property filtering, not separate graphs.
+      # This matches Neo4j driver behavior and enables cross-group_id queries.
+      database: ${FALKORDB_DATABASE:GRAPHITI}
 
     neo4j:
       uri: ${NEO4J_URI:bolt://localhost:7687}
@@ -90,22 +111,91 @@ graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}
   episode_id_prefix: ${EPISODE_ID_PREFIX:}
   user_id: ${USER_ID:mcp_user}
+
+  # Episode deduplication settings
+  deduplication:
+    enabled: true  # Enable/disable episode deduplication
+    strategy: "exact"  # Options: "exact" (exact match), "similarity" (content similarity), "hybrid" (both)
+    similarity_threshold: 0.95  # Minimum similarity score for similarity-based deduplication (0.0-1.0)
+    check_by_uuid_first: true  # If uuid is provided, check existing episode before processing
+
+  # Queue concurrency settings
+  queue:
+    # Maximum number of episodes to process concurrently across all group_ids
+    # This prevents LLM API rate limit errors when processing multiple shared_group_ids
+    # - 1-3: Strict limit for low-tier APIs (OpenAI Free: 3 RPM, Anthropic Free: 50 RPM)
+    # - 5-8: Balanced for mid-tier APIs (OpenAI Tier 2-3: 60-500 RPM, Anthropic: default)
+    # - 10-20: High concurrency for high-tier APIs (OpenAI Tier 4+: 5,000+ RPM)
+    max_concurrent_processing: ${QUEUE_MAX_CONCURRENT:5}
+
+    # Maximum queue size per group_id before rejecting new episodes
+    max_queue_size_per_group: 100
+
   entity_types:
+    # === Core Types (High Priority, Cross-Domain) ===
     - name: "Preference"
-      description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
-    - name: "Requirement"
-      description: "Specific needs, features, or functionality that must be fulfilled"
+      description: "Personal preferences for tools, styles, workflows, communication"
     - name: "Procedure"
-      description: "Standard operating procedures and sequential instructions"
-    - name: "Location"
-      description: "Physical or virtual places where activities occur"
-    - name: "Event"
-      description: "Time-bound activities, occurrences, or experiences"
-    - name: "Organization"
-      description: "Companies, institutions, groups, or formal entities"
+      description: "Standard operating procedures, workflows, step-by-step processes"
+    - name: "Requirement"
+      description: "Functional/non-functional requirements, constraints, acceptance criteria"
+    - name: "Decision"
+      description: "Key decisions with rationale, alternatives considered, trade-offs"
+
+    # === Market Research ===
+    - name: "MarketInsight"
+      description: "Market research findings, user feedback, survey results"
+    - name: "Competitor"
+      description: "Competitor analysis, competitive advantages, market positioning"
+    - name: "Trend"
+      description: "Industry trends, technology trends, market movements"
+
+    # === Product Management ===
+    - name: "Vision"
+      description: "Product vision, mission statements, strategic goals"
+    - name: "Feature"
+      description: "Product features, user stories, feature specifications"
+    - name: "Milestone"
+      description: "Project milestones, release plans, deliverables"
+    - name: "Stakeholder"
+      description: "Stakeholders, their interests, communication preferences"
+
+    # === Design ===
+    - name: "Persona"
+      description: "User personas, target audience profiles, user segments"
+    - name: "UserFlow"
+      description: "User flows, user journeys, interaction sequences"
+    - name: "DesignPattern"
+      description: "UI patterns, design system components, style guides"
+
+    # === Development ===
+    - name: "Architecture"
+      description: "System architecture, module design, tech stack decisions"
+    - name: "API"
+      description: "API endpoints, interface definitions, data contracts"
+    - name: "Convention"
+      description: "Coding conventions, naming standards, formatting rules"
+    - name: "Configuration"
+      description: "Config files, environment settings, feature flags"
+    - name: "Dependency"
+      description: "Libraries, packages, version requirements"
+
+    # === Testing ===
+    - name: "TestCase"
+      description: "Test cases, test scenarios, expected results"
+    - name: "Bug"
+      description: "Bug reports, defects, issues with reproduction steps"
+    - name: "TestPlan"
+      description: "Test plans, test strategies, coverage requirements"
+
+    # === Project Management ===
+    - name: "Risk"
+      description: "Project risks, mitigation strategies, contingency plans"
+    - name: "Status"
+      description: "Project status, progress updates, blockers"
+
+    # === Documentation ===
     - name: "Document"
-      description: "Information content in various forms (books, articles, reports, etc.)"
+      description: "Documentation references, specs, technical docs"
     - name: "Topic"
-      description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
-    - name: "Object"
-      description: "Physical items, tools, devices, or possessions (use as last resort)"
+      description: "Knowledge domains, subject areas (fallback type)"

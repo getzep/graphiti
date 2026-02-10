@@ -4,6 +4,7 @@ from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    RerankerConfig,
 )
 
 # Try to import FalkorDriver if available
@@ -18,6 +19,7 @@ except ImportError:
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
 # Try to import additional providers if available
 try:
@@ -112,31 +114,56 @@ class LLMClientFactory:
                     raise ValueError('OpenAI provider configuration not found')
 
                 api_key = config.providers.openai.api_key
+                api_url = config.providers.openai.api_url
                 _validate_api_key('OpenAI', api_key, logger)
 
-                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+                # Check if using a non-standard OpenAI API URL (e.g., DashScope, Ollama)
+                # These should use OpenAIGenericClient instead of OpenAIClient
+                is_generic = api_url and not api_url.startswith('https://api.openai.com')
 
-                # Use the same model for both main and small model slots
-                small_model = config.model
+                if is_generic:
+                    # Use OpenAIGenericClient for OpenAI-compatible APIs (DashScope, Ollama, etc.)
+                    logger.info(f'Using OpenAIGenericClient for {api_url}')
+                    from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                llm_config = CoreLLMConfig(
-                    api_key=api_key,
-                    model=config.model,
-                    small_model=small_model,
-                    temperature=config.temperature,
-                    max_tokens=config.max_tokens,
-                )
-
-                # Check if this is a reasoning model (o1, o3, gpt-5 family)
-                reasoning_prefixes = ('o1', 'o3', 'gpt-5')
-                is_reasoning_model = config.model.startswith(reasoning_prefixes)
-
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    llm_config = CoreLLMConfig(
+                        api_key=api_key,
+                        base_url=api_url,
+                        model=config.model,
+                        temperature=config.temperature,
+                        max_tokens=config.max_tokens,
+                    )
+                    return OpenAIGenericClient(
+                        config=llm_config, max_tokens=config.max_tokens or 16384
+                    )
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    # Use standard OpenAIClient for official OpenAI API
+                    from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                    # Determine appropriate small model based on main model type
+                    is_reasoning_model = (
+                        config.model.startswith('gpt-5')
+                        or config.model.startswith('o1')
+                        or config.model.startswith('o3')
+                    )
+                    small_model = (
+                        'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
+                    )  # Use reasoning model for small tasks if main model is reasoning
+
+                    llm_config = CoreLLMConfig(
+                        api_key=api_key,
+                        model=config.model,
+                        small_model=small_model,
+                        temperature=config.temperature,
+                        max_tokens=config.max_tokens,
+                    )
+
+                    # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
+                    if is_reasoning_model:
+                        return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    else:
+                        # For non-reasoning models, explicitly pass None to disable these parameters
+                        return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
@@ -271,7 +298,7 @@ class EmbedderFactory:
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
-                    base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
+                    base_url=config.providers.openai.api_url,  # Pass api_url to support custom endpoints like Ollama, DashScope etc.
                     embedding_dim=config.dimensions,  # Support custom embedding dimensions
                 )
                 return OpenAIEmbedder(config=embedder_config)
@@ -433,3 +460,117 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class RerankerFactory:
+    """Factory for creating CrossEncoder/Reranker clients."""
+
+    # Local reranker types that don't require API clients
+    LOCAL_TYPES = {'rrf', 'mmr', 'node_distance', 'episode_mentions'}
+
+    @staticmethod
+    def create(config: RerankerConfig):
+        """Create a CrossEncoder client based on configuration.
+
+        Returns:
+            - None if using local reranker (RRF, MMR, etc.) or disabled
+            - CrossEncoderClient instance if using cross_encoder
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if not config.enabled:
+            logger.info('Reranker is disabled')
+            return None
+
+        reranker_type = config.type.lower()
+
+        # Check if it's a local reranker type
+        if reranker_type in RerankerFactory.LOCAL_TYPES:
+            logger.info(f'Using local reranker: {reranker_type}')
+            return None
+
+        # Need to create API client
+        if reranker_type != 'cross_encoder':
+            logger.warning(f'Unknown reranker type: {reranker_type}, using local RRF')
+            return None
+
+        # Create cross_encoder client
+        provider = config.provider.lower()
+        logger.info(f'Creating cross_encoder with provider: {provider}')
+
+        match provider:
+            case 'openai':
+                return RerankerFactory._create_openai(config, logger)
+            case 'gemini':
+                return RerankerFactory._create_gemini(config, logger)
+            case 'sentence_transformers':
+                return RerankerFactory._create_bge(config, logger)
+            case _:
+                logger.warning(f'Unknown cross_encoder provider: {provider}')
+                return None
+
+    @staticmethod
+    def _create_openai(config: RerankerConfig, logger):
+        """Create OpenAI-compatible Reranker client."""
+        from graphiti_core.cross_encoder import OpenAIRerankerClient
+        from graphiti_core.llm_client.config import LLMConfig
+
+        provider_config = config.providers.openai
+        if not provider_config:
+            raise ValueError('OpenAI provider configuration not found')
+
+        api_key = provider_config.api_key
+        if not api_key:
+            raise ValueError('Reranker OpenAI API key not configured')
+
+        _validate_api_key('Reranker OpenAI', api_key, logger)
+
+        llm_config = LLMConfig(
+            api_key=api_key,
+            base_url=provider_config.api_url,
+            model=config.model,
+        )
+        return OpenAIRerankerClient(config=llm_config)
+
+    @staticmethod
+    def _create_gemini(config: RerankerConfig, logger):
+        """Create Gemini Reranker client."""
+        try:
+            from graphiti_core.cross_encoder import GeminiRerankerClient
+        except ImportError:
+            raise ValueError(
+                'Gemini reranker not available. Install with: pip install graphiti-core[google-genai]'
+            )
+
+        from graphiti_core.llm_client.config import LLMConfig
+
+        provider_config = config.providers.gemini
+        if not provider_config:
+            raise ValueError('Gemini provider configuration not found')
+
+        api_key = provider_config.api_key
+        if not api_key:
+            raise ValueError('Reranker Gemini API key not configured')
+
+        _validate_api_key('Reranker Gemini', api_key, logger)
+
+        llm_config = LLMConfig(
+            api_key=api_key,
+            model=config.model or 'gemini-2.5-flash-lite',
+        )
+        return GeminiRerankerClient(config=llm_config)
+
+    @staticmethod
+    def _create_bge(config: RerankerConfig, logger):
+        """Create BGE local Reranker client."""
+        try:
+            from graphiti_core.cross_encoder import BGERerankerClient
+        except ImportError:
+            raise ValueError(
+                'BGE reranker not available. Install with: pip install graphiti-core[sentence-transformers]'
+            )
+
+        logger.info('Initializing BGE Reranker (local model)')
+        return BGERerankerClient()

@@ -1,0 +1,30 @@
+{
+  "group_id": "graphiti-mcp-server",
+  "description": "Graphiti MCP Server development",
+  "shared_group_ids": [
+    "personal-prefs",
+    "std-coding",
+    "std-design",
+    "std-arch",
+    "proc-dev",
+    "proc-test",
+    "proc-product",
+    "kb-tech"
+  ],
+  "shared_entity_types": [
+    "Preference",
+    "Convention",
+    "DesignPattern",
+    "Architecture",
+    "Procedure",
+    "Decision"
+  ],
+  "shared_patterns": [
+    "偏好", "习惯", "喜欢", "倾向",
+    "规范", "约定", "标准", "convention", "standard",
+    "流程", "步骤", "procedure", "workflow",
+    "通用", "跨项目", "所有项目", "cross-project",
+    "best practice", "最佳实践"
+  ],
+  "write_strategy": "llm_based"
+}

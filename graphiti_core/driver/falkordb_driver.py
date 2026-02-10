@@ -253,16 +253,14 @@ class FalkorDriver(GraphDriver):
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
-        """
-        if database == self._database:
-            cloned = self
-        elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
-        else:
-            # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
 
-        return cloned
+        Note: FalkorDB now uses a single graph for all group_ids, with logical isolation
+        via the group_id property on nodes. This matches the behavior of the Neo4j driver
+        and allows for cross-group_id queries and the shared groups mechanism.
+        """
+        # Return self to maintain single database connection
+        # Data isolation is achieved via group_id filtering, not separate graphs
+        return self
 
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""
@@ -346,10 +344,7 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-            group_values = '|'.join(escaped_group_ids)
+            group_values = '|'.join(group_ids)
             group_filter = f'(@group_id:{group_values})'
 
         sanitized_query = self.sanitize(query)

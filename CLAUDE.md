@@ -136,6 +136,7 @@ The codebase supports multiple LLM providers but works best with services suppor
 #### Current LLM Models (as of November 2025)
 
 **OpenAI Models:**
+
 - **GPT-5 Family** (Reasoning models, require temperature=0):
   - `gpt-5-mini` - Fast reasoning model
   - `gpt-5-nano` - Smallest reasoning model
@@ -148,6 +149,7 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `gpt-4o-mini` - Previous generation efficient
 
 **Anthropic Models:**
+
 - **Claude 4.5 Family** (Latest):
   - `claude-sonnet-4-5-latest` - Flagship model, auto-updates
   - `claude-sonnet-4-5-20250929` - Pinned Sonnet version from September 2025
@@ -161,6 +163,7 @@ The codebase supports multiple LLM providers but works best with services suppor
   - `claude-3-5-haiku-latest` - Fast model
 
 **Google Gemini Models:**
+
 - **Gemini 2.5 Family** (Latest):
   - `gemini-2.5-pro` - Flagship reasoning and multimodal
   - `gemini-2.5-flash` - Fast, efficient
@@ -180,3 +183,40 @@ When working with the MCP server, follow the patterns established in `mcp_server
 - Use specific entity type filters (`Preference`, `Procedure`, `Requirement`)
 - Store new information immediately using `add_memory`
 - Follow discovered procedures and respect established preferences
+
+## Other Rules
+
+Follow Cursor style rules in the directory:
+
+- @.cursor/rules
+- @~/.cursor/rules
+
+## About virtual environment
+
+Project root and some subdirectories have their own `.venv`, that means when we enter into these directories to run apps or tests, we must use `source ./.venv/bin/activate` to activate the current env first. For example for dev env:
+
+- Project root (graphiti core):
+
+  ```bash
+  uv venv -c -p 3.10 && \
+  uv sync --extra dev && \
+  source ./.venv/bin/activate`
+  ```
+
+- Graphiti MCP Server:
+
+  ```bash
+  cd mcp_server && \
+  uv venv -c -p 3.10 && \
+  uv sync --extra providers --group dev && \
+  source ./.venv/bin/activate
+  ```
+
+- server:
+
+  ```bash
+  cd server && \
+  uv venv -c -p 3.10 && \
+  uv sync && \
+  source ./.venv/bin/activate
+  ```

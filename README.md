@@ -61,7 +61,7 @@ nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Kno
 extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
 while handling changing relationships and maintaining historical context.
 
-## Graphiti and Zep's Context Engineering Platform.
+## Graphiti and Zep's Context Engineering Platform
 
 Graphiti powers the core of [Zep's context engineering platform](https://www.getzep.com) for AI Agents. Zep
 offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
@@ -201,7 +201,7 @@ pip install graphiti-core[neptune]
 uv add graphiti-core[neptune]
 ```
 
-### You can also install optional LLM providers as extras:
+### You can also install optional LLM providers as extras
 
 ```bash
 # Install with Anthropic support
@@ -261,15 +261,19 @@ setup instructions and next steps.
 You can use Docker Compose to quickly start the required services:
 
 - **Neo4j Docker:**
+
   ```sh
   docker compose up
   ```
+
   This will start the Neo4j Docker service and related components.
 
 - **FalkorDB Docker:**
+
   ```sh
   docker compose --profile falkordb up
   ```
+
   This will start the FalkorDB Docker service and related components.
 
 ## MCP Server
@@ -429,6 +433,7 @@ graphiti = Graphiti(
 ```
 
 **Key Points:**
+
 - Use the standard `AsyncOpenAI` client with Azure's v1 API endpoint format: `https://your-resource-name.openai.azure.com/openai/v1/`
 - The deployment names (e.g., `gpt-5-mini`, `text-embedding-3-small`) should match your Azure OpenAI deployment names
 - See `examples/azure-openai/` for a complete working example
@@ -563,9 +568,9 @@ When you initialize a Graphiti instance, we collect:
 - **System information**: Operating system, Python version, and system architecture
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
-    - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-    - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
-    - Embedder provider (OpenAI, Azure, Voyage, etc.)
+  - LLM provider type (OpenAI, Azure, Anthropic, etc.)
+  - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+  - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect
 
@@ -640,8 +645,8 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
 Graphiti is under active development. We aim to maintain API stability while working on:
 
 - [x] Supporting custom graph schemas:
-    - Allow developers to provide their own defined node and edge classes when ingesting episodes
-    - Enable more flexible knowledge representation tailored to specific use cases
+  - Allow developers to provide their own defined node and edge classes when ingesting episodes
+  - Enable more flexible knowledge representation tailored to specific use cases
 - [x] Enhancing retrieval capabilities with more robust and configurable options
 - [x] Graphiti MCP Server
 - [ ] Expanding test coverage to ensure reliability and catch edge cases
