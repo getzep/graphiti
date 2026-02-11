@@ -147,11 +147,9 @@ class GeminiClient(LLMClient):
                     safety_info.append(f'{category}: {probability}')
 
         safety_details = (
-            ', '.join(
-                safety_info) if safety_info else 'Content blocked for safety reasons'
+            ', '.join(safety_info) if safety_info else 'Content blocked for safety reasons'
         )
-        raise Exception(
-            f'Response blocked by Gemini safety filters: {safety_details}')
+        raise Exception(f'Response blocked by Gemini safety filters: {safety_details}')
 
     def _check_prompt_blocks(self, response) -> None:
         """Check if prompt was blocked and raise appropriate exceptions."""
@@ -282,8 +280,7 @@ class GeminiClient(LLMClient):
             for m in messages:
                 m.content = self._clean_input(m.content)
                 gemini_messages.append(
-                    types.Content(role=m.role, parts=[
-                                  types.Part.from_text(text=m.content)])
+                    types.Content(role=m.role, parts=[types.Part.from_text(text=m.content)])
                 )
 
             # Get the appropriate model for the requested size
@@ -322,8 +319,7 @@ class GeminiClient(LLMClient):
                     if not raw_output:
                         raise ValueError('No response text')
 
-                    validated_model = response_model.model_validate(
-                        json.loads(raw_output))
+                    validated_model = response_model.model_validate(json.loads(raw_output))
 
                     # Return as a dictionary for API consistency
                     return validated_model.model_dump()
@@ -332,16 +328,13 @@ class GeminiClient(LLMClient):
                         logger.error(
                             '🦀 LLM generation failed parsing as JSON, will try to salvage.'
                         )
-                        logger.error(self._get_failed_generation_log(
-                            gemini_messages, raw_output))
+                        logger.error(self._get_failed_generation_log(gemini_messages, raw_output))
                         # Try to salvage
                         salvaged = self.salvage_json(raw_output)
                         if salvaged is not None:
-                            logger.warning(
-                                'Salvaged partial JSON from truncated/malformed output.')
+                            logger.warning('Salvaged partial JSON from truncated/malformed output.')
                             return salvaged
-                    raise Exception(
-                        f'Failed to parse structured response: {e}') from e
+                    raise Exception(f'Failed to parse structured response: {e}') from e
 
             # Otherwise, return the response text as a dictionary
             return {'content': raw_output}
@@ -424,14 +417,11 @@ class GeminiClient(LLMClient):
                     last_error = e
 
                     # Check if this is a safety block - these typically shouldn't be retried
-                    error_text = str(e) or (
-                        str(e.__cause__) if e.__cause__ else '')
+                    error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
                     if 'safety' in error_text.lower() or 'blocked' in error_text.lower():
-                        logger.warning(
-                            f'Content blocked by safety filters: {e}')
+                        logger.warning(f'Content blocked by safety filters: {e}')
                         span.set_status('error', str(e))
-                        raise Exception(
-                            f'Content blocked by safety filters: {e}') from e
+                        raise Exception(f'Content blocked by safety filters: {e}') from e
 
                     retry_count += 1
 
@@ -452,10 +442,8 @@ class GeminiClient(LLMClient):
 
             # If we exit the loop without returning, all retries are exhausted
             logger.error('🦀 LLM generation failed and retries are exhausted.')
-            logger.error(self._get_failed_generation_log(
-                messages, last_output))
-            logger.error(
-                f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
+            logger.error(self._get_failed_generation_log(messages, last_output))
+            logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
             span.set_status('error', str(last_error))
             span.record_exception(last_error) if last_error else None
             raise last_error or Exception('Max retries exceeded')

@@ -501,9 +501,7 @@ def test_edge_type_signatures_map_preserves_multiple_signatures():
     edge_types_context = [
         {
             'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(
-                type_name, [('Entity', 'Entity')]
-            ),
+            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
             'fact_type_description': type_model.__doc__,
         }
         for type_name, type_model in edge_types.items()
@@ -547,9 +545,7 @@ def test_edge_type_signatures_map_single_signature_still_works():
     edge_types_context = [
         {
             'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(
-                type_name, [('Entity', 'Entity')]
-            ),
+            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
             'fact_type_description': type_model.__doc__,
         }
         for type_name, type_model in edge_types.items()

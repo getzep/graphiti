@@ -29,7 +29,7 @@ class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
         description='ID of the classified entity type. '
-                    'Must be one of the provided entity_type_id integers.',
+        'Must be one of the provided entity_type_id integers.',
     )
 
 
