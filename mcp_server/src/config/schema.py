@@ -173,6 +173,38 @@ class EmbedderConfig(BaseModel):
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
+class CrossEncoderProvidersConfig(BaseModel):
+    """Cross-encoder providers configuration."""
+
+    openai: OpenAIProviderConfig | None = None
+    azure_openai: AzureOpenAIProviderConfig | None = None
+    gemini: GeminiProviderConfig | None = None
+
+
+class CrossEncoderConfig(BaseModel):
+    """Cross-encoder (reranker) configuration.
+
+    The cross-encoder is used for reranking search results. When disabled,
+    Graphiti will fall back to simpler ranking methods (e.g., RRF).
+
+    Supported providers:
+    - openai: Direct OpenAI API
+    - openai_generic: OpenAI-compatible APIs (LiteLLM, Ollama, vLLM, etc.)
+    - azure_openai: Azure OpenAI
+    - gemini: Google Gemini
+    - bge: Local BGE model (no API required)
+    - none/disabled: Disable cross-encoder entirely
+    """
+
+    enabled: bool = Field(default=True, description='Enable cross-encoder reranking')
+    provider: str = Field(default='openai', description='Cross-encoder provider')
+    model: str | None = Field(
+        default=None,
+        description='Model name (if None, uses provider default)',
+    )
+    providers: CrossEncoderProvidersConfig = Field(default_factory=CrossEncoderProvidersConfig)
+
+
 class Neo4jProviderConfig(BaseModel):
     """Neo4j provider configuration."""
 
@@ -232,6 +264,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    cross_encoder: CrossEncoderConfig = Field(default_factory=CrossEncoderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 

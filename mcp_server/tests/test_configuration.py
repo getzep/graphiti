@@ -48,6 +48,41 @@ def test_config_loading():
     return config
 
 
+def test_log_level_environment_variable():
+    """Test LOG_LEVEL environment variable configuration for MCP server."""
+    import logging
+
+    print('\nTesting LOG_LEVEL environment variable...')
+
+    # Test default (INFO)
+    if 'LOG_LEVEL' in os.environ:
+        del os.environ['LOG_LEVEL']
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    assert getattr(logging, log_level, logging.INFO) == logging.INFO
+    print('✓ Default LOG_LEVEL is INFO')
+
+    # Test DEBUG override
+    os.environ['LOG_LEVEL'] = 'DEBUG'
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    assert getattr(logging, log_level, logging.INFO) == logging.DEBUG
+    print('✓ LOG_LEVEL=DEBUG works correctly')
+    del os.environ['LOG_LEVEL']
+
+    # Test invalid value falls back to INFO
+    os.environ['LOG_LEVEL'] = 'INVALID'
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    assert getattr(logging, log_level, logging.INFO) == logging.INFO
+    print('✓ Invalid LOG_LEVEL falls back to INFO')
+    del os.environ['LOG_LEVEL']
+
+    # Test case insensitivity
+    os.environ['LOG_LEVEL'] = 'warning'
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    assert getattr(logging, log_level, logging.INFO) == logging.WARNING
+    print('✓ LOG_LEVEL is case-insensitive')
+    del os.environ['LOG_LEVEL']
+
+
 def test_llm_factory(config: GraphitiConfig):
     """Test LLM client factory creation."""
     print('\nTesting LLM client factory...')
@@ -83,6 +118,28 @@ def test_llm_factory(config: GraphitiConfig):
         print('✓ Factory supports provider switching (tested with Gemini)')
     except Exception as e:
         print(f'✗ Factory provider switching failed: {e}')
+
+    # Test openai_generic provider
+    generic_config = config.llm.model_copy()
+    generic_config.provider = 'openai_generic'
+    if not generic_config.providers.openai:
+        from config.schema import OpenAIProviderConfig
+
+        generic_config.providers.openai = OpenAIProviderConfig(
+            api_key='dummy_key', api_url='http://localhost:11434/v1'
+        )
+    else:
+        generic_config.providers.openai.api_key = 'dummy_key'
+        generic_config.providers.openai.api_url = 'http://localhost:11434/v1'
+
+    try:
+        from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+        client = LLMClientFactory.create(generic_config)
+        assert isinstance(client, OpenAIGenericClient)
+        print('✓ Factory supports openai_generic provider')
+    except Exception as e:
+        print(f'✗ Factory openai_generic provider failed: {e}')
 
 
 def test_embedder_factory(config: GraphitiConfig):
@@ -185,6 +242,9 @@ async def main():
     try:
         # Test configuration loading
         config = test_config_loading()
+
+        # Test LOG_LEVEL environment variable
+        test_log_level_environment_variable()
 
         # Test factories
         test_llm_factory(config)

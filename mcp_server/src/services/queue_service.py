@@ -128,7 +128,7 @@ class QueueService:
         async def process_episode():
             """Process the episode using the graphiti client."""
             try:
-                logger.info(f'Processing episode {uuid} for group {group_id}')
+                logger.info(f"Processing episode '{name}' ({uuid}) for group {group_id}")
 
                 # Process the episode using the graphiti client
                 await self._graphiti_client.add_episode(
@@ -142,10 +142,14 @@ class QueueService:
                     uuid=uuid,
                 )
 
-                logger.info(f'Successfully processed episode {uuid} for group {group_id}')
+                logger.info(
+                    f"Successfully processed episode '{name}' ({uuid}) for group {group_id}"
+                )
 
             except Exception as e:
-                logger.error(f'Failed to process episode {uuid} for group {group_id}: {str(e)}')
+                logger.error(
+                    f"Failed to process episode '{name}' ({uuid}) for group {group_id}: {str(e)}"
+                )
                 raise
 
         # Use the existing add_episode_task method to queue the processing
