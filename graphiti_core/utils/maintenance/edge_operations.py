@@ -160,10 +160,7 @@ async def extract_edges(
         # Prepare context for LLM
         context = {
             'episode_content': episode.content,
-            'nodes': [
-                {'name': node.name, 'entity_types': node.labels}
-                for node in chunk
-            ],
+            'nodes': [{'name': node.name, 'entity_types': node.labels} for node in chunk],
             'previous_episodes': [ep.content for ep in previous_episodes],
             'reference_time': episode.valid_at,
             'edge_types': edge_types_context,
