@@ -82,10 +82,15 @@ async def search(
     embedder = clients.embedder
     cross_encoder = clients.cross_encoder
 
-    if query.strip() == '':
+    # Only bail on empty query when there's no BFS fallback.
+    # BFS traversal doesn't need a text query — only origin UUIDs.
+    if query.strip() == '' and not bfs_origin_node_uuids:
         return SearchResults()
 
-    if (
+    # Skip embedding API call when query is empty (BFS-only path)
+    if query.strip() == '':
+        search_vector = [0.0] * EMBEDDING_DIM
+    elif (
         config.edge_config
         and EdgeSearchMethod.cosine_similarity in config.edge_config.search_methods
         or config.edge_config
