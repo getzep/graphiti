@@ -64,7 +64,11 @@ class Neo4jDriver(GraphDriver):
     async def execute_query(self, cypher_query_: LiteralString, **kwargs: Any) -> EagerResult:
         # Check if database_ is provided in kwargs.
         # If not populated, set the value to retain backwards compatibility
+        # Support both 'params' (internal convention) and 'parameters_' (neo4j driver convention)
         params = kwargs.pop('params', None)
+        parameters_ = kwargs.pop('parameters_', None)
+        if params is None:
+            params = parameters_
         if params is None:
             params = {}
         params.setdefault('database_', self._database)
