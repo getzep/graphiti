@@ -363,6 +363,12 @@ class FalkorDriver(GraphDriver):
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
             return ''
 
+        # If the query is empty (e.g., node_uuid-only explore_node), return
+        # just the group filter or empty string — empty parens are invalid
+        # RediSearch syntax.
+        if not sanitized_query:
+            return group_filter
+
         full_query = group_filter + ' (' + sanitized_query + ')'
 
         return full_query
