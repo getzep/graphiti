@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import OpenAIClient
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -87,8 +87,9 @@ class LocatedIn(BaseModel):
 async def main(use_bulk: bool = False):
     setup_logging()
 
-    # Configure LLM client (uses default models from OpenAIClient)
-    llm_client = OpenAIClient()
+    # Configure LLM client
+    llm_config = LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano')
+    llm_client = OpenAIClient(config=llm_config)
 
     client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client=llm_client)
     await clear_data(client.driver)
