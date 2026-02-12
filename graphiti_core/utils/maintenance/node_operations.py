@@ -54,6 +54,9 @@ from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_senten
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of nodes to summarize in a single LLM call
+MAX_NODES = 30
+
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 
@@ -554,10 +557,11 @@ async def _extract_entity_summaries_batch(
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
 ) -> None:
-    """Extract summaries for multiple entities in a single LLM call.
+    """Extract summaries for multiple entities in batched LLM calls.
 
     Nodes that don't need LLM summarization (short enough with edge facts appended)
-    are handled directly without an LLM call.
+    are handled directly without an LLM call. Nodes needing summarization are
+    partitioned into flights of MAX_NODES and processed with separate LLM calls.
     """
     # Determine which nodes need LLM summarization vs direct edge fact appending
     nodes_needing_llm: list[EntityNode] = []
@@ -591,6 +595,24 @@ async def _extract_entity_summaries_batch(
     if not nodes_needing_llm:
         return
 
+    # Partition nodes into flights of MAX_NODES
+    node_flights = [
+        nodes_needing_llm[i : i + MAX_NODES]
+        for i in range(0, len(nodes_needing_llm), MAX_NODES)
+    ]
+
+    # Process each flight with a separate LLM call
+    for flight in node_flights:
+        await _process_summary_flight(llm_client, flight, episode, previous_episodes)
+
+
+async def _process_summary_flight(
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
+    episode: EpisodicNode | None,
+    previous_episodes: list[EpisodicNode] | None,
+) -> None:
+    """Process a single flight of nodes for batch summarization."""
     # Build context for batch summarization
     entities_context = [
         {
@@ -599,7 +621,7 @@ async def _extract_entity_summaries_batch(
             'entity_types': node.labels,
             'attributes': node.attributes,
         }
-        for node in nodes_needing_llm
+        for node in nodes
     ]
 
     batch_context = {
@@ -611,7 +633,7 @@ async def _extract_entity_summaries_batch(
     }
 
     # Get group_id from the first node (all nodes in a batch should have same group_id)
-    group_id = nodes_needing_llm[0].group_id if nodes_needing_llm else None
+    group_id = nodes[0].group_id if nodes else None
 
     llm_response = await llm_client.generate_response(
         prompt_library.extract_nodes.extract_summaries_batch(batch_context),
@@ -622,7 +644,7 @@ async def _extract_entity_summaries_batch(
     )
 
     # Build name -> node mapping for applying results
-    name_to_node: dict[str, EntityNode] = {node.name: node for node in nodes_needing_llm}
+    name_to_node: dict[str, EntityNode] = {node.name: node for node in nodes}
 
     # Apply summaries from LLM response
     summaries_response = SummarizedEntities(**llm_response)
