@@ -496,4 +496,74 @@ class TestExtractEntitySummariesBatch:
         llm_generate.assert_not_awaited()
         assert node.summary == ''
 
+    @pytest.mark.asyncio
+    async def test_flight_partitioning(self, monkeypatch):
+        """Nodes should be partitioned into flights of MAX_NODES."""
+        # Set MAX_NODES to a small value for testing
+        monkeypatch.setattr(
+            'graphiti_core.utils.maintenance.node_operations.MAX_NODES', 2
+        )
+
+        llm_client = MagicMock()
+        call_count = 0
+        call_args_list = []
+
+        async def mock_generate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Extract entity names from the context
+            context = args[0][1].content if args else ''
+            call_args_list.append(context)
+            return {'summaries': []}
+
+        llm_client.generate_response = mock_generate
+
+        # Create 5 nodes with long summaries (need LLM)
+        long_summary = 'X ' * 1500
+        nodes = [
+            _make_entity_node(f'Entity{i}', summary=long_summary)
+            for i in range(5)
+        ]
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            nodes,
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # With MAX_NODES=2 and 5 nodes, we should have 3 flights (2+2+1)
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_name_matching(self):
+        """LLM response names should match case-insensitively."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        # LLM returns name with different casing
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'ALICE', 'summary': 'Alice summary from LLM.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Node has lowercase name
+        long_summary = 'X ' * 1500
+        node = _make_entity_node('alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # Should match despite case difference
+        assert node.summary == 'Alice summary from LLM.'
+
 

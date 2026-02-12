@@ -601,9 +601,13 @@ async def _extract_entity_summaries_batch(
         for i in range(0, len(nodes_needing_llm), MAX_NODES)
     ]
 
-    # Process each flight with a separate LLM call
-    for flight in node_flights:
-        await _process_summary_flight(llm_client, flight, episode, previous_episodes)
+    # Process flights in parallel
+    await semaphore_gather(
+        *[
+            _process_summary_flight(llm_client, flight, episode, previous_episodes)
+            for flight in node_flights
+        ]
+    )
 
 
 async def _process_summary_flight(
@@ -643,15 +647,24 @@ async def _process_summary_flight(
         prompt_name='extract_nodes.extract_summaries_batch',
     )
 
-    # Build name -> node mapping for applying results
-    name_to_node: dict[str, EntityNode] = {node.name: node for node in nodes}
+    # Build case-insensitive name -> nodes mapping (handles duplicates)
+    name_to_nodes: dict[str, list[EntityNode]] = {}
+    for node in nodes:
+        key = node.name.lower()
+        if key not in name_to_nodes:
+            name_to_nodes[key] = []
+        name_to_nodes[key].append(node)
 
     # Apply summaries from LLM response
     summaries_response = SummarizedEntities(**llm_response)
     for summarized_entity in summaries_response.summaries:
-        node = name_to_node.get(summarized_entity.name)
-        if node is not None:
-            node.summary = truncate_at_sentence(summarized_entity.summary, MAX_SUMMARY_CHARS)
+        matching_nodes = name_to_nodes.get(summarized_entity.name.lower(), [])
+        if matching_nodes:
+            truncated_summary = truncate_at_sentence(
+                summarized_entity.summary, MAX_SUMMARY_CHARS
+            )
+            for node in matching_nodes:
+                node.summary = truncated_summary
         else:
             logger.warning(
                 f'LLM returned summary for unknown entity: {summarized_entity.name}'

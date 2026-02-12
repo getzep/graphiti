@@ -563,24 +563,27 @@ async def resolve_extracted_edge(
 
     # Process contradicted facts (continuous indexing across both lists)
     contradicted_facts: list[int] = response_object.contradicted_facts
-    max_valid_idx = len(related_edges) + len(existing_edges) - 1
-    invalid_contradictions = [i for i in contradicted_facts if i < 0 or i > max_valid_idx]
-    if invalid_contradictions:
-        logger.warning(
-            'LLM returned invalid contradicted_facts idx values %s (valid range: 0-%d)',
-            invalid_contradictions,
-            max_valid_idx,
-        )
-
-    # Split contradicted facts into those from related_edges vs existing_edges based on offset
     invalidation_candidates: list[EntityEdge] = []
-    for idx in contradicted_facts:
-        if 0 <= idx < len(related_edges):
-            # From EXISTING FACTS (duplicate candidates)
-            invalidation_candidates.append(related_edges[idx])
-        elif invalidation_idx_offset <= idx <= max_valid_idx:
-            # From FACT INVALIDATION CANDIDATES (adjust index by offset)
-            invalidation_candidates.append(existing_edges[idx - invalidation_idx_offset])
+
+    # Only process contradictions if there are edges to check against
+    if related_edges or existing_edges:
+        max_valid_idx = len(related_edges) + len(existing_edges) - 1
+        invalid_contradictions = [i for i in contradicted_facts if i < 0 or i > max_valid_idx]
+        if invalid_contradictions:
+            logger.warning(
+                'LLM returned invalid contradicted_facts idx values %s (valid range: 0-%d)',
+                invalid_contradictions,
+                max_valid_idx,
+            )
+
+        # Split contradicted facts into those from related_edges vs existing_edges based on offset
+        for idx in contradicted_facts:
+            if 0 <= idx < len(related_edges):
+                # From EXISTING FACTS (duplicate candidates)
+                invalidation_candidates.append(related_edges[idx])
+            elif invalidation_idx_offset <= idx <= max_valid_idx:
+                # From FACT INVALIDATION CANDIDATES (adjust index by offset)
+                invalidation_candidates.append(existing_edges[idx - invalidation_idx_offset])
 
     # Only extract structured attributes if the edge's relation_type matches an allowed custom type
     # AND the edge model exists for this node pair signature
@@ -588,7 +591,7 @@ async def resolve_extracted_edge(
     if edge_model is not None and len(edge_model.model_fields) != 0:
         edge_attributes_context = {
             'fact': resolved_edge.fact,
-            'reference_time': episode.valid_at,
+            'reference_time': episode.valid_at if episode is not None else None,
             'existing_attributes': resolved_edge.attributes,
         }
 
