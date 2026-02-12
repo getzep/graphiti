@@ -440,8 +440,17 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
-    ) -> tuple[list[EntityEdge], list[EntityEdge]]:
-        """Extract edges from episode and resolve against existing graph."""
+    ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
+        """Extract edges from episode and resolve against existing graph.
+
+        Returns
+        -------
+        tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]
+            A tuple of (resolved_edges, invalidated_edges, new_edges) where:
+            - resolved_edges: All edges after resolution
+            - invalidated_edges: Edges invalidated by new information
+            - new_edges: Only edges that are new to the graph (not duplicates)
+        """
         extracted_edges = await extract_edges(
             self.clients,
             episode,
@@ -455,7 +464,7 @@ class Graphiti:
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
-        resolved_edges, invalidated_edges = await resolve_extracted_edges(
+        resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
             self.clients,
             edges,
             episode,
@@ -464,7 +473,7 @@ class Graphiti:
             edge_type_map,
         )
 
-        return resolved_edges, invalidated_edges
+        return resolved_edges, invalidated_edges, new_edges
 
     async def _process_episode_data(
         self,
@@ -700,6 +709,8 @@ class Graphiti:
         for result in edge_results:
             resolved_edges.extend(result[0])
             invalidated_edges.extend(result[1])
+            # result[2] is new_edges - not used in bulk flow since attributes
+            # are extracted before edge resolution
 
         return final_hydrated_nodes, resolved_edges, invalidated_edges, uuid_map
 
@@ -917,7 +928,7 @@ class Graphiti:
                 )
 
                 # Extract and resolve edges in parallel with attribute extraction
-                resolved_edges, invalidated_edges = await self._extract_and_resolve_edges(
+                resolved_edges, invalidated_edges, new_edges = await self._extract_and_resolve_edges(
                     episode,
                     extracted_nodes,
                     previous_episodes,
@@ -931,14 +942,15 @@ class Graphiti:
 
                 entity_edges = resolved_edges + invalidated_edges
 
-                # Extract node attributes
+                # Extract node attributes - only pass new edges for summary generation
+                # to avoid duplicating facts that already exist in the graph
                 hydrated_nodes = await extract_attributes_from_nodes(
                     self.clients,
                     nodes,
                     episode,
                     previous_episodes,
                     entity_types,
-                    edges=entity_edges,
+                    edges=new_edges,
                 )
 
                 # Process and save episode data (including saga association if provided)
