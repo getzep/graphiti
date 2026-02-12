@@ -260,6 +260,18 @@ class Graphiti:
             # Silently handle telemetry errors
             pass
 
+    @property
+    def token_tracker(self):
+        """Access the LLM client's token usage tracker.
+
+        Returns the TokenUsageTracker from the LLM client, which can be used to:
+        - Get token usage by prompt type: tracker.get_usage()
+        - Get total token usage: tracker.get_total_usage()
+        - Print a formatted summary: tracker.print_summary()
+        - Reset tracking: tracker.reset()
+        """
+        return self.llm_client.token_tracker
+
     def _get_provider_type(self, client) -> str:
         """Get provider type from client class name."""
         if client is None:

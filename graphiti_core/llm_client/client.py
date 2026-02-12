@@ -29,6 +29,7 @@ from ..prompts.models import Message
 from ..tracer import NoOpTracer, Tracer
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
+from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
@@ -80,6 +81,7 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = None
         self.tracer: Tracer = NoOpTracer()
+        self.token_tracker: TokenUsageTracker = TokenUsageTracker()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
