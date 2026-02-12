@@ -35,20 +35,14 @@ from graphiti_core.nodes import (
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_nodes import NodeDuplicate, NodeResolutions
 from graphiti_core.prompts.extract_nodes import (
-    EntitySummary,
     ExtractedEntities,
     ExtractedEntity,
+    SummarizedEntities,
 )
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
-from graphiti_core.utils.content_chunking import (
-    chunk_json_content,
-    chunk_message_content,
-    chunk_text_content,
-    should_chunk,
-)
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
@@ -71,11 +65,7 @@ async def extract_nodes(
     excluded_entity_types: list[str] | None = None,
     custom_extraction_instructions: str | None = None,
 ) -> list[EntityNode]:
-    """Extract entity nodes from an episode with adaptive chunking.
-
-    For high-density content (many entities per token), the content is chunked
-    and processed in parallel to avoid LLM timeouts and truncation issues.
-    """
+    """Extract entity nodes from an episode."""
     start = time()
     llm_client = clients.llm_client
 
@@ -92,11 +82,8 @@ async def extract_nodes(
         'source_description': episode.source_description,
     }
 
-    # Check if chunking is needed (based on entity density)
-    if should_chunk(episode.content, episode.source):
-        extracted_entities = await _extract_nodes_chunked(llm_client, episode, context)
-    else:
-        extracted_entities = await _extract_nodes_single(llm_client, episode, context)
+    # Extract entities
+    extracted_entities = await _extract_nodes_single(llm_client, episode, context)
 
     # Filter empty names
     filtered_entities = [e for e in extracted_entities if e.name.strip()]
@@ -152,48 +139,6 @@ async def _extract_nodes_single(
     return response_object.extracted_entities
 
 
-async def _extract_nodes_chunked(
-    llm_client: LLMClient,
-    episode: EpisodicNode,
-    context: dict,
-) -> list[ExtractedEntity]:
-    """Extract entities from large content using chunking."""
-    # Chunk the content based on episode type
-    if episode.source == EpisodeType.json:
-        chunks = chunk_json_content(episode.content)
-    elif episode.source == EpisodeType.message:
-        chunks = chunk_message_content(episode.content)
-    else:
-        chunks = chunk_text_content(episode.content)
-
-    logger.debug(f'Chunked content into {len(chunks)} chunks for entity extraction')
-
-    # Extract entities from each chunk in parallel
-    chunk_results = await semaphore_gather(
-        *[_extract_from_chunk(llm_client, chunk, context, episode) for chunk in chunks]
-    )
-
-    # Merge and deduplicate entities across chunks
-    merged_entities = _merge_extracted_entities(chunk_results)
-    logger.debug(
-        f'Merged {sum(len(r) for r in chunk_results)} entities into {len(merged_entities)} unique'
-    )
-
-    return merged_entities
-
-
-async def _extract_from_chunk(
-    llm_client: LLMClient,
-    chunk: str,
-    base_context: dict,
-    episode: EpisodicNode,
-) -> list[ExtractedEntity]:
-    """Extract entities from a single chunk."""
-    chunk_context = {**base_context, 'episode_content': chunk}
-    llm_response = await _call_extraction_llm(llm_client, episode, chunk_context)
-    return ExtractedEntities(**llm_response).extracted_entities
-
-
 async def _call_extraction_llm(
     llm_client: LLMClient,
     episode: EpisodicNode,
@@ -220,26 +165,6 @@ async def _call_extraction_llm(
         group_id=episode.group_id,
         prompt_name=prompt_name,
     )
-
-
-def _merge_extracted_entities(
-    chunk_results: list[list[ExtractedEntity]],
-) -> list[ExtractedEntity]:
-    """Merge entities from multiple chunks, deduplicating by normalized name.
-
-    When duplicates occur, prefer the first occurrence (maintains ordering).
-    """
-    seen_names: set[str] = set()
-    merged: list[ExtractedEntity] = []
-
-    for entities in chunk_results:
-        for entity in entities:
-            normalized = entity.name.strip().lower()
-            if normalized and normalized not in seen_names:
-                seen_names.add(normalized)
-                merged.append(entity)
-
-    return merged
 
 
 def _create_entity_nodes(
@@ -549,9 +474,10 @@ async def extract_attributes_from_nodes(
     # Pre-build edges lookup for O(E + N) instead of O(N * E)
     edges_by_node = _build_edges_by_node(edges)
 
-    updated_nodes: list[EntityNode] = await semaphore_gather(
+    # Extract attributes in parallel (per-entity calls)
+    attribute_results: list[dict[str, Any]] = await semaphore_gather(
         *[
-            extract_attributes_from_node(
+            _extract_entity_attributes(
                 llm_client,
                 node,
                 episode,
@@ -561,40 +487,28 @@ async def extract_attributes_from_nodes(
                     if entity_types is not None
                     else None
                 ),
-                should_summarize_node,
-                edges_by_node.get(node.uuid, []),
             )
             for node in nodes
         ]
     )
 
-    await create_entity_node_embeddings(embedder, updated_nodes)
+    # Apply attributes to nodes
+    for node, attributes in zip(nodes, attribute_results, strict=True):
+        node.attributes.update(attributes)
 
-    return updated_nodes
-
-
-async def extract_attributes_from_node(
-    llm_client: LLMClient,
-    node: EntityNode,
-    episode: EpisodicNode | None = None,
-    previous_episodes: list[EpisodicNode] | None = None,
-    entity_type: type[BaseModel] | None = None,
-    should_summarize_node: NodeSummaryFilter | None = None,
-    edges: list[EntityEdge] | None = None,
-) -> EntityNode:
-    # Extract attributes if entity type is defined and has attributes
-    llm_response = await _extract_entity_attributes(
-        llm_client, node, episode, previous_episodes, entity_type
+    # Extract summaries in batch
+    await _extract_entity_summaries_batch(
+        llm_client,
+        nodes,
+        episode,
+        previous_episodes,
+        should_summarize_node,
+        edges_by_node,
     )
 
-    # Extract summary if needed
-    await _extract_entity_summary(
-        llm_client, node, episode, previous_episodes, should_summarize_node, edges
-    )
+    await create_entity_node_embeddings(embedder, nodes)
 
-    node.attributes.update(llm_response)
-
-    return node
+    return nodes
 
 
 async def _extract_entity_attributes(
@@ -632,52 +546,94 @@ async def _extract_entity_attributes(
     return llm_response
 
 
-async def _extract_entity_summary(
+async def _extract_entity_summaries_batch(
     llm_client: LLMClient,
-    node: EntityNode,
+    nodes: list[EntityNode],
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
-    edges: list[EntityEdge] | None = None,
+    edges_by_node: dict[str, list[EntityEdge]],
 ) -> None:
-    if should_summarize_node is not None and not await should_summarize_node(node):
+    """Extract summaries for multiple entities in a single LLM call.
+
+    Nodes that don't need LLM summarization (short enough with edge facts appended)
+    are handled directly without an LLM call.
+    """
+    # Determine which nodes need LLM summarization vs direct edge fact appending
+    nodes_needing_llm: list[EntityNode] = []
+
+    for node in nodes:
+        # Check if node should be summarized at all
+        if should_summarize_node is not None and not await should_summarize_node(node):
+            continue
+
+        node_edges = edges_by_node.get(node.uuid, [])
+
+        # Build summary with edge facts appended
+        summary_with_edges = node.summary
+        if node_edges:
+            edge_facts = '\n'.join(edge.fact for edge in node_edges if edge.fact)
+            summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
+
+        # If summary is short enough, use it directly (append edge facts, no LLM call)
+        if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
+            node.summary = summary_with_edges
+            continue
+
+        # Skip if no summary content and no episode to generate from
+        if not summary_with_edges and episode is None:
+            continue
+
+        # This node needs LLM summarization
+        nodes_needing_llm.append(node)
+
+    # If no nodes need LLM summarization, return early
+    if not nodes_needing_llm:
         return
 
-    # Build summary with edge facts appended
-    summary_with_edges = node.summary
-    if edges:
-        edge_facts = '\n'.join(edge.fact for edge in edges if edge.fact)
-        summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
-
-    # If we have summary content and it's short enough, use it directly
-    if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
-        node.summary = summary_with_edges
-        return
-
-    # Skip if no summary content and no episode to generate from
-    if not summary_with_edges and episode is None:
-        return
-
-    summary_context = _build_episode_context(
-        node_data={
+    # Build context for batch summarization
+    entities_context = [
+        {
             'name': node.name,
             'summary': node.summary,
             'entity_types': node.labels,
             'attributes': node.attributes,
-        },
-        episode=episode,
-        previous_episodes=previous_episodes,
-    )
+        }
+        for node in nodes_needing_llm
+    ]
 
-    summary_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_summary(summary_context),
-        response_model=EntitySummary,
+    batch_context = {
+        'entities': entities_context,
+        'episode_content': episode.content if episode is not None else '',
+        'previous_episodes': (
+            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+        ),
+    }
+
+    # Get group_id from the first node (all nodes in a batch should have same group_id)
+    group_id = nodes_needing_llm[0].group_id if nodes_needing_llm else None
+
+    llm_response = await llm_client.generate_response(
+        prompt_library.extract_nodes.extract_summaries_batch(batch_context),
+        response_model=SummarizedEntities,
         model_size=ModelSize.small,
-        group_id=node.group_id,
-        prompt_name='extract_nodes.extract_summary',
+        group_id=group_id,
+        prompt_name='extract_nodes.extract_summaries_batch',
     )
 
-    node.summary = truncate_at_sentence(summary_response.get('summary', ''), MAX_SUMMARY_CHARS)
+    # Build name -> node mapping for applying results
+    name_to_node: dict[str, EntityNode] = {node.name: node for node in nodes_needing_llm}
+
+    # Apply summaries from LLM response
+    summaries_response = SummarizedEntities(**llm_response)
+    for summarized_entity in summaries_response.summaries:
+        node = name_to_node.get(summarized_entity.name)
+        if node is not None:
+            node.summary = truncate_at_sentence(summarized_entity.summary, MAX_SUMMARY_CHARS)
+        else:
+            logger.warning(
+                f'LLM returned summary for unknown entity: {summarized_entity.name}'
+            )
 
 
 def _build_episode_context(

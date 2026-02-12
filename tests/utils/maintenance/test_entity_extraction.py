@@ -14,20 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.nodes import EpisodeType, EpisodicNode
-from graphiti_core.prompts.extract_nodes import ExtractedEntity
-from graphiti_core.utils import content_chunking
 from graphiti_core.utils.datetime_utils import utc_now
-from graphiti_core.utils.maintenance import node_operations
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
-    _merge_extracted_entities,
     extract_nodes,
 )
 
@@ -191,176 +186,6 @@ class TestExtractNodesSmallInput:
         assert nodes[0].name == 'Alice'
 
 
-class TestExtractNodesChunking:
-    @pytest.mark.asyncio
-    async def test_large_input_triggers_chunking(self, monkeypatch):
-        """Large inputs should be chunked and processed in parallel."""
-        clients, llm_generate = _make_clients()
-
-        # Track number of LLM calls
-        call_count = 0
-
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return {
-                'extracted_entities': [
-                    {'name': f'Entity{call_count}', 'entity_type_id': 0},
-                ]
-            }
-
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # Large content that exceeds threshold
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Multiple LLM calls should have been made
-        assert call_count > 1
-
-    @pytest.mark.asyncio
-    async def test_json_content_uses_json_chunking(self, monkeypatch):
-        """JSON episodes should use JSON-aware chunking."""
-        clients, llm_generate = _make_clients()
-
-        llm_generate.return_value = {
-            'extracted_entities': [
-                {'name': 'Service1', 'entity_type_id': 0},
-            ]
-        }
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # JSON content
-        json_data = [{'service': f'Service{i}'} for i in range(50)]
-        episode = _make_episode(
-            content=json.dumps(json_data),
-            source=EpisodeType.json,
-        )
-
-        await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Verify JSON chunking was used (LLM called multiple times)
-        assert llm_generate.await_count > 1
-
-    @pytest.mark.asyncio
-    async def test_message_content_uses_message_chunking(self, monkeypatch):
-        """Message episodes should use message-aware chunking."""
-        clients, llm_generate = _make_clients()
-
-        llm_generate.return_value = {
-            'extracted_entities': [
-                {'name': 'Speaker', 'entity_type_id': 0},
-            ]
-        }
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        # Conversation content
-        messages = [f'Speaker{i}: Hello from speaker {i}!' for i in range(50)]
-        episode = _make_episode(
-            content='\n'.join(messages),
-            source=EpisodeType.message,
-        )
-
-        await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        assert llm_generate.await_count > 1
-
-    @pytest.mark.asyncio
-    async def test_deduplicates_across_chunks(self, monkeypatch):
-        """Entities appearing in multiple chunks should be deduplicated."""
-        clients, llm_generate = _make_clients()
-
-        # Simulate same entity appearing in multiple chunks
-        call_count = 0
-
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            # Return 'Alice' in every chunk
-            return {
-                'extracted_entities': [
-                    {'name': 'Alice', 'entity_type_id': 0},
-                    {'name': f'Entity{call_count}', 'entity_type_id': 0},
-                ]
-            }
-
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        nodes = await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Alice should appear only once despite being in every chunk
-        alice_count = sum(1 for n in nodes if n.name == 'Alice')
-        assert alice_count == 1
-
-    @pytest.mark.asyncio
-    async def test_deduplication_case_insensitive(self, monkeypatch):
-        """Deduplication should be case-insensitive."""
-        clients, llm_generate = _make_clients()
-
-        call_count = 0
-
-        async def mock_generate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return {'extracted_entities': [{'name': 'alice', 'entity_type_id': 0}]}
-            return {'extracted_entities': [{'name': 'Alice', 'entity_type_id': 0}]}
-
-        llm_generate.side_effect = mock_generate
-
-        # Patch should_chunk where it's imported in node_operations
-        monkeypatch.setattr(node_operations, 'should_chunk', lambda content, ep_type: True)
-        monkeypatch.setattr(content_chunking, 'CHUNK_TOKEN_SIZE', 50)  # Small chunk size
-
-        large_content = 'word ' * 1000
-        episode = _make_episode(content=large_content)
-
-        nodes = await extract_nodes(
-            clients,
-            episode,
-            previous_episodes=[],
-        )
-
-        # Should have only one Alice (case-insensitive dedup)
-        alice_variants = [n for n in nodes if n.name.lower() == 'alice']
-        assert len(alice_variants) == 1
-
-
 class TestExtractNodesPromptSelection:
     @pytest.mark.asyncio
     async def test_uses_text_prompt_for_text_episodes(self, monkeypatch):
@@ -441,34 +266,3 @@ class TestBuildEntityTypesContext:
         assert context[2]['entity_type_id'] == 2
 
 
-class TestMergeExtractedEntities:
-    def test_merge_deduplicates_by_name(self):
-        """Entities with same name should be deduplicated."""
-        chunk_results = [
-            [
-                ExtractedEntity(name='Alice', entity_type_id=0),
-                ExtractedEntity(name='Bob', entity_type_id=0),
-            ],
-            [
-                ExtractedEntity(name='Alice', entity_type_id=0),  # Duplicate
-                ExtractedEntity(name='Charlie', entity_type_id=0),
-            ],
-        ]
-
-        merged = _merge_extracted_entities(chunk_results)
-
-        assert len(merged) == 3
-        names = {e.name for e in merged}
-        assert names == {'Alice', 'Bob', 'Charlie'}
-
-    def test_merge_prefers_first_occurrence(self):
-        """When duplicates exist, first occurrence should be preferred."""
-        chunk_results = [
-            [ExtractedEntity(name='Alice', entity_type_id=1)],  # First: type 1
-            [ExtractedEntity(name='Alice', entity_type_id=2)],  # Later: type 2
-        ]
-
-        merged = _merge_extracted_entities(chunk_results)
-
-        assert len(merged) == 1
-        assert merged[0].entity_type_id == 1  # First occurrence wins
