@@ -306,7 +306,17 @@ async def resolve_extracted_edges(
     entities: list[EntityNode],
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
-) -> tuple[list[EntityEdge], list[EntityEdge]]:
+) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
+    """Resolve extracted edges against existing graph context.
+
+    Returns
+    -------
+    tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]
+        A tuple of (resolved_edges, invalidated_edges, new_edges) where:
+        - resolved_edges: All edges after resolution (may include existing edges if duplicates found)
+        - invalidated_edges: Edges that were invalidated/contradicted by new information
+        - new_edges: Only edges that are new to the graph (not duplicates of existing edges)
+    """
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
     seen: dict[tuple[str, str, str], EntityEdge] = {}
     deduplicated_edges: list[EntityEdge] = []
@@ -444,21 +454,29 @@ async def resolve_extracted_edges(
 
     resolved_edges: list[EntityEdge] = []
     invalidated_edges: list[EntityEdge] = []
-    for result in results:
+    new_edges: list[EntityEdge] = []
+    for extracted_edge, result in zip(extracted_edges, results, strict=True):
         resolved_edge = result[0]
         invalidated_edge_chunk = result[1]
+        # result[2] is duplicate_edges list
 
         resolved_edges.append(resolved_edge)
         invalidated_edges.extend(invalidated_edge_chunk)
 
+        # Track edges that are new (not duplicates of existing edges)
+        # An edge is new if the resolved edge UUID matches the extracted edge UUID
+        if resolved_edge.uuid == extracted_edge.uuid:
+            new_edges.append(resolved_edge)
+
     logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
+    logger.debug(f'New edges (non-duplicates): {[(e.name, e.uuid) for e in new_edges]}')
 
     await semaphore_gather(
         create_entity_edge_embeddings(embedder, resolved_edges),
         create_entity_edge_embeddings(embedder, invalidated_edges),
     )
 
-    return resolved_edges, invalidated_edges
+    return resolved_edges, invalidated_edges, new_edges
 
 
 def resolve_edge_contradictions(
