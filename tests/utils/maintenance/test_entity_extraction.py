@@ -18,11 +18,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from graphiti_core.edges import EntityEdge
 from graphiti_core.graphiti_types import GraphitiClients
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.node_operations import (
     _build_entity_types_context,
+    _extract_entity_summaries_batch,
     extract_nodes,
 )
 
@@ -264,5 +266,234 @@ class TestBuildEntityTypesContext:
         assert context[1]['entity_type_id'] == 1
         assert context[2]['entity_type_name'] == 'Organization'
         assert context[2]['entity_type_id'] == 2
+
+
+def _make_entity_node(
+    name: str,
+    summary: str = '',
+    group_id: str = 'group',
+    uuid: str | None = None,
+) -> EntityNode:
+    """Create a test entity node."""
+    node = EntityNode(
+        name=name,
+        group_id=group_id,
+        labels=['Entity'],
+        summary=summary,
+        created_at=utc_now(),
+    )
+    if uuid is not None:
+        node.uuid = uuid
+    return node
+
+
+def _make_entity_edge(
+    source_uuid: str,
+    target_uuid: str,
+    fact: str,
+) -> EntityEdge:
+    """Create a test entity edge."""
+    return EntityEdge(
+        source_node_uuid=source_uuid,
+        target_node_uuid=target_uuid,
+        name='TEST_RELATION',
+        fact=fact,
+        group_id='group',
+        created_at=utc_now(),
+    )
+
+
+class TestExtractEntitySummariesBatch:
+    @pytest.mark.asyncio
+    async def test_no_nodes_needing_summarization(self):
+        """When no nodes need summarization, no LLM call should be made."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        # Node with short summary that doesn't need LLM
+        node = _make_entity_node('Alice', summary='Alice is a person.')
+        nodes = [node]
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            nodes,
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+        # Summary should remain unchanged
+        assert nodes[0].summary == 'Alice is a person.'
+
+    @pytest.mark.asyncio
+    async def test_short_summary_with_edge_facts(self):
+        """Nodes with short summaries should have edge facts appended without LLM."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='Alice is a person.', uuid='alice-uuid')
+        edge = _make_entity_edge('alice-uuid', 'bob-uuid', 'Alice works with Bob.')
+
+        edges_by_node = {
+            'alice-uuid': [edge],
+        }
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node=edges_by_node,
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+        # Summary should include edge fact
+        assert 'Alice is a person.' in node.summary
+        assert 'Alice works with Bob.' in node.summary
+
+    @pytest.mark.asyncio
+    async def test_long_summary_needs_llm(self):
+        """Nodes with long summaries should trigger LLM summarization."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice is a software engineer at Acme Corp.'}
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Create a node with a very long summary (over MAX_SUMMARY_CHARS * 4)
+        long_summary = 'Alice is a person. ' * 200  # ~3800 chars
+        node = _make_entity_node('Alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should be called
+        llm_generate.assert_awaited_once()
+        # Summary should be updated from LLM response
+        assert node.summary == 'Alice is a software engineer at Acme Corp.'
+
+    @pytest.mark.asyncio
+    async def test_should_summarize_filter(self):
+        """Nodes filtered by should_summarize_node should be skipped."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='')
+
+        # Filter that rejects all nodes
+        async def reject_all(n):
+            return False
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=reject_all,
+            edges_by_node={},
+        )
+
+        # LLM should not be called
+        llm_generate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_batch_multiple_nodes(self):
+        """Multiple nodes needing summarization should be batched into one call."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'Alice', 'summary': 'Alice summary.'},
+                {'name': 'Bob', 'summary': 'Bob summary.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        # Create nodes with long summaries
+        long_summary = 'X ' * 1500  # Long enough to need LLM
+        alice = _make_entity_node('Alice', summary=long_summary)
+        bob = _make_entity_node('Bob', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [alice, bob],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should be called exactly once (batch call)
+        llm_generate.assert_awaited_once()
+        # Both nodes should have updated summaries
+        assert alice.summary == 'Alice summary.'
+        assert bob.summary == 'Bob summary.'
+
+    @pytest.mark.asyncio
+    async def test_unknown_entity_in_response(self):
+        """LLM returning unknown entity names should be logged but not crash."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_generate.return_value = {
+            'summaries': [
+                {'name': 'UnknownEntity', 'summary': 'Should be ignored.'},
+                {'name': 'Alice', 'summary': 'Alice summary.'},
+            ]
+        }
+        llm_client.generate_response = llm_generate
+
+        long_summary = 'X ' * 1500
+        alice = _make_entity_node('Alice', summary=long_summary)
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [alice],
+            episode=_make_episode(),
+            previous_episodes=[],
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # Alice should have updated summary
+        assert alice.summary == 'Alice summary.'
+
+    @pytest.mark.asyncio
+    async def test_no_episode_and_no_summary(self):
+        """Nodes with no summary and no episode should be skipped."""
+        llm_client = MagicMock()
+        llm_generate = AsyncMock()
+        llm_client.generate_response = llm_generate
+
+        node = _make_entity_node('Alice', summary='')
+
+        await _extract_entity_summaries_batch(
+            llm_client,
+            [node],
+            episode=None,
+            previous_episodes=None,
+            should_summarize_node=None,
+            edges_by_node={},
+        )
+
+        # LLM should not be called - no content to summarize
+        llm_generate.assert_not_awaited()
+        assert node.summary == ''
 
 
