@@ -138,6 +138,29 @@ class LLMClientFactory:
                     # For non-reasoning models, explicitly pass None to disable these parameters
                     return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
 
+            case 'openai_generic':
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found')
+
+                api_key = config.providers.openai.api_key or 'not-needed'
+                api_url = config.providers.openai.api_url
+
+                _validate_api_key('OpenAI Generic', api_key, logger)
+                logger.info(f'Using custom base_url: {api_url}')
+
+                from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    base_url=api_url,
+                    model=config.model,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
+
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
                     raise ValueError(
@@ -433,3 +456,62 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating Cross-Encoder (reranker) clients."""
+
+    @staticmethod
+    def create(config):
+        """Create a cross-encoder client based on configuration.
+
+        Args:
+            config: RerankerConfig instance
+
+        Returns:
+            CrossEncoderClient instance
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'openai':
+                from graphiti_core.cross_encoder.openai_reranker_client import (
+                    OpenAIRerankerClient,
+                )
+
+                logger.info('Creating OpenAI reranker client (default)')
+                # OpenAI reranker is the default - matches graphiti_core behavior
+                return OpenAIRerankerClient()
+
+            case 'gemini':
+                from graphiti_core.cross_encoder.gemini_reranker_client import (
+                    GeminiRerankerClient,
+                )
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                if not config.providers.gemini:
+                    raise ValueError('Gemini provider configuration not found')
+
+                api_key = config.providers.gemini.api_key
+                _validate_api_key('Gemini Reranker', api_key, logger)
+
+                gemini_config = CoreLLMConfig(
+                    api_key=api_key,
+                    model='gemini-2.5-flash-lite',  # Default reranker model
+                )
+                return GeminiRerankerClient(config=gemini_config)
+
+            case 'bge':
+                from graphiti_core.cross_encoder.bge_reranker_client import (
+                    BGERerankerClient,
+                )
+
+                logger.info('Creating BGE (local) reranker client')
+                return BGERerankerClient()
+
+            case _:
+                raise ValueError(f'Unsupported reranker provider: {provider}')

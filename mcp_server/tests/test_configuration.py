@@ -10,7 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from config.schema import GraphitiConfig
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    CrossEncoderFactory,
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+)
 
 
 def test_config_loading():
@@ -84,6 +89,25 @@ def test_llm_factory(config: GraphitiConfig):
     except Exception as e:
         print(f'✗ Factory provider switching failed: {e}')
 
+    # Test openai_generic provider
+    test_generic_config = config.llm.model_copy()
+    test_generic_config.provider = 'openai_generic'
+    if not test_generic_config.providers.openai:
+        from config.schema import OpenAIProviderConfig
+
+        test_generic_config.providers.openai = OpenAIProviderConfig(
+            api_key='not-needed', api_url='http://localhost:11434/v1'
+        )
+    else:
+        test_generic_config.providers.openai.api_key = 'not-needed'
+        test_generic_config.providers.openai.api_url = 'http://localhost:11434/v1'
+
+    try:
+        client = LLMClientFactory.create(test_generic_config)
+        print('✓ Factory supports openai_generic provider for local models')
+    except Exception as e:
+        print(f'✗ openai_generic provider failed: {e}')
+
 
 def test_embedder_factory(config: GraphitiConfig):
     """Test Embedder client factory creation."""
@@ -145,6 +169,55 @@ async def test_database_factory(config: GraphitiConfig):
         print(f'⚠ Skipping Database factory test (no configuration for {config.database.provider})')
 
 
+def test_reranker_factory(config: GraphitiConfig):
+    """Test Reranker (cross-encoder) client factory creation."""
+    print('\nTesting Reranker client factory...')
+
+    # Test OpenAI reranker creation (default) - only if API key is set
+    if config.reranker.provider == 'openai' and config.reranker.providers.openai and config.reranker.providers.openai.api_key:
+        try:
+            reranker = CrossEncoderFactory.create(config.reranker)
+            print(f'✓ Created {config.reranker.provider} reranker client successfully (default)')
+        except Exception as e:
+            print(f'✗ Failed to create reranker client: {e}')
+    else:
+        print('⚠ Skipping OpenAI reranker test (no API key configured)')
+
+    # Test BGE reranker (local, no API key needed) - only if dependencies available
+    test_config = config.reranker.model_copy()
+    test_config.provider = 'bge'
+
+    try:
+        reranker = CrossEncoderFactory.create(test_config)
+        print('✓ Factory supports BGE local reranker')
+    except Exception as e:
+        if 'sentence-transformers' in str(e):
+            print('⚠ Skipping BGE reranker test (optional dependency not installed)')
+        else:
+            print(f'✗ BGE reranker failed: {e}')
+
+    # Test Gemini reranker - only if dependencies available
+    test_gemini_config = config.reranker.model_copy()
+    test_gemini_config.provider = 'gemini'
+    if not test_gemini_config.providers.gemini:
+        from config.schema import GeminiProviderConfig
+
+        test_gemini_config.providers.gemini = GeminiProviderConfig(
+            api_key='dummy_value_for_testing'
+        )
+    else:
+        test_gemini_config.providers.gemini.api_key = 'dummy_value_for_testing'
+
+    try:
+        reranker = CrossEncoderFactory.create(test_gemini_config)
+        print('✓ Factory supports Gemini reranker')
+    except Exception as e:
+        if 'google-genai' in str(e):
+            print('⚠ Skipping Gemini reranker test (optional dependency not installed)')
+        else:
+            print(f'✗ Gemini reranker failed: {e}')
+
+
 def test_cli_override():
     """Test CLI argument override functionality."""
     print('\nTesting CLI argument override...')
@@ -189,6 +262,7 @@ async def main():
         # Test factories
         test_llm_factory(config)
         test_embedder_factory(config)
+        test_reranker_factory(config)
         await test_database_factory(config)
 
         # Test CLI overrides
