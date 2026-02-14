@@ -1,0 +1,88 @@
+# Graphiti MCP Server with FalkorDB + Milvus Vector Store
+# Usage: cd mcp_server && docker compose --env-file .env -f docker/docker-compose-falkordb-milvus.yml up --build
+#
+# Required env vars in .env:
+#   OPENAI_API_KEY=sk-...
+#
+# Optional env vars:
+#   MILVUS_URI=https://...               (Zilliz Cloud override; default: http://milvus:19530)
+#   MILVUS_TOKEN=                         (Zilliz Cloud token; empty for local Milvus)
+#   MILVUS_COLLECTION_PREFIX=graphiti
+#   MCP_PORT=8123                         (host port for MCP server)
+
+services:
+  milvus:
+    image: milvusdb/milvus:v2.5-latest
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+    environment:
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  graphiti-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.standalone
+      args:
+        INSTALL_MILVUS: "true"
+    env_file:
+      - path: ../.env
+        required: false
+    depends_on:
+      falkordb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    environment:
+      # Database configuration (FalkorDB as graph backend)
+      - FALKORDB_URI=${FALKORDB_URI:-redis://falkordb:6379}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
+      # Application configuration
+      - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+      - PATH=/root/.local/bin:${PATH}
+    volumes:
+      - ../config/config-docker-falkordb-milvus.yaml:/app/mcp/config/config.yaml:ro
+      # Mount vector_store package (needed until PyPI graphiti-core includes [milvus] extra)
+      - ../../graphiti_core/vector_store:/app/milvus_driver/vector_store:ro
+    ports:
+      - "${MCP_PORT:-8123}:8000"
+    command: >
+      sh -c '
+        SITE=$$(python -c "import graphiti_core; import os; print(os.path.dirname(graphiti_core.__file__))") &&
+        mkdir -p "$$SITE/vector_store" &&
+        cp /app/milvus_driver/vector_store/*.py "$$SITE/vector_store/" &&
+        uv run --no-sync main.py
+      '
+
+volumes:
+  milvus_data:
+    driver: local
+  falkordb_data:
+    driver: local
