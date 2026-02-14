@@ -254,6 +254,22 @@ async def remove_communities(driver: GraphDriver):
         """
     )
 
+    if driver.vector_store is not None:
+        try:
+            from graphiti_core.vector_store.milvus_utils import COLLECTION_COMMUNITY_NODES
+
+            await driver.vector_store.ensure_ready()
+            await driver.vector_store.delete(
+                collection_name=driver.vector_store.collection_name(
+                    COLLECTION_COMMUNITY_NODES
+                ),
+                filter_expr='uuid != ""',
+            )
+        except Exception:
+            logger.warning(
+                'Failed to remove communities from vector store', exc_info=True
+            )
+
 
 async def determine_entity_community(
     driver: GraphDriver, entity: EntityNode

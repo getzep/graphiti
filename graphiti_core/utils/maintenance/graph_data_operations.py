@@ -63,6 +63,35 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
         else:
             await session.execute_write(delete_group_ids)
 
+    if driver.vector_store is not None:
+        try:
+            from graphiti_core.vector_store.milvus_utils import (
+                COLLECTION_COMMUNITY_NODES,
+                COLLECTION_ENTITY_EDGES,
+                COLLECTION_ENTITY_NODES,
+                COLLECTION_EPISODIC_NODES,
+            )
+
+            await driver.vector_store.ensure_ready()
+            col = driver.vector_store.collection_name
+            if group_ids is None:
+                await driver.vector_store.reset_collections()
+            else:
+                gid_list = ', '.join(f'"{g}"' for g in group_ids)
+                filter_expr = f'group_id in [{gid_list}]'
+                for suffix in [
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                    COLLECTION_COMMUNITY_NODES,
+                    COLLECTION_ENTITY_EDGES,
+                ]:
+                    await driver.vector_store.delete(
+                        collection_name=col(suffix),
+                        filter_expr=filter_expr,
+                    )
+        except Exception:
+            logger.warning('Failed to clear vector store data', exc_info=True)
+
 
 async def retrieve_episodes(
     driver: GraphDriver,

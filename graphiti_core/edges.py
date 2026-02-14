@@ -89,6 +89,22 @@ class Edge(BaseModel, ABC):
 
         logger.debug(f'Deleted Edge: {self.uuid}')
 
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import COLLECTION_ENTITY_EDGES
+
+                await driver.vector_store.ensure_ready()
+                await driver.vector_store.delete(
+                    collection_name=driver.vector_store.collection_name(
+                        COLLECTION_ENTITY_EDGES
+                    ),
+                    filter_expr=f'uuid == "{self.uuid}"',
+                )
+            except Exception:
+                logger.warning(
+                    f'Failed to delete edge {self.uuid} from vector store', exc_info=True
+                )
+
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
@@ -127,6 +143,23 @@ class Edge(BaseModel, ABC):
             )
 
         logger.debug(f'Deleted Edges: {uuids}')
+
+        if driver.vector_store is not None and uuids:
+            try:
+                from graphiti_core.vector_store.milvus_utils import COLLECTION_ENTITY_EDGES
+
+                await driver.vector_store.ensure_ready()
+                uuid_list = ', '.join(f'"{u}"' for u in uuids)
+                await driver.vector_store.delete(
+                    collection_name=driver.vector_store.collection_name(
+                        COLLECTION_ENTITY_EDGES
+                    ),
+                    filter_expr=f'uuid in [{uuid_list}]',
+                )
+            except Exception:
+                logger.warning(
+                    'Failed to delete edges from vector store', exc_info=True
+                )
 
     def __hash__(self):
         return hash(self.uuid)
@@ -363,6 +396,23 @@ class EntityEdge(Edge):
             )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
+
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_ENTITY_EDGES,
+                    entity_edge_to_milvus_dict,
+                )
+
+                await driver.vector_store.ensure_ready()
+                await driver.vector_store.upsert(
+                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
+                    data=[entity_edge_to_milvus_dict(self)],
+                )
+            except Exception:
+                logger.warning(
+                    f'Failed to sync edge {self.uuid} to vector store', exc_info=True
+                )
 
         return result
 
