@@ -191,6 +191,16 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class MilvusProviderConfig(BaseModel):
+    """Milvus provider configuration."""
+
+    uri: str = 'http://localhost:19530'
+    token: str | None = None
+    db_name: str = 'default'
+    embedding_dim: int = 1024
+    collection_prefix: str = 'graphiti'
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
@@ -203,6 +213,21 @@ class DatabaseConfig(BaseModel):
 
     provider: str = Field(default='falkordb', description='Database provider')
     providers: DatabaseProvidersConfig = Field(default_factory=DatabaseProvidersConfig)
+
+
+class VectorStoreProvidersConfig(BaseModel):
+    """Vector store providers configuration."""
+
+    milvus: MilvusProviderConfig | None = None
+
+
+class VectorStoreAppConfig(BaseModel):
+    """Vector store configuration."""
+
+    provider: str | None = Field(
+        default=None, description='Vector store provider (e.g. milvus). None = disabled.'
+    )
+    providers: VectorStoreProvidersConfig = Field(default_factory=VectorStoreProvidersConfig)
 
 
 class EntityTypeConfig(BaseModel):
@@ -233,6 +258,7 @@ class GraphitiConfig(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    vector_store: VectorStoreAppConfig = Field(default_factory=VectorStoreAppConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
     # Additional server options

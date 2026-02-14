@@ -209,6 +209,19 @@ class GraphitiService:
             # Store entity types for later use
             self.entity_types = custom_types
 
+            # Create vector store client if configured
+            vector_store_client = None
+            if os.environ.get('MILVUS_URI') or self.config.vector_store.provider:
+                try:
+                    from services.factories import VectorStoreFactory
+
+                    # If MILVUS_URI is set but config doesn't specify provider, auto-detect
+                    if os.environ.get('MILVUS_URI') and not self.config.vector_store.provider:
+                        self.config.vector_store.provider = 'milvus'
+                    vector_store_client = VectorStoreFactory.create(self.config.vector_store)
+                except Exception as e:
+                    logger.warning(f'Failed to create vector store client: {e}')
+
             # Initialize Graphiti client with appropriate driver
             try:
                 if self.config.database.provider.lower() == 'falkordb':
@@ -227,6 +240,7 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
+                        vector_store=vector_store_client,
                     )
                 else:
                     # For Neo4j (default), use the original approach
@@ -237,6 +251,7 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
+                        vector_store=vector_store_client,
                     )
             except Exception as db_error:
                 # Check for connection errors
@@ -282,6 +297,10 @@ class GraphitiService:
             await self.client.build_indices_and_constraints()
 
             logger.info('Successfully initialized Graphiti client')
+            if vector_store_client is not None:
+                logger.info(
+                    f'Vector store attached: {type(vector_store_client).__name__}'
+                )
 
             # Log configuration details
             if llm_client:
