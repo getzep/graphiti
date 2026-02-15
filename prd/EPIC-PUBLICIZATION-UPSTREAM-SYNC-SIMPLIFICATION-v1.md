@@ -26,6 +26,14 @@ For any child PRD that touches code, implementation agents must run the followin
 3. Run build/tests to verify behavior.
 4. Suggest optional abstractions only if they clearly improve clarity.
 
+## Cross-Repo Review Gate (mandatory)
+For any child PRD that touches code, the implementation agent must review and compare both repositories before coding:
+- `projects/graphiti` (private/source baseline)
+- `projects/graphiti-openclaw` (public target)
+
+PR notes must include a cross-repo inventory (paths reviewed), at least 3 simplification candidates, and explicit deferrals for any unselected candidates.
+Single-file/narrow-function refactors require explicit justification for why broader owned-path opportunities were not applicable.
+
 ## Global Definition of Done (DoD)
 **Global DoD checklist:**
 - [ ] Public export boundary is codified as an allowlist and enforced by audit tooling.

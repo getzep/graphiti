@@ -15,6 +15,13 @@
 ## Overview
 Establish a repeatable upstream sync lane for `yhl999/graphiti-openclaw` with controlled PR-based updates from `zep/graphiti`.
 
+## Mandatory Cross-Repo Baseline Review (to prevent narrow-pass regressions)
+Before implementation, the agent must:
+1. Review corresponding paths in `projects/graphiti` (private/source baseline) and `projects/graphiti-openclaw` (public target).
+2. Produce a short cross-repo inventory in PR notes listing concrete files/directories reviewed in both repos.
+3. Identify at least 3 candidate simplifications across the owned-path surface; implement selected items or explicitly defer each candidate with rationale.
+4. If the PR touches only one file or one narrow function, include explicit justification for why broader owned-path opportunities were not applicable.
+
 ## Goals
 - Keep public fork current without destabilizing local foundations.
 - Minimize merge pain via dedicated sync branches and checklists.

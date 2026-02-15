@@ -14,6 +14,13 @@
 ## Overview
 Run full end-to-end verification of the publicization program and produce a ship/no-ship recommendation.
 
+## Mandatory Cross-Repo Baseline Review (to prevent narrow-pass regressions)
+Before implementation, the agent must:
+1. Review corresponding paths in `projects/graphiti` (private/source baseline) and `projects/graphiti-openclaw` (public target).
+2. Produce a short cross-repo inventory in PR notes listing concrete files/directories reviewed in both repos.
+3. Identify at least 3 candidate simplifications across the owned-path surface; implement selected items or explicitly defer each candidate with rationale.
+4. If the PR touches only one file or one narrow function, include explicit justification for why broader owned-path opportunities were not applicable.
+
 ## Goals
 - Prove that boundaries, migration choice, sync lane, adapter contract, and docs operate as one coherent system.
 - Verify no private leakage and no regressions in exported foundations.
