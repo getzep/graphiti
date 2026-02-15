@@ -20,9 +20,8 @@ jobs:
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
         uses: contributor-assistant/github-action@v2.6.1
         env:
-          # the default github token does not have branch protection override permissions
-          # the repo secrets will need to be updated when the token expires.
-          GITHUB_TOKEN: ${{ secrets.DANIEL_PAT }}
+          # Use the built-in workflow token to avoid drift/expiry of personal PAT secrets.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           path-to-signatures: "signatures/version1/cla.json"
           path-to-document: "https://github.com/getzep/graphiti/blob/main/Zep-CLA.md" # e.g. a CLA or a DCO document
