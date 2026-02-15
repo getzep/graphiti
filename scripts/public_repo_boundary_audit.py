@@ -56,7 +56,7 @@ def _read_yaml_list(file_path: Path, section_name: str) -> list[str]:
             if not value:
                 continue
             value = value.strip("\"'")
-            rules.append(value.lstrip('./'))
+            rules.append(value.removeprefix('./'))
     return rules
 
 
