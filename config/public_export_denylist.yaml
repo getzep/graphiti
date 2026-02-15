@@ -1,0 +1,18 @@
+version: 1
+
+denylist:
+  - ".env"
+  - ".env.*"
+  - "*.key"
+  - "*.pem"
+  - "*.p12"
+  - "**/secrets/**"
+  - "**/secret/**"
+  - "state/**"
+  - "backup/**"
+  - "exports/**"
+  - "reports/**"
+  - "workflow_packs/**"
+  - "content_packs/**/private/**"
+  - "packs/**/private/**"
+  - "private/**"
