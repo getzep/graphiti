@@ -32,8 +32,6 @@ Provide a clean migration kit for runtime data so users can move Graphiti state 
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/state_migration_export.py --dry-run --out /tmp/graphiti-state-export
 python3 scripts/state_migration_check.py --package /tmp/graphiti-state-export --dry-run
 python3 scripts/state_migration_import.py --dry-run --in /tmp/graphiti-state-export

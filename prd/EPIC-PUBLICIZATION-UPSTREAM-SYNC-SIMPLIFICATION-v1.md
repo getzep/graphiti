@@ -41,8 +41,6 @@ For any child PRD that touches code, implementation agents must run the followin
 **Global validation commands:**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/public_repo_boundary_audit.py --strict --manifest config/public_export_allowlist.yaml
 python3 scripts/public_repo_history_scan.py --repo . --strict
 python3 scripts/run_tests.py

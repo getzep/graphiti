@@ -31,8 +31,6 @@ Establish a repeatable upstream sync lane for `yhl999/graphiti-openclaw` with co
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/upstream_sync_doctor.py --repo . --dry-run
 python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety
 

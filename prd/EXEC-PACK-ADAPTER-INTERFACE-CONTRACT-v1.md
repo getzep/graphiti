@@ -33,8 +33,6 @@ Define a stable extension interface so private/custom workflow and content packs
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/extension_contract_check.py --strict
 python3 scripts/run_tests.py --target extensions
 python3 -m compileall extensions scripts

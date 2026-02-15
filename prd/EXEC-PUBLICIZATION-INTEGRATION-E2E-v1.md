@@ -34,8 +34,6 @@ Run full end-to-end verification of the publicization program and produce a ship
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/public_repo_boundary_audit.py --strict --manifest config/public_export_allowlist.yaml
 python3 scripts/public_repo_history_scan.py --repo . --strict
 python3 scripts/run_tests.py

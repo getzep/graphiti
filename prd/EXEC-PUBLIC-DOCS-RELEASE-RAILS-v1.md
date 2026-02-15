@@ -33,8 +33,6 @@ Create public-facing docs and release guardrails so external users get a clean, 
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 test -s docs/public/README.md
 test -s docs/public/SECURITY-BOUNDARIES.md
 test -s docs/public/RELEASE-CHECKLIST.md

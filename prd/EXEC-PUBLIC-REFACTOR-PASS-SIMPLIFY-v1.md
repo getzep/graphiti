@@ -40,8 +40,6 @@ Apply this exact flow:
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/run_tests.py
 python3 -m compileall ingest runtime scripts evals
 python3 scripts/run_tests.py --target policy

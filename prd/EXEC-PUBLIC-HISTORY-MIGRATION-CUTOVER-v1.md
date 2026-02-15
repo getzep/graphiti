@@ -35,8 +35,6 @@ Select the winner using a scorecard biased toward elegance/simplicity and safety
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-cd .
-
 python3 scripts/public_history_export.py --mode filtered-history --dry-run
 python3 scripts/public_history_export.py --mode clean-foundation --dry-run
 python3 scripts/public_history_scorecard.py \
