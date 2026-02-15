@@ -1,0 +1,44 @@
+name: Gemini Security
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: gemini-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gemini-security:
+    if: ${{ secrets.GEMINI_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Gemini security analysis
+        uses: google-github-actions/run-gemini-cli@v0.1.20
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
+          REPOSITORY: ${{ github.repository }}
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_cli_version: '0.26.0'
+          extensions: |
+            [
+              "https://github.com/gemini-cli-extensions/security.git"
+            ]
+          prompt: /security:analyze-github-pr
+
+  gemini-security-skipped:
+    if: ${{ secrets.GEMINI_API_KEY == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip notice
+        run: |
+          echo "Skipping Gemini Security: repository secret GEMINI_API_KEY is not configured."
