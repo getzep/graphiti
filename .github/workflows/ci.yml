@@ -1,0 +1,92 @@
+name: CI (Public Baseline)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff>0.1.7"
+      - name: Run Ruff
+        run: ruff check --output-format=github
+
+  typecheck:
+    name: Pyright typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Run Pyright (core)
+        run: uv run pyright ./graphiti_core
+      - name: Install graph-service dependencies
+        run: |
+          cd server
+          uv sync --all-extras
+      - name: Run Pyright (server)
+        run: |
+          cd server
+          uv run pyright .
+
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Run unit tests (no external deps)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DISABLE_NEPTUNE: 1
+          DISABLE_NEO4J: 1
+          DISABLE_FALKORDB: 1
+          DISABLE_KUZU: 1
+        run: |
+          uv run pytest tests/ -m "not integration" \
+            --ignore=tests/test_graphiti_int.py \
+            --ignore=tests/test_graphiti_mock.py \
+            --ignore=tests/test_node_int.py \
+            --ignore=tests/test_edge_int.py \
+            --ignore=tests/test_entity_exclusion_int.py \
+            --ignore=tests/driver/ \
+            --ignore=tests/llm_client/test_anthropic_client_int.py \
+            --ignore=tests/utils/maintenance/test_temporal_operations_int.py \
+            --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
+            --ignore=tests/evals/
