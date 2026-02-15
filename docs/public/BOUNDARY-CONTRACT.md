@@ -1,25 +1,24 @@
 # Public Foundation Boundary Contract + Allowlist Audit v1
 
-This repository uses a default-closed boundary for public export.
+This repository uses a **default-closed** public export boundary.
 
-- Files are **allowed** only when a path matches the allowlist policy.
-- Files are **blocked** when a path matches denylist patterns.
-- Matches in denylist always win over allowlist matches.
-- Files that match neither are **ambiguous** and must be resolved before export.
+1. A path matching the denylist is **BLOCK**.
+2. Otherwise, a path matching the allowlist is **ALLOW**.
+3. Otherwise, the path is **AMBIGUOUS** (must be resolved before export).
 
-## Default policy
+Denylist matches always win over allowlist matches.
+
+## Policy files
 
 - `config/public_export_allowlist.yaml`
 - `config/public_export_denylist.yaml`
 
-## Contract examples
+## Example policy intent
 
-- Allowlist foundations: `graphiti_core/**`, `mcp_server/**`, `server/**`, `tests/**`, `docs/public/**`.
-- Denylist protections: `.env`, `.env.*`, `*.key`, `*.pem`, `*.p12`, and explicit secret folders (`**/secrets/**`).
-- Sensitive folders: `state/**`, `backup/**`, `exports/**`, `reports/**`.
-- Private overlays: workflow/content/private pack paths.
+- Allowlisted foundation paths: `graphiti_core/**`, `mcp_server/**`, `server/**`, `tests/**`, `docs/public/**`.
+- Denylisted sensitive patterns: `.env*`, key/cert files, `**/secrets/**`, and private state/export folders.
 
-## Usage
+## Run audit
 
 ```bash
 python3 scripts/public_repo_boundary_audit.py \
@@ -28,6 +27,19 @@ python3 scripts/public_repo_boundary_audit.py \
   --report /tmp/boundary-audit.md
 ```
 
-Use `--strict` to make the script return a non-zero exit code when any path is BLOCK or AMBIGUOUS.
+### Fail closed for CI
 
-Use `--include-untracked` to include `git status --porcelain` untracked files in the scan.
+```bash
+python3 scripts/public_repo_boundary_audit.py \
+  --manifest config/public_export_allowlist.yaml \
+  --denylist config/public_export_denylist.yaml \
+  --report /tmp/boundary-audit.md \
+  --strict
+```
+
+`--strict` exits non-zero when any path is `BLOCK` or `AMBIGUOUS`.
+
+### Include untracked files
+
+Use `--include-untracked` to include local untracked paths via:
+`git ls-files --others --exclude-standard`.

@@ -24,6 +24,13 @@ Apply this exact flow:
 3. Run build/tests to verify behavior.
 4. Suggest optional abstractions only if they clearly improve clarity.
 
+## Mandatory Cross-Repo Baseline Review (to prevent narrow-pass regressions)
+Before implementation, the agent must:
+1. Review corresponding paths in `projects/graphiti` (private/source baseline) and `projects/graphiti-openclaw` (public target).
+2. Produce a short cross-repo inventory in PR notes listing concrete files/directories reviewed in both repos.
+3. Identify at least 3 candidate simplifications across the owned-path surface; implement selected items or explicitly defer each candidate with rationale.
+4. If the PR touches only one file or one narrow function, include explicit justification for why broader owned-path opportunities were not applicable.
+
 ## Goals
 - Reduce maintenance burden by deleting dead/duplicative pathways.
 - Simplify control flow and interfaces in foundation modules.

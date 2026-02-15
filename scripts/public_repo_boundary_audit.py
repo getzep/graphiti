@@ -5,23 +5,21 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
-Status = str
 ALLOW = 'ALLOW'
 BLOCK = 'BLOCK'
 AMBIGUOUS = 'AMBIGUOUS'
+STATUS_ORDER = (ALLOW, BLOCK, AMBIGUOUS)
 
 
 @dataclass(frozen=True)
 class RuleDecision:
     path: str
-    status: Status
+    status: str
     reason_code: str
     matched_rule: str | None
 
@@ -35,39 +33,46 @@ def _read_yaml_list(file_path: Path, section_name: str) -> list[str]:
     """
 
     if not file_path.exists():
-        raise FileNotFoundError(f"Missing file: {file_path}")
+        raise FileNotFoundError(f'Missing file: {file_path}')
 
-    lines = file_path.read_text(encoding='utf-8').splitlines()
     rules: list[str] = []
-    current_section: str | None = None
+    in_target_section = False
     found_section = False
-    section_matcher = re.compile(r'^([A-Za-z0-9_]+):')
 
-    for raw_line in lines:
+    for raw_line in file_path.read_text(encoding='utf-8').splitlines():
         line = raw_line.strip()
         if not line or line.startswith('#'):
             continue
 
-        section_match = section_matcher.match(line)
-        if section_match:
-            current_section = section_match.group(1)
-            if current_section == section_name:
-                found_section = True
+        if line.endswith(':') and not line.startswith('-'):
+            section = line[:-1].strip()
+            in_target_section = section == section_name
+            found_section = found_section or in_target_section
             continue
 
-        if current_section == section_name and raw_line.lstrip().startswith('-'):
-            value = raw_line.lstrip()[1:].strip()
-            if not value:
-                continue
-            value = value.split('#', 1)[0].strip()
-            value = value.strip("\"'")
-            if value:
-                rules.append(value.removeprefix('./'))
+        if not in_target_section or not line.startswith('-'):
+            continue
+
+        value = line[1:].split('#', 1)[0].strip().strip("\"'")
+        if value:
+            rules.append(value.removeprefix('./'))
 
     if not found_section:
         raise ValueError(f"Manifest missing required section '{section_name}': {file_path}")
 
     return rules
+
+
+def _run_git_lines(repo_root: Path, *args: str) -> set[str]:
+    """Run a git command and return non-empty output lines as a set."""
+
+    result = subprocess.run(
+        ['git', '-C', str(repo_root), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
 def _resolve_repo_root(cwd: Path) -> Path:
@@ -98,24 +103,10 @@ def _resolve_input_path(path: Path, repo_root: Path) -> Path:
 def _collect_git_files(repo_root: Path, include_untracked: bool) -> list[str]:
     """Collect tracked files from git and optionally append untracked files."""
 
-    result = subprocess.run(
-        ['git', '-C', str(repo_root), 'ls-files'],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    files = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    files = _run_git_lines(repo_root, 'ls-files')
 
     if include_untracked:
-        untracked_result = subprocess.run(
-            ['git', '-C', str(repo_root), 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
-            capture_output=True,
-            check=True,
-        )
-        for record in untracked_result.stdout.decode('utf-8', 'surrogateescape').split('\0'):
-            if not record.startswith('?? '):
-                continue
-            files.add(record[3:])
+        files |= _run_git_lines(repo_root, 'ls-files', '--others', '--exclude-standard')
 
     return sorted(files)
 
@@ -134,24 +125,35 @@ def _classify(path: str, allowlist: list[str], denylist: list[str]) -> RuleDecis
     return RuleDecision(path, AMBIGUOUS, 'NO_MATCH', None)
 
 
+def _summarize_decisions(
+    decisions: list[RuleDecision],
+) -> tuple[dict[str, int], list[RuleDecision], list[RuleDecision]]:
+    """Return status counts plus blocked and ambiguous path decisions."""
+
+    counts = {status: 0 for status in STATUS_ORDER}
+    blocked: list[RuleDecision] = []
+    ambiguous: list[RuleDecision] = []
+
+    for decision in decisions:
+        counts[decision.status] += 1
+        if decision.status == BLOCK:
+            blocked.append(decision)
+        elif decision.status == AMBIGUOUS:
+            ambiguous.append(decision)
+
+    return counts, blocked, ambiguous
+
+
 def _build_report(
     decisions: list[RuleDecision],
     manifest_path: Path,
     denylist_path: Path,
     include_untracked: bool,
+    status_counts: dict[str, int],
+    block_list: list[RuleDecision],
+    ambiguous_list: list[RuleDecision],
 ) -> str:
     """Build a markdown report with summary counts and remediation hints."""
-
-    status_counts = {
-        ALLOW: 0,
-        BLOCK: 0,
-        AMBIGUOUS: 0,
-    }
-    for decision in decisions:
-        status_counts[decision.status] += 1
-
-    block_list = [d for d in decisions if d.status == BLOCK]
-    ambiguous_list = [d for d in decisions if d.status == AMBIGUOUS]
 
     lines = [
         '# Public Foundation Boundary Audit',
@@ -165,9 +167,7 @@ def _build_report(
         '',
         '| Status | Count |',
         '| --- | --- |',
-        f'| {ALLOW} | {status_counts[ALLOW]} |',
-        f'| {BLOCK} | {status_counts[BLOCK]} |',
-        f'| {AMBIGUOUS} | {status_counts[AMBIGUOUS]} |',
+        *[f'| {status} | {status_counts[status]} |' for status in STATUS_ORDER],
         '',
         '## Offending paths',
         '',
@@ -221,7 +221,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--include-untracked',
         action='store_true',
-        help='Include untracked files from git status',
+        help='Include untracked files (git ls-files --others --exclude-standard)',
     )
     parser.add_argument(
         '--strict',
@@ -245,26 +245,26 @@ def main() -> int:
     denylist_rules = _read_yaml_list(denylist, 'denylist')
 
     files = _collect_git_files(repo_root, include_untracked=args.include_untracked)
-    decisions = [
-        _classify(path, allowlist=allowlist_rules, denylist=denylist_rules)
-        for path in files
-    ]
+    decisions = [_classify(path, allowlist=allowlist_rules, denylist=denylist_rules) for path in files]
+    status_counts, block_list, ambiguous_list = _summarize_decisions(decisions)
 
     report_text = _build_report(
         decisions=decisions,
         manifest_path=manifest,
         denylist_path=denylist,
         include_untracked=args.include_untracked,
+        status_counts=status_counts,
+        block_list=block_list,
+        ambiguous_list=ambiguous_list,
     )
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(report_text, encoding='utf-8')
 
+    summary = ' | '.join(f'{status}: {status_counts[status]}' for status in STATUS_ORDER)
     print(f'Report written to: {report}')
-    print(f'Total: {len(decisions)} | ALLOW: {sum(d.status == ALLOW for d in decisions)} | '
-          f'BLOCK: {sum(d.status == BLOCK for d in decisions)} | '
-          f'AMBIGUOUS: {sum(d.status == AMBIGUOUS for d in decisions)}')
+    print(f'Total: {len(decisions)} | {summary}')
 
-    if args.strict and any(d.status != ALLOW for d in decisions):
+    if args.strict and (block_list or ambiguous_list):
         return 1
     return 0
 
@@ -274,4 +274,4 @@ if __name__ == '__main__':
         raise SystemExit(main())
     except (FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from exc
