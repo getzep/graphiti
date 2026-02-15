@@ -16,7 +16,7 @@ llm:
     gemini:
       # Option 1: Use Google AI API with API key
       # Get your free API key from: https://aistudio.google.com/app/apikey
-      api_key: ${GOOGLE_API_KEY}
+      # api_key: ${GOOGLE_API_KEY}
 
       # Option 2: Use Vertex AI with Application Default Credentials (ADC)
       # Set these if using ADC instead of API key:
@@ -24,8 +24,8 @@ llm:
       # - GOOGLE_CLOUD_PROJECT environment variable
       # - GOOGLE_CLOUD_LOCATION environment variable
       # - Run: gcloud auth application-default login
-      # project_id: ${GOOGLE_CLOUD_PROJECT}
-      # location: ${GOOGLE_CLOUD_LOCATION}
+      project_id: ${GOOGLE_CLOUD_PROJECT}
+      location: ${GOOGLE_CLOUD_LOCATION}
 
 embedder:
   provider: "gemini"
@@ -35,7 +35,7 @@ embedder:
   providers:
     gemini:
       # Same authentication options as LLM provider above
-      api_key: ${GOOGLE_API_KEY}
+      # api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_CLOUD_PROJECT}
       location: ${GOOGLE_CLOUD_LOCATION}
 

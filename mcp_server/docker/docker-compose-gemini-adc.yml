@@ -43,7 +43,7 @@ services:
       - ../config/config-docker-falkordb-gemini.yaml:/app/mcp/config/config.yaml:ro
       # To use GCP Application Default Credentials or a service account json:
       # Mount Google Cloud credentials for ADC (if available)
-      - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+      # - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
       # Or mount a service account key file:
       # - ${GOOGLE_APPLICATION_CREDENTIALS}:/credentials/google-credentials.json:ro
     ports:
