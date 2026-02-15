@@ -7,6 +7,7 @@ import argparse
 import fnmatch
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def _read_yaml_list(file_path: Path, section_name: str) -> list[str]:
     lines = file_path.read_text(encoding='utf-8').splitlines()
     rules: list[str] = []
     current_section: str | None = None
+    found_section = False
     section_matcher = re.compile(r'^([A-Za-z0-9_]+):')
 
     for raw_line in lines:
@@ -49,15 +51,48 @@ def _read_yaml_list(file_path: Path, section_name: str) -> list[str]:
         section_match = section_matcher.match(line)
         if section_match:
             current_section = section_match.group(1)
+            if current_section == section_name:
+                found_section = True
             continue
 
         if current_section == section_name and raw_line.lstrip().startswith('-'):
             value = raw_line.lstrip()[1:].strip()
             if not value:
                 continue
+            value = value.split('#', 1)[0].strip()
             value = value.strip("\"'")
-            rules.append(value.removeprefix('./'))
+            if value:
+                rules.append(value.removeprefix('./'))
+
+    if not found_section:
+        raise ValueError(f"Manifest missing required section '{section_name}': {file_path}")
+
     return rules
+
+
+def _resolve_repo_root(cwd: Path) -> Path:
+    """Resolve git repository root for the given working directory."""
+
+    result = subprocess.run(
+        ['git', '-C', str(cwd), 'rev-parse', '--show-toplevel'],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+def _resolve_input_path(path: Path, repo_root: Path) -> Path:
+    """Resolve input paths from cwd first, then repo root."""
+
+    if path.is_absolute():
+        return path
+
+    cwd_candidate = (Path.cwd() / path).resolve()
+    if cwd_candidate.exists():
+        return cwd_candidate
+
+    return (repo_root / path).resolve()
 
 
 def _collect_git_files(repo_root: Path, include_untracked: bool) -> list[str]:
@@ -73,16 +108,14 @@ def _collect_git_files(repo_root: Path, include_untracked: bool) -> list[str]:
 
     if include_untracked:
         untracked_result = subprocess.run(
-            ['git', '-C', str(repo_root), 'status', '--porcelain'],
+            ['git', '-C', str(repo_root), 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
             capture_output=True,
-            text=True,
             check=True,
         )
-        for line in untracked_result.stdout.splitlines():
-            if not line.startswith('?? '):
+        for record in untracked_result.stdout.decode('utf-8', 'surrogateescape').split('\0'):
+            if not record.startswith('?? '):
                 continue
-            path = line[3:].strip()
-            files.add(path)
+            files.add(record[3:])
 
     return sorted(files)
 
@@ -202,14 +235,16 @@ def main() -> int:
     """Run the audit and write the markdown report."""
 
     args = parse_args()
-    manifest = args.manifest
-    denylist = args.denylist
-    report = args.report
+    repo_root = _resolve_repo_root(Path.cwd())
+
+    manifest = _resolve_input_path(args.manifest, repo_root)
+    denylist = _resolve_input_path(args.denylist, repo_root)
+    report = args.report if args.report.is_absolute() else (Path.cwd() / args.report).resolve()
 
     allowlist_rules = _read_yaml_list(manifest, 'allowlist')
     denylist_rules = _read_yaml_list(denylist, 'denylist')
 
-    files = _collect_git_files(Path.cwd(), include_untracked=args.include_untracked)
+    files = _collect_git_files(repo_root, include_untracked=args.include_untracked)
     decisions = [
         _classify(path, allowlist=allowlist_rules, denylist=denylist_rules)
         for path in files
@@ -235,4 +270,8 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f'ERROR: {exc}', file=sys.stderr)
+        raise SystemExit(2)
