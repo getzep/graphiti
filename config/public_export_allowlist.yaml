@@ -1,0 +1,10 @@
+version: 1
+
+allowlist:
+  - "graphiti_core/**"
+  - "mcp_server/**"
+  - "server/**"
+  - "tests/**"
+  - "docs/public/**"
+  - "config/public_export_*.yaml"
+  - "scripts/public_repo_boundary_audit.py"
