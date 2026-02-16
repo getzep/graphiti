@@ -193,12 +193,16 @@ def _create_entity_nodes(
 
         labels: list[str] = list({'Entity', str(entity_type_name)})
 
+        # Convert list of EntityAttribute to dict
+        attributes_dict = {attr.key: attr.value for attr in extracted_entity.attributes}
+
         new_node = EntityNode(
             name=extracted_entity.name,
             group_id=episode.group_id,
             labels=labels,
             summary='',
             created_at=utc_now(),
+            attributes=attributes_dict,
         )
         extracted_nodes.append(new_node)
         logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
@@ -391,6 +395,7 @@ async def _resolve_with_llm(
         state.resolved_nodes[original_index] = resolved_node
         state.uuid_map[extracted_node.uuid] = resolved_node.uuid
         if resolved_node.uuid != extracted_node.uuid:
+            resolved_node.attributes.update(extracted_node.attributes)
             state.duplicate_pairs.append((extracted_node, resolved_node))
 
 

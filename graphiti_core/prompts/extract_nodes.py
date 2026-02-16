@@ -25,11 +25,21 @@ from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
 
+class EntityAttribute(BaseModel):
+    key: str = Field(..., description='Attribute name (e.g., employee_count, title)')
+    value: str = Field(..., description='Attribute value as string')
+
+
 class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
     entity_type_id: int = Field(
+        ...,
         description='ID of the classified entity type. '
         'Must be one of the provided entity_type_id integers.',
+    )
+    attributes: list[EntityAttribute] = Field(
+        ...,
+        description='Extracted attributes (empty [] if none)',
     )
 
 
@@ -114,6 +124,9 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don
 5. **Formatting**:
    - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
 
+6. **Attributes**:
+   - For each entity, extract any quantitative or qualitative attributes mentioned. For monetary values, include currency if stated (e.g., "50M USD"). If not stated, preserve the original format.
+
 {context['custom_extraction_instructions']}
 """
     return [
@@ -148,6 +161,7 @@ Guidelines:
 1. Extract all entities that the JSON represents. This will often be something like a "name" or "user" field
 2. Extract all entities mentioned in all other properties throughout the JSON structure
 3. Do NOT extract any properties that contain dates
+4. For each entity, extract any quantitative or qualitative attributes mentioned. For monetary values, include currency if stated (e.g., "50M USD"). If not stated, preserve the original format.
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -179,6 +193,7 @@ Guidelines:
 2. Avoid creating nodes for relationships or actions.
 3. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
 4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+5. For each entity, extract any quantitative or qualitative attributes mentioned. For monetary values, include currency if stated (e.g., "50M USD"). If not stated, preserve the original format.
 """
     return [
         Message(role='system', content=sys_prompt),
