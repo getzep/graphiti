@@ -29,12 +29,12 @@ Wire existing workflow/content packs into the adapter interfaces so runtime sele
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [ ] Existing VC workflows are adapter-routed through `runtime_pack_router` with no hidden hardcoded pack selection.
-- [ ] `runtime_pack_registry.yaml` and `runtime_consumer_profiles.yaml` are aligned (no dangling pack keys).
-- [ ] Router output validates and is reproducible for memo/deal-brief/diligence/ic-prep consumers.
-- [ ] Routing tests cover positive path + misconfiguration path.
-- [ ] Existing workflow/content packs needed for current operations are migrated and wired in `projects/graphiti-openclaw` (not legacy `clawd-graphiti`).
-- [ ] No runtime adapter/profile references to legacy `clawd-graphiti` repo paths remain.
+- [x] Existing VC workflows are adapter-routed through `runtime_pack_router` with no hidden hardcoded pack selection.
+- [x] `runtime_pack_registry.yaml` and `runtime_consumer_profiles.yaml` are aligned (no dangling pack keys).
+- [x] Router output validates and is reproducible for memo/deal-brief/diligence/ic-prep consumers.
+- [x] Routing tests cover positive path + misconfiguration path.
+- [x] Existing workflow/content packs needed for current operations are migrated and wired in `projects/graphiti-openclaw` (not legacy `clawd-graphiti`).
+- [x] No runtime adapter/profile references to legacy `clawd-graphiti` repo paths remain.
 
 **Validation commands (run from repo root):**
 ```bash

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "consumer": "main_session_vc_memo",
+      "workflow_id": "vc_memo_drafting",
+      "step_id": "draft",
+      "scope": "private",
+      "schema_version": 1,
+      "task": "Draft memo",
+      "injection_text": "VC memo drafting pack profile",
+      "pack_ids": ["vc_memo_drafting"]
+    },
+    {
+      "consumer": "main_session_vc_deal_brief",
+      "workflow_id": "vc_deal_brief",
+      "step_id": "compose",
+      "scope": "private",
+      "schema_version": 1,
+      "task": "Prepare deal brief",
+      "injection_text": "VC deal brief pack profile",
+      "pack_ids": ["vc_deal_brief"]
+    },
+    {
+      "consumer": "main_session_vc_diligence_questions",
+      "workflow_id": "vc_diligence_questions",
+      "step_id": "draft",
+      "scope": "private",
+      "schema_version": 1,
+      "task": "Draft diligence questions",
+      "injection_text": "VC diligence pack profile",
+      "pack_ids": ["vc_diligence_questions"]
+    },
+    {
+      "consumer": "main_session_vc_ic_prep",
+      "workflow_id": "vc_ic_prep",
+      "step_id": "synthesize",
+      "scope": "private",
+      "schema_version": 1,
+      "task": "Prepare IC brief",
+      "injection_text": "VC IC prep pack profile",
+      "pack_ids": ["vc_ic_prep"]
+    }
+  ]
+}

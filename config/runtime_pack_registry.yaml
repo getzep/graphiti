@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "packs": [
+    {
+      "pack_id": "vc_memo_drafting",
+      "path": "workflows/vc_memo_drafting.pack.yaml",
+      "scope": "private",
+      "query_template": "${path}"
+    },
+    {
+      "pack_id": "vc_deal_brief",
+      "path": "workflows/vc_deal_brief.pack.yaml",
+      "scope": "private",
+      "query_template": "${path}"
+    },
+    {
+      "pack_id": "vc_diligence_questions",
+      "path": "workflows/vc_diligence_questions.pack.yaml",
+      "scope": "private",
+      "query_template": "${path}"
+    },
+    {
+      "pack_id": "vc_ic_prep",
+      "path": "workflows/vc_ic_prep.pack.yaml",
+      "scope": "private",
+      "query_template": "${path}"
+    }
+  ]
+}
