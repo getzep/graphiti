@@ -22,6 +22,6 @@ Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation 
 | public docs/release rails presence | `test -s docs/public/README.md` etc. (security boundaries/release checklist/what-not-to-migrate + runbooks) | **PASS** | docs files are present and release checklist includes content-marketing gate |
 
 ## Cross-repo baseline review (executed)
-- Source baseline (`/Users/archibald/clawd/projects/graphiti`) and target (`/Users/archibald/clawd/projects/graphiti-openclaw`) paths reviewed.
+- Source baseline (`projects/graphiti`) and target (`projects/graphiti-openclaw`) paths reviewed.
 - Concrete inventory includes workflow/runbook/script/doc coverage around boundary contract, upstream sync lane, migration tooling, and docs rails.
 - Simplification loop: 4 candidates reviewed; 3 selected (command reuse, artifact-first reporting, command-sequence determinism), 1 deferred (dedicated integration report generator script).

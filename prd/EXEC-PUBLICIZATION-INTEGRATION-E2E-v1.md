@@ -68,6 +68,7 @@ rg -n 'BLOCK: [0-9]+' reports/publicization/integration-report.md
 rg -n 'Evaluated commit: `[0-9a-f]{7,40}`' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
 rg -n 'Gate return codes: `boundary_audit_rc=[0-9]+`, `upstream_doctor_rc=[0-9]+`, `upstream_sync_button_rc=[0-9]+`' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
 rg -n 'Generated \(UTC\): [0-9]{4}-[0-9]{2}-[0-9]{2}T' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
+diff -u <(sed -n '3,5p' reports/publicization/integration-checklist.md) <(sed -n '3,5p' reports/publicization/integration-report.md)
 test -s docs/public/README.md
 test -s docs/public/SECURITY-BOUNDARIES.md
 test -s docs/public/RELEASE-CHECKLIST.md
@@ -84,7 +85,7 @@ case "$upstream_doctor_rc" in 0|1) ;; *) echo "Unexpected upstream_doctor_rc=$up
 case "$upstream_sync_button_rc" in 0|1) ;; *) echo "Unexpected upstream_sync_button_rc=$upstream_sync_button_rc (expected 0|1)" >&2; exit 2 ;; esac
 rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHECKLIST.md
 ```
-**Pass criteria:** command sequence executes and produces artifacts; expected policy outcomes are captured as 0/1 gate return codes; unexpected runtime/infrastructure failures abort immediately; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
+**Pass criteria:** command sequence executes and produces artifacts; expected policy outcomes are captured as 0/1 gate return codes; unexpected runtime/infrastructure failures abort immediately; checklist/report metadata lines stay in sync; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
 
 ## Cross-repo baseline review (completed)
 
