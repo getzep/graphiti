@@ -1,6 +1,7 @@
 # Publicization Integration Checklist
 
 Generated (UTC): 2026-02-16T18:03:10Z
+Evaluated commit: `<PR head SHA at gate execution>`
 Gate: **NO-GO**
 Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation sequence.
 

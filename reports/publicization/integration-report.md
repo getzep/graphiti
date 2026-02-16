@@ -1,6 +1,7 @@
 # Publicization Integration Cutover Report
 
 Generated (UTC): 2026-02-16T18:03:10Z
+Evaluated commit: `<PR head SHA at gate execution>`
 Decision: **NO-GO**
 Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation sequence.
 

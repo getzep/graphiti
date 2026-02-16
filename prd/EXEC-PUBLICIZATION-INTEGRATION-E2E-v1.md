@@ -61,6 +61,9 @@ test -s reports/publicization/history-scorecard.md
 rg -n 'Winner: `clean-foundation`' reports/publicization/history-scorecard.md
 test -s reports/publicization/integration-checklist.md
 test -s reports/publicization/integration-report.md
+rg -n 'Gate: \*\*NO-GO\*\*|Gate: \*\*GO\*\*' reports/publicization/integration-checklist.md
+rg -n 'Decision: \*\*NO-GO\*\*|Decision: \*\*GO\*\*' reports/publicization/integration-report.md
+rg -n 'BLOCK: [0-9]+' reports/publicization/integration-report.md
 test -s docs/public/README.md
 test -s docs/public/SECURITY-BOUNDARIES.md
 test -s docs/public/RELEASE-CHECKLIST.md
@@ -72,9 +75,9 @@ test -s docs/public/MIGRATION-SYNC-TOOLKIT.md
 test -s /tmp/boundary-audit.md
 printf 'boundary_audit_rc=%s upstream_doctor_rc=%s upstream_sync_button_rc=%s\n' \
   "$boundary_audit_rc" "$upstream_doctor_rc" "$upstream_sync_button_rc"
-test "$boundary_audit_rc" -ge 0
-test "$upstream_doctor_rc" -ge 0
-test "$upstream_sync_button_rc" -ge 0
+test "$boundary_audit_rc" -le 1
+test "$upstream_doctor_rc" -le 1
+test "$upstream_sync_button_rc" -le 1
 rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHECKLIST.md
 ```
 **Pass criteria:** command sequence executes and produces artifacts; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
