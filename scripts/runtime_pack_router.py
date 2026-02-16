@@ -235,7 +235,9 @@ def _build_query(
             f'query_template references unknown key {missing!r}'
         ) from exc
 
-    query_path = repo_path / query
+    query_path = (repo_path / query).resolve()
+    if not query_path.is_relative_to(repo_path.resolve()):
+        raise ValueError(f'Pack path escapes repo root: {query}')
     if not query_path.exists():
         raise ValueError(f'Pack path not found: {query}')
     return query
@@ -335,7 +337,10 @@ def _validate_plan(plan: dict[str, object], *, repo_root: Path) -> None:
                 context=f'plan.packs[{index}].{pack_key}',
             )
 
-        query_path = repo_root / _ensure_non_empty_string(item_dict['query'], context=f'plan.packs[{index}].query')
+        query_raw = _ensure_non_empty_string(item_dict['query'], context=f'plan.packs[{index}].query')
+        query_path = (repo_root / query_raw).resolve()
+        if not query_path.is_relative_to(repo_root.resolve()):
+            raise ValueError(f'plan.packs[{index}].query escapes repo root: {query_raw}')
         if not query_path.exists():
             raise ValueError(f'plan.packs[{index}].query does not exist: {query_path}')
 

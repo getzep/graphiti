@@ -168,3 +168,46 @@ class RuntimePackRouterFixturesTests(unittest.TestCase):
             self.assertIn('.profiles[0].task', result.stderr)
             self.assertIn('must be a string', result.stderr)
 
+    def test_path_traversal_in_registry_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_repo = REPO_ROOT
+            repo = Path(tmp) / 'repo'
+            repo.mkdir(parents=True)
+            (repo / 'config').mkdir(parents=True)
+            (repo / 'workflows').mkdir(parents=True)
+
+            registry = json.loads((source_repo / 'config/runtime_pack_registry.yaml').read_text(encoding='utf-8'))
+            registry['packs'][0]['path'] = '../../../etc/passwd'
+            (repo / 'config' / 'runtime_pack_registry.yaml').write_text(
+                json.dumps(registry, indent=2),
+                encoding='utf-8',
+            )
+            shutil.copyfile(
+                source_repo / 'config/runtime_consumer_profiles.yaml',
+                repo / 'config/runtime_consumer_profiles.yaml',
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    '--consumer',
+                    'main_session_vc_memo',
+                    '--workflow-id',
+                    'vc_memo_drafting',
+                    '--step-id',
+                    'draft',
+                    '--repo',
+                    str(repo),
+                    '--task',
+                    'Draft memo',
+                    '--validate',
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('escapes repo root', result.stderr)
+
