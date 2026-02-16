@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   gemini-security:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +42,8 @@ jobs:
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           gemini_cli_version: '0.26.0'
+          gemini_debug: 'true'
+          upload_artifacts: 'true'
           extensions: |
             [
               "https://github.com/gemini-cli-extensions/security.git"
