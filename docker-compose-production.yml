@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ika-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    networks:
+      - graphiti-network
+    restart: unless-stopped
+
+  # FalkorDB Graph Database
+  falkordb:
+    image: falkordb/falkordb:v4.10.3
+    container_name: ika-falkordb
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkordb_data:/data
+    networks:
+      - graphiti-network
+    restart: unless-stopped
+
+  # Graphiti FastAPI Server
+  graphiti:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ika-graphiti
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - DEFAULT_MODEL=qwen2.5:7b
+      - DEFAULT_GROUP_ID=ika-production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - graphiti-network
+    restart: unless-stopped
+    # Simple startup delay instead of health checks
+    command: sh -c "sleep 10 && uvicorn graphiti_api:app --host 0.0.0.0 --port 8000"
+
+networks:
+  graphiti-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
+  falkordb_data:
