@@ -596,7 +596,7 @@ docker compose up
 }
 ```
 
-3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](cursor_rules.md) for details.
+3. Add the Graphiti rules to Cursor's User Rules. See [cursor_rules.md](docs/cursor_rules.md) for details.
 
 4. Kick off an agent session in Cursor.
 
