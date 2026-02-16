@@ -318,9 +318,9 @@ class SagaNodeNamespace:
 class NodeNamespace:
     """Namespace for all node operations. Accessed as ``graphiti.nodes``.
 
-    Attributes are always set — both Neo4j and FalkorDB drivers provide all operations.
-    Accessing an attribute will raise ``NotImplementedError`` if the driver does not
-    implement the corresponding operations interface.
+    Sub-namespaces are set only when the driver provides the corresponding
+    operations implementation.  Accessing an unset attribute raises
+    ``NotImplementedError`` with a clear message.
     """
 
     entity: EntityNodeNamespace
@@ -328,30 +328,30 @@ class NodeNamespace:
     community: CommunityNodeNamespace
     saga: SagaNodeNamespace
 
+    _driver_name: str
+
     def __init__(self, driver: GraphDriver, embedder: EmbedderClient):
+        self._driver_name = type(driver).__name__
+
         entity_node_ops = driver.entity_node_ops
+        if entity_node_ops is not None:
+            self.entity = EntityNodeNamespace(driver, entity_node_ops, embedder)
+
         episode_node_ops = driver.episode_node_ops
+        if episode_node_ops is not None:
+            self.episode = EpisodeNodeNamespace(driver, episode_node_ops)
+
         community_node_ops = driver.community_node_ops
+        if community_node_ops is not None:
+            self.community = CommunityNodeNamespace(driver, community_node_ops, embedder)
+
         saga_node_ops = driver.saga_node_ops
+        if saga_node_ops is not None:
+            self.saga = SagaNodeNamespace(driver, saga_node_ops)
 
-        if entity_node_ops is None:
+    def __getattr__(self, name: str) -> object:
+        if name in ('entity', 'episode', 'community', 'saga'):
             raise NotImplementedError(
-                f'{type(driver).__name__} does not implement entity_node_ops'
+                f'{self._driver_name} does not implement {name}_node_ops'
             )
-        if episode_node_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement episode_node_ops'
-            )
-        if community_node_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement community_node_ops'
-            )
-        if saga_node_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement saga_node_ops'
-            )
-
-        self.entity = EntityNodeNamespace(driver, entity_node_ops, embedder)
-        self.episode = EpisodeNodeNamespace(driver, episode_node_ops)
-        self.community = CommunityNodeNamespace(driver, community_node_ops, embedder)
-        self.saga = SagaNodeNamespace(driver, saga_node_ops)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")

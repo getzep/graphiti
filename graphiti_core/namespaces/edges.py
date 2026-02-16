@@ -313,9 +313,9 @@ class NextEpisodeEdgeNamespace:
 class EdgeNamespace:
     """Namespace for all edge operations. Accessed as ``graphiti.edges``.
 
-    Attributes are always set — both Neo4j and FalkorDB drivers provide all operations.
-    Accessing an attribute will raise ``NotImplementedError`` if the driver does not
-    implement the corresponding operations interface.
+    Sub-namespaces are set only when the driver provides the corresponding
+    operations implementation.  Accessing an unset attribute raises
+    ``NotImplementedError`` with a clear message.
     """
 
     entity: EntityEdgeNamespace
@@ -324,36 +324,34 @@ class EdgeNamespace:
     has_episode: HasEpisodeEdgeNamespace
     next_episode: NextEpisodeEdgeNamespace
 
+    _driver_name: str
+
     def __init__(self, driver: GraphDriver, embedder: EmbedderClient):
+        self._driver_name = type(driver).__name__
+
         entity_edge_ops = driver.entity_edge_ops
+        if entity_edge_ops is not None:
+            self.entity = EntityEdgeNamespace(driver, entity_edge_ops, embedder)
+
         episodic_edge_ops = driver.episodic_edge_ops
+        if episodic_edge_ops is not None:
+            self.episodic = EpisodicEdgeNamespace(driver, episodic_edge_ops)
+
         community_edge_ops = driver.community_edge_ops
+        if community_edge_ops is not None:
+            self.community = CommunityEdgeNamespace(driver, community_edge_ops)
+
         has_episode_edge_ops = driver.has_episode_edge_ops
+        if has_episode_edge_ops is not None:
+            self.has_episode = HasEpisodeEdgeNamespace(driver, has_episode_edge_ops)
+
         next_episode_edge_ops = driver.next_episode_edge_ops
+        if next_episode_edge_ops is not None:
+            self.next_episode = NextEpisodeEdgeNamespace(driver, next_episode_edge_ops)
 
-        if entity_edge_ops is None:
+    def __getattr__(self, name: str) -> object:
+        if name in ('entity', 'episodic', 'community', 'has_episode', 'next_episode'):
             raise NotImplementedError(
-                f'{type(driver).__name__} does not implement entity_edge_ops'
+                f'{self._driver_name} does not implement {name}_edge_ops'
             )
-        if episodic_edge_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement episodic_edge_ops'
-            )
-        if community_edge_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement community_edge_ops'
-            )
-        if has_episode_edge_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement has_episode_edge_ops'
-            )
-        if next_episode_edge_ops is None:
-            raise NotImplementedError(
-                f'{type(driver).__name__} does not implement next_episode_edge_ops'
-            )
-
-        self.entity = EntityEdgeNamespace(driver, entity_edge_ops, embedder)
-        self.episodic = EpisodicEdgeNamespace(driver, episodic_edge_ops)
-        self.community = CommunityEdgeNamespace(driver, community_edge_ops)
-        self.has_episode = HasEpisodeEdgeNamespace(driver, has_episode_edge_ops)
-        self.next_episode = NextEpisodeEdgeNamespace(driver, next_episode_edge_ops)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
