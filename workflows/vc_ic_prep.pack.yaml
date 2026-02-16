@@ -1,0 +1,5 @@
+name: vc_ic_prep
+workflow_id: vc_ic_prep
+steps:
+  - id: synthesize
+  - id: finalize

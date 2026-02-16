@@ -1,0 +1,5 @@
+name: vc_memo_drafting
+workflow_id: vc_memo_drafting
+steps:
+  - id: draft
+  - id: review
