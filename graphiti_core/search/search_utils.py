@@ -226,17 +226,16 @@ async def edge_fulltext_search(
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
+            filter_query = filter_query + ' AND id(e)=id ' if filter_query else ' WHERE id(e)=id '
+
             # Match the edge ids and return the values
             query = (
                 """
-                                UNWIND $ids as id
-                                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
-                                """
-                + filter_query
-                + """
-                AND id(e)=id
+                UNWIND $ids as id
+                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                """
+                + filter_query +
+                """
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
                 RETURN
                     e.uuid AS uuid,
@@ -252,7 +251,7 @@ async def edge_fulltext_search(
                     e.invalid_at AS invalid_at,
                     properties(e) AS attributes
                 ORDER BY score DESC LIMIT $limit
-                            """
+                """
             )
 
             records, _, _ = await driver.execute_query(
