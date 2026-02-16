@@ -7,6 +7,7 @@ These tests require:
    MILVUS_TOKEN=your_token_here
 """
 
+import asyncio
 import os
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -81,6 +82,22 @@ class TestMilvusSearchIntegration:
         self.graph_ops = MilvusGraphOperationsInterface(vs_client=self.vs_client)
         yield
 
+    @classmethod
+    def teardown_class(cls):
+        """Drop all test collections after the test class finishes."""
+
+        async def _cleanup():
+            from pymilvus import AsyncMilvusClient
+
+            client = AsyncMilvusClient(uri=MILVUS_URI, token=MILVUS_TOKEN)
+            collections = await client.list_collections()
+            for c in collections:
+                if c.startswith(cls.PREFIX):
+                    await client.drop_collection(c)
+            await client.close()
+
+        asyncio.run(_cleanup())
+
     @pytest.fixture(autouse=True)
     def _mock_search_filter(self):
         """Provide an empty search filter for tests."""
@@ -121,6 +138,7 @@ class TestMilvusSearchIntegration:
         node.name_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.node_save(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency
 
         # Search with the same embedding should find the node
         results = await self.search.node_similarity_search(
@@ -156,6 +174,7 @@ class TestMilvusSearchIntegration:
         edge.fact_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.edge_save(edge, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency
 
         results = await self.search.edge_similarity_search(
             driver=MagicMock(),
@@ -187,6 +206,7 @@ class TestMilvusSearchIntegration:
         node.name_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.node_save(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for BM25 index
 
         results = await self.search.node_fulltext_search(
             driver=MagicMock(),
@@ -220,6 +240,7 @@ class TestMilvusSearchIntegration:
         edge.fact_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.edge_save(edge, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for BM25 index
 
         results = await self.search.edge_fulltext_search(
             driver=MagicMock(),
@@ -249,6 +270,7 @@ class TestMilvusSearchIntegration:
         node.entity_edges = []
 
         await self.graph_ops.episodic_node_save(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for BM25 index
 
         results = await self.search.episode_fulltext_search(
             driver=MagicMock(),
@@ -275,6 +297,7 @@ class TestMilvusSearchIntegration:
         node.name_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.community_node_save(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency
 
         results = await self.search.community_similarity_search(
             driver=MagicMock(),
@@ -303,7 +326,9 @@ class TestMilvusSearchIntegration:
         node.name_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.node_save(node, driver=MagicMock())
+        await asyncio.sleep(1)  # Ensure insert is indexed before delete
         await self.graph_ops.node_delete(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for delete
 
         results = await self.search.node_similarity_search(
             driver=MagicMock(),
@@ -331,6 +356,7 @@ class TestMilvusSearchIntegration:
         node.name_embedding = emb
 
         await self.graph_ops.community_node_save(node, driver=MagicMock())
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for query
 
         result = await self.search.get_embeddings_for_communities(
             driver=MagicMock(),
@@ -357,7 +383,9 @@ class TestMilvusSearchIntegration:
         node.name_embedding = _make_embedding(self.DIM)
 
         await self.graph_ops.node_save(node, driver=MagicMock())
+        await asyncio.sleep(1)  # Ensure insert is indexed before clear
         await self.graph_ops.clear_data(driver=MagicMock(), group_ids=[group])
+        await asyncio.sleep(2)  # Zilliz Cloud eventual consistency for delete
 
         results = await self.search.node_similarity_search(
             driver=MagicMock(),
