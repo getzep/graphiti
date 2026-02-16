@@ -20,20 +20,26 @@ from typing import Any
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
+from graphiti_core.driver.record_parsers import (
+    community_node_from_record,
+    entity_edge_from_record,
+    entity_node_from_record,
+    episodic_node_from_record,
+)
 from graphiti_core.edges import EntityEdge
 from graphiti_core.graph_queries import (
     get_nodes_query,
     get_relationships_query,
     get_vector_cosine_func_query,
 )
-from graphiti_core.helpers import lucene_sanitize, parse_db_date
+from graphiti_core.helpers import lucene_sanitize
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     EPISODIC_NODE_RETURN,
     get_entity_node_return_query,
 )
-from graphiti_core.nodes import CommunityNode, EntityNode, EpisodeType, EpisodicNode
+from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.search.search_filters import (
     SearchFilters,
     edge_search_filter_query_constructor,
@@ -43,99 +49,6 @@ from graphiti_core.search.search_filters import (
 logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 128
-
-
-def _entity_node_from_record(record: Any) -> EntityNode:
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('name_embedding', None)
-    attributes.pop('summary', None)
-    attributes.pop('created_at', None)
-    attributes.pop('labels', None)
-
-    labels = record.get('labels', [])
-    group_id = record.get('group_id')
-    dynamic_label = 'Entity_' + group_id.replace('-', '')
-    if dynamic_label in labels:
-        labels.remove(dynamic_label)
-
-    return EntityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        name_embedding=record.get('name_embedding'),
-        group_id=group_id,
-        labels=labels,
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-        attributes=attributes,
-    )
-
-
-def _entity_edge_from_record(record: Any) -> EntityEdge:
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('source_node_uuid', None)
-    attributes.pop('target_node_uuid', None)
-    attributes.pop('fact', None)
-    attributes.pop('fact_embedding', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('episodes', None)
-    attributes.pop('created_at', None)
-    attributes.pop('expired_at', None)
-    attributes.pop('valid_at', None)
-    attributes.pop('invalid_at', None)
-
-    return EntityEdge(
-        uuid=record['uuid'],
-        source_node_uuid=record['source_node_uuid'],
-        target_node_uuid=record['target_node_uuid'],
-        fact=record['fact'],
-        fact_embedding=record.get('fact_embedding'),
-        name=record['name'],
-        group_id=record['group_id'],
-        episodes=record['episodes'],
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        expired_at=parse_db_date(record['expired_at']),
-        valid_at=parse_db_date(record['valid_at']),
-        invalid_at=parse_db_date(record['invalid_at']),
-        attributes=attributes,
-    )
-
-
-def _episodic_node_from_record(record: Any) -> EpisodicNode:
-    created_at = parse_db_date(record['created_at'])
-    valid_at = parse_db_date(record['valid_at'])
-
-    if created_at is None:
-        raise ValueError(f'created_at cannot be None for episode {record.get("uuid", "unknown")}')
-    if valid_at is None:
-        raise ValueError(f'valid_at cannot be None for episode {record.get("uuid", "unknown")}')
-
-    return EpisodicNode(
-        content=record['content'],
-        created_at=created_at,
-        valid_at=valid_at,
-        uuid=record['uuid'],
-        group_id=record['group_id'],
-        source=EpisodeType.from_str(record['source']),
-        name=record['name'],
-        source_description=record['source_description'],
-        entity_edges=record['entity_edges'],
-    )
-
-
-def _community_node_from_record(record: Any) -> CommunityNode:
-    return CommunityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        group_id=record['group_id'],
-        name_embedding=record['name_embedding'],
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-    )
 
 
 def _build_neo4j_fulltext_query(
@@ -208,7 +121,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     async def node_similarity_search(
         self,
@@ -259,7 +172,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     async def node_bfs_search(
         self,
@@ -310,7 +223,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     # --- Edge search ---
 
@@ -364,7 +277,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def edge_similarity_search(
         self,
@@ -425,7 +338,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def edge_bfs_search(
         self,
@@ -477,7 +390,7 @@ class Neo4jSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     # --- Episode search ---
 
@@ -521,7 +434,7 @@ class Neo4jSearchOperations(SearchOperations):
             cypher, query=fuzzy_query, limit=limit, routing_='r', **filter_params
         )
 
-        return [_episodic_node_from_record(r) for r in records]
+        return [episodic_node_from_record(r) for r in records]
 
     # --- Community search ---
 
@@ -563,7 +476,7 @@ class Neo4jSearchOperations(SearchOperations):
             cypher, query=fuzzy_query, limit=limit, routing_='r', **filter_params
         )
 
-        return [_community_node_from_record(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
     async def community_similarity_search(
         self,
@@ -609,7 +522,7 @@ class Neo4jSearchOperations(SearchOperations):
             **query_params,
         )
 
-        return [_community_node_from_record(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
     # --- Rerankers ---
 
@@ -663,7 +576,7 @@ class Neo4jSearchOperations(SearchOperations):
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids, routing_='r')
 
-        node_map = {r['uuid']: _entity_node_from_record(r) for r in records}
+        node_map = {r['uuid']: entity_node_from_record(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     async def episode_mentions_reranker(
@@ -711,7 +624,7 @@ class Neo4jSearchOperations(SearchOperations):
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids, routing_='r')
 
-        node_map = {r['uuid']: _entity_node_from_record(r) for r in records}
+        node_map = {r['uuid']: entity_node_from_record(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     # --- Filter builders ---

@@ -20,8 +20,8 @@ from typing import Any
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.record_parsers import entity_node_from_record
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_return_query,
     get_entity_node_save_bulk_query,
@@ -30,34 +30,6 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.nodes import EntityNode
 
 logger = logging.getLogger(__name__)
-
-
-def _entity_node_from_record(record: Any) -> EntityNode:
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('name_embedding', None)
-    attributes.pop('summary', None)
-    attributes.pop('created_at', None)
-    attributes.pop('labels', None)
-
-    labels = record.get('labels', [])
-    group_id = record.get('group_id')
-    dynamic_label = 'Entity_' + group_id.replace('-', '')
-    if dynamic_label in labels:
-        labels.remove(dynamic_label)
-
-    return EntityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        name_embedding=record.get('name_embedding'),
-        group_id=group_id,
-        labels=labels,
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-        attributes=attributes,
-    )
 
 
 class Neo4jEntityNodeOperations(EntityNodeOperations):
@@ -183,7 +155,7 @@ class Neo4jEntityNodeOperations(EntityNodeOperations):
             RETURN
             """ + get_entity_node_return_query(GraphProvider.NEO4J)
         records, _, _ = await executor.execute_query(query, uuid=uuid, routing_='r')
-        nodes = [_entity_node_from_record(r) for r in records]
+        nodes = [entity_node_from_record(r) for r in records]
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
         return nodes[0]
@@ -199,7 +171,7 @@ class Neo4jEntityNodeOperations(EntityNodeOperations):
             RETURN
             """ + get_entity_node_return_query(GraphProvider.NEO4J)
         records, _, _ = await executor.execute_query(query, uuids=uuids, routing_='r')
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -232,7 +204,7 @@ class Neo4jEntityNodeOperations(EntityNodeOperations):
             limit=limit,
             routing_='r',
         )
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     async def load_embeddings(
         self,

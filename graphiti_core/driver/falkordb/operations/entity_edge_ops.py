@@ -20,9 +20,9 @@ from typing import Any
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.record_parsers import entity_edge_from_record
 from graphiti_core.edges import EntityEdge
 from graphiti_core.errors import EdgeNotFoundError
-from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
     get_entity_edge_return_query,
     get_entity_edge_save_bulk_query,
@@ -30,38 +30,6 @@ from graphiti_core.models.edges.edge_db_queries import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _entity_edge_from_record(record: Any) -> EntityEdge:
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('source_node_uuid', None)
-    attributes.pop('target_node_uuid', None)
-    attributes.pop('fact', None)
-    attributes.pop('fact_embedding', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('episodes', None)
-    attributes.pop('created_at', None)
-    attributes.pop('expired_at', None)
-    attributes.pop('valid_at', None)
-    attributes.pop('invalid_at', None)
-
-    return EntityEdge(
-        uuid=record['uuid'],
-        source_node_uuid=record['source_node_uuid'],
-        target_node_uuid=record['target_node_uuid'],
-        fact=record['fact'],
-        fact_embedding=record.get('fact_embedding'),
-        name=record['name'],
-        group_id=record['group_id'],
-        episodes=record['episodes'],
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        expired_at=parse_db_date(record['expired_at']),
-        valid_at=parse_db_date(record['valid_at']),
-        invalid_at=parse_db_date(record['invalid_at']),
-        attributes=attributes,
-    )
 
 
 class FalkorEntityEdgeOperations(EntityEdgeOperations):
@@ -170,7 +138,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             RETURN
             """ + get_entity_edge_return_query(GraphProvider.FALKORDB)
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        edges = [_entity_edge_from_record(r) for r in records]
+        edges = [entity_edge_from_record(r) for r in records]
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -188,7 +156,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             RETURN
             """ + get_entity_edge_return_query(GraphProvider.FALKORDB)
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -220,7 +188,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def get_between_nodes(
         self,
@@ -237,7 +205,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             source_node_uuid=source_node_uuid,
             target_node_uuid=target_node_uuid,
         )
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def get_by_node_uuid(
         self,
@@ -249,7 +217,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             RETURN
             """ + get_entity_edge_return_query(GraphProvider.FALKORDB)
         records, _, _ = await executor.execute_query(query, node_uuid=node_uuid)
-        return [_entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r) for r in records]
 
     async def load_embeddings(
         self,

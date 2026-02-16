@@ -23,8 +23,9 @@ from pydantic import BaseModel
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
 from graphiti_core.driver.query_executor import QueryExecutor
+from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import parse_db_date, semaphore_gather
+from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     get_entity_node_return_query,
@@ -37,45 +38,6 @@ logger = logging.getLogger(__name__)
 class Neighbor(BaseModel):
     node_uuid: str
     edge_count: int
-
-
-def _entity_node_from_record(record: Any) -> EntityNode:
-    attributes = record['attributes']
-    attributes.pop('uuid', None)
-    attributes.pop('name', None)
-    attributes.pop('group_id', None)
-    attributes.pop('name_embedding', None)
-    attributes.pop('summary', None)
-    attributes.pop('created_at', None)
-    attributes.pop('labels', None)
-
-    labels = record.get('labels', [])
-    group_id = record.get('group_id')
-    dynamic_label = 'Entity_' + group_id.replace('-', '')
-    if dynamic_label in labels:
-        labels.remove(dynamic_label)
-
-    return EntityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        name_embedding=record.get('name_embedding'),
-        group_id=group_id,
-        labels=labels,
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-        attributes=attributes,
-    )
-
-
-def _community_node_from_record(record: Any) -> CommunityNode:
-    return CommunityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        group_id=record['group_id'],
-        name_embedding=record['name_embedding'],
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-    )
 
 
 def _label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
@@ -191,7 +153,7 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                 group_ids=[group_id],
                 routing_='r',
             )
-            nodes = [_entity_node_from_record(r) for r in node_records]
+            nodes = [entity_node_from_record(r) for r in node_records]
 
             for node in nodes:
                 records, _, _ = await executor.execute_query(
@@ -227,7 +189,7 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                     uuids=cluster,
                     routing_='r',
                 )
-                community_clusters.append([_entity_node_from_record(r) for r in cluster_records])
+                community_clusters.append([entity_node_from_record(r) for r in cluster_records])
 
         return community_clusters
 
@@ -288,7 +250,7 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
             routing_='r',
         )
 
-        return [_entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r) for r in records]
 
     async def get_communities_by_nodes(
         self,
@@ -308,4 +270,4 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
             routing_='r',
         )
 
-        return [_community_node_from_record(r) for r in records]
+        return [community_node_from_record(r) for r in records]

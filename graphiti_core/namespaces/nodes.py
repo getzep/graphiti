@@ -316,7 +316,17 @@ class SagaNodeNamespace:
 
 
 class NodeNamespace:
-    """Namespace for all node operations. Accessed as ``graphiti.nodes``."""
+    """Namespace for all node operations. Accessed as ``graphiti.nodes``.
+
+    Attributes are always set — both Neo4j and FalkorDB drivers provide all operations.
+    Accessing an attribute will raise ``NotImplementedError`` if the driver does not
+    implement the corresponding operations interface.
+    """
+
+    entity: EntityNodeNamespace
+    episode: EpisodeNodeNamespace
+    community: CommunityNodeNamespace
+    saga: SagaNodeNamespace
 
     def __init__(self, driver: GraphDriver, embedder: EmbedderClient):
         entity_node_ops = driver.entity_node_ops
@@ -324,11 +334,24 @@ class NodeNamespace:
         community_node_ops = driver.community_node_ops
         saga_node_ops = driver.saga_node_ops
 
-        if entity_node_ops is not None:
-            self.entity = EntityNodeNamespace(driver, entity_node_ops, embedder)
-        if episode_node_ops is not None:
-            self.episode = EpisodeNodeNamespace(driver, episode_node_ops)
-        if community_node_ops is not None:
-            self.community = CommunityNodeNamespace(driver, community_node_ops, embedder)
-        if saga_node_ops is not None:
-            self.saga = SagaNodeNamespace(driver, saga_node_ops)
+        if entity_node_ops is None:
+            raise NotImplementedError(
+                f'{type(driver).__name__} does not implement entity_node_ops'
+            )
+        if episode_node_ops is None:
+            raise NotImplementedError(
+                f'{type(driver).__name__} does not implement episode_node_ops'
+            )
+        if community_node_ops is None:
+            raise NotImplementedError(
+                f'{type(driver).__name__} does not implement community_node_ops'
+            )
+        if saga_node_ops is None:
+            raise NotImplementedError(
+                f'{type(driver).__name__} does not implement saga_node_ops'
+            )
+
+        self.entity = EntityNodeNamespace(driver, entity_node_ops, embedder)
+        self.episode = EpisodeNodeNamespace(driver, episode_node_ops)
+        self.community = CommunityNodeNamespace(driver, community_node_ops, embedder)
+        self.saga = SagaNodeNamespace(driver, saga_node_ops)

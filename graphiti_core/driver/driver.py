@@ -114,7 +114,7 @@ class GraphDriver(QueryExecutor, ABC):
     def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
 
-    def with_database(self, database: str) -> 'GraphDriver':
+    def with_database(self, database: str) -> GraphDriver:
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
@@ -128,7 +128,7 @@ class GraphDriver(QueryExecutor, ABC):
     async def build_indices_and_constraints(self, delete_existing: bool = False):
         raise NotImplementedError()
 
-    def clone(self, database: str) -> 'GraphDriver':
+    def clone(self, database: str) -> GraphDriver:
         """Clone the driver with a different database or graph name."""
         return self
 

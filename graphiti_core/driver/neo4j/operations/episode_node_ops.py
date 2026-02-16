@@ -21,38 +21,16 @@ from typing import Any
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.record_parsers import episodic_node_from_record
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     EPISODIC_NODE_RETURN,
     get_episode_node_save_bulk_query,
     get_episode_node_save_query,
 )
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.nodes import EpisodicNode
 
 logger = logging.getLogger(__name__)
-
-
-def _episodic_node_from_record(record: Any) -> EpisodicNode:
-    created_at = parse_db_date(record['created_at'])
-    valid_at = parse_db_date(record['valid_at'])
-
-    if created_at is None:
-        raise ValueError(f'created_at cannot be None for episode {record.get("uuid", "unknown")}')
-    if valid_at is None:
-        raise ValueError(f'valid_at cannot be None for episode {record.get("uuid", "unknown")}')
-
-    return EpisodicNode(
-        content=record['content'],
-        created_at=created_at,
-        valid_at=valid_at,
-        uuid=record['uuid'],
-        group_id=record['group_id'],
-        source=EpisodeType.from_str(record['source']),
-        name=record['name'],
-        source_description=record['source_description'],
-        entity_edges=record['entity_edges'],
-    )
 
 
 class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
@@ -172,7 +150,7 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
             + EPISODIC_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuid=uuid, routing_='r')
-        episodes = [_episodic_node_from_record(r) for r in records]
+        episodes = [episodic_node_from_record(r) for r in records]
         if len(episodes) == 0:
             raise NodeNotFoundError(uuid)
         return episodes[0]
@@ -191,7 +169,7 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
             + EPISODIC_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuids=uuids, routing_='r')
-        return [_episodic_node_from_record(r) for r in records]
+        return [episodic_node_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -224,7 +202,7 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
             limit=limit,
             routing_='r',
         )
-        return [_episodic_node_from_record(r) for r in records]
+        return [episodic_node_from_record(r) for r in records]
 
     async def get_by_entity_node_uuid(
         self,
@@ -241,7 +219,7 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
         records, _, _ = await executor.execute_query(
             query, entity_node_uuid=entity_node_uuid, routing_='r'
         )
-        return [_episodic_node_from_record(r) for r in records]
+        return [episodic_node_from_record(r) for r in records]
 
     async def retrieve_episodes(
         self,
@@ -306,4 +284,4 @@ class Neo4jEpisodeNodeOperations(EpisodeNodeOperations):
                 routing_='r',
             )
 
-        return [_episodic_node_from_record(r) for r in records]
+        return [episodic_node_from_record(r) for r in records]

@@ -20,8 +20,8 @@ from typing import Any
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.record_parsers import community_node_from_record
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     get_community_node_save_query,
@@ -29,17 +29,6 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.nodes import CommunityNode
 
 logger = logging.getLogger(__name__)
-
-
-def _community_node_from_record(record: Any) -> CommunityNode:
-    return CommunityNode(
-        uuid=record['uuid'],
-        name=record['name'],
-        group_id=record['group_id'],
-        name_embedding=record['name_embedding'],
-        created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
-        summary=record['summary'],
-    )
 
 
 class FalkorCommunityNodeOperations(CommunityNodeOperations):
@@ -142,7 +131,7 @@ class FalkorCommunityNodeOperations(CommunityNodeOperations):
             + COMMUNITY_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        nodes = [_community_node_from_record(r) for r in records]
+        nodes = [community_node_from_record(r) for r in records]
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
         return nodes[0]
@@ -161,7 +150,7 @@ class FalkorCommunityNodeOperations(CommunityNodeOperations):
             + COMMUNITY_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [_community_node_from_record(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -193,7 +182,7 @@ class FalkorCommunityNodeOperations(CommunityNodeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [_community_node_from_record(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
     async def load_name_embedding(
         self,
