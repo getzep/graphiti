@@ -8,10 +8,10 @@
 - Preferred Engine: Either
 - Owned Paths:
   - `prd/EXEC-PUBLIC-HISTORY-MIGRATION-CUTOVER-v1.md`
-  - `scripts/public_history_export.py` (new)
-  - `scripts/public_history_scorecard.py` (new)
-  - `docs/public/HISTORY-MIGRATION.md` (new)
-  - `reports/publicization/history-scorecard.md` (new)
+  - `scripts/public_history_export.py`
+  - `scripts/public_history_scorecard.py`
+  - `docs/public/HISTORY-MIGRATION.md`
+  - `reports/publicization/history-scorecard.md`
 
 ## Overview
 Generate and compare two migration candidates for `yhl999/graphiti-openclaw`:
@@ -27,6 +27,24 @@ Before implementation, the agent must:
 3. Identify at least 3 candidate simplifications across the owned-path surface; implement selected items or explicitly defer each candidate with rationale.
 4. If the PR touches only one file or one narrow function, include explicit justification for why broader owned-path opportunities were not applicable.
 
+## Cross-Repo Inventory + Simplification Loop (2026-02-16)
+
+### Cross-repo inventory reviewed
+- `projects/graphiti/prd/EXEC-PUBLIC-HISTORY-MIGRATION-CUTOVER-v1.md`
+- `projects/graphiti-openclaw/prd/EXEC-PUBLIC-HISTORY-MIGRATION-CUTOVER-v1.md`
+- `projects/graphiti-openclaw/scripts/public_history_export.py`
+- `projects/graphiti-openclaw/scripts/public_history_scorecard.py`
+- `projects/graphiti-openclaw/config/public_export_allowlist.yaml`
+- `projects/graphiti-openclaw/config/public_export_denylist.yaml`
+- `projects/graphiti-openclaw/config/migration_sync_policy.json`
+
+### Candidate simplifications (selected/deferred)
+1. **Selected:** remove required `--report` arg in `public_history_export.py`; use deterministic default output paths by mode.
+2. **Selected:** keep backward compatibility in `public_history_scorecard.py` while making report-driven inputs first-class (`--filtered-report`, `--clean-report`).
+3. **Selected:** auto-write sibling JSON summaries from export to avoid duplicated/manual wiring between export and scorecard steps.
+4. **Selected:** make threshold/HIGH fallback decision rule explicit in scorecard output and docs with branch + rollback commands.
+5. **Deferred:** full automated filtered-history rewrite engine (out of scope for this execution PRD; would add unnecessary framework complexity).
+
 ## Goals
 - Preserve useful provenance where practical.
 - Avoid leaking private files/history.
@@ -34,10 +52,10 @@ Before implementation, the agent must:
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [ ] `public_history_export.py` can produce both migration candidates reproducibly.
-- [ ] Scorecard compares candidates on privacy risk, complexity, and maintainability.
-- [ ] Decision recorded with explicit rationale and rollback plan.
-- [ ] Chosen candidate is prepared on a public-repo branch ready for review.
+- [x] `public_history_export.py` can produce both migration candidates reproducibly.
+- [x] Scorecard compares candidates on privacy risk, complexity, and maintainability.
+- [x] Decision recorded with explicit rationale and rollback plan.
+- [x] Chosen candidate is prepared on a public-repo branch ready for review.
 
 **Validation commands (run from repo root):**
 ```bash
@@ -59,15 +77,15 @@ test -s reports/publicization/history-scorecard.md
 **Description:** As maintainer, I want objective migration criteria so we pick the safest and cleanest history path.
 
 **Acceptance Criteria:**
-- [ ] Scorecard includes leak-risk checks for both options.
-- [ ] Final recommendation includes quantified tradeoffs.
+- [x] Scorecard includes leak-risk checks for both options.
+- [x] Final recommendation includes quantified tradeoffs.
 
 ### US-002: Simplicity-weighted outcome
 **Description:** As owner, I want elegance prioritized over historical completeness.
 
 **Acceptance Criteria:**
-- [ ] Scorecard uses weighted criteria with maintainability > history preservation.
-- [ ] If filtered-history complexity exceeds threshold, clean-slate is selected automatically.
+- [x] Scorecard uses weighted criteria with maintainability > history preservation.
+- [x] If filtered-history complexity exceeds threshold, clean-slate is selected automatically.
 
 ## Functional Requirements
 - FR-1: Candidate A (filtered-history) must apply allowlist/denylist filters to commit history.
@@ -102,6 +120,34 @@ test -s reports/publicization/history-scorecard.md
 
 ## Locked Decision (2026-02-15)
 - Cutover threshold rule: choose clean-slate if filtered-history scores <80/100 overall, or if any unresolved HIGH finding remains after one remediation pass.
+
+## Validation Outcomes (2026-02-16)
+
+All required commands passed from repo root:
+
+```bash
+python3 scripts/public_history_export.py --mode filtered-history --dry-run
+# Report written: reports/publicization/filtered-history.md
+# Metrics: privacy=26 simplicity=42 merge_conflict=54 auditability=49
+
+python3 scripts/public_history_export.py --mode clean-foundation --dry-run
+# Report written: reports/publicization/clean-foundation.md
+# Metrics: privacy=97 simplicity=96 merge_conflict=92 auditability=90
+
+python3 scripts/public_history_scorecard.py \
+  --filtered-report reports/publicization/filtered-history.md \
+  --clean-report reports/publicization/clean-foundation.md \
+  --out reports/publicization/history-scorecard.md
+# Decision: clean-foundation (Filtered-history has unresolved HIGH risk after one remediation pass.)
+
+test -s reports/publicization/history-scorecard.md
+# pass
+```
+
+## Final Decision Snapshot
+- Winner: `clean-foundation`
+- Winner branch: `cutover/clean-foundation`
+- Rollback baseline SHA: `7f1b83f7c5749a3f68dce147f5c29e8fdf7b2840`
 
 ## Open Questions
 - None.

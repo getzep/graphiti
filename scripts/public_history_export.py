@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate migration-candidate reports for public history cutover planning."""
+"""Generate deterministic migration-candidate reports for public history cutover."""
 
 from __future__ import annotations
 
@@ -20,6 +20,11 @@ from public_boundary_policy import (
     read_yaml_list,
     summarize_decisions,
 )
+
+DEFAULT_REPORT_PATHS = {
+    'filtered-history': Path('reports/publicization/filtered-history.md'),
+    'clean-foundation': Path('reports/publicization/clean-foundation.md'),
+}
 
 DEFAULT_HISTORY_METRICS: dict[str, Any] = {
     'filtered_history': {
@@ -66,7 +71,9 @@ DEFAULT_HISTORY_METRICS: dict[str, Any] = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Generate migration candidate report for public history cutover.')
+    parser = argparse.ArgumentParser(
+        description='Generate migration candidate report for public history cutover.',
+    )
     parser.add_argument('--repo', type=Path, default=Path('.'), help='Repository root or subdirectory')
     parser.add_argument('--mode', choices=('filtered-history', 'clean-foundation'), required=True)
     parser.add_argument(
@@ -87,21 +94,38 @@ def parse_args() -> argparse.Namespace:
         default=Path('config/migration_sync_policy.json'),
         help='Optional migration/sync policy JSON with history metric coefficients',
     )
-    parser.add_argument('--report', type=Path, required=True, help='Markdown output path')
+    parser.add_argument(
+        '--report',
+        type=Path,
+        help='Markdown output path (defaults to reports/publicization/<mode>.md)',
+    )
     parser.add_argument('--summary-json', type=Path, help='Optional JSON summary output path')
     parser.add_argument('--dry-run', action='store_true', help='Emit planning report only (no git rewrites)')
     return parser.parse_args()
+
+
+def _resolve_input_path(path: Path, repo_root: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return (repo_root / path).resolve()
+
+
+def _resolve_output_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return (Path.cwd() / path).resolve()
 
 
 def _git_count(repo_root: Path, *args: str) -> int:
     result = run_git(repo_root, *args, check=False)
     if result.returncode != 0:
         return 0
-    output = result.stdout.strip()
-    if output.isdigit():
-        return int(output)
-    lines = [line for line in output.splitlines() if line.strip()]
-    return len(lines)
+
+    value = result.stdout.strip()
+    if value.isdigit():
+        return int(value)
+
+    return len([line for line in value.splitlines() if line.strip()])
 
 
 def _number(value: object, default: float) -> float:
@@ -139,7 +163,7 @@ def _calc_filtered_metrics(
     simplicity_cap = _number(simplicity_cfg.get('commit_cap'), 35)
     simplicity_commit_penalty = min(
         int(commit_count / simplicity_divisor) if simplicity_divisor > 0 else 0,
-        simplicity_cap,
+        int(simplicity_cap),
     )
     simplicity = _number(simplicity_cfg.get('base'), 100) - simplicity_commit_penalty - (
         ambiguous_count * _number(simplicity_cfg.get('ambiguous_penalty'), 0.3)
@@ -149,7 +173,7 @@ def _calc_filtered_metrics(
     merge_cap = _number(merge_cfg.get('commit_cap'), 30)
     merge_commit_penalty = min(
         int(commit_count / merge_divisor) if merge_divisor > 0 else 0,
-        merge_cap,
+        int(merge_cap),
     )
     merge_conflict = _number(merge_cfg.get('base'), 100) - merge_commit_penalty - (
         ambiguous_count * _number(merge_cfg.get('ambiguous_penalty'), 0.2)
@@ -176,7 +200,7 @@ def _calc_clean_metrics(commit_count: int, history_cfg: dict[str, Any]) -> dict[
     simplicity_base = _number(simplicity_cfg.get('base'), 90)
     bonus_divisor = _number(simplicity_cfg.get('commit_bonus_divisor'), 100)
     bonus_cap = _number(simplicity_cfg.get('commit_bonus_cap'), 6)
-    simplicity_bonus = min(int(commit_count / bonus_divisor) if bonus_divisor > 0 else 0, bonus_cap)
+    simplicity_bonus = min(int(commit_count / bonus_divisor) if bonus_divisor > 0 else 0, int(bonus_cap))
 
     return {
         'privacy_risk': _clamp_metric(_number(privacy_cfg.get('base'), 97)),
@@ -204,6 +228,7 @@ def _load_history_metrics(policy_path: Path) -> tuple[dict[str, Any], bool]:
         candidate_cfg = history_cfg.get(candidate, {})
         if not isinstance(candidate_cfg, dict):
             continue
+
         for metric, defaults in DEFAULT_HISTORY_METRICS[candidate].items():
             metric_cfg = candidate_cfg.get(metric, {})
             if isinstance(metric_cfg, dict):
@@ -214,14 +239,75 @@ def _load_history_metrics(policy_path: Path) -> tuple[dict[str, Any], bool]:
     return merged, True
 
 
+def _default_report_path(mode: str) -> Path:
+    return DEFAULT_REPORT_PATHS[mode]
+
+
+def _build_report_lines(summary: dict[str, Any]) -> list[str]:
+    metrics = summary['metrics']
+    policy = summary['policy']
+    git_meta = summary['git']
+    counts = summary['boundary_counts']
+
+    return [
+        f"# Public History Candidate Report — {summary['mode']}",
+        '',
+        f"- Generated: `{summary['generated_at']}`",
+        f"- Repo: `{summary['repo_root']}`",
+        f"- Dry run: `{summary['dry_run']}`",
+        f"- Candidate branch (planned): `{summary['candidate_branch']}`",
+        '',
+        '## Inputs',
+        '',
+        f"- Allowlist: `{policy['allowlist']}`",
+        f"- Denylist: `{policy['denylist']}`",
+        f"- History metric policy: `{policy['history_metrics']}`",
+        '',
+        '## Repository baseline',
+        '',
+        f"- Commits: `{git_meta['commit_count']}`",
+        f"- Authors: `{git_meta['author_count']}`",
+        f"- HEAD SHA: `{git_meta['head_sha']}`",
+        f"- Tracked paths scanned: `{git_meta['tracked_paths']}`",
+        '',
+        '## Boundary counts',
+        '',
+        f"- ALLOW: `{counts[ALLOW]}`",
+        f"- BLOCK: `{counts[BLOCK]}`",
+        f"- AMBIGUOUS: `{counts[AMBIGUOUS]}`",
+        '',
+        '## Candidate metrics (0-100, higher is better)',
+        '',
+        f"- privacy_risk: `{metrics['privacy_risk']}`",
+        f"- simplicity: `{metrics['simplicity']}`",
+        f"- merge_conflict_risk: `{metrics['merge_conflict_risk']}`",
+        f"- auditability: `{metrics['auditability']}`",
+        '',
+        '## Risk flags',
+        '',
+        f"- unresolved_high: `{summary['risk_flags']['unresolved_high']}`",
+        '',
+        '## Rationale',
+        '',
+        f"- {summary['rationale']}",
+        '',
+        '## Next step',
+        '',
+        '- Feed this summary into `scripts/public_history_scorecard.py` for winner selection.',
+    ]
+
+
 def main() -> int:
     args = parse_args()
     repo_root = resolve_repo_root(args.repo.resolve())
 
-    manifest_path = args.manifest if args.manifest.is_absolute() else (repo_root / args.manifest).resolve()
-    denylist_path = args.denylist if args.denylist.is_absolute() else (repo_root / args.denylist).resolve()
-    policy_path = args.policy if args.policy.is_absolute() else (repo_root / args.policy).resolve()
-    report_path = args.report if args.report.is_absolute() else (Path.cwd() / args.report).resolve()
+    manifest_path = _resolve_input_path(args.manifest, repo_root)
+    denylist_path = _resolve_input_path(args.denylist, repo_root)
+    policy_path = _resolve_input_path(args.policy, repo_root)
+
+    report_arg = args.report or _default_report_path(args.mode)
+    report_path = _resolve_output_path(report_arg)
+    summary_path = _resolve_output_path(args.summary_json) if args.summary_json else report_path.with_suffix('.json')
 
     allowlist = read_yaml_list(manifest_path, 'allowlist')
     denylist = read_yaml_list(denylist_path, 'denylist')
@@ -233,17 +319,19 @@ def main() -> int:
 
     commit_count = _git_count(repo_root, 'rev-list', '--count', 'HEAD')
     author_count = _git_count(repo_root, 'shortlog', '-sn', 'HEAD')
+    head_sha_result = run_git(repo_root, 'rev-parse', 'HEAD', check=False)
+    head_sha = head_sha_result.stdout.strip() if head_sha_result.returncode == 0 else ''
 
     if args.mode == 'filtered-history':
         metrics = _calc_filtered_metrics(commit_count, len(blocked), len(ambiguous), history_metrics)
         unresolved_high = len(blocked) > 0
         rationale = (
-            'Filtered-history keeps more provenance but inherits policy ambiguity and privacy review burden.'
+            'Filtered-history preserves provenance but inherits policy ambiguity and privacy review burden.'
         )
     else:
         metrics = _calc_clean_metrics(commit_count, history_metrics)
         unresolved_high = False
-        rationale = 'Clean-foundation minimizes carry-over complexity and should reduce long-term merge friction.'
+        rationale = 'Clean-foundation minimizes carry-over complexity and long-term merge friction.'
 
     summary = {
         'mode': args.mode,
@@ -258,6 +346,8 @@ def main() -> int:
         'git': {
             'commit_count': commit_count,
             'author_count': author_count,
+            'tracked_paths': len(files),
+            'head_sha': head_sha,
         },
         'boundary_counts': {
             ALLOW: counts[ALLOW],
@@ -268,60 +358,17 @@ def main() -> int:
         'risk_flags': {
             'unresolved_high': unresolved_high,
         },
+        'candidate_branch': f'cutover/{args.mode}',
         'rationale': rationale,
     }
 
-    report_lines = [
-        f'# Public History Candidate Report — {args.mode}',
-        '',
-        f'- Generated: `{summary["generated_at"]}`',
-        f'- Repo: `{repo_root}`',
-        f'- Dry run: `{args.dry_run}`',
-        '',
-        '## Inputs',
-        '',
-        f'- Allowlist: `{manifest_path}`',
-        f'- Denylist: `{denylist_path}`',
-        f"- History metric policy: `{summary['policy']['history_metrics']}`",
-        '',
-        '## Repository baseline',
-        '',
-        f'- Commits: `{commit_count}`',
-        f'- Authors: `{author_count}`',
-        f'- Paths scanned: `{len(files)}`',
-        '',
-        '## Boundary counts',
-        '',
-        f'- ALLOW: `{counts[ALLOW]}`',
-        f'- BLOCK: `{counts[BLOCK]}`',
-        f'- AMBIGUOUS: `{counts[AMBIGUOUS]}`',
-        '',
-        '## Candidate metrics (0-100, higher is better)',
-        '',
-        f'- privacy_risk: `{metrics["privacy_risk"]}`',
-        f'- simplicity: `{metrics["simplicity"]}`',
-        f'- merge_conflict_risk: `{metrics["merge_conflict_risk"]}`',
-        f'- auditability: `{metrics["auditability"]}`',
-        '',
-        '## Rationale',
-        '',
-        f'- {rationale}',
-        f'- unresolved_high: `{unresolved_high}`',
-        '',
-        '## Next step',
-        '',
-        '- Feed this summary JSON into `scripts/public_history_scorecard.py` for winner selection.',
-    ]
-
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text('\n'.join(report_lines).rstrip() + '\n', encoding='utf-8')
+    report_path.write_text('\n'.join(_build_report_lines(summary)).rstrip() + '\n', encoding='utf-8')
 
-    if args.summary_json:
-        summary_path = args.summary_json if args.summary_json.is_absolute() else (Path.cwd() / args.summary_json).resolve()
-        dump_json(summary_path, summary)
-        print(f'Summary JSON written: {summary_path}')
+    dump_json(summary_path, summary)
 
     print(f'Report written: {report_path}')
+    print(f'Summary JSON written: {summary_path}')
     print(
         'Metrics: '
         f"privacy={metrics['privacy_risk']} simplicity={metrics['simplicity']} "
