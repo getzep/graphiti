@@ -11,7 +11,12 @@ import tempfile
 from pathlib import Path
 
 from delta_contracts import validate_package_manifest
-from migration_sync_lib import evaluate_payload_entries, load_json, resolve_safe_child
+from migration_sync_lib import (
+    evaluate_payload_entries,
+    file_has_expected_content,
+    load_json,
+    resolve_safe_child,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,26 +47,39 @@ def _apply_import_atomic(planned_writes: list[tuple[str, Path, Path]], target_ro
         ),
     )
 
-    backup_pairs: list[tuple[Path, Path]] = []
+    backup_pairs: list[tuple[str, Path]] = []
     created_paths: list[Path] = []
 
     try:
         for rel, src, dst in planned_writes:
             if dst.exists():
-                backup_path = rollback_root / rel
+                backup_path = resolve_safe_child(
+                    rollback_root,
+                    rel,
+                    context='atomic rollback backup path',
+                )
                 _copy_file(dst, backup_path)
-                backup_pairs.append((dst, backup_path))
+                backup_pairs.append((rel, dst))
             else:
                 created_paths.append(dst)
 
             _copy_file(src, dst)
-    except Exception:
+    except Exception as import_exc:
         for created in reversed(created_paths):
             if created.exists():
                 created.unlink()
 
-        for dst, backup_path in backup_pairs:
-            _copy_file(backup_path, dst)
+        for rel, dst in backup_pairs:
+            restore_src = resolve_safe_child(
+                rollback_root,
+                rel,
+                context='atomic rollback restore source',
+            )
+            if not restore_src.exists() or not restore_src.is_file():
+                raise ValueError(
+                    f'Atomic rollback backup missing or invalid for {rel}: {restore_src}',
+                ) from import_exc
+            _copy_file(restore_src, dst)
 
         raise
     finally:
@@ -101,16 +119,47 @@ def main() -> int:
     )
 
     planned_writes: list[tuple[str, Path, Path]] = []
-    conflicts: list[str] = []
-    for rel, src in planned_entries:
+    skipped_matches: list[tuple[str, Path, Path]] = []
+    destination_conflicts: list[str] = []
+    destination_path_conflicts: list[str] = []
+
+    for rel, src, expected_hash, expected_size in planned_entries:
         dst = resolve_safe_child(target_root, rel, context='migration import target entry')
+        if dst.exists() and not dst.is_file():
+            destination_path_conflicts.append(
+                f'{rel}: destination is not a file: {dst}',
+            )
+            continue
+
+        if dst.parent.exists() and not dst.parent.is_dir():
+            destination_path_conflicts.append(
+                f'{rel}: destination parent is not a directory: {dst.parent}',
+            )
+            continue
+
+        if dst.exists() and file_has_expected_content(
+            dst,
+            expected_sha256=expected_hash,
+            expected_size_bytes=expected_size,
+        ):
+            skipped_matches.append((rel, src, dst))
+            continue
+
         if dst.exists() and not args.allow_overwrite:
-            conflicts.append(rel)
+            destination_conflicts.append(rel)
+            continue
+
         planned_writes.append((rel, src, dst))
 
-    if conflicts and not args.dry_run:
+    if destination_path_conflicts and not args.dry_run:
+        print('Import blocked: invalid destination entries.', file=sys.stderr)
+        for detail in destination_path_conflicts:
+            print(f'- {detail}', file=sys.stderr)
+        return 1
+
+    if destination_conflicts and not args.dry_run:
         print('Import blocked: existing files would be overwritten.', file=sys.stderr)
-        for rel in conflicts:
+        for rel in destination_conflicts:
             print(f'- {rel}', file=sys.stderr)
         print('Use --allow-overwrite to apply import anyway.', file=sys.stderr)
         return 1
@@ -128,15 +177,38 @@ def main() -> int:
         return 1
 
     if args.dry_run:
-        print(f'DRY RUN import plan ({len(planned_writes)} files):')
-        for _, src, dst in planned_writes:
+        print(
+            f'DRY RUN import plan: write/overwrite={len(planned_writes)}, '
+            f'skip-same={len(skipped_matches)}, '
+            f'blocked-conflicts={len(destination_conflicts)}, '
+            f'blocked-paths={len(destination_path_conflicts)}'
+        )
+        for rel, _, _ in skipped_matches:
+            print(f'- skip identical: {rel}')
+        for rel, src, dst in planned_writes:
             note = ' (payload missing in dry-run preview)' if not src.exists() else ''
-            print(f'- {src} -> {dst}{note}')
+            print(f'- write: {rel} -> {dst}{note}')
+
+        has_blocking_conflicts = bool(destination_conflicts or destination_path_conflicts)
+        if destination_conflicts:
+            for rel in destination_conflicts:
+                print(f'- would overwrite: {rel}', file=sys.stderr)
+        if destination_path_conflicts:
+            for detail in destination_path_conflicts:
+                print(f'- blocked path: {detail}', file=sys.stderr)
 
         if integrity_errors:
             print('Dry-run integrity warnings:')
             for issue in integrity_errors:
                 print(f'- {issue}')
+
+        if has_blocking_conflicts:
+            print(
+                'Dry-run detected blocking destination conflicts. '
+                'Resolve conflicts or use --allow-overwrite before import.',
+                file=sys.stderr,
+            )
+            return 1
         return 0
 
     if dry_run_preview:
@@ -144,6 +216,12 @@ def main() -> int:
             'Cannot execute non-dry-run import from dry-run preview package. '
             'Re-export without --dry-run to include payload files.',
         )
+
+    if not planned_writes:
+        print(
+            f'No changes: all {len(skipped_matches)} entries already match target state.',
+        )
+        return 0
 
     if args.atomic:
         _apply_import_atomic(planned_writes, target_root)

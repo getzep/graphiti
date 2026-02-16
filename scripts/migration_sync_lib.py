@@ -167,21 +167,36 @@ def collect_file_entries(files: list[Path], repo_root: Path) -> list[dict[str, A
     return entries
 
 
+def file_has_expected_content(
+    path: Path,
+    *,
+    expected_sha256: str,
+    expected_size_bytes: int,
+) -> bool:
+    """Check whether a file exists with expected digest and size."""
+
+    if not path.is_file():
+        return False
+    if path.stat().st_size != expected_size_bytes:
+        return False
+    return sha256_file(path) == expected_sha256
+
+
 def evaluate_payload_entries(
     entries: list[dict[str, Any]],
     payload_root: Path,
     *,
     context: str,
-) -> tuple[list[tuple[str, Path]], list[str], list[str]]:
+) -> tuple[list[tuple[str, Path, str, int]], list[str], list[str]]:
     """Evaluate payload entries for presence and integrity.
 
     Returns:
-      - planned entries as ``(relative_path, payload_source_path)``
+      - planned entries as ``(relative_path, payload_source_path, expected_sha256, expected_size_bytes)``
       - missing payload relative paths
       - integrity issues (size/checksum mismatches)
     """
 
-    planned_entries: list[tuple[str, Path]] = []
+    planned_entries: list[tuple[str, Path, str, int]] = []
     missing_payload: list[str] = []
     integrity_errors: list[str] = []
 
@@ -191,7 +206,7 @@ def evaluate_payload_entries(
         expected_size = int(entry['size_bytes'])
 
         src = resolve_safe_child(payload_root, rel, context=context)
-        planned_entries.append((rel, src))
+        planned_entries.append((rel, src, expected_hash, expected_size))
 
         if not src.exists() or not src.is_file():
             missing_payload.append(rel)

@@ -8,10 +8,14 @@
 - Preferred Engine: Either
 - Owned Paths:
   - `prd/EXEC-STATE-MIGRATION-KIT-v1.md`
-  - `scripts/state_migration_export.py` (new)
-  - `scripts/state_migration_import.py` (new)
-  - `scripts/state_migration_check.py` (new)
-  - `docs/runbooks/state-migration.md` (new)
+  - `config/state_migration_manifest.json`
+  - `docs/runbooks/state-migration.md`
+  - `scripts/delta_contracts_lib/package_manifest.py`
+  - `scripts/migration_sync_lib.py`
+  - `scripts/state_migration_export.py`
+  - `scripts/state_migration_import.py`
+  - `scripts/state_migration_check.py`
+  - `tests/test_state_migration_kit.py`
 
 ## Overview
 Provide a clean migration kit for runtime data so users can move Graphiti state between environments without committing private state into git.
@@ -30,11 +34,11 @@ Before implementation, the agent must:
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [ ] Export tool generates package for required runtime state (graph history, ingest registry, minimal metadata).
-- [ ] Import tool restores package idempotently with validation checks.
-- [ ] Migration check script verifies package integrity and target compatibility.
-- [ ] Runbook documents migration flow, rollback, and security handling.
-- [ ] Refactor-pass simplification loop is applied to all touched code.
+- [x] Export tool generates package for required runtime state (graph history, ingest registry, minimal metadata).
+- [x] Import tool restores package idempotently with validation checks.
+- [x] Migration check script verifies package integrity and target compatibility.
+- [x] Runbook documents migration flow, rollback, and security handling.
+- [x] Refactor-pass simplification loop is applied to all touched code.
 
 **Validation commands (run from repo root):**
 ```bash
@@ -42,8 +46,10 @@ set -euo pipefail
 python3 scripts/state_migration_export.py --dry-run --out /tmp/graphiti-state-export
 python3 scripts/state_migration_check.py --package /tmp/graphiti-state-export --dry-run
 python3 scripts/state_migration_import.py --dry-run --in /tmp/graphiti-state-export
-python3 scripts/run_tests.py --target migration
+python3 -m unittest tests.test_state_migration_kit
 ```
+Note: `scripts/run_tests.py` is not part of this repository, so this validation path is replaced with direct migration-kit tests that run in the default Python environment.
+
 **Pass criteria:** all commands exit 0; dry-run reports no schema/compatibility errors.
 
 ## User Stories
@@ -52,15 +58,15 @@ python3 scripts/run_tests.py --target migration
 **Description:** As operator, I want to move runtime graph state into a new setup cleanly.
 
 **Acceptance Criteria:**
-- [ ] Export/import flow works without manual DB surgery.
-- [ ] Migration preserves required references and integrity checks pass.
+- [x] Export/import flow works without manual DB surgery.
+- [x] Migration preserves required references and integrity checks pass.
 
 ### US-002: Private data safety
 **Description:** As maintainer, I want migration data handled explicitly so no private runtime state leaks into git.
 
 **Acceptance Criteria:**
-- [ ] Migration artifacts are explicitly excluded from git in docs/checks.
-- [ ] Runbook includes secure handling/deletion guidance.
+- [x] Migration artifacts are explicitly excluded from git in docs/checks.
+- [x] Runbook includes secure handling/deletion guidance.
 
 ## Functional Requirements
 - FR-1: Export package format is versioned and documented.

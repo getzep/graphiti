@@ -75,6 +75,13 @@ def main() -> int:
         'source_repo': str(repo_root),
         'source_commit': source_commit,
         'dry_run_preview': bool(args.dry_run),
+        'source_manifest': {
+            'version': manifest_version,
+            'package_name': package_name,
+            'required_files': required_files,
+            'optional_globs': optional_globs,
+            'exclude_globs': exclude_globs,
+        },
         'entry_count': len(entries),
         'entries': entries,
     }

@@ -5,6 +5,7 @@ from typing import Any
 from migration_sync_lib import ensure_safe_relative
 
 from .common import expect_bool, expect_dict, expect_int, expect_non_empty_str
+from .state_manifest import validate_state_migration_manifest
 
 
 def validate_package_manifest(
@@ -53,10 +54,21 @@ def validate_package_manifest(
         min_value=0,
     )
 
+    source_manifest = manifest.get('source_manifest')
+    if source_manifest is not None:
+        if not isinstance(source_manifest, dict):
+            raise ValueError(f'{context}.source_manifest must be an object')
+        validate_state_migration_manifest(
+            source_manifest,
+            context=f'{context}.source_manifest',
+        )
+
     if expected_entry_count != len(entries):
         raise ValueError(
             f'{context}.entry_count mismatch: expected {expected_entry_count}, found {len(entries)}',
         )
+
+    seen_paths: set[str] = set()
 
     for index, entry in enumerate(entries):
         entry_context = f'{context}.entries[{index}]'
@@ -73,5 +85,8 @@ def validate_package_manifest(
             raise ValueError(f'{entry_context}.sha256 must be a 64-char hex string')
 
         expect_int(entry_dict.get('size_bytes'), context=f'{entry_context}.size_bytes', min_value=0)
+        if rel_path in seen_paths:
+            raise ValueError(f'{entry_context}.path duplicate: {rel_path}')
+        seen_paths.add(rel_path)
 
     return manifest

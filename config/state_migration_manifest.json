@@ -10,6 +10,7 @@
   ],
   "optional_globs": [
     "docs/public/*.md",
+    "state/*.db",
     "scripts/ci/*.sh",
     "scripts/public_*.py",
     "scripts/migration_sync_lib.py",
