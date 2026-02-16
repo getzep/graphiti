@@ -1,0 +1,166 @@
+name: Upstream Sync Lane
+
+on:
+  schedule:
+    # Weekly Monday ET lane (represented in UTC).
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+    inputs:
+      branch_date:
+        description: 'Optional branch date override (YYYY-MM-DD, ET naming)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Run merge planning only (no push / no PR mutation)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upstream-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Resolve sync branch metadata
+        id: meta
+        env:
+          INPUT_BRANCH_DATE: ${{ github.event.inputs.branch_date }}
+        run: |
+          set -euo pipefail
+          export TZ=America/New_York
+          if [ -n "${INPUT_BRANCH_DATE:-}" ]; then
+            branch_date="${INPUT_BRANCH_DATE}"
+          else
+            branch_date="$(date +%F)"
+          fi
+
+          branch_name="upstream-sync/${branch_date}"
+          pr_title="chore: upstream sync ${branch_date}"
+
+          echo "branch_date=${branch_date}" >> "$GITHUB_OUTPUT"
+          echo "branch_name=${branch_name}" >> "$GITHUB_OUTPUT"
+          echo "pr_title=${pr_title}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure remotes and fetch refs
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/getzep/graphiti.git 2>/dev/null || true
+          git fetch origin main --prune
+          git fetch upstream main --prune
+
+      - name: Preflight doctor
+        run: |
+          set -euo pipefail
+          python3 scripts/upstream_sync_doctor.py --repo . --dry-run
+
+      - name: Build sync branch and merge upstream/main
+        id: merge
+        run: |
+          set -euo pipefail
+          branch="${{ steps.meta.outputs.branch_name }}"
+
+          git checkout -B "$branch" origin/main
+          if git merge --no-ff --no-edit upstream/main; then
+            echo "merge_status=clean" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "merge_status=conflict" >> "$GITHUB_OUTPUT"
+            echo "Merge conflict detected. Resolve manually via PR lane." >&2
+            exit 1
+          fi
+
+          if git diff --quiet origin/main..HEAD; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "merge_commit_sha=" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "merge_commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push sync branch
+        if: steps.merge.outputs.has_changes == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true')
+        run: |
+          set -euo pipefail
+          git push --force-with-lease origin "${{ steps.meta.outputs.branch_name }}"
+
+      - name: Open or update sync PR
+        if: steps.merge.outputs.has_changes == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: ${{ steps.meta.outputs.branch_name }}
+          PR_TITLE: ${{ steps.meta.outputs.pr_title }}
+          MERGE_COMMIT_SHA: ${{ steps.merge.outputs.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+
+          body_file="$(mktemp)"
+          {
+            echo "## Automated upstream sync"
+            echo
+            echo "- Source: \`upstream/main\`"
+            echo "- Target: \`main\`"
+            echo "- Sync branch: \`${BRANCH_NAME}\`"
+            echo "- Merge commit: \`${MERGE_COMMIT_SHA}\`"
+            echo "- Cadence: weekly Monday ET (manual trigger supported)"
+            echo
+            echo "### Conflict hotspots"
+            echo "- \`signatures/version1/cla.json\` (fork-owned CLA state; default to origin/ours unless explicitly approved)."
+            echo "- \`scripts/**\` and \`docs/public/**\` delta-layer surfaces (review for accidental overwrite)."
+            echo
+            echo "### Validation commands"
+            echo "\`\`\`bash"
+            echo "python3 scripts/upstream_sync_doctor.py --repo . --dry-run"
+            echo "python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety"
+            echo "test -s docs/runbooks/upstream-sync-openclaw.md"
+            echo "\`\`\`"
+            echo
+            echo "### Operator checklist"
+            echo "- [ ] Review merge diff for local delta-layer conflicts."
+            echo "- [ ] Resolve hotspot conflicts according to runbook policy."
+            echo "- [ ] Run validation commands and CI checks."
+            echo "- [ ] Confirm rollback plan before merge."
+          } > "$body_file"
+
+          existing_pr_number="$(gh pr list \
+            --head "$BRANCH_NAME" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [ -n "$existing_pr_number" ]; then
+            gh pr edit "$existing_pr_number" \
+              --title "$PR_TITLE" \
+              --body-file "$body_file"
+            echo "Updated PR #$existing_pr_number for $BRANCH_NAME"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body-file "$body_file"
+            echo "Created PR for $BRANCH_NAME"
+          fi
+
+      - name: Workflow summary
+        run: |
+          {
+            echo "## Upstream Sync Lane"
+            echo "- Branch: \`${{ steps.meta.outputs.branch_name }}\`"
+            echo "- Merge status: \`${{ steps.merge.outputs.merge_status }}\`"
+            echo "- Has changes: \`${{ steps.merge.outputs.has_changes }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -40,6 +40,40 @@ def _git_ref_exists(repo_root: Path, ref_name: str) -> bool:
     return result.returncode == 0
 
 
+def _evaluate_sync_button_decision(
+    *,
+    clean_worktree: bool,
+    origin_only: int,
+    upstream_only: int,
+    max_origin_only: int,
+    require_upstream_only: bool,
+    require_clean_worktree: bool,
+) -> tuple[bool, list[str]]:
+    deny_reasons: list[str] = []
+
+    if require_clean_worktree and not clean_worktree:
+        deny_reasons.append('working tree is dirty')
+
+    if origin_only < 0 or upstream_only < 0:
+        deny_reasons.append('origin/upstream divergence could not be computed')
+    else:
+        if origin_only > max_origin_only:
+            deny_reasons.append(
+                f'origin is ahead by {origin_only} commit(s), exceeds max_origin_only_commits={max_origin_only}',
+            )
+        if require_upstream_only and upstream_only <= 0:
+            deny_reasons.append('upstream has no commits ahead of origin')
+
+    if deny_reasons:
+        return False, deny_reasons
+
+    return True, [
+        f'origin-only commits={origin_only} (allowed <= {max_origin_only})',
+        f'upstream-only commits={upstream_only}',
+        f'clean worktree required={require_clean_worktree}, current clean={clean_worktree}',
+    ]
+
+
 def main() -> int:
     args = parse_args()
     repo_root = resolve_repo_root(args.repo.resolve())
@@ -134,24 +168,26 @@ def main() -> int:
             missing_refs.append(upstream_ref)
         warnings.append(f'Missing refs for divergence check: {", ".join(missing_refs)}')
 
-    sync_button_safe = False
-    if origin_only >= 0 and upstream_only >= 0:
-        sync_button_safe = origin_only <= max_origin_only
-        if require_upstream_only:
-            sync_button_safe = sync_button_safe and upstream_only > 0
-        if require_clean_worktree:
-            sync_button_safe = sync_button_safe and clean_worktree
+    sync_button_safe, sync_button_reasons = _evaluate_sync_button_decision(
+        clean_worktree=clean_worktree,
+        origin_only=origin_only,
+        upstream_only=upstream_only,
+        max_origin_only=max_origin_only,
+        require_upstream_only=require_upstream_only,
+        require_clean_worktree=require_clean_worktree,
+    )
+    sync_button_decision = 'ALLOW' if sync_button_safe else 'DENY'
 
     # When --allow-missing-upstream is set and upstream refs are absent,
     # degrade sync-button-safety to a warning instead of hard-failing.
-    _upstream_refs_absent = upstream_remote not in remotes or not upstream_ref_exists
+    upstream_refs_absent = upstream_remote not in remotes or not upstream_ref_exists
     if args.check_sync_button_safety and not sync_button_safe:
-        if args.allow_missing_upstream and _upstream_refs_absent:
+        if args.allow_missing_upstream and upstream_refs_absent:
             warnings.append(
                 'Sync button safety check skipped (--allow-missing-upstream; upstream refs absent)'
             )
         else:
-            issues.append('Sync button safety check failed; use PR-based sync lane')
+            issues.append('Sync button decision is DENY; use PR-based sync lane')
 
     report = {
         'repo_root': str(repo_root),
@@ -162,6 +198,8 @@ def main() -> int:
         'origin_only_commits': origin_only,
         'upstream_only_commits': upstream_only,
         'sync_button_safe': sync_button_safe,
+        'sync_button_decision': sync_button_decision,
+        'sync_button_reasons': sync_button_reasons,
         'issues': issues,
         'warnings': warnings,
     }
@@ -178,6 +216,10 @@ def main() -> int:
     print(f'Origin-only commits: {origin_only}')
     print(f'Upstream-only commits: {upstream_only}')
     print(f'Sync button safe: {sync_button_safe}')
+    print(f'Sync button decision: {sync_button_decision}')
+    print('Sync button rationale:')
+    for reason in sync_button_reasons:
+        print(f'- {reason}')
 
     if warnings:
         print('Warnings:')
