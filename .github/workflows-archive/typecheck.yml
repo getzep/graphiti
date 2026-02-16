@@ -1,13 +1,12 @@
-name: Pyright Type Check
+name: Pyright Type Check (manual legacy)
 
 permissions:
   contents: read
 
+# Legacy workflow kept for manual parity/debugging.
+# Canonical PR CI typecheck path is .github/workflows/ci.yml.
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   pyright:
@@ -26,17 +25,6 @@ jobs:
           version: "latest"
       - name: Install dependencies
         run: uv sync --all-extras
-      - name: Run Pyright for graphiti-core
+      - name: Run Pyright suite (core + server)
         shell: bash
-        run: |
-          uv run pyright ./graphiti_core
-      - name: Install graph-service dependencies
-        shell: bash
-        run: |
-          cd server
-          uv sync --all-extras
-      - name: Run Pyright for graph-service
-        shell: bash
-        run: |
-          cd server
-          uv run pyright .
+        run: bash scripts/ci/run_pyright.sh

@@ -7,12 +7,64 @@
 - Depends On: task-graphiti-public-boundary-contract
 - Preferred Engine: Either
 - Owned Paths:
+  - `.github/workflows-archive/README.md`
+  - `.github/workflows-archive/lint.yml`
+  - `.github/workflows-archive/typecheck.yml`
+  - `.github/workflows-archive/unit_tests.yml`
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/lint.yml`
+  - `.github/workflows/migration-sync-tooling.yml`
+  - `README.md`
+  - `config/delta_contract_policy.json`
+  - `config/migration_sync_policy.json`
+  - `config/public_export_allowlist.yaml`
+  - `config/state_migration_manifest.json`
+  - `docs/public/BOUNDARY-CONTRACT.md`
+  - `docs/public/MIGRATION-SYNC-TOOLKIT.md`
+  - `extensions/migration_sync/README.md`
+  - `extensions/migration_sync/manifest.json`
+  - `prd/EPIC-PUBLICIZATION-UPSTREAM-SYNC-SIMPLIFICATION-v1.md`
   - `prd/EXEC-PUBLIC-REFACTOR-PASS-SIMPLIFY-v1.md`
-  - `ingest/**` (foundation-only files)
-  - `runtime/**` (foundation-only files)
-  - `scripts/**` (foundation-only files)
-  - `evals/**` (foundation-only files)
-  - `docs/` (only files directly documenting refactored foundation paths)
+  - `scripts/ci/run_db_integration_tests.sh`
+  - `scripts/ci/run_migration_sync_toolkit.sh`
+  - `scripts/ci/run_pyright.sh`
+  - `scripts/ci/run_ruff_lint.sh`
+  - `scripts/ci/run_unit_tests.sh`
+  - `scripts/delta_contract_check.py`
+  - `scripts/delta_contract_migrate.py`
+  - `scripts/delta_contracts.py`
+  - `scripts/delta_contracts_lib/__init__.py`
+  - `scripts/delta_contracts_lib/common.py`
+  - `scripts/delta_contracts_lib/contract_policy.py`
+  - `scripts/delta_contracts_lib/extension.py`
+  - `scripts/delta_contracts_lib/inspect.py`
+  - `scripts/delta_contracts_lib/package_manifest.py`
+  - `scripts/delta_contracts_lib/policy.py`
+  - `scripts/delta_contracts_lib/state_manifest.py`
+  - `scripts/delta_tool.py`
+  - `scripts/extension_contract_check.py`
+  - `scripts/migration_sync_lib.py`
+  - `scripts/public_boundary_policy.py`
+  - `scripts/public_boundary_policy_lint.py`
+  - `scripts/public_history_export.py`
+  - `scripts/public_history_scorecard.py`
+  - `scripts/public_repo_boundary_audit.py`
+  - `scripts/state_migration_check.py`
+  - `scripts/state_migration_export.py`
+  - `scripts/state_migration_import.py`
+  - `scripts/upstream_sync_doctor.py`
+  - `tests/test_delta_contract_check.py`
+  - `tests/test_delta_contract_migrate.py`
+  - `tests/test_delta_pipeline_e2e.py`
+  - `tests/test_delta_tool.py`
+  - `tests/test_extension_contract_check.py`
+  - `tests/test_public_boundary_policy.py`
+  - `tests/test_public_boundary_policy_lint.py`
+  - `tests/test_public_history_export.py`
+  - `tests/test_public_history_scorecard.py`
+  - `tests/test_public_repo_boundary_audit.py`
+  - `tests/test_state_migration_kit.py`
+  - `tests/test_upstream_sync_doctor.py`
 
 ## Overview
 Perform a targeted refactor pass to reduce complexity before migration so the public codebase is elegant, minimal, and easier to maintain.
@@ -47,11 +99,15 @@ Before implementation, the agent must:
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
-python3 scripts/run_tests.py
-python3 -m compileall ingest runtime scripts evals
-python3 scripts/run_tests.py --target policy
+bash scripts/ci/run_ruff_lint.sh
+bash scripts/ci/run_migration_sync_toolkit.sh
+python3 tests/test_delta_contract_check.py
+python3 tests/test_delta_contract_migrate.py
+python3 tests/test_delta_tool.py
+python3 tests/test_delta_pipeline_e2e.py
+python3 tests/test_state_migration_kit.py
 ```
-**Pass criteria:** all checks exit 0; no functionality regressions; compileall succeeds.
+**Pass criteria:** all checks exit 0; no functionality regressions; contract/migration invariants preserved.
 
 ## User Stories
 
@@ -98,6 +154,62 @@ python3 scripts/run_tests.py --target policy
 ### Dependency map
 - Depends on boundary contract to define allowed foundation scope.
 - Feeds history migration (avoid rewriting history multiple times).
+
+## Execution Amendment (2026-02-15) — Delta Control-Layer Tranches 1→7
+
+### Why this amendment exists
+The implementation stream for this PRD converged on the **delta/control layer** as the highest-leverage simplification surface.
+This amendment captures the shipped scope and the new steady-state contract model.
+
+### Effective owned-path focus (override for this execution)
+- `scripts/**` (delta tooling + shared contract/migration libraries)
+- `config/**` (policy + contract metadata)
+- `docs/public/**` (operator-facing runbooks/docs)
+- `.github/workflows/**` (canonical CI gates + legacy archive policy)
+- `extensions/**` (versioned extension command contract)
+- `tests/**` (delta contract, migration, and pipeline coverage)
+
+### Shipped tranche outcomes
+1. **Boundary modularization + CI centralization**
+   - Boundary policy library + lint CLI + shared CI shell entrypoints.
+2. **Migration/sync toolkit + extension contracts baseline**
+   - Upstream doctor, history export/scorecard, state export/check/import.
+3. **Hardening + policy-driven metrics**
+   - Safer path handling, payload integrity checks, policyized history metrics.
+4. **Contract-first layer + unified command surface**
+   - `delta_contract_check.py` + `delta_tool.py` canonical entrypoint.
+5. **Registry/integrity dedupe + pipeline e2e**
+   - Shared extension inspection + shared payload evaluation + e2e test.
+6. **Modular contracts + explicit migration policy + workflow retirement**
+   - `delta_contracts_lib/**`, `delta_contract_migrate.py`, workflow archive policy.
+7. **Cross-contract invariants + safer execution semantics**
+   - Invariant checks across policy/manifest/contract policy,
+   - target-aware migration handlers,
+   - fail-fast command execution on registry warnings,
+   - atomic import rollback default.
+
+### Current design contract (steady state)
+- Exactly one canonical command bus: `scripts/delta_tool.py`
+- Exactly one canonical contract validator entrypoint: `scripts/delta_contract_check.py`
+- Exactly one canonical contract migration entrypoint: `scripts/delta_contract_migrate.py`
+- Extension commands must be namespaced and versioned via `command_contract`
+- State import defaults to atomic rollback semantics (`--atomic` default)
+
+### Delta-specific validation commands (canonical)
+```bash
+set -euo pipefail
+bash scripts/ci/run_ruff_lint.sh
+bash scripts/ci/run_migration_sync_toolkit.sh
+python3 tests/test_delta_contract_check.py
+python3 tests/test_delta_contract_migrate.py
+python3 tests/test_delta_tool.py
+python3 tests/test_delta_pipeline_e2e.py
+python3 tests/test_state_migration_kit.py
+```
+
+### Outcome note
+This PRD execution now functions as the implementation record for the tranche-based delta refactor line.
+Any future refactor should preserve these invariants unless an explicit ADR supersedes them.
 
 ## Open Questions
 - Should we set an explicit complexity budget target per module (e.g., max function length / branch count)?

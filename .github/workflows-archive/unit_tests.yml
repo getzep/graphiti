@@ -1,13 +1,12 @@
-name: Tests
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+name: Tests (manual legacy)
 
 permissions:
   contents: read
+
+# Legacy workflow kept for manual parity/debugging.
+# Canonical PR CI unit-test path is .github/workflows/ci.yml.
+on:
+  workflow_dispatch:
 
 jobs:
   unit-tests:
@@ -31,18 +30,7 @@ jobs:
           DISABLE_NEO4J: 1
           DISABLE_FALKORDB: 1
           DISABLE_KUZU: 1
-        run: |
-          uv run pytest tests/ -m "not integration" \
-            --ignore=tests/test_graphiti_int.py \
-            --ignore=tests/test_graphiti_mock.py \
-            --ignore=tests/test_node_int.py \
-            --ignore=tests/test_edge_int.py \
-            --ignore=tests/test_entity_exclusion_int.py \
-            --ignore=tests/driver/ \
-            --ignore=tests/llm_client/test_anthropic_client_int.py \
-            --ignore=tests/utils/maintenance/test_temporal_operations_int.py \
-            --ignore=tests/cross_encoder/test_bge_reranker_client_int.py \
-            --ignore=tests/evals/
+        run: bash scripts/ci/run_unit_tests.sh
 
   database-integration-tests:
     runs-on: depot-ubuntu-22.04
@@ -90,11 +78,4 @@ jobs:
           FALKORDB_HOST: localhost
           FALKORDB_PORT: 6379
           DISABLE_NEPTUNE: 1
-        run: |
-          uv run pytest \
-            tests/test_graphiti_mock.py \
-            tests/test_node_int.py \
-            tests/test_edge_int.py \
-            tests/cross_encoder/test_bge_reranker_client_int.py \
-            tests/driver/test_falkordb_driver.py \
-            -m "not integration"
+        run: bash scripts/ci/run_db_integration_tests.sh

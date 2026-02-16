@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "package_name": "graphiti-openclaw-delta-state",
+  "required_files": [
+    "config/public_export_allowlist.yaml",
+    "config/public_export_denylist.yaml",
+    "config/migration_sync_policy.json",
+    "config/state_migration_manifest.json",
+    "config/delta_contract_policy.json"
+  ],
+  "optional_globs": [
+    "docs/public/*.md",
+    "scripts/ci/*.sh",
+    "scripts/public_*.py",
+    "scripts/migration_sync_lib.py",
+    "scripts/delta_*.py",
+    "scripts/delta_contracts_lib/*.py",
+    "scripts/upstream_sync_doctor.py",
+    "scripts/state_migration_*.py",
+    "scripts/extension_contract_check.py",
+    ".github/workflows/migration-sync-tooling.yml",
+    ".github/workflows-archive/**",
+    "extensions/**"
+  ],
+  "exclude_globs": [
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/.DS_Store"
+  ]
+}

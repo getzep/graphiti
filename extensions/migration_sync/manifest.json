@@ -1,0 +1,30 @@
+{
+  "name": "migration-sync",
+  "version": "0.1.0",
+  "description": "Delta-layer migration and upstream sync orchestration contract.",
+  "capabilities": [
+    "upstream-sync-doctor",
+    "public-history-scorecard",
+    "state-migration-kit"
+  ],
+  "entrypoints": {
+    "doctor": "scripts/upstream_sync_doctor.py",
+    "history_export": "scripts/public_history_export.py",
+    "history_scorecard": "scripts/public_history_scorecard.py",
+    "state_export": "scripts/state_migration_export.py",
+    "state_check": "scripts/state_migration_check.py",
+    "state_import": "scripts/state_migration_import.py"
+  },
+  "command_contract": {
+    "version": 1,
+    "namespace": "migration-sync"
+  },
+  "commands": {
+    "migration-sync/doctor": "scripts/upstream_sync_doctor.py",
+    "migration-sync/history-export": "scripts/public_history_export.py",
+    "migration-sync/history-scorecard": "scripts/public_history_scorecard.py",
+    "migration-sync/state-export": "scripts/state_migration_export.py",
+    "migration-sync/state-check": "scripts/state_migration_check.py",
+    "migration-sync/state-import": "scripts/state_migration_import.py"
+  }
+}

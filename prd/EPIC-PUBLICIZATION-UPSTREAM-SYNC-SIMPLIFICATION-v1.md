@@ -154,6 +154,10 @@ antfarm_plan:
 - **R31:** golden-path test gate: fast baseline suite (boot, ingest, sync, migration, extension-load) must pass on every release PR.
 - **R32:** no cross-repo symlink rule for PRDs/config/docs; use copy/sync generation instead (portable clones, no dangling external paths).
 - **R33:** canonical-doc mirroring rule: public repo may contain mirrored PRDs/docs, but source-of-truth remains explicit and mirror process is scripted.
+- **R34:** cross-contract invariant rule: contract validation must enforce relationships across policy/manifest/contract-policy artifacts (not schema-only per file).
+- **R35:** command-surface safety rule: command bus fails fast on extension registry warnings unless explicit local override is passed.
+- **R36:** atomic state import rule: migration import defaults to rollback-capable atomic behavior; non-atomic mode is explicit and debug-only.
+- **R37:** migration handler rule: contract-policy targets must map to explicit migrator handlers with version gates.
 
 ## Constraint -> Enforcement Map
 - **R13, R15, R30** -> `task-graphiti-pack-adapter-interface` + `task-graphiti-publicization-integration-e2e` (`extension_contract_check.py --strict` + layer import check in CI).

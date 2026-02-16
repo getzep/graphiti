@@ -1,0 +1,40 @@
+name: Migration/Sync Toolkit Checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Monday cadence (ET policy), represented in UTC.
+    - cron: '0 14 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  migration-sync-tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run migration/sync toolkit pipeline
+        run: bash scripts/ci/run_migration_sync_toolkit.sh
+
+      - name: Upload migration/sync artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-sync-tooling-artifacts
+          path: |
+            /tmp/upstream-sync-doctor.json
+            /tmp/filtered-history.md
+            /tmp/filtered-history.json
+            /tmp/clean-foundation.md
+            /tmp/clean-foundation.json
+            /tmp/history-scorecard.md
+            /tmp/history-scorecard.json
+            /tmp/graphiti-state-export/package_manifest.json

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "targets": {
+    "migration_sync_policy": {
+      "current_version": 1,
+      "migration_script": "scripts/delta_contract_migrate.py",
+      "notes": "Migration sync policy remains on schema v1."
+    },
+    "state_migration_manifest": {
+      "current_version": 1,
+      "migration_script": "scripts/delta_contract_migrate.py",
+      "notes": "State migration manifest remains on schema v1."
+    },
+    "extension_command_contract": {
+      "current_version": 1,
+      "migration_script": "scripts/delta_contract_migrate.py",
+      "notes": "Commands must use namespaced keys: <normalized-extension-name>/<command>."
+    }
+  }
+}

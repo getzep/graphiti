@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "origin": {
+    "remote": "origin",
+    "branch": "main"
+  },
+  "upstream": {
+    "remote": "upstream",
+    "url": "https://github.com/getzep/graphiti.git",
+    "branch": "main"
+  },
+  "sync_button_policy": {
+    "require_clean_worktree": true,
+    "max_origin_only_commits": 0,
+    "require_upstream_only_commits": true
+  },
+  "history_metrics": {
+    "filtered_history": {
+      "privacy_risk": {
+        "base": 100,
+        "block_penalty": 35,
+        "ambiguous_penalty": 0.5
+      },
+      "simplicity": {
+        "base": 100,
+        "commit_divisor": 15,
+        "commit_cap": 35,
+        "ambiguous_penalty": 0.3
+      },
+      "merge_conflict_risk": {
+        "base": 100,
+        "commit_divisor": 20,
+        "commit_cap": 30,
+        "ambiguous_penalty": 0.2
+      },
+      "auditability": {
+        "base": 100,
+        "block_penalty": 20,
+        "ambiguous_penalty": 0.4
+      }
+    },
+    "clean_foundation": {
+      "privacy_risk": {
+        "base": 97
+      },
+      "simplicity": {
+        "base": 90,
+        "commit_bonus_divisor": 100,
+        "commit_bonus_cap": 6
+      },
+      "merge_conflict_risk": {
+        "base": 92
+      },
+      "auditability": {
+        "base": 90
+      }
+    }
+  },
+  "scorecard": {
+    "clean_foundation_threshold": 80,
+    "weights": {
+      "privacy_risk": 0.35,
+      "simplicity": 0.35,
+      "merge_conflict_risk": 0.2,
+      "auditability": 0.1
+    }
+  },
+  "schedule": {
+    "timezone": "America/New_York",
+    "weekly_day": "monday",
+    "cron_utc": "0 14 * * 1"
+  }
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,12 @@ class BoundaryAuditStrictModeTests(unittest.TestCase):
             encoding='utf-8',
         )
 
-    def _run(self, repo: Path, strict: bool) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        repo: Path,
+        strict: bool,
+        summary_json: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         cmd = [
             sys.executable,
             str(SCRIPT_PATH),
@@ -41,6 +47,8 @@ class BoundaryAuditStrictModeTests(unittest.TestCase):
             '--report',
             'report.md',
         ]
+        if summary_json:
+            cmd.extend(['--summary-json', summary_json])
         if strict:
             cmd.append('--strict')
 
@@ -93,6 +101,26 @@ class BoundaryAuditStrictModeTests(unittest.TestCase):
             result = self._run(repo, strict=False)
             self.assertEqual(result.returncode, 0)
             self.assertTrue((repo / 'report.md').exists())
+
+    def test_summary_json_written_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / 'repo_summary'
+            repo.mkdir()
+            self._init_repo(repo)
+
+            (repo / 'allowed.txt').write_text('ok\n', encoding='utf-8')
+            (repo / 'extra.txt').write_text('ambiguous\n', encoding='utf-8')
+            self._write_policy(repo)
+
+            subprocess.run(['git', 'add', '.'], cwd=repo, check=True)
+
+            result = self._run(repo, strict=False, summary_json='summary.json')
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            payload = json.loads((repo / 'summary.json').read_text(encoding='utf-8'))
+            self.assertIn('status_counts', payload)
+            self.assertIn('ambiguous_paths', payload)
+            self.assertIn('extra.txt', payload['ambiguous_paths'])
 
 
 if __name__ == '__main__':
