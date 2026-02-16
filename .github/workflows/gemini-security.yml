@@ -13,9 +13,12 @@ concurrency:
   group: gemini-security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
 jobs:
   gemini-security:
-    if: ${{ secrets.GEMINI_API_KEY != '' }}
+    if: ${{ env.GEMINI_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +30,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
           REPOSITORY: ${{ github.repository }}
         with:
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_api_key: ${{ env.GEMINI_API_KEY }}
           gemini_cli_version: '0.26.0'
           extensions: |
             [
@@ -36,7 +39,7 @@ jobs:
           prompt: /security:analyze-github-pr
 
   gemini-security-skipped:
-    if: ${{ secrets.GEMINI_API_KEY == '' }}
+    if: ${{ env.GEMINI_API_KEY == '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip notice
