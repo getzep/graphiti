@@ -47,6 +47,7 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -235,6 +236,10 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
         )
+
+        # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
+        self.nodes = NodeNamespace(self.driver, self.embedder)
+        self.edges = EdgeNamespace(self.driver, self.embedder)
 
         # Capture telemetry event
         self._capture_initialization_telemetry()
@@ -940,7 +945,11 @@ class Graphiti:
                 )
 
                 # Extract and resolve edges in parallel with attribute extraction
-                resolved_edges, invalidated_edges, new_edges = await self._extract_and_resolve_edges(
+                (
+                    resolved_edges,
+                    invalidated_edges,
+                    new_edges,
+                ) = await self._extract_and_resolve_edges(
                     episode,
                     extracted_nodes,
                     previous_episodes,

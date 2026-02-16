@@ -113,9 +113,7 @@ class BaseOpenAIClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
-    def _handle_structured_response(
-        self, response: Any
-    ) -> tuple[dict[str, Any], int, int]:
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing and validation.
 
         Returns:

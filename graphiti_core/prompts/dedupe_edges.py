@@ -45,7 +45,7 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are a helpful assistant that de-duplicates facts from fact lists and determines which existing '
-                    'facts are contradicted by the new fact.',
+            'facts are contradicted by the new fact.',
         ),
         Message(
             role='user',

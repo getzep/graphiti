@@ -517,9 +517,7 @@ async def test_batch_summaries_callback_skip_summary():
 async def test_batch_summaries_selective_callback():
     """Test callback that selectively skips summaries based on node properties."""
     llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(
-        return_value={'summaries': []}
-    )
+    llm_client.generate_response = AsyncMock(return_value={'summaries': []})
 
     user_node = EntityNode(name='User', group_id='group', labels=['Entity', 'User'], summary='Old')
     topic_node = EntityNode(
@@ -553,9 +551,7 @@ async def test_batch_summaries_selective_callback():
 async def test_extract_attributes_from_nodes_with_callback():
     """Test that callback is properly passed through extract_attributes_from_nodes."""
     clients, _ = _make_clients()
-    clients.llm_client.generate_response = AsyncMock(
-        return_value={'summaries': []}
-    )
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
     clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
     clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
 

@@ -317,7 +317,9 @@ async def resolve_extracted_edges(
         related_edges_lists, edge_invalidation_candidate_results, strict=True
     ):
         related_uuids = {edge.uuid for edge in related_edges}
-        deduplicated = [edge for edge in invalidation_result.edges if edge.uuid not in related_uuids]
+        deduplicated = [
+            edge for edge in invalidation_result.edges if edge.uuid not in related_uuids
+        ]
         edge_invalidation_candidates.append(deduplicated)
 
     logger.debug(
@@ -530,7 +532,9 @@ async def resolve_extracted_edge(
             len(related_edges),
             f' (idx 0-{len(related_edges) - 1})' if related_edges else '',
             len(existing_edges),
-            f' (idx {invalidation_idx_offset}-{invalidation_idx_offset + len(existing_edges) - 1})' if existing_edges else '',
+            f' (idx {invalidation_idx_offset}-{invalidation_idx_offset + len(existing_edges) - 1})'
+            if existing_edges
+            else '',
         )
 
     llm_response = await llm_client.generate_response(
