@@ -1,7 +1,8 @@
 # Publicization Integration Cutover Report
 
-Generated: 2026-02-16
+Generated (UTC): 2026-02-16T18:03:10Z
 Decision: **NO-GO**
+Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation sequence.
 
 ## Gate table
 

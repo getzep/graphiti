@@ -1,7 +1,8 @@
 # Publicization Integration Checklist
 
-Generated: 2026-02-16
+Generated (UTC): 2026-02-16T18:03:10Z
 Gate: **NO-GO**
+Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation sequence.
 
 ## Mission outcome
 - Final integrated gate recommendation: **NO-GO** until boundary strictness and sync-button preconditions are remediated.

@@ -41,13 +41,16 @@ Before implementation, the agent must:
 **Validation commands (run from repo root):**
 ```bash
 set -euo pipefail
+boundary_audit_rc=0
 python3 scripts/public_repo_boundary_audit.py \
   --strict \
   --manifest config/public_export_allowlist.yaml \
   --denylist config/public_export_denylist.yaml \
-  --report /tmp/boundary-audit.md || true
-python3 scripts/upstream_sync_doctor.py --repo . --dry-run || true
-python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety || true
+  --report /tmp/boundary-audit.md || boundary_audit_rc=$?
+upstream_doctor_rc=0
+python3 scripts/upstream_sync_doctor.py --repo . --dry-run || upstream_doctor_rc=$?
+upstream_sync_button_rc=0
+python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety || upstream_sync_button_rc=$?
 python3 scripts/extension_contract_check.py --strict
 rm -rf /tmp/graphiti-state-export-clean
 python3 scripts/state_migration_export.py --dry-run --out /tmp/graphiti-state-export-clean
@@ -67,6 +70,11 @@ test -s docs/runbooks/upstream-sync-openclaw.md
 test -s docs/public/BOUNDARY-CONTRACT.md
 test -s docs/public/MIGRATION-SYNC-TOOLKIT.md
 test -s /tmp/boundary-audit.md
+printf 'boundary_audit_rc=%s upstream_doctor_rc=%s upstream_sync_button_rc=%s\n' \
+  "$boundary_audit_rc" "$upstream_doctor_rc" "$upstream_sync_button_rc"
+test "$boundary_audit_rc" -ge 0
+test "$upstream_doctor_rc" -ge 0
+test "$upstream_sync_button_rc" -ge 0
 rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHECKLIST.md
 ```
 **Pass criteria:** command sequence executes and produces artifacts; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
