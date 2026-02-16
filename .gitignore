@@ -166,3 +166,10 @@ cache.db*
 
 # All DS_Store files
 .DS_Store
+
+# Publicization runtime/private artifacts
+backup/
+state/
+exports/
+reports/private/
+logs/
