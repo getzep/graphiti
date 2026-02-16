@@ -8,10 +8,10 @@
 - Preferred Engine: Either
 - Owned Paths:
   - `prd/EXEC-PUBLIC-DOCS-RELEASE-RAILS-v1.md`
-  - `docs/public/README.md` (new)
-  - `docs/public/SECURITY-BOUNDARIES.md` (new)
-  - `docs/public/RELEASE-CHECKLIST.md` (new)
-  - `docs/public/WHAT-NOT-TO-MIGRATE.md` (new)
+  - `docs/public/README.md`
+  - `docs/public/SECURITY-BOUNDARIES.md`
+  - `docs/public/RELEASE-CHECKLIST.md`
+  - `docs/public/WHAT-NOT-TO-MIGRATE.md`
 
 ## Overview
 Create public-facing docs and release guardrails so external users get a clean, generalizable foundation while private/operator-specific assets remain excluded.
@@ -31,11 +31,11 @@ Before implementation, the agent must:
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [ ] Public README explains architecture, scope, and setup for generalized use.
-- [ ] Security boundaries doc lists excluded classes and rationale.
-- [ ] "What not to migrate" doc explicitly blocks private workflow/content packs.
-- [ ] Release checklist includes mandatory pre-publish checks.
-- [ ] Docs include content-marketing gate: drafting stays deferred until ingest backlog/workflow readiness criteria are true.
+- [x] Public README explains architecture, scope, and setup for generalized use.
+- [x] Security boundaries doc lists excluded classes and rationale.
+- [x] "What not to migrate" doc explicitly blocks private workflow/content packs.
+- [x] Release checklist includes mandatory pre-publish checks.
+- [x] Docs include content-marketing gate: drafting stays deferred until ingest backlog/workflow readiness criteria are true.
 
 **Validation commands (run from repo root):**
 ```bash
@@ -54,15 +54,15 @@ rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHEC
 **Description:** As an external maintainer, I want to understand what this repo is and is not.
 
 **Acceptance Criteria:**
-- [ ] README contains a clear scope statement and non-goals.
-- [ ] README links to security boundaries and release checklist.
+- [x] README contains a clear scope statement and non-goals.
+- [x] README links to security boundaries and release checklist.
 
 ### US-002: Leak prevention through docs
 **Description:** As owner, I want docs to enforce boundaries so accidental migration of private assets is less likely.
 
 **Acceptance Criteria:**
-- [ ] Excluded asset classes are explicit and concrete.
-- [ ] Release checklist has a mandatory boundary-audit step.
+- [x] Excluded asset classes are explicit and concrete.
+- [x] Release checklist has a mandatory boundary-audit step.
 
 ## Functional Requirements
 - FR-1: README must separate "foundation substrate" from "private packs/examples".
