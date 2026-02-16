@@ -64,6 +64,10 @@ test -s reports/publicization/integration-report.md
 rg -n 'Gate: \*\*NO-GO\*\*|Gate: \*\*GO\*\*' reports/publicization/integration-checklist.md
 rg -n 'Decision: \*\*NO-GO\*\*|Decision: \*\*GO\*\*' reports/publicization/integration-report.md
 rg -n 'BLOCK: [0-9]+' reports/publicization/integration-report.md
+! rg -n '<PR head SHA at gate execution>' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
+rg -n 'Evaluated commit: `[0-9a-f]{7,40}`' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
+rg -n 'Gate return codes: `boundary_audit_rc=[0-9]+`, `upstream_doctor_rc=[0-9]+`, `upstream_sync_button_rc=[0-9]+`' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
+rg -n 'Generated \(UTC\): [0-9]{4}-[0-9]{2}-[0-9]{2}T' reports/publicization/integration-checklist.md reports/publicization/integration-report.md
 test -s docs/public/README.md
 test -s docs/public/SECURITY-BOUNDARIES.md
 test -s docs/public/RELEASE-CHECKLIST.md
@@ -75,12 +79,12 @@ test -s docs/public/MIGRATION-SYNC-TOOLKIT.md
 test -s /tmp/boundary-audit.md
 printf 'boundary_audit_rc=%s upstream_doctor_rc=%s upstream_sync_button_rc=%s\n' \
   "$boundary_audit_rc" "$upstream_doctor_rc" "$upstream_sync_button_rc"
-test "$boundary_audit_rc" -le 1
-test "$upstream_doctor_rc" -le 1
-test "$upstream_sync_button_rc" -le 1
+case "$boundary_audit_rc" in 0|1) ;; *) echo "Unexpected boundary_audit_rc=$boundary_audit_rc (expected 0|1)" >&2; exit 2 ;; esac
+case "$upstream_doctor_rc" in 0|1) ;; *) echo "Unexpected upstream_doctor_rc=$upstream_doctor_rc (expected 0|1)" >&2; exit 2 ;; esac
+case "$upstream_sync_button_rc" in 0|1) ;; *) echo "Unexpected upstream_sync_button_rc=$upstream_sync_button_rc (expected 0|1)" >&2; exit 2 ;; esac
 rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHECKLIST.md
 ```
-**Pass criteria:** command sequence executes and produces artifacts; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
+**Pass criteria:** command sequence executes and produces artifacts; expected policy outcomes are captured as 0/1 gate return codes; unexpected runtime/infrastructure failures abort immediately; final recommendation is GO only if no unresolved CRITICAL/HIGH blockers remain, otherwise NO-GO with explicit remediation.
 
 ## Cross-repo baseline review (completed)
 
