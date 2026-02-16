@@ -10,7 +10,7 @@ Gate: **NO-GO**
 
 | Area | Evidence command | Result | Key artifact(s) |
 | --- | --- | --- | --- |
-| boundary contract checks | `python3 scripts/public_repo_boundary_audit.py --strict --manifest config/public_export_allowlist.yaml --denylist config/public_export_denylist.yaml --report /tmp/boundary-audit.md` | **FAIL (1)** | `/tmp/boundary-audit.md` (ALLOW 245 / BLOCK 2 / AMBIGUOUS 81) |
+| boundary contract checks | `python3 scripts/public_repo_boundary_audit.py --strict --manifest config/public_export_allowlist.yaml --denylist config/public_export_denylist.yaml --report /tmp/boundary-audit.md` | **FAIL (1)** | `/tmp/boundary-audit.md` (ALLOW 245 / BLOCK 4 / AMBIGUOUS 81) |
 | history migration decision/scorecard | `test -s reports/publicization/history-scorecard.md`, `rg -n "Winner: \`clean-foundation\`" reports/publicization/history-scorecard.md` | **PASS** | `reports/publicization/history-scorecard.md` |
 | upstream sync doctor | `python3 scripts/upstream_sync_doctor.py --repo . --dry-run` | **PASS** | doctor summary (origin-only 25, upstream-only 5, clean worktree: true) |
 | upstream sync safety policy | `python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety` | **FAIL (1)** | sync button decision: **DENY** (exceeds max_origin_only_commits=0) |

@@ -7,7 +7,7 @@ Decision: **NO-GO**
 
 | Child area | Status | Evidence | Blocking reason |
 | --- | --- | --- | --- |
-| Boundary contract checks | ❌ FAIL | `scripts/public_repo_boundary_audit.py --strict ... --report /tmp/boundary-audit.md` | `BLOCK: 2`, `AMBIGUOUS: 81` (no clean strict pass)
+| Boundary contract checks | ❌ FAIL | `scripts/public_repo_boundary_audit.py --strict ... --report /tmp/boundary-audit.md` | `BLOCK: 4`, `AMBIGUOUS: 81` (no clean strict pass)
 | History migration decision/scorecard | ✅ PASS | `reports/publicization/history-scorecard.md` | Winner: `clean-foundation` |
 | Upstream sync doctor | ✅ PASS | `scripts/upstream_sync_doctor.py --repo . --dry-run` | Non-trivial divergence noted: origin-only 25 / upstream-only 5 |
 | Extension adapter contract | ✅ PASS | `scripts/extension_contract_check.py --strict` | Extension contract valid; 1 extension, 6 commands |

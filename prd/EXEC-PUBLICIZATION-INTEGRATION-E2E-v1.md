@@ -29,7 +29,7 @@ Before implementation, the agent must:
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [x] Boundary audit strict mode evaluated. **Status: FAIL** (BLOCK: 2, AMBIGUOUS: 81).
+- [x] Boundary audit strict mode evaluated. **Status: FAIL** (BLOCK: 4, AMBIGUOUS: 81).
 - [x] Chosen migration path validated on public repo candidate. **Status: PASS** (`clean-foundation` won via `scripts/public_history_scorecard.py`).
 - [x] Refactor validation suite covered by child PRDs. **Status: N/A** (child PRD execution artifacts and validations already recorded).
 - [x] Upstream sync doctor dry-run passes. **Status: PASS** (clean worktree + diff report produced).
