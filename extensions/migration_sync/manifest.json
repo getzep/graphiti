@@ -1,5 +1,6 @@
 {
   "name": "migration-sync",
+  "api_version": 1,
   "version": "0.1.0",
   "description": "Delta-layer migration and upstream sync orchestration contract.",
   "capabilities": [
