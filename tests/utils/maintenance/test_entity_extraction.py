@@ -500,9 +500,7 @@ class TestExtractEntitySummariesBatch:
     async def test_flight_partitioning(self, monkeypatch):
         """Nodes should be partitioned into flights of MAX_NODES."""
         # Set MAX_NODES to a small value for testing
-        monkeypatch.setattr(
-            'graphiti_core.utils.maintenance.node_operations.MAX_NODES', 2
-        )
+        monkeypatch.setattr('graphiti_core.utils.maintenance.node_operations.MAX_NODES', 2)
 
         llm_client = MagicMock()
         call_count = 0
@@ -520,10 +518,7 @@ class TestExtractEntitySummariesBatch:
 
         # Create 5 nodes with long summaries (need LLM)
         long_summary = 'X ' * 1500
-        nodes = [
-            _make_entity_node(f'Entity{i}', summary=long_summary)
-            for i in range(5)
-        ]
+        nodes = [_make_entity_node(f'Entity{i}', summary=long_summary) for i in range(5)]
 
         await _extract_entity_summaries_batch(
             llm_client,
@@ -565,5 +560,3 @@ class TestExtractEntitySummariesBatch:
 
         # Should match despite case difference
         assert node.summary == 'Alice summary from LLM.'
-
-

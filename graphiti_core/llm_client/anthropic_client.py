@@ -314,7 +314,11 @@ class AnthropicClient(LLMClient):
             # If we didn't get a proper tool_use response, try to extract from text
             for content_item in result.content:
                 if content_item.type == 'text':
-                    return self._extract_json_from_text(content_item.text), input_tokens, output_tokens
+                    return (
+                        self._extract_json_from_text(content_item.text),
+                        input_tokens,
+                        output_tokens,
+                    )
                 else:
                     raise ValueError(
                         f'Could not extract structured data from model response: {result.content}'
