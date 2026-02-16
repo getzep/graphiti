@@ -13,35 +13,36 @@ concurrency:
   group: gemini-security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-
 jobs:
   gemini-security:
-    if: ${{ env.GEMINI_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check GEMINI_API_KEY availability
+        id: gate
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "key_present=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Gemini Security: repository secret GEMINI_API_KEY is not configured."
+          else
+            echo "key_present=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Gemini security analysis
+        if: ${{ steps.gate.outputs.key_present == 'true' }}
         uses: google-github-actions/run-gemini-cli@v0.1.20
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
           REPOSITORY: ${{ github.repository }}
         with:
-          gemini_api_key: ${{ env.GEMINI_API_KEY }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           gemini_cli_version: '0.26.0'
           extensions: |
             [
               "https://github.com/gemini-cli-extensions/security.git"
             ]
           prompt: /security:analyze-github-pr
-
-  gemini-security-skipped:
-    if: ${{ env.GEMINI_API_KEY == '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Skip notice
-        run: |
-          echo "Skipping Gemini Security: repository secret GEMINI_API_KEY is not configured."
