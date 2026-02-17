@@ -171,8 +171,7 @@ class LLMClientFactory:
                 api_key = config.providers.openai.api_key or 'not-needed'
                 api_url = config.providers.openai.api_url
 
-                _validate_api_key('OpenAI Generic', api_key, logger)
-                logger.info(f'Using custom base_url: {api_url}')
+                logger.info(f'Creating OpenAI Generic client with base_url: {api_url}')
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
