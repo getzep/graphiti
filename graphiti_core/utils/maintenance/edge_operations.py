@@ -153,11 +153,17 @@ async def extract_edges(
 
         # Validate LLM-returned names exist in the nodes list
         if source_name not in name_to_node:
-            logger.warning('Source entity not found in nodes for extracted edge')
+            logger.warning(
+                'Source entity not found in nodes for edge relation: %s',
+                edge_data.relation_type,
+            )
             continue
 
         if target_name not in name_to_node:
-            logger.warning('Target entity not found in nodes for extracted edge')
+            logger.warning(
+                'Target entity not found in nodes for edge relation: %s',
+                edge_data.relation_type,
+            )
             continue
 
         edges_data.append(edge_data)

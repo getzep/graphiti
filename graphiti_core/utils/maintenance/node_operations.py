@@ -382,8 +382,10 @@ async def _resolve_with_llm(
             resolved_node = existing_nodes_by_name[duplicate_name]
         else:
             logger.warning(
-                'Invalid duplicate_name for extracted node %s; treating as no duplicate.',
+                'Invalid duplicate_name for extracted node %s; treating as no duplicate. '
+                'duplicate_name was: %r',
                 extracted_node.uuid,
+                duplicate_name[:50] + '...' if len(duplicate_name) > 50 else duplicate_name,
             )
             resolved_node = extracted_node
 
@@ -662,7 +664,10 @@ async def _process_summary_flight(
             for node in matching_nodes:
                 node.summary = truncated_summary
         else:
-            logger.warning('LLM returned summary for unknown entity')
+            logger.warning(
+                'LLM returned summary for unknown entity (first 30 chars): %.30s',
+                summarized_entity.name,
+            )
 
 
 def _build_episode_context(

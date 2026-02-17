@@ -234,13 +234,14 @@ class LLMClient(ABC):
 
     def _get_failed_generation_log(self, messages: list[Message], output: str | None) -> str:
         """
-        Log metadata about the failed generation for debugging, without including
-        message content that may contain PII.
+        Log structural metadata and truncated raw output for debugging failed
+        generations, without including full message content that may contain PII.
         """
         log = f'Input messages: {len(messages)} message(s), '
         log += f'roles: {[m.role for m in messages]}\n'
         if output is not None:
-            log += f'Raw output length: {len(output)} chars\n'
+            truncated = output[:500] + '...' if len(output) > 500 else output
+            log += f'Raw output (truncated): {truncated}\n'
         else:
             log += 'No raw output available'
         return log
