@@ -8,6 +8,17 @@ If you want the full upstream Graphiti framework docs (core runtime, drivers, ex
 
 ---
 
+## Current status (publicization + hardening)
+
+- Publicization execution lanes completed: adapter wiring, backup wiring, cron cutover.
+- Integration gate: **GO** (`reports/publicization/integration-report.md`).
+- Boundary policy: **ALLOW=370 / BLOCK=0 / AMBIGUOUS=0**.
+- Sync doctor safety decision: **ALLOW** under policy threshold.
+
+Runtime reliability rails (overlay manifest, drift guard, deterministic rebuild, migration integrity, cron canary) live in the private overlay companion repo: `yhl999/graphiti-openclaw-private`.
+
+---
+
 ## What this fork adds (delta layer)
 
 The fork introduces a policy-first operator layer that sits alongside upstream Graphiti core.
@@ -133,8 +144,13 @@ python3 scripts/delta_tool.py state-import -- \
 
 - `docs/public/BOUNDARY-CONTRACT.md`
 - `docs/public/MIGRATION-SYNC-TOOLKIT.md`
+- `docs/public/RELEASE-CHECKLIST.md`
+- `docs/runbooks/runtime-pack-overlay.md`
+- `docs/runbooks/publicization-backup-cutover.md`
+- `docs/runbooks/state-migration.md`
+- `docs/runbooks/upstream-sync-openclaw.md`
 - `prd/EPIC-PUBLICIZATION-UPSTREAM-SYNC-SIMPLIFICATION-v1.md`
-- `prd/EXEC-PUBLIC-REFACTOR-PASS-SIMPLIFY-v1.md`
+- `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md`
 
 ---
 

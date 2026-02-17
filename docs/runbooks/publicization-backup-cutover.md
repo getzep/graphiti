@@ -78,6 +78,19 @@ This wrapper is rerun-safe for snapshot outputs (`snapshot_create.py` is invoked
 - If not committed: restore via `git restore`/`git checkout --` for affected files.
 - If committed: revert the import commit and reopen cutover gate review.
 
+## Post-run hardening checks (recommended)
+After backup lane is green, run:
+
+```bash
+python3 /path/to/graphiti-openclaw-private/scripts/rebuild_runtime.py \
+  --runtime-repo /path/to/graphiti-openclaw-runtime \
+  --preserve-state
+
+python3 /path/to/graphiti-openclaw-private/scripts/cron_canary_matrix.py --skip-run
+```
+
+This confirms runtime reproducibility and post-sync cron health before final GO.
+
 ## Post-run hygiene
 ```bash
 rm -rf /tmp/graphiti-state-export-clean

@@ -34,6 +34,18 @@ For any child PRD that touches code, the implementation agent must review and co
 PR notes must include a cross-repo inventory (paths reviewed), at least 3 simplification candidates, and explicit deferrals for any unselected candidates.
 Single-file/narrow-function refactors require explicit justification for why broader owned-path opportunities were not applicable.
 
+## Execution Status (2026-02-17)
+
+### Child execution status
+- ✅ `task-graphiti-publicization-adapter-wiring` — merged in PR `#25` (`0ec8853`)
+- ✅ `task-graphiti-publicization-db-backup-wiring` — merged in PR `#29` (`90ef2ea`)
+- ✅ `task-graphiti-publicization-cron-cutover` — merged in PR `#32` (`cede19c`)
+- ✅ `task-graphiti-publicization-integration-e2e` — GO report updated and merged in PR `#33` (`c19b780`)
+
+### Hardening follow-through (post child lanes)
+- ✅ Policy rails: strict boundary + legacy-path lint + sync policy alignment
+- ✅ Runtime reliability rails: overlay manifest/checksums, immutable rebuild, drift guard, migration integrity + rollback drill, cron canary matrix
+
 ## Global Definition of Done (DoD)
 **Global DoD checklist:**
 - [ ] Public export boundary is codified as an allowlist and enforced by audit tooling.

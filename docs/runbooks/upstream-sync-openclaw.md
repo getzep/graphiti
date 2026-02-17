@@ -91,7 +91,7 @@ Use `python3 scripts/upstream_sync_doctor.py --repo . --check-sync-button-safety
 
 ### ALLOW only when all are true
 - working tree is clean,
-- `origin/main` has **0** origin-only commits vs `upstream/main`,
+- `origin/main` origin-only commit count is **within policy threshold** (`max_origin_only_commits` from `config/migration_sync_policy.json`, currently `100`),
 - `upstream/main` is ahead (there is upstream delta to sync).
 
 ### DENY in all other cases

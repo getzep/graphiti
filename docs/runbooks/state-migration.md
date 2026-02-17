@@ -76,6 +76,30 @@ python3 scripts/state_migration_check.py --package /tmp/graphiti-state-export-ta
 
 `git status` should remain clean after import unless you expect working-tree state changes.
 
+## Integrity suite (post-cutover hardening)
+
+After cutover, run the private overlay integrity suite to verify migration invariants on active runtime:
+
+```bash
+python3 /path/to/graphiti-openclaw-private/scripts/sqlite_migration_integrity.py \
+  --source-root /path/to/archive/deprecated-2026-02/graphiti-legacy-<timestamp> \
+  --target-root /path/to/graphiti-openclaw-runtime \
+  --out /tmp/sqlite-migration-integrity.json \
+  --allow-growth
+```
+
+Notes:
+- `--allow-growth` is expected for live systems where runtime has continued ingest after migration.
+- Integrity still requires `PRAGMA integrity_check=ok` and no table loss.
+
+Dry-run rollback drill:
+
+```bash
+python3 /path/to/graphiti-openclaw-private/scripts/sqlite_migration_rollback.py \
+  --backup-dir /path/to/graphiti-openclaw-runtime/state_migration_backups/<snapshot-ts> \
+  --target-root /path/to/graphiti-openclaw-runtime
+```
+
 ## Rollback and recovery
 
 ### If import was done on an uncommitted working tree

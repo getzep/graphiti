@@ -18,6 +18,12 @@
 ## Overview
 Wire the existing migration/export and snapshot backup paths into one reproducible pre-cutover data safety lane.
 
+## Execution Status
+- **Status:** Completed
+- **Merged PR:** `#29`
+- **Merge commit:** `90ef2ea`
+- **Hardening follow-through:** runtime reliability rails added in private overlay PR `#6` (`635486d`) for integrity+rollback+canary operations.
+
 ## Goals
 - Ensure migration kit + snapshot backup can be executed as one operator playbook.
 - Provide explicit backup readiness evidence before production cutover.
@@ -27,12 +33,12 @@ Wire the existing migration/export and snapshot backup paths into one reproducib
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [ ] Backup runbook defines exact pre-cutover sequence (export/check/import-dry-run + snapshot + restore test).
-- [ ] Backup readiness report records latest dry-run evidence and blocking conditions.
-- [ ] Snapshot scripts support runbook flow without undocumented manual steps.
-- [ ] Rollback guidance is explicit and includes decision points.
-- [ ] `.gitignore` explicitly covers private/runtime artifacts required for the migrated private surfaces.
-- [ ] Backup readiness report includes archive-readiness notes for deprecating old `clawd-graphiti` after cutover gates pass.
+- [x] Backup runbook defines exact pre-cutover sequence (export/check/import-dry-run + snapshot + restore test).
+- [x] Backup readiness report records latest dry-run evidence and blocking conditions.
+- [x] Snapshot scripts support runbook flow without undocumented manual steps.
+- [x] Rollback guidance is explicit and includes decision points.
+- [x] `.gitignore` explicitly covers private/runtime artifacts required for the migrated private surfaces.
+- [x] Backup readiness report includes archive-readiness notes for deprecating old `clawd-graphiti` after cutover gates pass.
 
 **Validation commands (run from repo root):**
 ```bash
@@ -61,15 +67,15 @@ rg -n "archive|deprecat|clawd-graphiti" reports/publicization/backup-readiness.m
 **Description:** As operator, I want one explicit backup play before cutover so rollback is practical, not theoretical.
 
 **Acceptance Criteria:**
-- [ ] Pre-cutover sequence has no ambiguous steps.
-- [ ] Rollback entry point is documented and tested at procedure level.
+- [x] Pre-cutover sequence has no ambiguous steps.
+- [x] Rollback entry point is documented and tested at procedure level.
 
 ### US-002: Evidence-based readiness
 **Description:** As reviewer, I want concrete backup evidence in the repo before approving cutover.
 
 **Acceptance Criteria:**
-- [ ] Backup readiness report includes latest run timestamps and outcomes.
-- [ ] Report explicitly marks GO/NO-GO for backup gate.
+- [x] Backup readiness report includes latest run timestamps and outcomes.
+- [x] Report explicitly marks GO/NO-GO for backup gate.
 
 ## Functional Requirements
 - FR-1: Migration dry-run and snapshot lifecycle must be documented as one sequence.

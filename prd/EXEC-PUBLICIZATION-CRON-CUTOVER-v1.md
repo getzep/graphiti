@@ -26,12 +26,18 @@
 ## Overview
 Ship a deterministic, reversible cron/runtime cutover lane in the public framework while keeping environment-specific operational values in private overlay.
 
+## Execution Status
+- **Status:** Completed
+- **Merged PR:** `#32`
+- **Merge commit:** `cede19c`
+- **Hardening follow-through:** runtime immutability + cron canary + migration integrity rails added in private overlay PR `#6` (`635486d`).
+
 ## Definition of Done
-- [ ] Incremental ingest trigger/worker scripts exist and run in dry-run mode.
-- [ ] Runtime backend switch/status scripts support both `qmd_primary` and `graphiti_primary` dry-run operations.
-- [ ] Cron cutover plan template exists with staged enablement and rollback checklist.
-- [ ] No legacy `clawd-graphiti` path dependency remains in cutover scripts/docs.
-- [ ] Runtime validation works against canonical checkout linked by `tools/graphiti`.
+- [x] Incremental ingest trigger/worker scripts exist and run in dry-run mode.
+- [x] Runtime backend switch/status scripts support both `qmd_primary` and `graphiti_primary` dry-run operations.
+- [x] Cron cutover plan template exists with staged enablement and rollback checklist.
+- [x] No legacy `clawd-graphiti` path dependency remains in cutover scripts/docs.
+- [x] Runtime validation works against canonical checkout linked by `tools/graphiti`.
 
 ## Validation commands (run from repo root)
 ```bash

@@ -14,6 +14,11 @@
 ## Overview
 Run full end-to-end verification of the publicization program and produce a ship/no-ship recommendation.
 
+## Execution Status
+- **Status:** Completed (GO)
+- **Merged PR:** `#22` (`83f102e`) for initial integration lane
+- **Final hardening GO update:** `#33` (`c19b780`) after policy rails + runtime reliability follow-through
+
 ## Mandatory Cross-Repo Baseline Review (to prevent narrow-pass regressions)
 Before implementation, the agent must:
 1. Review corresponding paths in `projects/graphiti` (private/source baseline) and `projects/graphiti-openclaw` (public target).
@@ -29,14 +34,15 @@ Before implementation, the agent must:
 
 ## Definition of Done (DoD)
 **DoD checklist:**
-- [x] Boundary audit strict mode evaluated. **Status: FAIL** (BLOCK: 4, AMBIGUOUS: 81).
+- [x] Boundary audit strict mode passes. **Status: PASS** (ALLOW: 370, BLOCK: 0, AMBIGUOUS: 0).
 - [x] Chosen migration path validated on public repo candidate. **Status: PASS** (`clean-foundation` won via `scripts/public_history_scorecard.py`).
-- [x] Refactor validation suite covered by child PRDs. **Status: N/A** (child PRD execution artifacts and validations already recorded).
+- [x] Refactor validation suite covered by child PRDs. **Status: PASS** (child PRD execution artifacts and validations recorded).
 - [x] Upstream sync doctor dry-run passes. **Status: PASS** (clean worktree + diff report produced).
+- [x] Sync-button safety precheck passes under policy. **Status: PASS** (decision `ALLOW`, `max_origin_only_commits=100`).
 - [x] Adapter contract checker passes in strict mode. **Status: PASS** (`1` extension, `6` commands).
 - [x] State migration kit dry-run export/check/import passes. **Status: PASS** (using dedicated output dir + `--allow-overwrite`).
 - [x] Release docs checklist passes. **Status: PASS** (presence and gating language checks).
-- [x] Integration report includes explicit GO/NO-GO recommendation and outstanding risks. **Status: PASS** (this PRD artifact set).
+- [x] Integration report includes explicit GO/NO-GO recommendation and outstanding risks. **Status: PASS** (final recommendation: **GO**).
 
 **Validation commands (run from repo root):**
 ```bash
@@ -106,15 +112,15 @@ rg -n "content marketing|public write-up|deferred|gate" docs/public/RELEASE-CHEC
 **Description:** As operator, I want one final report that tells me if publicization is safe to execute.
 
 **Acceptance Criteria:**
-- [ ] Report has clear GO/NO-GO status.
-- [ ] Report lists blockers with owners and remediation.
+- [x] Report has clear GO/NO-GO status.
+- [x] Report lists blockers with owners and remediation.
 
 ### US-002: Regression confidence
 **Description:** As maintainer, I want confidence that simplification and migration didn’t break foundations.
 
 **Acceptance Criteria:**
-- [ ] Core tests pass.
-- [ ] Sync dry-run and boundary checks pass in same run.
+- [x] Core tests pass.
+- [x] Sync dry-run and boundary checks pass in same run.
 
 ## Functional Requirements
 - FR-1: Integration report must aggregate outputs from all child PRDs.
