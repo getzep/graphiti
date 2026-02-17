@@ -164,6 +164,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityEdge]:
         cursor_clause = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
@@ -176,7 +177,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             + """
             RETURN
             """
-            + get_entity_edge_return_query(GraphProvider.FALKORDB)
+            + get_entity_edge_return_query(GraphProvider.FALKORDB, lightweight=lightweight)
             + """
             ORDER BY e.uuid DESC
             """
@@ -188,7 +189,7 @@ class FalkorEntityEdgeOperations(EntityEdgeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r, lightweight=lightweight) for r in records]
 
     async def get_between_nodes(
         self,

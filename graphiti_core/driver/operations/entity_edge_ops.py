@@ -75,6 +75,7 @@ class EntityEdgeOperations(ABC):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityEdge]: ...
 
     @abstractmethod

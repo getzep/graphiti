@@ -164,6 +164,7 @@ class Neo4jEntityEdgeOperations(EntityEdgeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityEdge]:
         cursor_clause = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
@@ -176,7 +177,7 @@ class Neo4jEntityEdgeOperations(EntityEdgeOperations):
             + """
             RETURN
             """
-            + get_entity_edge_return_query(GraphProvider.NEO4J)
+            + get_entity_edge_return_query(GraphProvider.NEO4J, lightweight=lightweight)
             + """
             ORDER BY e.uuid DESC
             """
@@ -189,7 +190,7 @@ class Neo4jEntityEdgeOperations(EntityEdgeOperations):
             limit=limit,
             routing_='r',
         )
-        return [entity_edge_from_record(r) for r in records]
+        return [entity_edge_from_record(r, lightweight=lightweight) for r in records]
 
     async def get_between_nodes(
         self,

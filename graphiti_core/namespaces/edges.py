@@ -86,8 +86,11 @@ class EntityEdgeNamespace:
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityEdge]:
-        return await self._ops.get_by_group_ids(self._driver, group_ids, limit, uuid_cursor)
+        return await self._ops.get_by_group_ids(
+            self._driver, group_ids, limit, uuid_cursor, lightweight=lightweight
+        )
 
     async def get_between_nodes(
         self,
@@ -351,7 +354,5 @@ class EdgeNamespace:
 
     def __getattr__(self, name: str) -> object:
         if name in ('entity', 'episodic', 'community', 'has_episode', 'next_episode'):
-            raise NotImplementedError(
-                f'{self._driver_name} does not implement {name}_edge_ops'
-            )
+            raise NotImplementedError(f'{self._driver_name} does not implement {name}_edge_ops')
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
