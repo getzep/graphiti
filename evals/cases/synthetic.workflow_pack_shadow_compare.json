@@ -1,0 +1,471 @@
+{
+  "version": "1.0",
+  "description": "Synthetic dual-backend fixture cases for workflow pack shadow compare harness. Each case provides both graphiti_facts and qmd_items so the harness can build context packs under graphiti_primary and qmd_only_eval resolvers and compare outputs.",
+  "cases": [
+    {
+      "id": "sc-001",
+      "name": "Restaurant recommendation with dining preferences (bars/restaurants)",
+      "category": "dining_preferences",
+      "pack_ref": "synthetic_wf_draft_only_v0",
+      "query": "Best restaurant and bar picks near the office",
+      "scope": "private",
+      "as_of": "2026-02-10T00:00:00Z",
+      "context_pack_inputs": [
+        {
+          "pack_type": "dining_preferences",
+          "scope": "private",
+          "query": "Best restaurant and bar picks near the office",
+          "graphiti_facts": [
+            {
+              "fact_id": "sc-dp-gf-001",
+              "subject": "user:principal",
+              "predicate": "pref.likes",
+              "scope": "private",
+              "value": ["natural wine bars", "omakase sushi"],
+              "valid_from": "2026-01-15T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-dining-001",
+                  "chunk_key": "session:main:sc-dining-001:c1",
+                  "observed_at": "2026-01-15T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-dp-gf-002",
+              "subject": "user:principal",
+              "predicate": "pref.dislikes",
+              "scope": "private",
+              "value": ["loud sports bars", "chain restaurants"],
+              "valid_from": "2026-01-20T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-dining-002",
+                  "chunk_key": "session:main:sc-dining-002:c1",
+                  "observed_at": "2026-01-20T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-dp-gf-003",
+              "subject": "user:principal",
+              "predicate": "pref.dietary_restriction",
+              "scope": "private",
+              "value": "pescatarian on weekdays",
+              "valid_from": "2026-02-01T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "chatgpt:s1_chatgpt_history:sc-dining-003",
+                  "chunk_key": "chatgpt:s1_chatgpt_history:sc-dining-003:c1",
+                  "observed_at": "2026-02-01T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_id": "sc-dp-cand-001",
+              "created_at": "2026-02-05T00:00:00Z",
+              "subject": "user:principal",
+              "predicate": "pref.favorites",
+              "scope": "private",
+              "status": "pending",
+              "risk_level": "low",
+              "confidence": 0.88,
+              "value": ["izakaya spots"],
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-dining-004",
+                  "chunk_key": "session:main:sc-dining-004:c1",
+                  "observed_at": "2026-02-05T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "qmd_items": [
+            {
+              "id": "sc-dp-qmd-001",
+              "text": "User likes natural wine bars and omakase sushi. Dislikes loud sports bars.",
+              "scope": "private",
+              "score": 0.85,
+              "observed_at": "2026-01-16T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            },
+            {
+              "id": "sc-dp-qmd-002",
+              "text": "Pescatarian on weekdays. Prefers quiet intimate restaurants for business dinners.",
+              "scope": "private",
+              "score": 0.78,
+              "observed_at": "2026-02-02T00:00:00Z",
+              "source_family": "chatgpt",
+              "source_key": null
+            },
+            {
+              "id": "sc-dp-qmd-003",
+              "text": "Likes izakaya spots for casual team outings.",
+              "scope": "private",
+              "score": 0.72,
+              "observed_at": "2026-02-06T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sc-002",
+      "name": "VC deal brief for Series A target company",
+      "category": "work_company_deal",
+      "pack_ref": "synthetic_wf_execute_with_approval_v0",
+      "query": "NovaTech Series A deal status and diligence notes",
+      "scope": "private",
+      "as_of": "2026-02-10T00:00:00Z",
+      "context_pack_inputs": [
+        {
+          "pack_type": "work_company_deal",
+          "mode": "short",
+          "scope": "private",
+          "query": "NovaTech Series A deal status and diligence notes",
+          "graphiti_facts": [
+            {
+              "fact_id": "sc-vc-gf-001",
+              "subject": "company:novatech",
+              "predicate": "work.deal_stage",
+              "scope": "private",
+              "value": "series_a",
+              "valid_from": "2026-01-10T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-deal-001",
+                  "chunk_key": "session:main:sc-deal-001:c1",
+                  "observed_at": "2026-01-10T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-vc-gf-002",
+              "subject": "company:novatech",
+              "predicate": "work.deal_status",
+              "scope": "private",
+              "value": "live",
+              "valid_from": "2026-01-10T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-deal-001",
+                  "chunk_key": "session:main:sc-deal-001:c2",
+                  "observed_at": "2026-01-10T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-vc-gf-003",
+              "subject": "company:novatech",
+              "predicate": "work.deal_valuation",
+              "scope": "private",
+              "value": "$25M pre-money",
+              "valid_from": "2026-01-25T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "chatgpt:s1_chatgpt_history:sc-deal-002",
+                  "chunk_key": "chatgpt:s1_chatgpt_history:sc-deal-002:c1",
+                  "observed_at": "2026-01-25T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-vc-gf-004",
+              "subject": "company:novatech",
+              "predicate": "work.deal_risk",
+              "scope": "private",
+              "value": "Key-person risk: CTO departure rumor",
+              "valid_from": "2026-02-03T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-deal-003",
+                  "chunk_key": "session:main:sc-deal-003:c1",
+                  "observed_at": "2026-02-03T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_id": "sc-vc-cand-001",
+              "created_at": "2026-02-07T00:00:00Z",
+              "subject": "company:novatech",
+              "predicate": "work.next_step",
+              "scope": "private",
+              "status": "pending",
+              "risk_level": "medium",
+              "confidence": 0.75,
+              "value": "Schedule IC vote for next Thursday",
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-deal-004",
+                  "chunk_key": "session:main:sc-deal-004:c1",
+                  "observed_at": "2026-02-07T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "candidate_id": "sc-vc-cand-002",
+              "created_at": "2026-02-08T00:00:00Z",
+              "subject": "company:novatech",
+              "predicate": "work.deal_note",
+              "scope": "private",
+              "status": "requires_approval",
+              "risk_level": "high",
+              "confidence": 0.62,
+              "value": "Founder mentioned possible bridge round if Series A slips",
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-deal-005",
+                  "chunk_key": "session:main:sc-deal-005:c1",
+                  "observed_at": "2026-02-08T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "qmd_items": [
+            {
+              "id": "sc-vc-qmd-001",
+              "text": "NovaTech is raising a Series A at $25M pre-money. Deal is live. Lead partner is interested.",
+              "scope": "private",
+              "score": 0.90,
+              "observed_at": "2026-01-11T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            },
+            {
+              "id": "sc-vc-qmd-002",
+              "text": "CTO departure rumor flagged as key-person risk. Need to verify before IC.",
+              "scope": "private",
+              "score": 0.82,
+              "observed_at": "2026-02-04T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            },
+            {
+              "id": "sc-vc-qmd-003",
+              "text": "Next step: schedule IC vote for Thursday. Pending candidate has bridge round note.",
+              "scope": "private",
+              "score": 0.70,
+              "observed_at": "2026-02-08T00:00:00Z",
+              "source_family": "chatgpt",
+              "source_key": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sc-003",
+      "name": "Group-safe dining preferences for team dinner planning",
+      "category": "dining_preferences",
+      "pack_ref": "synthetic_wf_draft_only_v0",
+      "query": "Team dinner options that accommodate everyone",
+      "scope": "group_safe",
+      "as_of": "2026-02-10T00:00:00Z",
+      "context_pack_inputs": [
+        {
+          "pack_type": "dining_preferences",
+          "scope": "group_safe",
+          "query": "Team dinner options that accommodate everyone",
+          "graphiti_facts": [
+            {
+              "fact_id": "sc-gs-gf-001",
+              "subject": "user:principal",
+              "predicate": "pref.likes",
+              "scope": "group",
+              "value": ["Thai food", "Italian restaurants"],
+              "valid_from": "2026-01-10T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:group:sc-team-001",
+                  "chunk_key": "session:group:sc-team-001:c1",
+                  "observed_at": "2026-01-10T00:00:00Z",
+                  "scope": "group"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-gs-gf-002",
+              "subject": "user:principal",
+              "predicate": "pref.dietary_restriction",
+              "scope": "private",
+              "value": "gluten intolerance",
+              "valid_from": "2026-01-12T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-team-priv-001",
+                  "chunk_key": "session:main:sc-team-priv-001:c1",
+                  "observed_at": "2026-01-12T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "candidates": [],
+          "qmd_items": [
+            {
+              "id": "sc-gs-qmd-001",
+              "text": "User likes Thai food and Italian restaurants for team events.",
+              "scope": "group",
+              "score": 0.80,
+              "observed_at": "2026-01-11T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            },
+            {
+              "id": "sc-gs-qmd-002",
+              "text": "User has gluten intolerance (private medical info).",
+              "scope": "private",
+              "score": 0.75,
+              "observed_at": "2026-01-13T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sc-004",
+      "name": "VC deal brief with long mode and multiple evidence sources",
+      "category": "work_company_deal",
+      "pack_ref": "synthetic_wf_draft_only_v0",
+      "query": "Helios Bio seed deal deep dive",
+      "scope": "private",
+      "as_of": "2026-02-10T00:00:00Z",
+      "context_pack_inputs": [
+        {
+          "pack_type": "work_company_deal",
+          "mode": "long",
+          "scope": "private",
+          "query": "Helios Bio seed deal deep dive",
+          "graphiti_facts": [
+            {
+              "fact_id": "sc-hb-gf-001",
+              "subject": "company:helios_bio",
+              "predicate": "work.deal_stage",
+              "scope": "private",
+              "value": "seed",
+              "valid_from": "2026-01-05T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-hb-001",
+                  "chunk_key": "session:main:sc-hb-001:c1",
+                  "observed_at": "2026-01-05T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-hb-gf-002",
+              "subject": "company:helios_bio",
+              "predicate": "work.deal_status",
+              "scope": "private",
+              "value": "live",
+              "valid_from": "2026-01-05T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-hb-001",
+                  "chunk_key": "session:main:sc-hb-001:c2",
+                  "observed_at": "2026-01-05T00:00:00Z",
+                  "scope": "private"
+                },
+                {
+                  "source_key": "chatgpt:s1_chatgpt_history:sc-hb-002",
+                  "chunk_key": "chatgpt:s1_chatgpt_history:sc-hb-002:c1",
+                  "observed_at": "2026-01-20T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            },
+            {
+              "fact_id": "sc-hb-gf-003",
+              "subject": "company:helios_bio",
+              "predicate": "work.deal_thesis",
+              "scope": "private",
+              "value": "Novel CRISPR delivery mechanism for rare diseases; strong IP moat",
+              "valid_from": "2026-01-15T00:00:00Z",
+              "valid_to": null,
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-hb-003",
+                  "chunk_key": "session:main:sc-hb-003:c1",
+                  "observed_at": "2026-01-15T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_id": "sc-hb-cand-001",
+              "created_at": "2026-02-09T00:00:00Z",
+              "subject": "company:helios_bio",
+              "predicate": "work.next_step",
+              "scope": "private",
+              "status": "pending",
+              "risk_level": "low",
+              "confidence": 0.85,
+              "value": "Request updated cap table from founder",
+              "evidence_refs": [
+                {
+                  "source_key": "session:main:sc-hb-004",
+                  "chunk_key": "session:main:sc-hb-004:c1",
+                  "observed_at": "2026-02-09T00:00:00Z",
+                  "scope": "private"
+                }
+              ]
+            }
+          ],
+          "qmd_items": [
+            {
+              "id": "sc-hb-qmd-001",
+              "text": "Helios Bio seed deal is live. Novel CRISPR delivery for rare diseases. Strong IP moat noted.",
+              "scope": "private",
+              "score": 0.88,
+              "observed_at": "2026-01-06T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            },
+            {
+              "id": "sc-hb-qmd-002",
+              "text": "Need updated cap table from Helios Bio founder before finalizing term sheet.",
+              "scope": "private",
+              "score": 0.75,
+              "observed_at": "2026-02-09T00:00:00Z",
+              "source_family": "sessions",
+              "source_key": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

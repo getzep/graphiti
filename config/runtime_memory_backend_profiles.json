@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "description": "Canonical runtime memory backend profiles for operator switch layer.",
+  "default_profile": "qmd_primary",
+  "profiles": {
+    "qmd_primary": {
+      "label": "QMD-primary (production default)",
+      "memory_search_backend": "qmd",
+      "memory_get_backend": "qmd",
+      "resolver_mode": "qmd_only_eval",
+      "shadow_compare": true,
+      "shadow_backend": "graphiti",
+      "failover_backend": null,
+      "group_safe_gating": true,
+      "notes": "Production default. QMD handles search+get. Graphiti runs in shadow for diff logging."
+    },
+    "graphiti_primary": {
+      "label": "Graphiti-primary (operator opt-in)",
+      "memory_search_backend": "graphiti",
+      "memory_get_backend": "graphiti",
+      "resolver_mode": "graphiti_primary",
+      "shadow_compare": true,
+      "shadow_backend": "qmd",
+      "failover_backend": "qmd",
+      "group_safe_gating": true,
+      "notes": "Graphiti handles search+get. QMD available as shadow comparator and strict failover."
+    }
+  },
+  "guardrails": {
+    "group_safe_gating_required": true,
+    "shadow_compare_recommended": true,
+    "instant_revert_required": true
+  }
+}
