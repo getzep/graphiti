@@ -193,11 +193,11 @@ class GraphitiService:
                 logger.warning(f'Failed to create embedder client: {e}')
 
             # Create reranker (cross-encoder) client based on configured provider
+            cross_encoder = None
             try:
                 cross_encoder = CrossEncoderFactory.create(self.config.reranker)
             except Exception as e:
                 logger.warning(f'Failed to create reranker client: {e}')
-                cross_encoder = None  # Will use Graphiti's default (OpenAI)
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)

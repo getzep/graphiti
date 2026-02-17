@@ -185,6 +185,10 @@ class RerankerConfig(BaseModel):
     """Reranker (cross-encoder) configuration."""
 
     provider: str = Field(default='openai', description='Reranker provider')
+    model: str | None = Field(
+        default=None,
+        description='Model name (used by Gemini reranker, default: gemini-2.5-flash-lite)',
+    )
     providers: RerankerProvidersConfig = Field(default_factory=RerankerProvidersConfig)
 
 
