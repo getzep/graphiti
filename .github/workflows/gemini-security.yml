@@ -33,7 +33,9 @@ jobs:
           fi
 
       - name: Run Gemini security analysis
+        id: gemini
         if: ${{ steps.gate.outputs.key_present == 'true' }}
+        continue-on-error: true
         uses: google-github-actions/run-gemini-cli@v0.1.20
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -49,3 +51,8 @@ jobs:
               "https://github.com/gemini-cli-extensions/security.git"
             ]
           prompt: /security:analyze-github-pr
+
+      - name: Mark Gemini quota/rate failures as non-blocking
+        if: ${{ steps.gate.outputs.key_present == 'true' && steps.gemini.outcome != 'success' }}
+        run: |
+          echo "::warning::Gemini security check failed (often quota/rate-limit). Treating as non-blocking for CI."

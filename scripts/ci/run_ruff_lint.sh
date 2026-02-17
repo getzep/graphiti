@@ -21,7 +21,16 @@ collect_python_targets() {
     return
   fi
 
-  git diff --name-only "${base_ref}...HEAD" -- '*.py' | while IFS= read -r file; do
+  diff_output=""
+  if diff_output=$(git diff --name-only "${base_ref}...HEAD" -- '*.py' 2>/dev/null); then
+    :
+  else
+    # Fallback for shallow or unrelated-history contexts.
+    diff_output=$(git show --name-only --pretty='' HEAD -- '*.py' 2>/dev/null || true)
+  fi
+
+  printf '%s
+' "${diff_output}" | while IFS= read -r file; do
     [[ -f "${file}" ]] && echo "${file}"
   done
 }
