@@ -80,12 +80,15 @@ class TokenUsageTracker:
     def get_usage(self) -> dict[str, PromptTokenUsage]:
         """Get a copy of current token usage by prompt type."""
         with self._lock:
-            return {k: PromptTokenUsage(
-                prompt_name=v.prompt_name,
-                call_count=v.call_count,
-                total_input_tokens=v.total_input_tokens,
-                total_output_tokens=v.total_output_tokens,
-            ) for k, v in self._usage.items()}
+            return {
+                k: PromptTokenUsage(
+                    prompt_name=v.prompt_name,
+                    call_count=v.call_count,
+                    total_input_tokens=v.total_input_tokens,
+                    total_output_tokens=v.total_output_tokens,
+                )
+                for k, v in self._usage.items()
+            }
 
     def get_total_usage(self) -> TokenUsage:
         """Get total token usage across all prompts."""

@@ -70,12 +70,8 @@ class MilvusVectorStoreClient(VectorStoreClient):
     async def _ensure_collections(self) -> None:
         """Create all 4 collections if they don't already exist."""
         collections = {
-            COLLECTION_ENTITY_NODES: get_entity_node_collection_schema(
-                self._config.embedding_dim
-            ),
-            COLLECTION_ENTITY_EDGES: get_entity_edge_collection_schema(
-                self._config.embedding_dim
-            ),
+            COLLECTION_ENTITY_NODES: get_entity_node_collection_schema(self._config.embedding_dim),
+            COLLECTION_ENTITY_EDGES: get_entity_edge_collection_schema(self._config.embedding_dim),
             COLLECTION_EPISODIC_NODES: get_episodic_node_collection_schema(),
             COLLECTION_COMMUNITY_NODES: get_community_node_collection_schema(
                 self._config.embedding_dim

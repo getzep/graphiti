@@ -53,9 +53,7 @@ class TestGraphitiVectorStoreInit:
             MilvusVectorStoreConfig,
         )
 
-        vs = MilvusVectorStoreClient(
-            config=MilvusVectorStoreConfig(uri='http://localhost:19530')
-        )
+        vs = MilvusVectorStoreClient(config=MilvusVectorStoreConfig(uri='http://localhost:19530'))
         g = _make_graphiti(vector_store=vs)
 
         assert g.driver.vector_store is vs
@@ -85,9 +83,7 @@ class TestGraphitiVectorStoreInit:
         mock_driver.graph_operations_interface = None
         mock_driver.build_indices_and_constraints = AsyncMock()
 
-        vs = MilvusVectorStoreClient(
-            config=MilvusVectorStoreConfig(uri='http://localhost:19530')
-        )
+        vs = MilvusVectorStoreClient(config=MilvusVectorStoreConfig(uri='http://localhost:19530'))
         g = Graphiti(
             graph_driver=mock_driver,
             llm_client=MagicMock(spec=LLMClient),

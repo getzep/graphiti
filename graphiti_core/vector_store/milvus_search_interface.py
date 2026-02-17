@@ -37,19 +37,45 @@ logger = logging.getLogger(__name__)
 
 # Output field lists for each collection (excludes embedding vectors for efficiency)
 _NODE_OUTPUT_FIELDS = [
-    'uuid', 'group_id', 'name', 'summary', 'labels', 'created_at', 'attributes',
+    'uuid',
+    'group_id',
+    'name',
+    'summary',
+    'labels',
+    'created_at',
+    'attributes',
 ]
 _EDGE_OUTPUT_FIELDS = [
-    'uuid', 'group_id', 'source_node_uuid', 'target_node_uuid',
-    'name', 'fact', 'episodes', 'created_at', 'expired_at',
-    'valid_at', 'invalid_at', 'attributes',
+    'uuid',
+    'group_id',
+    'source_node_uuid',
+    'target_node_uuid',
+    'name',
+    'fact',
+    'episodes',
+    'created_at',
+    'expired_at',
+    'valid_at',
+    'invalid_at',
+    'attributes',
 ]
 _EPISODE_OUTPUT_FIELDS = [
-    'uuid', 'group_id', 'name', 'content', 'source',
-    'source_description', 'created_at', 'valid_at', 'entity_edges',
+    'uuid',
+    'group_id',
+    'name',
+    'content',
+    'source',
+    'source_description',
+    'created_at',
+    'valid_at',
+    'entity_edges',
 ]
 _COMMUNITY_OUTPUT_FIELDS = [
-    'uuid', 'group_id', 'name', 'summary', 'created_at',
+    'uuid',
+    'group_id',
+    'name',
+    'summary',
+    'created_at',
 ]
 
 
@@ -199,11 +225,7 @@ class MilvusSearchInterface(SearchInterface):
             output_fields=_EDGE_OUTPUT_FIELDS,
             limit=limit,
         )
-        return [
-            milvus_dict_to_entity_edge(hit['entity'])
-            for hits in results
-            for hit in hits
-        ]
+        return [milvus_dict_to_entity_edge(hit['entity']) for hits in results for hit in hits]
 
     async def node_fulltext_search(
         self,
@@ -228,11 +250,7 @@ class MilvusSearchInterface(SearchInterface):
             output_fields=_NODE_OUTPUT_FIELDS,
             limit=limit,
         )
-        return [
-            milvus_dict_to_entity_node(hit['entity'])
-            for hits in results
-            for hit in hits
-        ]
+        return [milvus_dict_to_entity_node(hit['entity']) for hits in results for hit in hits]
 
     async def episode_fulltext_search(
         self,
@@ -254,11 +272,7 @@ class MilvusSearchInterface(SearchInterface):
             output_fields=_EPISODE_OUTPUT_FIELDS,
             limit=limit,
         )
-        return [
-            milvus_dict_to_episodic_node(hit['entity'])
-            for hits in results
-            for hit in hits
-        ]
+        return [milvus_dict_to_episodic_node(hit['entity']) for hits in results for hit in hits]
 
     async def community_fulltext_search(
         self,
@@ -279,11 +293,7 @@ class MilvusSearchInterface(SearchInterface):
             output_fields=_COMMUNITY_OUTPUT_FIELDS,
             limit=limit,
         )
-        return [
-            milvus_dict_to_community_node(hit['entity'])
-            for hits in results
-            for hit in hits
-        ]
+        return [milvus_dict_to_community_node(hit['entity']) for hits in results for hit in hits]
 
     # ---- Embeddings ----
 

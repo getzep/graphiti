@@ -369,9 +369,7 @@ class Node(BaseModel, ABC):
                         filter_expr=filter_expr,
                     )
             except Exception:
-                logger.warning(
-                    'Failed to delete nodes from vector store', exc_info=True
-                )
+                logger.warning('Failed to delete nodes from vector store', exc_info=True)
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -649,9 +647,7 @@ class EntityNode(Node):
                     data=[entity_node_to_milvus_dict(self)],
                 )
             except Exception:
-                logger.warning(
-                    f'Failed to sync node {self.uuid} to vector store', exc_info=True
-                )
+                logger.warning(f'Failed to sync node {self.uuid} to vector store', exc_info=True)
 
         return result
 
@@ -793,9 +789,7 @@ class CommunityNode(Node):
 
                 await driver.vector_store.ensure_ready()
                 await driver.vector_store.upsert(
-                    collection_name=driver.vector_store.collection_name(
-                        COLLECTION_COMMUNITY_NODES
-                    ),
+                    collection_name=driver.vector_store.collection_name(COLLECTION_COMMUNITY_NODES),
                     data=[community_node_to_milvus_dict(self)],
                 )
             except Exception:

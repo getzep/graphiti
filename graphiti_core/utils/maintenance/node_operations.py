@@ -597,8 +597,7 @@ async def _extract_entity_summaries_batch(
 
     # Partition nodes into flights of MAX_NODES
     node_flights = [
-        nodes_needing_llm[i : i + MAX_NODES]
-        for i in range(0, len(nodes_needing_llm), MAX_NODES)
+        nodes_needing_llm[i : i + MAX_NODES] for i in range(0, len(nodes_needing_llm), MAX_NODES)
     ]
 
     # Process flights in parallel
@@ -660,15 +659,11 @@ async def _process_summary_flight(
     for summarized_entity in summaries_response.summaries:
         matching_nodes = name_to_nodes.get(summarized_entity.name.lower(), [])
         if matching_nodes:
-            truncated_summary = truncate_at_sentence(
-                summarized_entity.summary, MAX_SUMMARY_CHARS
-            )
+            truncated_summary = truncate_at_sentence(summarized_entity.summary, MAX_SUMMARY_CHARS)
             for node in matching_nodes:
                 node.summary = truncated_summary
         else:
-            logger.warning(
-                f'LLM returned summary for unknown entity: {summarized_entity.name}'
-            )
+            logger.warning(f'LLM returned summary for unknown entity: {summarized_entity.name}')
 
 
 def _build_episode_context(

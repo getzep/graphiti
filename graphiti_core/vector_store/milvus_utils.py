@@ -58,9 +58,7 @@ def build_group_ids_filter(group_ids: list[str] | None) -> str:
     return f'group_id in [{ids_str}]'
 
 
-def _translate_date_filters(
-    field_name: str, date_filter_groups: list[list[Any]]
-) -> str:
+def _translate_date_filters(field_name: str, date_filter_groups: list[list[Any]]) -> str:
     """Translate Graphiti date filter groups to Milvus boolean expression.
 
     Date filters use nested AND/OR logic:
@@ -88,9 +86,7 @@ def _translate_date_filters(
     return '(' + ' or '.join(or_parts) + ')'
 
 
-def build_milvus_filter_from_search_filters(
-    search_filter: Any, entity_type: str
-) -> str:
+def build_milvus_filter_from_search_filters(search_filter: Any, entity_type: str) -> str:
     """Translate Graphiti SearchFilters to a Milvus boolean expression string.
 
     Args:
@@ -387,8 +383,7 @@ def milvus_dict_to_entity_edge(data: dict[str, Any]) -> Any:
         fact=data.get('fact', ''),
         fact_embedding=data.get('fact_embedding'),
         episodes=episodes,
-        created_at=epoch_ms_to_datetime(data.get('created_at', 0))
-        or datetime.now(tz=timezone.utc),
+        created_at=epoch_ms_to_datetime(data.get('created_at', 0)) or datetime.now(tz=timezone.utc),
         expired_at=epoch_ms_to_datetime(data.get('expired_at', 0)),
         valid_at=epoch_ms_to_datetime(data.get('valid_at', 0)),
         invalid_at=epoch_ms_to_datetime(data.get('invalid_at', 0)),
@@ -426,8 +421,7 @@ def milvus_dict_to_episodic_node(data: dict[str, Any]) -> Any:
         content=data.get('content', ''),
         source=EpisodeType.from_str(data.get('source', 'text')),
         source_description=data.get('source_description', ''),
-        created_at=epoch_ms_to_datetime(data.get('created_at', 0))
-        or datetime.now(tz=timezone.utc),
+        created_at=epoch_ms_to_datetime(data.get('created_at', 0)) or datetime.now(tz=timezone.utc),
         valid_at=epoch_ms_to_datetime(data.get('valid_at', 0)) or datetime.now(tz=timezone.utc),
         entity_edges=entity_edges,
     )
@@ -454,7 +448,6 @@ def milvus_dict_to_community_node(data: dict[str, Any]) -> Any:
         name=data.get('name', ''),
         group_id=data.get('group_id', ''),
         summary=data.get('summary', ''),
-        created_at=epoch_ms_to_datetime(data.get('created_at', 0))
-        or datetime.now(tz=timezone.utc),
+        created_at=epoch_ms_to_datetime(data.get('created_at', 0)) or datetime.now(tz=timezone.utc),
         name_embedding=data.get('name_embedding'),
     )

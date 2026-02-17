@@ -485,9 +485,7 @@ class VectorStoreFactory:
                 embedding_dim = int(
                     os.environ.get('MILVUS_EMBEDDING_DIM', str(milvus_config.embedding_dim))
                 )
-                prefix = os.environ.get(
-                    'MILVUS_COLLECTION_PREFIX', milvus_config.collection_prefix
-                )
+                prefix = os.environ.get('MILVUS_COLLECTION_PREFIX', milvus_config.collection_prefix)
 
                 vs_config = MilvusVectorStoreConfig(
                     uri=uri,

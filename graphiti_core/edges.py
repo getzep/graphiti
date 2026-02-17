@@ -95,9 +95,7 @@ class Edge(BaseModel, ABC):
 
                 await driver.vector_store.ensure_ready()
                 await driver.vector_store.delete(
-                    collection_name=driver.vector_store.collection_name(
-                        COLLECTION_ENTITY_EDGES
-                    ),
+                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
                     filter_expr=f'uuid == "{self.uuid}"',
                 )
             except Exception:
@@ -151,15 +149,11 @@ class Edge(BaseModel, ABC):
                 await driver.vector_store.ensure_ready()
                 uuid_list = ', '.join(f'"{u}"' for u in uuids)
                 await driver.vector_store.delete(
-                    collection_name=driver.vector_store.collection_name(
-                        COLLECTION_ENTITY_EDGES
-                    ),
+                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
                     filter_expr=f'uuid in [{uuid_list}]',
                 )
             except Exception:
-                logger.warning(
-                    'Failed to delete edges from vector store', exc_info=True
-                )
+                logger.warning('Failed to delete edges from vector store', exc_info=True)
 
     def __hash__(self):
         return hash(self.uuid)
@@ -410,9 +404,7 @@ class EntityEdge(Edge):
                     data=[entity_edge_to_milvus_dict(self)],
                 )
             except Exception:
-                logger.warning(
-                    f'Failed to sync edge {self.uuid} to vector store', exc_info=True
-                )
+                logger.warning(f'Failed to sync edge {self.uuid} to vector store', exc_info=True)
 
         return result
 

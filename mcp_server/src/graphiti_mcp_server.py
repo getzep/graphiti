@@ -298,9 +298,7 @@ class GraphitiService:
 
             logger.info('Successfully initialized Graphiti client')
             if vector_store_client is not None:
-                logger.info(
-                    f'Vector store attached: {type(vector_store_client).__name__}'
-                )
+                logger.info(f'Vector store attached: {type(vector_store_client).__name__}')
 
             # Log configuration details
             if llm_client:

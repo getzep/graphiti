@@ -256,9 +256,7 @@ class TestBulkDualWrite:
         driver = _mock_driver(with_vector_store=False)
         tx = AsyncMock()
 
-        await add_nodes_and_edges_bulk_tx(
-            tx, [], [], [], [], MagicMock(), driver=driver
-        )
+        await add_nodes_and_edges_bulk_tx(tx, [], [], [], [], MagicMock(), driver=driver)
 
         # No error, no vector store calls
 
@@ -285,9 +283,7 @@ class TestBulkDualWrite:
         )
 
         # Should not raise even though vector store fails
-        await add_nodes_and_edges_bulk_tx(
-            tx, [], [], [node], [edge], MagicMock(), driver=driver
-        )
+        await add_nodes_and_edges_bulk_tx(tx, [], [], [node], [edge], MagicMock(), driver=driver)
 
         # Graph DB write still happened
         assert tx.run.call_count >= 1

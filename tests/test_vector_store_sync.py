@@ -210,7 +210,8 @@ class TestBackfillVectorStore:
         assert counts['entity_nodes'] == 5
         # 3 batches: [2, 2, 1]
         entity_upsert_calls = [
-            c for c in vs.upsert.call_args_list
+            c
+            for c in vs.upsert.call_args_list
             if c.kwargs.get('collection_name') == 'test_entity_nodes'
         ]
         assert len(entity_upsert_calls) == 3
