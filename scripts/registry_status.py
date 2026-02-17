@@ -32,45 +32,11 @@ from registry import (
     get_registry,
 )
 
-
-QUEUE_SCHEMA_DDL = """
-CREATE TABLE IF NOT EXISTS ingest_jobs (
-  job_id TEXT PRIMARY KEY,
-  dedupe_key TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  source TEXT NOT NULL,
-  job_type TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  lane TEXT NOT NULL,
-  session_key TEXT,
-  requested_ts TEXT,
-  status TEXT NOT NULL,
-  run_after TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  max_attempts INTEGER NOT NULL DEFAULT 6,
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  last_error TEXT,
-  last_error_at TEXT,
-  last_started_at TEXT,
-  last_finished_at TEXT,
-  last_exit_code INTEGER,
-  last_duration_s REAL
-);
-
-CREATE INDEX IF NOT EXISTS idx_ingest_jobs_created_at
-  ON ingest_jobs(created_at);
-CREATE INDEX IF NOT EXISTS idx_ingest_jobs_job_type
-  ON ingest_jobs(job_type);
-CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status_run_after
-  ON ingest_jobs(status, run_after);
-CREATE INDEX IF NOT EXISTS idx_ingest_jobs_dedupe_key
-  ON ingest_jobs(dedupe_key);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ux_ingest_jobs_active_dedupe
-  ON ingest_jobs(dedupe_key)
-  WHERE status IN ('queued', 'running');
-"""
+# Import from shared module (ingest/queue.py) rather than duplicating the DDL.
+# Use importlib to avoid name collision with stdlib ``queue`` module.
+import importlib as _importlib
+_queue_mod = _importlib.import_module("queue")
+QUEUE_SCHEMA_DDL = _queue_mod.QUEUE_SCHEMA_DDL
 
 
 def format_timestamp(ts_str: str | None) -> str:

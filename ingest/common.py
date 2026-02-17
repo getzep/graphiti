@@ -114,9 +114,13 @@ def write_evidence_batch(evidences: list[dict], output_path: Path) -> None:
 
 
 def parse_telegram_context(text: str) -> dict[str, Any]:
-    """
-    Parse Telegram message context from format:
+    """Parse Telegram message context from format:
     [Telegram Yuan Han Li | Personal (@yuan_han_li) id:1439681712 +8h 2026-01-24 22:52 UTC]
+
+    ⚠️  PII Notice: This function extracts personally-identifiable information
+    (display name, username, user ID).  Callers MUST treat returned values as
+    **sensitive PII** — do not log at INFO/DEBUG, do not include in public
+    exports, and ensure storage complies with data-retention policies.
     """
     pattern = r"\[Telegram\s+([^|]+)\s*\|\s*([^(]+)\s*\((@\w+)\)\s*id:(\d+)\s+[^\]]+\]"
     match = re.search(pattern, text)
@@ -124,10 +128,10 @@ def parse_telegram_context(text: str) -> dict[str, Any]:
     if match:
         return {
             "channel": "telegram",
-            "displayName": match.group(1).strip(),
+            "displayName": match.group(1).strip(),   # PII: real name
             "chatType": match.group(2).strip(),
-            "username": match.group(3),
-            "userId": match.group(4)
+            "username": match.group(3),               # PII: Telegram handle
+            "userId": match.group(4),                 # PII: numeric Telegram ID
         }
     return {}
 

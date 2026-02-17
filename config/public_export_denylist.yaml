@@ -1,14 +1,10 @@
 version: 1
 
 denylist:
-  # Secrets and key material
-  - ".env"
-  - ".env.local"
-  - ".env.production"
-  - ".env.secret"
-  - "**/.env"
-  - "**/.env.local"
-  - "**/.env.secret"
+  # Secrets and key material — broad glob catches all .env variants
+  # (.env.example is explicitly allowed in public_export_allowlist.yaml)
+  - ".env*"
+  - "**/.env*"
   - "*.key"
   - "*.pem"
   - "*.p12"
