@@ -1,10 +1,11 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
-from config.schema import (
-    DatabaseConfig,
-    EmbedderConfig,
-    LLMConfig,
-)
+from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
+from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+from config.schema import DatabaseConfig, EmbedderConfig, LLMConfig
 
 # Try to import FalkorDriver if available
 try:
@@ -13,11 +14,6 @@ try:
     HAS_FALKOR = True
 except ImportError:
     HAS_FALKOR = False
-
-# Kuzu support removed - FalkorDB is now the default
-from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
-from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
 try:
@@ -94,6 +90,23 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     return api_key
 
 
+def is_non_openai_provider(base_url: str | None) -> bool:
+    """
+    Detect if the base_url points to a non-OpenAI provider.
+
+    Returns True if base_url is set and doesn't point to OpenAI's official API.
+    This includes Ollama, LM Studio, vLLM, and other OpenAI-compatible providers.
+    """
+    if not base_url:
+        return False
+
+    # OpenAI's official endpoints
+    openai_domains = ['api.openai.com', 'openai.azure.com']
+
+    # Check if base_url contains any official OpenAI domain
+    return not any(domain in base_url for domain in openai_domains)
+
+
 class LLMClientFactory:
     """Factory for creating LLM clients based on configuration."""
 
@@ -125,18 +138,28 @@ class LLMClientFactory:
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
+                    base_url=config.providers.openai.api_url,
                 )
 
-                # Check if this is a reasoning model (o1, o3, gpt-5 family)
-                reasoning_prefixes = ('o1', 'o3', 'gpt-5')
-                is_reasoning_model = config.model.startswith(reasoning_prefixes)
+                # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
+                use_generic_client = is_non_openai_provider(config.providers.openai.api_url)
 
-                # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
-                if is_reasoning_model:
-                    return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                if use_generic_client:
+                    # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
+                    # This uses the standard Chat Completions API instead of Responses API
+                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
                 else:
-                    # For non-reasoning models, explicitly pass None to disable these parameters
-                    return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
+                    # Use OpenAIClient for official OpenAI API (supports Responses API)
+                    # Check if this is a reasoning model (o1, o3, gpt-5 family)
+                    reasoning_prefixes = ('o1', 'o3', 'gpt-5')
+                    is_reasoning_model = config.model.startswith(reasoning_prefixes)
+
+                    # Only pass reasoning/verbosity parameters for reasoning models
+                    if is_reasoning_model:
+                        return OpenAIClient(config=llm_config, reasoning='minimal', verbosity='low')
+                    else:
+                        # For non-reasoning models, don't pass reasoning/verbosity parameters
+                        return OpenAIClient(config=llm_config)
 
             case 'azure_openai':
                 if not HAS_AZURE_LLM:
