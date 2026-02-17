@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
-from typing import Any, cast
+from __future__ import annotations
 
-import numpy as np
+import logging
+from typing import TYPE_CHECKING, Any
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.search_ops import SearchOperations
@@ -41,22 +41,18 @@ from graphiti_core.search.search_filters import (
     edge_search_filter_query_constructor,
     node_search_filter_query_constructor,
 )
+from graphiti_core.search.search_utils import calculate_cosine_similarity
+
+if TYPE_CHECKING:
+    from graphiti_core.driver.neptune_driver import NeptuneDriver
 
 logger = logging.getLogger(__name__)
 
-MAX_QUERY_LENGTH = 128
-
-
-def _calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> float:
-    dot_product = np.dot(vector1, vector2)
-    norm_vector1 = np.linalg.norm(vector1)
-    norm_vector2 = np.linalg.norm(vector2)
-    if norm_vector1 == 0 or norm_vector2 == 0:
-        return 0
-    return dot_product / (norm_vector1 * norm_vector2)
-
 
 class NeptuneSearchOperations(SearchOperations):
+    def __init__(self, driver: NeptuneDriver | None = None):
+        self._driver = driver
+
     # --- Node search ---
 
     async def node_fulltext_search(
@@ -67,9 +63,9 @@ class NeptuneSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityNode]:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
+        if self._driver is None:
+            return []
+        driver = self._driver
         res = driver.run_aoss_query('node_name_and_summary', query, limit=limit)
         if not res or res.get('hits', {}).get('total', {}).get('value', 0) == 0:
             return []
@@ -140,7 +136,7 @@ class NeptuneSearchOperations(SearchOperations):
         input_ids = []
         for r in resp:
             if r['embedding']:
-                score = _calculate_cosine_similarity(
+                score = calculate_cosine_similarity(
                     search_vector, list(map(float, r['embedding'].split(',')))
                 )
                 if score > min_score:
@@ -231,9 +227,9 @@ class NeptuneSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityEdge]:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
+        if self._driver is None:
+            return []
+        driver = self._driver
         res = driver.run_aoss_query('edge_name_and_fact', query)
         if not res or res.get('hits', {}).get('total', {}).get('value', 0) == 0:
             return []
@@ -330,7 +326,7 @@ class NeptuneSearchOperations(SearchOperations):
         input_ids = []
         for r in resp:
             if r['embedding']:
-                score = _calculate_cosine_similarity(
+                score = calculate_cosine_similarity(
                     search_vector, list(map(float, r['embedding'].split(',')))
                 )
                 if score > min_score:
@@ -437,9 +433,9 @@ class NeptuneSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EpisodicNode]:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
+        if self._driver is None:
+            return []
+        driver = self._driver
         res = driver.run_aoss_query('episode_content', query, limit=limit)
         if not res or res.get('hits', {}).get('total', {}).get('value', 0) == 0:
             return []
@@ -479,9 +475,9 @@ class NeptuneSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[CommunityNode]:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
+        if self._driver is None:
+            return []
+        driver = self._driver
         res = driver.run_aoss_query('community_name', query, limit=limit)
         if not res or res.get('hits', {}).get('total', {}).get('value', 0) == 0:
             return []
@@ -545,7 +541,7 @@ class NeptuneSearchOperations(SearchOperations):
         input_ids = []
         for r in resp:
             if r['embedding']:
-                score = _calculate_cosine_similarity(
+                score = calculate_cosine_similarity(
                     search_vector, list(map(float, r['embedding'].split(',')))
                 )
                 if score > min_score:

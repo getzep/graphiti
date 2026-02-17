@@ -184,15 +184,15 @@ class NeptuneDriver(GraphDriver):
         # Instantiate Neptune operations
         self._entity_node_ops = NeptuneEntityNodeOperations()
         self._episode_node_ops = NeptuneEpisodeNodeOperations()
-        self._community_node_ops = NeptuneCommunityNodeOperations()
+        self._community_node_ops = NeptuneCommunityNodeOperations(driver=self)
         self._saga_node_ops = NeptuneSagaNodeOperations()
         self._entity_edge_ops = NeptuneEntityEdgeOperations()
         self._episodic_edge_ops = NeptuneEpisodicEdgeOperations()
         self._community_edge_ops = NeptuneCommunityEdgeOperations()
         self._has_episode_edge_ops = NeptuneHasEpisodeEdgeOperations()
         self._next_episode_edge_ops = NeptuneNextEpisodeEdgeOperations()
-        self._search_ops = NeptuneSearchOperations()
-        self._graph_ops = NeptuneGraphMaintenanceOperations()
+        self._search_ops = NeptuneSearchOperations(driver=self)
+        self._graph_ops = NeptuneGraphMaintenanceOperations(driver=self)
 
     # --- Operations properties ---
 

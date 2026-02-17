@@ -14,17 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.kuzu.operations.record_parsers import (
+    parse_kuzu_entity_edge,
+    parse_kuzu_entity_node,
+)
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import (
     community_node_from_record,
-    entity_edge_from_record,
-    entity_node_from_record,
     episodic_node_from_record,
 )
 from graphiti_core.edges import EntityEdge
@@ -53,7 +54,7 @@ MAX_QUERY_LENGTH = 128
 
 def _build_kuzu_fulltext_query(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: list[str] | None = None,  # noqa: ARG001
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
     """Build a fulltext query string for Kuzu.
@@ -62,34 +63,10 @@ def _build_kuzu_fulltext_query(
     exceeds *max_query_length* words.
     """
     words = query.split()
-    if len(words) + len(group_ids or '') >= max_query_length:
+    if len(words) >= max_query_length:
         words = words[:max_query_length]
     truncated = ' '.join(words)
     return truncated
-
-
-def _parse_kuzu_entity_node(record: Any) -> EntityNode:
-    """Parse a Kuzu entity node record, deserializing JSON attributes."""
-    if isinstance(record.get('attributes'), str):
-        try:
-            record['attributes'] = json.loads(record['attributes'])
-        except (json.JSONDecodeError, TypeError):
-            record['attributes'] = {}
-    elif record.get('attributes') is None:
-        record['attributes'] = {}
-    return entity_node_from_record(record)
-
-
-def _parse_kuzu_entity_edge(record: Any) -> EntityEdge:
-    """Parse a Kuzu entity edge record, deserializing JSON attributes."""
-    if isinstance(record.get('attributes'), str):
-        try:
-            record['attributes'] = json.loads(record['attributes'])
-        except (json.JSONDecodeError, TypeError):
-            record['attributes'] = {}
-    elif record.get('attributes') is None:
-        record['attributes'] = {}
-    return entity_edge_from_record(record)
 
 
 class KuzuSearchOperations(SearchOperations):
@@ -141,7 +118,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_parse_kuzu_entity_node(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def node_similarity_search(
         self,
@@ -193,7 +170,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_parse_kuzu_entity_node(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def node_bfs_search(
         self,
@@ -308,7 +285,7 @@ class KuzuSearchOperations(SearchOperations):
         seen: set[str] = set()
         unique_nodes: list[EntityNode] = []
         for r in all_records:
-            node = _parse_kuzu_entity_node(r)
+            node = parse_kuzu_entity_node(r)
             if node.uuid not in seen:
                 seen.add(node.uuid)
                 unique_nodes.append(node)
@@ -370,7 +347,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_parse_kuzu_entity_edge(r) for r in records]
+        return [parse_kuzu_entity_edge(r) for r in records]
 
     async def edge_similarity_search(
         self,
@@ -432,7 +409,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [_parse_kuzu_entity_edge(r) for r in records]
+        return [parse_kuzu_entity_edge(r) for r in records]
 
     async def edge_bfs_search(
         self,
@@ -516,7 +493,7 @@ class KuzuSearchOperations(SearchOperations):
         seen: set[str] = set()
         unique_edges: list[EntityEdge] = []
         for r in all_records:
-            edge = _parse_kuzu_entity_edge(r)
+            edge = parse_kuzu_entity_edge(r)
             if edge.uuid not in seen:
                 seen.add(edge.uuid)
                 unique_edges.append(edge)
@@ -670,21 +647,20 @@ class KuzuSearchOperations(SearchOperations):
         filtered_uuids = [u for u in node_uuids if u != center_node_uuid]
         scores: dict[str, float] = {center_node_uuid: 0.0}
 
-        # Kuzu uses RelatesToNode_ as intermediate, so we match through it
+        # Kuzu does not support UNWIND, so query each UUID individually
         cypher = """
-        UNWIND $node_uuids AS node_uuid
-        MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]->(:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: node_uuid})
-        RETURN 1 AS score, node_uuid AS uuid
+        MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]->(:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $node_uuid})
+        RETURN 1 AS score, n.uuid AS uuid
         """
 
-        results, _, _ = await executor.execute_query(
-            cypher,
-            node_uuids=filtered_uuids,
-            center_uuid=center_node_uuid,
-        )
-
-        for result in results:
-            scores[result['uuid']] = result['score']
+        for node_uuid in filtered_uuids:
+            results, _, _ = await executor.execute_query(
+                cypher,
+                node_uuid=node_uuid,
+                center_uuid=center_node_uuid,
+            )
+            for result in results:
+                scores[result['uuid']] = result['score']
 
         for uuid in filtered_uuids:
             if uuid not in scores:
@@ -710,7 +686,7 @@ class KuzuSearchOperations(SearchOperations):
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids)
 
-        node_map = {r['uuid']: _parse_kuzu_entity_node(r) for r in records}
+        node_map = {r['uuid']: parse_kuzu_entity_node(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     async def episode_mentions_reranker(
@@ -724,17 +700,18 @@ class KuzuSearchOperations(SearchOperations):
 
         scores: dict[str, float] = {}
 
-        results, _, _ = await executor.execute_query(
-            """
-            UNWIND $node_uuids AS node_uuid
-            MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: node_uuid})
+        # Kuzu does not support UNWIND, so query each UUID individually
+        cypher = """
+            MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $node_uuid})
             RETURN count(*) AS score, n.uuid AS uuid
-            """,
-            node_uuids=node_uuids,
-        )
-
-        for result in results:
-            scores[result['uuid']] = result['score']
+        """
+        for node_uuid in node_uuids:
+            results, _, _ = await executor.execute_query(
+                cypher,
+                node_uuid=node_uuid,
+            )
+            for result in results:
+                scores[result['uuid']] = result['score']
 
         for uuid in node_uuids:
             if uuid not in scores:
@@ -757,7 +734,7 @@ class KuzuSearchOperations(SearchOperations):
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids)
 
-        node_map = {r['uuid']: _parse_kuzu_entity_node(r) for r in records}
+        node_map = {r['uuid']: parse_kuzu_entity_node(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     # --- Filter builders ---

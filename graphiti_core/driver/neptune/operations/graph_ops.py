@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
-from collections import defaultdict
-from typing import Any, cast
+from __future__ import annotations
 
-from pydantic import BaseModel
+import logging
+from typing import TYPE_CHECKING, Any
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
 from graphiti_core.models.nodes.node_db_queries import (
@@ -30,56 +30,16 @@ from graphiti_core.models.nodes.node_db_queries import (
 )
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 
+if TYPE_CHECKING:
+    from graphiti_core.driver.neptune_driver import NeptuneDriver
+
 logger = logging.getLogger(__name__)
 
 
-class Neighbor(BaseModel):
-    node_uuid: str
-    edge_count: int
-
-
-def _label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
-
-    while True:
-        no_change = True
-        new_community_map: dict[str, int] = {}
-
-        for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
-            community_candidates: dict[int, int] = defaultdict(int)
-            for neighbor in neighbors:
-                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
-
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
-            else:
-                new_community = max(community_candidate, curr_community)
-
-            new_community_map[uuid] = new_community
-
-            if new_community != curr_community:
-                no_change = False
-
-        if no_change:
-            break
-
-        community_map = new_community_map
-
-    community_cluster_map: dict[int, list[str]] = defaultdict(list)
-    for uuid, community in community_map.items():
-        community_cluster_map[community].append(uuid)
-
-    return list(community_cluster_map.values())
-
-
 class NeptuneGraphMaintenanceOperations(GraphMaintenanceOperations):
+    def __init__(self, driver: NeptuneDriver | None = None):
+        self._driver = driver
+
     async def clear_data(
         self,
         executor: QueryExecutor,
@@ -103,23 +63,21 @@ class NeptuneGraphMaintenanceOperations(GraphMaintenanceOperations):
         executor: QueryExecutor,
         delete_existing: bool = False,
     ) -> None:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
+        if self._driver is None:
+            return
 
         if delete_existing:
-            await driver.delete_aoss_indices()
+            await self._driver.delete_aoss_indices()
 
-        await driver.create_aoss_indices()
+        await self._driver.create_aoss_indices()
 
     async def delete_all_indexes(
         self,
         executor: QueryExecutor,
     ) -> None:
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        driver = cast(NeptuneDriver, executor)
-        await driver.delete_aoss_indices()
+        if self._driver is None:
+            return
+        await self._driver.delete_aoss_indices()
 
     async def get_community_clusters(
         self,
@@ -173,7 +131,7 @@ class NeptuneGraphMaintenanceOperations(GraphMaintenanceOperations):
                     for record in records
                 ]
 
-            cluster_uuids = _label_propagation(projection)
+            cluster_uuids = label_propagation(projection)
 
             # Fetch full node objects for each cluster
             for cluster in cluster_uuids:

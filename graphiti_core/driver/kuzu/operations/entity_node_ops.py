@@ -19,9 +19,9 @@ import logging
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.kuzu.operations.record_parsers import parse_kuzu_entity_node
 from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
-from graphiti_core.driver.record_parsers import entity_node_from_record
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.models.nodes.node_db_queries import (
     get_entity_node_return_query,
@@ -30,18 +30,6 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.nodes import EntityNode
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_kuzu_entity_node(record: Any) -> EntityNode:
-    """Parse a Kuzu entity node record, deserializing JSON attributes."""
-    if isinstance(record.get('attributes'), str):
-        try:
-            record['attributes'] = json.loads(record['attributes'])
-        except (json.JSONDecodeError, TypeError):
-            record['attributes'] = {}
-    elif record.get('attributes') is None:
-        record['attributes'] = {}
-    return entity_node_from_record(record)
 
 
 class KuzuEntityNodeOperations(EntityNodeOperations):
@@ -165,7 +153,7 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
             RETURN
             """ + get_entity_node_return_query(GraphProvider.KUZU)
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        nodes = [_parse_kuzu_entity_node(r) for r in records]
+        nodes = [parse_kuzu_entity_node(r) for r in records]
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
         return nodes[0]
@@ -181,7 +169,7 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
             RETURN
             """ + get_entity_node_return_query(GraphProvider.KUZU)
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [_parse_kuzu_entity_node(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -213,7 +201,7 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [_parse_kuzu_entity_node(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def load_embeddings(
         self,

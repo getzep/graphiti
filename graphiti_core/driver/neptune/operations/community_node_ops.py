@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
@@ -28,10 +30,16 @@ from graphiti_core.models.nodes.node_db_queries import (
 )
 from graphiti_core.nodes import CommunityNode
 
+if TYPE_CHECKING:
+    from graphiti_core.driver.neptune_driver import NeptuneDriver
+
 logger = logging.getLogger(__name__)
 
 
 class NeptuneCommunityNodeOperations(CommunityNodeOperations):
+    def __init__(self, driver: NeptuneDriver | None = None):
+        self._driver = driver
+
     async def save(
         self,
         executor: QueryExecutor,
@@ -52,12 +60,11 @@ class NeptuneCommunityNodeOperations(CommunityNodeOperations):
         else:
             await executor.execute_query(query, **params)
 
-        from graphiti_core.driver.neptune_driver import NeptuneDriver
-
-        cast(NeptuneDriver, executor).save_to_aoss(
-            'community_name',
-            [{'uuid': node.uuid, 'name': node.name, 'group_id': node.group_id}],
-        )
+        if self._driver is not None:
+            self._driver.save_to_aoss(
+                'community_name',
+                [{'uuid': node.uuid, 'name': node.name, 'group_id': node.group_id}],
+            )
 
         logger.debug(f'Saved Community Node to Graph: {node.uuid}')
 

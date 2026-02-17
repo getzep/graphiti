@@ -14,17 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
-from collections import defaultdict
 from typing import Any
 
-from pydantic import BaseModel
-
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.kuzu.operations.record_parsers import parse_kuzu_entity_node
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
-from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
+from graphiti_core.driver.record_parsers import community_node_from_record
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
@@ -34,64 +32,6 @@ from graphiti_core.models.nodes.node_db_queries import (
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 
 logger = logging.getLogger(__name__)
-
-
-class Neighbor(BaseModel):
-    node_uuid: str
-    edge_count: int
-
-
-def _label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
-
-    while True:
-        no_change = True
-        new_community_map: dict[str, int] = {}
-
-        for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
-            community_candidates: dict[int, int] = defaultdict(int)
-            for neighbor in neighbors:
-                community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
-
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
-            else:
-                new_community = max(community_candidate, curr_community)
-
-            new_community_map[uuid] = new_community
-
-            if new_community != curr_community:
-                no_change = False
-
-        if no_change:
-            break
-
-        community_map = new_community_map
-
-    community_cluster_map: dict[int, list[str]] = defaultdict(list)
-    for uuid, community in community_map.items():
-        community_cluster_map[community].append(uuid)
-
-    return list(community_cluster_map.values())
-
-
-def _parse_kuzu_entity_node(record: Any) -> EntityNode:
-    """Parse a Kuzu entity node record, deserializing JSON attributes."""
-    if isinstance(record.get('attributes'), str):
-        try:
-            record['attributes'] = json.loads(record['attributes'])
-        except (json.JSONDecodeError, TypeError):
-            record['attributes'] = {}
-    elif record.get('attributes') is None:
-        record['attributes'] = {}
-    return entity_node_from_record(record)
 
 
 class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
@@ -170,7 +110,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
                 + get_entity_node_return_query(GraphProvider.KUZU),
                 group_ids=[group_id],
             )
-            nodes = [_parse_kuzu_entity_node(r) for r in node_records]
+            nodes = [parse_kuzu_entity_node(r) for r in node_records]
 
             for node in nodes:
                 # Kuzu edges are modeled through RelatesToNode_ intermediate nodes
@@ -191,7 +131,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
                     for record in records
                 ]
 
-            cluster_uuids = _label_propagation(projection)
+            cluster_uuids = label_propagation(projection)
 
             # Fetch full node objects for each cluster
             for cluster in cluster_uuids:
@@ -206,7 +146,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
                     + get_entity_node_return_query(GraphProvider.KUZU),
                     uuids=cluster,
                 )
-                community_clusters.append([_parse_kuzu_entity_node(r) for r in cluster_records])
+                community_clusters.append([parse_kuzu_entity_node(r) for r in cluster_records])
 
         return community_clusters
 
@@ -267,7 +207,7 @@ class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
             uuids=episode_uuids,
         )
 
-        return [_parse_kuzu_entity_node(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def get_communities_by_nodes(
         self,
