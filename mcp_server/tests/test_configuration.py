@@ -102,11 +102,14 @@ def test_llm_factory(config: GraphitiConfig):
         test_generic_config.providers.openai.api_key = 'not-needed'
         test_generic_config.providers.openai.api_url = 'http://localhost:11434/v1'
 
-    try:
+    from services.factories import HAS_OPENAI_GENERIC
+
+    if HAS_OPENAI_GENERIC:
         client = LLMClientFactory.create(test_generic_config)
+        assert client is not None, 'openai_generic client should not be None'
         print('✓ Factory supports openai_generic provider for local models')
-    except Exception as e:
-        print(f'✗ openai_generic provider failed: {e}')
+    else:
+        print('⚠ Skipping openai_generic test (not available in current graphiti-core version)')
 
 
 def test_embedder_factory(config: GraphitiConfig):
@@ -173,49 +176,48 @@ def test_reranker_factory(config: GraphitiConfig):
     """Test Reranker (cross-encoder) client factory creation."""
     print('\nTesting Reranker client factory...')
 
+    from services.factories import HAS_BGE_RERANKER, HAS_GEMINI_RERANKER
+
     # Test OpenAI reranker creation (default) - only if API key is set
-    if config.reranker.provider == 'openai' and config.reranker.providers.openai and config.reranker.providers.openai.api_key:
-        try:
-            reranker = CrossEncoderFactory.create(config.reranker)
-            print(f'✓ Created {config.reranker.provider} reranker client successfully (default)')
-        except Exception as e:
-            print(f'✗ Failed to create reranker client: {e}')
+    if (
+        config.reranker.provider == 'openai'
+        and config.reranker.providers.openai
+        and config.reranker.providers.openai.api_key
+    ):
+        result = CrossEncoderFactory.create(config.reranker)
+        assert result is not None, 'OpenAI reranker client should not be None'
+        print(f'✓ Created {config.reranker.provider} reranker client successfully (default)')
     else:
         print('⚠ Skipping OpenAI reranker test (no API key configured)')
 
     # Test BGE reranker (local, no API key needed) - only if dependencies available
-    test_config = config.reranker.model_copy()
-    test_config.provider = 'bge'
-
-    try:
-        reranker = CrossEncoderFactory.create(test_config)
+    if HAS_BGE_RERANKER:
+        test_config = config.reranker.model_copy()
+        test_config.provider = 'bge'
+        result = CrossEncoderFactory.create(test_config)
+        assert result is not None, 'BGE reranker client should not be None'
         print('✓ Factory supports BGE local reranker')
-    except Exception as e:
-        if 'sentence-transformers' in str(e):
-            print('⚠ Skipping BGE reranker test (optional dependency not installed)')
-        else:
-            print(f'✗ BGE reranker failed: {e}')
+    else:
+        print('⚠ Skipping BGE reranker test (sentence-transformers not installed)')
 
     # Test Gemini reranker - only if dependencies available
-    test_gemini_config = config.reranker.model_copy()
-    test_gemini_config.provider = 'gemini'
-    if not test_gemini_config.providers.gemini:
-        from config.schema import GeminiProviderConfig
+    if HAS_GEMINI_RERANKER:
+        test_gemini_config = config.reranker.model_copy()
+        test_gemini_config.provider = 'gemini'
+        if not test_gemini_config.providers.gemini:
+            from config.schema import GeminiProviderConfig
 
-        test_gemini_config.providers.gemini = GeminiProviderConfig(
-            api_key='dummy_value_for_testing'
-        )
-    else:
-        test_gemini_config.providers.gemini.api_key = 'dummy_value_for_testing'
-
-    try:
-        reranker = CrossEncoderFactory.create(test_gemini_config)
-        print('✓ Factory supports Gemini reranker')
-    except Exception as e:
-        if 'google-genai' in str(e):
-            print('⚠ Skipping Gemini reranker test (optional dependency not installed)')
+            test_gemini_config.providers.gemini = GeminiProviderConfig(
+                api_key='dummy_value_for_testing'
+            )
         else:
-            print(f'✗ Gemini reranker failed: {e}')
+            test_gemini_config.providers.gemini.api_key = 'dummy_value_for_testing'
+
+        result = CrossEncoderFactory.create(test_gemini_config)
+        assert result is not None, 'Gemini reranker client should not be None'
+        print('✓ Factory supports Gemini reranker')
+    else:
+        print('⚠ Skipping Gemini reranker test (google-genai not installed)')
 
 
 def test_cli_override():

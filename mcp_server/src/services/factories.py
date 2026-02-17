@@ -4,6 +4,7 @@ from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    RerankerConfig,
 )
 
 # Try to import FalkorDriver if available
@@ -68,6 +69,27 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
+try:
+    from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+
+    HAS_BGE_RERANKER = True
+except ImportError:
+    HAS_BGE_RERANKER = False
+
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
 
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
@@ -139,20 +161,19 @@ class LLMClientFactory:
                     return OpenAIClient(config=llm_config, reasoning=None, verbosity=None)
 
             case 'openai_generic':
+                if not HAS_OPENAI_GENERIC:
+                    raise ValueError(
+                        'OpenAI Generic client not available in current graphiti-core version'
+                    )
                 if not config.providers.openai:
                     raise ValueError('OpenAI provider configuration not found')
 
                 api_key = config.providers.openai.api_key or 'not-needed'
                 api_url = config.providers.openai.api_url
 
-                _validate_api_key('OpenAI Generic', api_key, logger)
-                logger.info(f'Using custom base_url: {api_url}')
+                logger.info(f'Creating OpenAI Generic client with base_url: {api_url}')
 
-                from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
-
-                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
-
-                llm_config = CoreLLMConfig(
+                llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     base_url=api_url,
                     model=config.model,
@@ -462,7 +483,7 @@ class CrossEncoderFactory:
     """Factory for creating Cross-Encoder (reranker) clients."""
 
     @staticmethod
-    def create(config):
+    def create(config: RerankerConfig):
         """Create a cross-encoder client based on configuration.
 
         Args:
@@ -488,10 +509,10 @@ class CrossEncoderFactory:
                 return OpenAIRerankerClient()
 
             case 'gemini':
-                from graphiti_core.cross_encoder.gemini_reranker_client import (
-                    GeminiRerankerClient,
-                )
-                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+                if not HAS_GEMINI_RERANKER:
+                    raise ValueError(
+                        'Gemini reranker not available in current graphiti-core version'
+                    )
 
                 if not config.providers.gemini:
                     raise ValueError('Gemini provider configuration not found')
@@ -499,16 +520,18 @@ class CrossEncoderFactory:
                 api_key = config.providers.gemini.api_key
                 _validate_api_key('Gemini Reranker', api_key, logger)
 
-                gemini_config = CoreLLMConfig(
+                gemini_config = GraphitiLLMConfig(
                     api_key=api_key,
-                    model='gemini-2.5-flash-lite',  # Default reranker model
+                    model=config.model or 'gemini-2.5-flash-lite',
                 )
                 return GeminiRerankerClient(config=gemini_config)
 
             case 'bge':
-                from graphiti_core.cross_encoder.bge_reranker_client import (
-                    BGERerankerClient,
-                )
+                if not HAS_BGE_RERANKER:
+                    raise ValueError(
+                        'BGE reranker not available. Install sentence-transformers: '
+                        'pip install sentence-transformers'
+                    )
 
                 logger.info('Creating BGE (local) reranker client')
                 return BGERerankerClient()
