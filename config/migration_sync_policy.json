@@ -11,7 +11,7 @@
   },
   "sync_button_policy": {
     "require_clean_worktree": true,
-    "max_origin_only_commits": 0,
+    "max_origin_only_commits": 100,
     "require_upstream_only_commits": true
   },
   "history_metrics": {

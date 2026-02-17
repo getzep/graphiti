@@ -1,17 +1,27 @@
 version: 1
 
 denylist:
+  # Secrets and key material
   - ".env"
-  - ".env.*"
+  - ".env.local"
+  - ".env.production"
+  - ".env.secret"
+  - "**/.env"
+  - "**/.env.local"
+  - "**/.env.secret"
   - "*.key"
   - "*.pem"
   - "*.p12"
   - "**/secrets/**"
   - "**/secret/**"
+
+  # Runtime/generated state (non-export)
   - "state/**"
   - "backup/**"
   - "exports/**"
-  - "reports/**"
+  - "reports/private/**"
+
+  # Explicit private content rails
   - "workflow_packs/**"
   - "content_packs/**/private/**"
   - "packs/**/private/**"

@@ -8,6 +8,19 @@ python3 scripts/delta_tool.py contracts-check -- \
   --extensions-dir extensions \
   --strict
 
+python3 scripts/public_boundary_policy_lint.py \
+  --manifest config/public_export_allowlist.yaml \
+  --denylist config/public_export_denylist.yaml
+
+python3 scripts/public_repo_boundary_audit.py \
+  --strict \
+  --manifest config/public_export_allowlist.yaml \
+  --denylist config/public_export_denylist.yaml \
+  --report /tmp/boundary-audit.md \
+  --summary-json /tmp/boundary-audit-summary.json
+
+python3 scripts/public_repo_hardening_lint.py --repo .
+
 # PR-safe: --allow-missing-upstream + --dry-run ensures CI does not hard-fail
 # when the upstream remote/refs are absent (e.g. shallow clones, forks without
 # upstream configured).  Sync-button-safety degrades to a warning in this mode.

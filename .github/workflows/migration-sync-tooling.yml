@@ -30,6 +30,8 @@ jobs:
         with:
           name: migration-sync-tooling-artifacts
           path: |
+            /tmp/boundary-audit.md
+            /tmp/boundary-audit-summary.json
             /tmp/upstream-sync-doctor.json
             /tmp/filtered-history.md
             /tmp/filtered-history.json
