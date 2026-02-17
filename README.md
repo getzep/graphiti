@@ -411,14 +411,14 @@ The driver layer is organized into three tiers:
    - **Search & maintenance:** `SearchOperations`, `GraphMaintenanceOperations`
 
 Each backend provides a concrete driver class and a matching `operations/` directory with implementations of all 11
-ABCs:
+ABCs. The key directories and files are shown below (simplified; see source for complete structure):
 
 ```
 graphiti_core/driver/
-├── driver.py                    # GraphDriver ABC, GraphProvider enum
-├── query_executor.py            # QueryExecutor protocol
-├── record_parsers.py            # Shared record → model conversion
-├── operations/                  # 11 operation ABCs
+├── driver.py                        # GraphDriver ABC, GraphProvider enum
+├── query_executor.py                # QueryExecutor protocol
+├── record_parsers.py                # Shared record → model conversion
+├── operations/                      # 11 operation ABCs
 │   ├── entity_node_ops.py
 │   ├── episode_node_ops.py
 │   ├── community_node_ops.py
@@ -430,23 +430,27 @@ graphiti_core/driver/
 │   ├── next_episode_edge_ops.py
 │   ├── search_ops.py
 │   ├── graph_ops.py
-│   └── graph_utils.py           # Shared algorithms (e.g., label propagation)
-├── neo4j_driver.py              # Neo4jDriver
-├── neo4j/operations/            # 11 Neo4j implementations
-├── falkordb_driver.py           # FalkorDriver
-├── falkordb/operations/         # 11 FalkorDB implementations
-├── kuzu_driver.py               # KuzuDriver
-├── kuzu/operations/             # 11 Kuzu implementations
-├── neptune_driver.py            # NeptuneDriver
-└── neptune/operations/          # 11 Neptune implementations
+│   └── graph_utils.py              # Shared algorithms (e.g., label propagation)
+├── graph_operations/                # Legacy graph operations interface
+├── search_interface/                # Legacy search interface
+├── neo4j_driver.py                  # Neo4jDriver
+├── neo4j/operations/                # 11 Neo4j implementations
+├── falkordb_driver.py               # FalkorDriver
+├── falkordb/operations/             # 11 FalkorDB implementations
+├── kuzu_driver.py                   # KuzuDriver
+├── kuzu/operations/                 # 11 Kuzu implementations + record_parsers.py
+├── neptune_driver.py                # NeptuneDriver
+└── neptune/operations/              # 11 Neptune implementations
 ```
 
 Operations are decoupled from the driver itself — each operation method receives an `executor: QueryExecutor` parameter
 (a protocol for running queries) rather than a concrete `GraphDriver`, which makes operations testable and
 driver-agnostic. The driver class instantiates all 11 operation classes in its `__init__` and exposes them as
-properties:
+properties. The base `GraphDriver` ABC defines each property with an optional return type (`| None`, defaulting to
+`None`); concrete drivers override these to return their implementations:
 
 ```python
+# In your concrete driver (e.g., Neo4jDriver):
 @property
 def entity_node_ops(self) -> EntityNodeOperations:
     return self._entity_node_ops
