@@ -39,3 +39,5 @@ Operational boundaries and release requirements live here:
 ## Operating rule
 
 Everything that does not belong in a stable, reusable foundation should be treated as private layering and handled as externalized workflow/context input instead of being merged into this public core.
+
+For runtime pack/profile split guidance, see `docs/runbooks/runtime-pack-overlay.md`.

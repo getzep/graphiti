@@ -26,23 +26,15 @@ class RuntimePackRouterTests(unittest.TestCase):
         ):
             source = REPO_ROOT / 'config' / filename
             destination = config_dir / filename
-            destination.write_text(
-                source.read_text(encoding='utf-8'),
-                encoding='utf-8',
-            )
+            destination.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
 
         for filename in (
-            'vc_memo_drafting.pack.yaml',
-            'vc_deal_brief.pack.yaml',
-            'vc_diligence_questions.pack.yaml',
-            'vc_ic_prep.pack.yaml',
+            'example_summary.pack.yaml',
+            'example_research.pack.yaml',
         ):
             source = REPO_ROOT / 'workflows' / filename
             destination = workflows_dir / filename
-            destination.write_text(
-                source.read_text(encoding='utf-8'),
-                encoding='utf-8',
-            )
+            destination.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
 
     def _route(self, repo: Path, *, consumer: str, workflow_id: str, step_id: str, task: str) -> dict:
         out = repo / 'plan.json'
@@ -69,58 +61,48 @@ class RuntimePackRouterTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
-        payload = json.loads(out.read_text(encoding='utf-8'))
-        return payload
+        return json.loads(out.read_text(encoding='utf-8'))
 
-    def test_router_routes_vc_consumers_deterministically(self) -> None:
+    def test_router_routes_example_consumers_deterministically(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / 'repo'
             repo.mkdir(parents=True)
             self._seed_repo(repo)
 
-            memo_plan = self._route(
+            summary_plan = self._route(
                 repo,
-                consumer='main_session_vc_memo',
-                workflow_id='vc_memo_drafting',
+                consumer='main_session_example_summary',
+                workflow_id='example_summary',
                 step_id='draft',
-                task='Draft memo',
+                task='Draft summary',
             )
-            deal_plan = self._route(
+            research_plan = self._route(
                 repo,
-                consumer='main_session_vc_deal_brief',
-                workflow_id='vc_deal_brief',
-                step_id='compose',
-                task='Prepare deal brief',
-            )
-            ic_plan = self._route(
-                repo,
-                consumer='main_session_vc_ic_prep',
-                workflow_id='vc_ic_prep',
+                consumer='main_session_example_research',
+                workflow_id='example_research',
                 step_id='synthesize',
-                task='Prepare IC brief',
+                task='Synthesize notes',
             )
 
-            self.assertEqual(memo_plan['packs'][0]['pack_id'], 'vc_memo_drafting')
-            self.assertEqual(memo_plan['packs'][0]['query'], 'workflows/vc_memo_drafting.pack.yaml')
-            self.assertEqual(deal_plan['packs'][0]['pack_id'], 'vc_deal_brief')
-            self.assertEqual(deal_plan['packs'][0]['query'], 'workflows/vc_deal_brief.pack.yaml')
-            self.assertEqual(ic_plan['packs'][0]['pack_id'], 'vc_ic_prep')
-            self.assertEqual(ic_plan['packs'][0]['query'], 'workflows/vc_ic_prep.pack.yaml')
+            self.assertEqual(summary_plan['packs'][0]['pack_id'], 'example_summary_pack')
+            self.assertEqual(summary_plan['packs'][0]['query'], 'workflows/example_summary.pack.yaml')
+            self.assertEqual(research_plan['packs'][0]['pack_id'], 'example_research_pack')
+            self.assertEqual(research_plan['packs'][0]['query'], 'workflows/example_research.pack.yaml')
 
-            for plan in (memo_plan, deal_plan, ic_plan):
+            for plan in (summary_plan, research_plan):
                 self.assertNotIn('repo_path', plan)
-                self.assertEqual(plan['consumer'].startswith('main_session_vc_'), True)
+                self.assertTrue(plan['consumer'].startswith('main_session_example_'))
                 self.assertIn('scope', plan)
                 self.assertIn('packs', plan)
 
-            memo_plan_replay = self._route(
+            replay = self._route(
                 repo,
-                consumer='main_session_vc_memo',
-                workflow_id='vc_memo_drafting',
+                consumer='main_session_example_summary',
+                workflow_id='example_summary',
                 step_id='draft',
-                task='Draft memo',
+                task='Draft summary',
             )
-            self.assertEqual(memo_plan, memo_plan_replay)
+            self.assertEqual(summary_plan, replay)
 
 
 class RuntimePackRouterFixturesTests(unittest.TestCase):
@@ -148,15 +130,15 @@ class RuntimePackRouterFixturesTests(unittest.TestCase):
                     sys.executable,
                     str(SCRIPT),
                     '--consumer',
-                    'main_session_vc_memo',
+                    'main_session_example_summary',
                     '--workflow-id',
-                    'vc_memo_drafting',
+                    'example_summary',
                     '--step-id',
                     'draft',
                     '--repo',
                     str(repo),
                     '--task',
-                    'Draft memo',
+                    'Draft summary',
                     '--validate',
                 ],
                 capture_output=True,
@@ -192,15 +174,15 @@ class RuntimePackRouterFixturesTests(unittest.TestCase):
                     sys.executable,
                     str(SCRIPT),
                     '--consumer',
-                    'main_session_vc_memo',
+                    'main_session_example_summary',
                     '--workflow-id',
-                    'vc_memo_drafting',
+                    'example_summary',
                     '--step-id',
                     'draft',
                     '--repo',
                     str(repo),
                     '--task',
-                    'Draft memo',
+                    'Draft summary',
                     '--validate',
                 ],
                 capture_output=True,
@@ -210,4 +192,3 @@ class RuntimePackRouterFixturesTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertIn('escapes repo root', result.stderr)
-

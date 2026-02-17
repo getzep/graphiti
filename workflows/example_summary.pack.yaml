@@ -1,0 +1,5 @@
+name: example_summary
+workflow_id: example_summary
+steps:
+  - id: draft
+  - id: review

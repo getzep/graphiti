@@ -1,5 +1,0 @@
-name: vc_diligence_questions
-workflow_id: vc_diligence_questions
-steps:
-  - id: draft
-  - id: finalize

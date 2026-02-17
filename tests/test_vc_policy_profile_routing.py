@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'runtime_pack_router.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-class VcPolicyProfileRoutingTests(unittest.TestCase):
+class ExamplePolicyProfileRoutingTests(unittest.TestCase):
     def _seed_configs(self, repo: Path) -> None:
         (repo / 'config').mkdir(parents=True, exist_ok=True)
         (repo / 'workflows').mkdir(parents=True, exist_ok=True)
@@ -26,10 +26,8 @@ class VcPolicyProfileRoutingTests(unittest.TestCase):
             repo / 'config/runtime_consumer_profiles.yaml',
         )
         for filename in (
-            'vc_memo_drafting.pack.yaml',
-            'vc_deal_brief.pack.yaml',
-            'vc_diligence_questions.pack.yaml',
-            'vc_ic_prep.pack.yaml',
+            'example_summary.pack.yaml',
+            'example_research.pack.yaml',
         ):
             shutil.copyfile(
                 REPO_ROOT / 'workflows' / filename,
@@ -58,30 +56,30 @@ class VcPolicyProfileRoutingTests(unittest.TestCase):
             check=False,
         )
 
-    def test_diligence_and_ic_profiles_route_to_expected_packs(self) -> None:
+    def test_example_profiles_route_to_expected_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / 'repo'
             repo.mkdir(parents=True)
             self._seed_configs(repo)
 
-            diligence = self._run(
+            summary = self._run(
                 repo,
-                consumer='main_session_vc_diligence_questions',
-                workflow_id='vc_diligence_questions',
+                consumer='main_session_example_summary',
+                workflow_id='example_summary',
                 step_id='draft',
             )
-            ic = self._run(
+            research = self._run(
                 repo,
-                consumer='main_session_vc_ic_prep',
-                workflow_id='vc_ic_prep',
+                consumer='main_session_example_research',
+                workflow_id='example_research',
                 step_id='synthesize',
             )
 
-            self.assertEqual(diligence.returncode, 0, msg=diligence.stderr)
-            self.assertEqual(ic.returncode, 0, msg=ic.stderr)
+            self.assertEqual(summary.returncode, 0, msg=summary.stderr)
+            self.assertEqual(research.returncode, 0, msg=research.stderr)
 
-            self.assertIn('vc_diligence_questions', diligence.stderr + diligence.stdout)
-            self.assertIn('vc_ic_prep', ic.stderr + ic.stdout)
+            self.assertIn('example_summary_pack', summary.stderr + summary.stdout)
+            self.assertIn('example_research_pack', research.stderr + research.stdout)
 
     def test_invalid_pack_reference_is_a_misconfiguration_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,7 +90,7 @@ class VcPolicyProfileRoutingTests(unittest.TestCase):
             profiles = json.loads(
                 (repo / 'config/runtime_consumer_profiles.yaml').read_text(encoding='utf-8'),
             )
-            profiles['profiles'][0]['pack_ids'] = ['nonexistent_pack', 'vc_memo_drafting']
+            profiles['profiles'][0]['pack_ids'] = ['nonexistent_pack', 'example_summary_pack']
             (repo / 'config/runtime_consumer_profiles.yaml').write_text(
                 json.dumps(profiles, indent=2),
                 encoding='utf-8',
@@ -100,10 +98,9 @@ class VcPolicyProfileRoutingTests(unittest.TestCase):
 
             result = self._run(
                 repo,
-                consumer='main_session_vc_memo',
-                workflow_id='vc_memo_drafting',
+                consumer='main_session_example_summary',
+                workflow_id='example_summary',
                 step_id='draft',
             )
             self.assertEqual(result.returncode, 1)
             self.assertIn('pack_id not found in registry', result.stderr)
-

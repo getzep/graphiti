@@ -1,5 +1,0 @@
-name: vc_deal_brief
-workflow_id: vc_deal_brief
-steps:
-  - id: compose
-  - id: review

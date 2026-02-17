@@ -1,0 +1,5 @@
+name: example_research
+workflow_id: example_research
+steps:
+  - id: gather
+  - id: synthesize
