@@ -97,6 +97,7 @@ class GraphDriver(QueryExecutor, ABC):
     # Legacy interfaces (kept for backwards compatibility during Phase 1)
     search_interface: SearchInterface | None = None
     graph_operations_interface: GraphOperationsInterface | None = None
+    vector_store: Any = None  # VectorStoreClient, typed as Any to avoid import
 
     @abstractmethod
     def execute_query(self, cypher_query_: str, **kwargs: Any) -> Coroutine:

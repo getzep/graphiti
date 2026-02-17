@@ -155,6 +155,30 @@ class Node(BaseModel, ABC):
 
         logger.debug(f'Deleted Node: {self.uuid}')
 
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_COMMUNITY_NODES,
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                )
+
+                await driver.vector_store.ensure_ready()
+                col = driver.vector_store.collection_name
+                for suffix in [
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                    COLLECTION_COMMUNITY_NODES,
+                ]:
+                    await driver.vector_store.delete(
+                        collection_name=col(suffix),
+                        filter_expr=f'uuid == "{self.uuid}"',
+                    )
+            except Exception:
+                logger.warning(
+                    f'Failed to delete node {self.uuid} from vector store', exc_info=True
+                )
+
     def __hash__(self):
         return hash(self.uuid)
 
@@ -221,6 +245,32 @@ class Node(BaseModel, ABC):
                         """,
                         group_id=group_id,
                     )
+
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_COMMUNITY_NODES,
+                    COLLECTION_ENTITY_EDGES,
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                )
+
+                await driver.vector_store.ensure_ready()
+                col = driver.vector_store.collection_name
+                for suffix in [
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                    COLLECTION_COMMUNITY_NODES,
+                    COLLECTION_ENTITY_EDGES,
+                ]:
+                    await driver.vector_store.delete(
+                        collection_name=col(suffix),
+                        filter_expr=f'group_id == "{group_id}"',
+                    )
+            except Exception:
+                logger.warning(
+                    f'Failed to delete group {group_id} from vector store', exc_info=True
+                )
 
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str], batch_size: int = 100):
@@ -296,6 +346,30 @@ class Node(BaseModel, ABC):
                         uuids=uuids,
                         batch_size=batch_size,
                     )
+
+        if driver.vector_store is not None and uuids:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_COMMUNITY_NODES,
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                )
+
+                await driver.vector_store.ensure_ready()
+                col = driver.vector_store.collection_name
+                uuid_list = ', '.join(f'"{u}"' for u in uuids)
+                filter_expr = f'uuid in [{uuid_list}]'
+                for suffix in [
+                    COLLECTION_ENTITY_NODES,
+                    COLLECTION_EPISODIC_NODES,
+                    COLLECTION_COMMUNITY_NODES,
+                ]:
+                    await driver.vector_store.delete(
+                        collection_name=col(suffix),
+                        filter_expr=filter_expr,
+                    )
+            except Exception:
+                logger.warning('Failed to delete nodes from vector store', exc_info=True)
 
     @classmethod
     async def get_by_uuid(cls, driver: GraphDriver, uuid: str): ...
@@ -560,6 +634,21 @@ class EntityNode(Node):
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_ENTITY_NODES,
+                    entity_node_to_milvus_dict,
+                )
+
+                await driver.vector_store.ensure_ready()
+                await driver.vector_store.upsert(
+                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_NODES),
+                    data=[entity_node_to_milvus_dict(self)],
+                )
+            except Exception:
+                logger.warning(f'Failed to sync node {self.uuid} to vector store', exc_info=True)
+
         return result
 
     @classmethod
@@ -690,6 +779,24 @@ class CommunityNode(Node):
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
+
+        if driver.vector_store is not None:
+            try:
+                from graphiti_core.vector_store.milvus_utils import (
+                    COLLECTION_COMMUNITY_NODES,
+                    community_node_to_milvus_dict,
+                )
+
+                await driver.vector_store.ensure_ready()
+                await driver.vector_store.upsert(
+                    collection_name=driver.vector_store.collection_name(COLLECTION_COMMUNITY_NODES),
+                    data=[community_node_to_milvus_dict(self)],
+                )
+            except Exception:
+                logger.warning(
+                    f'Failed to sync community node {self.uuid} to vector store',
+                    exc_info=True,
+                )
 
         return result
 

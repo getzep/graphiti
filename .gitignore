@@ -1,4 +1,6 @@
 ### Python template
+# Claude
+# .claude/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -121,6 +123,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.milvus
 .venv
 env/
 venv/

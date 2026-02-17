@@ -250,6 +250,38 @@ async def add_nodes_and_edges_bulk_tx(
             entity_edges=edges,
         )
 
+    # Dual-write to vector store if attached
+    if driver.vector_store is not None:
+        try:
+            from graphiti_core.vector_store.milvus_utils import (
+                COLLECTION_ENTITY_EDGES,
+                COLLECTION_ENTITY_NODES,
+                COLLECTION_EPISODIC_NODES,
+                entity_edge_to_milvus_dict,
+                entity_node_to_milvus_dict,
+                episodic_node_to_milvus_dict,
+            )
+
+            await driver.vector_store.ensure_ready()
+            col = driver.vector_store.collection_name
+            if episodic_nodes:
+                await driver.vector_store.upsert(
+                    collection_name=col(COLLECTION_EPISODIC_NODES),
+                    data=[episodic_node_to_milvus_dict(ep) for ep in episodic_nodes],
+                )
+            if entity_nodes:
+                await driver.vector_store.upsert(
+                    collection_name=col(COLLECTION_ENTITY_NODES),
+                    data=[entity_node_to_milvus_dict(n) for n in entity_nodes],
+                )
+            if entity_edges:
+                await driver.vector_store.upsert(
+                    collection_name=col(COLLECTION_ENTITY_EDGES),
+                    data=[entity_edge_to_milvus_dict(e) for e in entity_edges],
+                )
+        except Exception:
+            logger.warning('Failed to sync bulk data to vector store', exc_info=True)
+
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,

@@ -1,0 +1,112 @@
+# Graphiti MCP Server Configuration for Docker with Neo4j + Milvus
+# This configuration is optimized for running with docker-compose-neo4j-milvus.yml
+
+server:
+  transport: "http"
+  host: "0.0.0.0"
+  port: 8000
+
+llm:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      organization_id: ${OPENAI_ORGANIZATION_ID:}
+
+    azure_openai:
+      api_key: ${AZURE_OPENAI_API_KEY}
+      api_url: ${AZURE_OPENAI_ENDPOINT}
+      api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
+      deployment_name: ${AZURE_OPENAI_DEPLOYMENT}
+      use_azure_ad: ${USE_AZURE_AD:false}
+
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      api_url: ${ANTHROPIC_API_URL:https://api.anthropic.com}
+      max_retries: 3
+
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_PROJECT_ID:}
+      location: ${GOOGLE_LOCATION:us-central1}
+
+    groq:
+      api_key: ${GROQ_API_KEY}
+      api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
+
+embedder:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  dimensions: 1536
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      organization_id: ${OPENAI_ORGANIZATION_ID:}
+
+    azure_openai:
+      api_key: ${AZURE_OPENAI_API_KEY}
+      api_url: ${AZURE_OPENAI_EMBEDDINGS_ENDPOINT}
+      api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
+      deployment_name: ${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
+      use_azure_ad: ${USE_AZURE_AD:false}
+
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_PROJECT_ID:}
+      location: ${GOOGLE_LOCATION:us-central1}
+
+    voyage:
+      api_key: ${VOYAGE_API_KEY}
+      api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
+      model: "voyage-3"
+
+database:
+  provider: "neo4j"
+
+  providers:
+    neo4j:
+      uri: ${NEO4J_URI:bolt://neo4j:7687}
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:demodemo}
+      database: ${NEO4J_DATABASE:neo4j}
+      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+
+vector_store:
+  provider: "milvus"
+
+  providers:
+    milvus:
+      uri: ${MILVUS_URI:http://milvus:19530}
+      token: ${MILVUS_TOKEN:}
+      embedding_dim: 1536
+      collection_prefix: ${MILVUS_COLLECTION_PREFIX:graphiti}
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:main}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:}
+  user_id: ${USER_ID:mcp_user}
+  entity_types:
+    - name: "Preference"
+      description: "User preferences, choices, opinions, or selections"
+    - name: "Requirement"
+      description: "Specific needs, features, or functionality that must be fulfilled"
+    - name: "Procedure"
+      description: "Standard operating procedures and sequential instructions"
+    - name: "Location"
+      description: "Physical or virtual places where activities occur"
+    - name: "Event"
+      description: "Time-bound activities, occurrences, or experiences"
+    - name: "Organization"
+      description: "Companies, institutions, groups, or formal entities"
+    - name: "Document"
+      description: "Information content in various forms (books, articles, reports, etc.)"
+    - name: "Topic"
+      description: "Subject of conversation, interest, or knowledge domain"
+    - name: "Object"
+      description: "Physical items, tools, devices, or possessions"
