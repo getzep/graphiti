@@ -122,15 +122,6 @@ wheels = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
-]
-
-[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -153,10 +144,9 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.22.0rc5"
+version = "0.28.0"
 source = { editable = "../../" }
 dependencies = [
-    { name = "diskcache" },
     { name = "neo4j" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -174,18 +164,16 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neo4j-opensearch'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
-    { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
     { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
     { name = "falkordb", marker = "extra == 'falkordb'", specifier = ">=1.1.2,<2.0.0" },
     { name = "google-genai", marker = "extra == 'dev'", specifier = ">=1.8.0" },
-    { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.8.0" },
+    { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.62.0" },
     { name = "groq", marker = "extra == 'dev'", specifier = ">=0.2.0" },
     { name = "groq", marker = "extra == 'groq'", specifier = ">=0.2.0" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
     { name = "jupyterlab", marker = "extra == 'dev'", specifier = ">=4.2.4" },
-    { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.2" },
-    { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.2" },
+    { name = "kuzu", marker = "extra == 'dev'", specifier = ">=0.11.3" },
+    { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.3" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
     { name = "langchain-aws", marker = "extra == 'dev'", specifier = ">=0.2.29" },
     { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
