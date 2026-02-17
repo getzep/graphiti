@@ -47,6 +47,7 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -236,6 +237,10 @@ class Graphiti:
             tracer=self.tracer,
         )
 
+        # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
+        self.nodes = NodeNamespace(self.driver, self.embedder)
+        self.edges = EdgeNamespace(self.driver, self.embedder)
+
         # Capture telemetry event
         self._capture_initialization_telemetry()
 
@@ -259,6 +264,18 @@ class Graphiti:
         except Exception:
             # Silently handle telemetry errors
             pass
+
+    @property
+    def token_tracker(self):
+        """Access the LLM client's token usage tracker.
+
+        Returns the TokenUsageTracker from the LLM client, which can be used to:
+        - Get token usage by prompt type: tracker.get_usage()
+        - Get total token usage: tracker.get_total_usage()
+        - Print a formatted summary: tracker.print_summary()
+        - Reset tracking: tracker.reset()
+        """
+        return self.llm_client.token_tracker
 
     def _get_provider_type(self, client) -> str:
         """Get provider type from client class name."""
@@ -928,7 +945,11 @@ class Graphiti:
                 )
 
                 # Extract and resolve edges in parallel with attribute extraction
-                resolved_edges, invalidated_edges, new_edges = await self._extract_and_resolve_edges(
+                (
+                    resolved_edges,
+                    invalidated_edges,
+                    new_edges,
+                ) = await self._extract_and_resolve_edges(
                     episode,
                     extracted_nodes,
                     previous_episodes,

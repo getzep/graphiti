@@ -24,11 +24,11 @@ from .models import Message, PromptFunction, PromptVersion
 class EdgeDuplicate(BaseModel):
     duplicate_facts: list[int] = Field(
         ...,
-        description='List of idx values of any duplicate facts. If no duplicate facts are found, default to empty list.',
+        description='List of idx values of duplicate facts (only from EXISTING FACTS range). Empty list if none.',
     )
     contradicted_facts: list[int] = Field(
         ...,
-        description='List of idx values of facts that should be invalidated. If no facts should be invalidated, the list should be empty.',
+        description='List of idx values of contradicted facts (from full idx range). Empty list if none.',
     )
 
 
@@ -51,27 +51,28 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Task:
-        You will receive TWO separate lists of facts. Each list uses 'idx' as its index field, starting from 0.
+        You will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.
+        EXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.
 
         1. DUPLICATE DETECTION:
            - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.
            - Facts with similar information that contain key differences should NOT be marked as duplicates.
-           - Return idx values from EXISTING FACTS.
            - If no duplicates, return an empty list for duplicate_facts.
 
         2. CONTRADICTION DETECTION:
-           - Based on FACT INVALIDATION CANDIDATES and NEW FACT, determine which facts the new fact contradicts.
-           - Return idx values from FACT INVALIDATION CANDIDATES.
+           - Determine which facts the NEW FACT contradicts from either list.
+           - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).
+           - Return all contradicted idx values in contradicted_facts.
            - If no contradictions, return an empty list for contradicted_facts.
 
         IMPORTANT:
-        - duplicate_facts: Use ONLY 'idx' values from EXISTING FACTS
-        - contradicted_facts: Use ONLY 'idx' values from FACT INVALIDATION CANDIDATES
-        - These are two separate lists with independent idx ranges starting from 0
+        - duplicate_facts: ONLY idx values from EXISTING FACTS (cannot include FACT INVALIDATION CANDIDATES)
+        - contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)
+        - The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)
 
         Guidelines:
-        1. Some facts may be very similar but will have key differences, particularly around numeric values in the facts.
-            Do not mark these facts as duplicates.
+        1. Some facts may be very similar but will have key differences, particularly around numeric values.
+           Do not mark these as duplicates.
 
         <EXISTING FACTS>
         {context['existing_edges']}

@@ -146,24 +146,27 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
         Message(
             role='user',
             content=f"""
-
-        <MESSAGE>
-        {to_prompt_json(context['episode_content'])}
-        </MESSAGE>
-        <REFERENCE TIME>
-        {context['reference_time']}
-        </REFERENCE TIME>
-
-        Given the above MESSAGE, its REFERENCE TIME, and the following FACT, update any of its attributes based on the information provided
-        in MESSAGE. Use the provided attribute descriptions to better understand how each attribute should be determined.
+        Given the following FACT, its REFERENCE TIME, and any EXISTING ATTRIBUTES, extract or update
+        attributes based on the information explicitly stated in the fact. Use the provided attribute
+        descriptions to understand how each attribute should be determined.
 
         Guidelines:
-        1. Do not hallucinate entity property values if they cannot be found in the current context.
-        2. Only use the provided MESSAGES and FACT to set attribute values.
+        1. Do not hallucinate attribute values if they cannot be found explicitly in the fact.
+        2. Only use information stated in the FACT to set attribute values.
+        3. Use REFERENCE TIME to resolve any relative temporal expressions in the fact.
+        4. Preserve existing attribute values unless the fact explicitly provides new information.
 
         <FACT>
         {context['fact']}
         </FACT>
+
+        <REFERENCE TIME>
+        {context['reference_time']}
+        </REFERENCE TIME>
+
+        <EXISTING ATTRIBUTES>
+        {to_prompt_json(context['existing_attributes'])}
+        </EXISTING ATTRIBUTES>
         """,
         ),
     ]
