@@ -1,0 +1,7 @@
+{
+  "name": "graphiti-openclaw",
+  "version": "0.1.0",
+  "description": "Graphiti runtime context injection plugin",
+  "entry": "index.ts",
+  "hooks": ["before_agent_start", "agent_end"]
+}

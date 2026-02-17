@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "packs": [
+    {
+      "pack_id": "example_summary_pack",
+      "pack_type": "example_summary_pack",
+      "path": "workflows/example_summary.pack.yaml",
+      "scope": "group-safe"
+    },
+    {
+      "pack_id": "example_research_pack",
+      "pack_type": "example_research_pack",
+      "path": "workflows/example_research.pack.yaml",
+      "scope": "private"
+    }
+  ]
+}

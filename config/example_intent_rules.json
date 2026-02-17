@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "id": "example_summary",
+      "consumerProfile": "main_session_example_summary",
+      "workflowId": "example_summary",
+      "stepId": "draft",
+      "packType": "example_summary_pack",
+      "keywords": ["summary", "recap", "brief"],
+      "keywordWeight": 1,
+      "entityBoosts": [
+        {
+          "summaryPattern": "report|summary",
+          "weight": 0.4
+        }
+      ],
+      "minConfidence": 0.3,
+      "scope": "public"
+    },
+    {
+      "id": "example_research",
+      "consumerProfile": "main_session_example_research",
+      "workflowId": "example_research",
+      "stepId": "synthesize",
+      "packType": "example_research_pack",
+      "keywords": ["research", "analysis", "synthesize"],
+      "keywordWeight": 1,
+      "entityBoosts": [
+        {
+          "summaryPattern": "dataset|paper",
+          "weight": 0.5,
+          "suppresses": ["example_summary"]
+        }
+      ],
+      "minConfidence": 0.3,
+      "scope": "private"
+    }
+  ]
+}

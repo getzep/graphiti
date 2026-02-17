@@ -1,0 +1,10 @@
+{
+  "name": "@graphiti/openclaw-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/correctness.test.ts",
+    "check": "node --experimental-strip-types --check index.ts"
+  }
+}

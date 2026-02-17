@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "primary_intent": "example_research",
+      "inject_additional": [
+        {
+          "pack_type": "example_summary_pack",
+          "mode": "formal",
+          "required": false,
+          "condition": "always"
+        }
+      ]
+    }
+  ]
+}
