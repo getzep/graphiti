@@ -1,7 +1,7 @@
 # Publicization Integration Checklist
 
-Generated (UTC): 2026-02-17T04:59:00Z
-Evaluated commit: `92bf60d7723b28b73f54ff8a2ece5694874e2f8f`
+Generated (UTC): 2026-02-17T14:22:08Z
+Evaluated commit: `7174af94c1eebea61bc3792d2cb4553d2f820616`
 Gate return codes: `boundary_audit_rc=0`, `upstream_doctor_rc=0`, `upstream_sync_button_rc=0`
 Gate: **GO**
 Regen command source: `prd/EXEC-PUBLICIZATION-INTEGRATION-E2E-v1.md` validation sequence.
