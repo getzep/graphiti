@@ -31,7 +31,7 @@ from models.response_types import (
     StatusResponse,
     SuccessResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import CrossEncoderFactory, DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
@@ -158,6 +158,49 @@ graphiti_client: Graphiti | None = None
 semaphore: asyncio.Semaphore
 
 
+async def get_matching_group_ids(prefix: str) -> list[str]:
+    """
+    Query the database for all group_ids that match the given prefix.
+
+    When using hierarchical group_ids (e.g., "project:category"), this function
+    returns all group_ids that equal the prefix OR start with "{prefix}:".
+
+    This enables queries to automatically include subgroups when no explicit
+    group_ids are provided. For example, with prefix "evadenta", this returns
+    ["evadenta:business", "evadenta:procedures", "evadenta:architecture", ...].
+
+    Args:
+        prefix: The configured default group_id (e.g., "evadenta")
+
+    Returns:
+        List of all matching group_ids, or [prefix] if none found or on error
+    """
+    global graphiti_service
+
+    if graphiti_service is None or graphiti_service.client is None:
+        return [prefix]
+
+    try:
+        client = graphiti_service.client
+        async with client.driver.session() as session:
+            # Query for all distinct group_ids that match the pattern
+            result = await session.run(
+                """
+                MATCH (n)
+                WHERE n.group_id = $prefix OR n.group_id STARTS WITH $prefix_colon
+                RETURN DISTINCT n.group_id AS group_id
+                """,
+                {'prefix': prefix, 'prefix_colon': f'{prefix}:'},
+            )
+            group_ids = [record['group_id'] async for record in result if record['group_id']]
+
+            # If no matching groups found, return the prefix as fallback
+            return group_ids if group_ids else [prefix]
+    except Exception as e:
+        logger.warning(f'Error querying group_ids: {e}, falling back to prefix')
+        return [prefix]
+
+
 class GraphitiService:
     """Graphiti service using the unified configuration system."""
 
@@ -186,6 +229,16 @@ class GraphitiService:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
+
+            # Create cross-encoder/reranker based on LLM provider
+            cross_encoder = None
+            try:
+                cross_encoder = CrossEncoderFactory.create(
+                    self.config.llm.provider,
+                    self.config.llm
+                )
+            except Exception as e:
+                logger.warning(f'Failed to create cross-encoder: {e}')
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -226,6 +279,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -236,6 +290,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -427,14 +482,16 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Determine effective group_ids:
+        # - If explicit group_ids provided, use them
+        # - Otherwise, auto-expand to include all subgroups matching the configured prefix
+        if group_ids is not None:
+            effective_group_ids = group_ids
+        elif config.graphiti.group_id:
+            # Auto-expand to include subgroups (e.g., "project:category")
+            effective_group_ids = await get_matching_group_ids(config.graphiti.group_id)
+        else:
+            effective_group_ids = []
 
         # Create search filters
         search_filters = SearchFilters(
@@ -511,14 +568,16 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Determine effective group_ids:
+        # - If explicit group_ids provided, use them
+        # - Otherwise, auto-expand to include all subgroups matching the configured prefix
+        if group_ids is not None:
+            effective_group_ids = group_ids
+        elif config.graphiti.group_id:
+            # Auto-expand to include subgroups (e.g., "project:category")
+            effective_group_ids = await get_matching_group_ids(config.graphiti.group_id)
+        else:
+            effective_group_ids = []
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -636,14 +695,16 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
-        effective_group_ids = (
-            group_ids
-            if group_ids is not None
-            else [config.graphiti.group_id]
-            if config.graphiti.group_id
-            else []
-        )
+        # Determine effective group_ids:
+        # - If explicit group_ids provided, use them
+        # - Otherwise, auto-expand to include all subgroups matching the configured prefix
+        if group_ids is not None:
+            effective_group_ids = group_ids
+        elif config.graphiti.group_id:
+            # Auto-expand to include subgroups (e.g., "project:category")
+            effective_group_ids = await get_matching_group_ids(config.graphiti.group_id)
+        else:
+            effective_group_ids = []
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode

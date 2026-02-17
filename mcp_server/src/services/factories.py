@@ -15,9 +15,26 @@ except ImportError:
     HAS_FALKOR = False
 
 # Kuzu support removed - FalkorDB is now the default
+from graphiti_core.cross_encoder import CrossEncoderClient
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
+
+# Try to import Gemini reranker if available
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
+# Try to import OpenAI reranker
+try:
+    from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
+    HAS_OPENAI_RERANKER = True
+except ImportError:
+    HAS_OPENAI_RERANKER = False
 
 # Try to import additional providers if available
 try:
@@ -70,7 +87,13 @@ except ImportError:
     HAS_GROQ = False
 
 
-def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
+def _is_vertex_ai_mode() -> bool:
+    """Check if Vertex AI mode is enabled via environment variable."""
+    import os
+    return os.environ.get('GOOGLE_GENAI_USE_VERTEXAI', '').lower() == 'true'
+
+
+def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str | None:
     """Validate API key is present.
 
     Args:
@@ -79,11 +102,16 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
         logger: Logger instance for output
 
     Returns:
-        The validated API key
+        The validated API key, or None if Vertex AI mode is enabled for Gemini
 
     Raises:
-        ValueError: If API key is None or empty
+        ValueError: If API key is None or empty (unless Vertex AI mode for Gemini)
     """
+    # Allow None for Gemini when using Vertex AI (ADC authentication)
+    if not api_key and 'Gemini' in provider_name and _is_vertex_ai_mode():
+        logger.info(f'Creating {provider_name} client with Vertex AI (ADC authentication)')
+        return None
+
     if not api_key:
         raise ValueError(
             f'{provider_name} API key is not configured. Please set the appropriate environment variable.'
@@ -433,3 +461,62 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating CrossEncoder/Reranker clients based on LLM provider."""
+
+    @staticmethod
+    def create(llm_provider: str, llm_config) -> CrossEncoderClient | None:
+        """Create a CrossEncoder client based on the LLM provider.
+
+        Uses the same provider as the LLM to ensure consistent authentication.
+        Returns None if no suitable reranker is available.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = llm_provider.lower()
+
+        match provider:
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    logger.warning('Gemini reranker not available, skipping cross-encoder')
+                    return None
+
+                api_key = None
+                if llm_config and llm_config.providers.gemini:
+                    api_key = llm_config.providers.gemini.api_key
+
+                # Allow None for Vertex AI mode
+                if not api_key and _is_vertex_ai_mode():
+                    logger.info('Creating Gemini Reranker with Vertex AI (ADC authentication)')
+                    api_key = None
+                elif not api_key:
+                    logger.warning('Gemini API key not configured, skipping cross-encoder')
+                    return None
+
+                reranker_config = GraphitiLLMConfig(api_key=api_key)
+                return GeminiRerankerClient(config=reranker_config)
+
+            case 'openai':
+                if not HAS_OPENAI_RERANKER:
+                    logger.warning('OpenAI reranker not available, skipping cross-encoder')
+                    return None
+
+                if not llm_config or not llm_config.providers.openai:
+                    logger.warning('OpenAI config not found, skipping cross-encoder')
+                    return None
+
+                api_key = llm_config.providers.openai.api_key
+                if not api_key:
+                    logger.warning('OpenAI API key not configured, skipping cross-encoder')
+                    return None
+
+                reranker_config = GraphitiLLMConfig(api_key=api_key)
+                return OpenAIRerankerClient(config=reranker_config)
+
+            case _:
+                logger.info(f'No reranker available for provider: {provider}')
+                return None
