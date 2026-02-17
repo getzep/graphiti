@@ -106,15 +106,20 @@ def collect_git_files(repo_root: Path, include_untracked: bool) -> list[str]:
 
 
 def classify_path(path: str, allowlist: list[str], denylist: list[str]) -> RuleDecision:
-    """Classify a repo path as ALLOW/BLOCK/AMBIGUOUS."""
+    """Classify a repo path as ALLOW/BLOCK/AMBIGUOUS.
+
+    Precedence: explicit allowlist match overrides denylist (so safe files
+    like ``.env.example`` can be allowed despite a broad ``.env*`` deny).
+    If neither list matches, the path is AMBIGUOUS.
+    """
+    # Check allowlist first — explicit allow overrides general deny.
+    for allow_rule in allowlist:
+        if fnmatch.fnmatch(path, allow_rule):
+            return RuleDecision(path, ALLOW, 'ALLOWLIST_MATCH', allow_rule)
 
     for deny_rule in denylist:
         if fnmatch.fnmatch(path, deny_rule):
             return RuleDecision(path, BLOCK, 'DENYLIST_MATCH', deny_rule)
-
-    for allow_rule in allowlist:
-        if fnmatch.fnmatch(path, allow_rule):
-            return RuleDecision(path, ALLOW, 'ALLOWLIST_MATCH', allow_rule)
 
     return RuleDecision(path, AMBIGUOUS, 'NO_MATCH', None)
 

@@ -41,4 +41,5 @@ allowlist:
   - "conftest.py"
   - ".gitignore"
   - ".env.example"
+  - "**/.env.example"
   - "signatures/**"
