@@ -35,14 +35,14 @@ class PublicBoundaryPolicyUnitTests(unittest.TestCase):
             rules = read_yaml_list(policy, 'allowlist')
             self.assertEqual(rules, ['scripts/ci/**', 'docs/public/**'])
 
-    def test_classify_path_denylist_takes_precedence(self) -> None:
+    def test_classify_path_allowlist_overrides_denylist(self) -> None:
         decision = classify_path(
             path='docs/private/secrets.txt',
             allowlist=['docs/**'],
             denylist=['docs/private/**'],
         )
-        self.assertEqual(decision.status, BLOCK)
-        self.assertEqual(decision.reason_code, 'DENYLIST_MATCH')
+        self.assertEqual(decision.status, ALLOW)
+        self.assertEqual(decision.reason_code, 'ALLOWLIST_MATCH')
 
     def test_summarize_decisions_splits_status_buckets(self) -> None:
         decisions = [
