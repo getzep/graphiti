@@ -12,7 +12,9 @@ Usage:
 import argparse
 import asyncio
 import json
+import logging
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +35,27 @@ except ImportError:
     print("Note: graphiti-core not installed. Running in dry-run mode.")
 
 
+def _sanitize_metadata_str(
+    value: Any, field_name: str = "unknown_field", max_len: int = 256,
+) -> str:
+    """Validate and sanitize a metadata string field.
+
+    Returns a safe string (stripped, truncated, control-chars removed).
+    Falls back to 'unknown' for missing/empty values.  *field_name* is
+    included in debug-level logging when the fallback is used.
+    """
+    if value is None:
+        logging.debug("metadata field '%s' is None, falling back to 'unknown'", field_name)
+        return "unknown"
+    s = str(value).strip()
+    if not s:
+        logging.debug("metadata field '%s' is empty, falling back to 'unknown'", field_name)
+        return "unknown"
+    # Remove control characters (keep printable + basic whitespace)
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
+    return s[:max_len]
+
+
 async def ingest_evidence(
     graphiti: Any,
     evidence: dict,
@@ -41,17 +64,18 @@ async def ingest_evidence(
     """Ingest a single evidence document into Graphiti."""
     
     source = evidence.get("source", {})
-    source_type = source.get("type", "unknown")
-    source_path = source.get("path", "")
+    source_type = _sanitize_metadata_str(source.get("type"), "source.type")
+    source_path = _sanitize_metadata_str(source.get("path"), "source.path")
+    evidence_id = _sanitize_metadata_str(evidence.get("id"), "evidence.id")
     
     # Build episode name
     if source_type == "memory":
-        episode_name = f"memory:{evidence['id'][:8]}"
+        episode_name = f"memory:{evidence_id[:8]}"
         source_desc = f"Daily memory note: {Path(source_path).name}"
     else:
-        agent = source.get("agent", "unknown")
-        session_id = source.get("sessionId", "")[:8]
-        episode_name = f"session:{agent}:{evidence['id'][:8]}"
+        agent = _sanitize_metadata_str(source.get("agent"), "source.agent")
+        session_id = _sanitize_metadata_str(source.get("sessionId"), "source.sessionId")[:8]
+        episode_name = f"session:{agent}:{evidence_id[:8]}"
         source_desc = f"Session transcript: {agent}/{session_id}"
     
     # Parse timestamp

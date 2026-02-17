@@ -38,6 +38,13 @@ class KVRow:
 
 
 class KVRegistry:
+    """Simple durable key/value store backed by SQLite.
+
+    ⚠️  Security: Values are stored as **plain-text** in SQLite.  Do NOT store
+    unencrypted PII, credentials, API keys, or other secrets.  If sensitive
+    data must be persisted, encrypt it before calling ``set()`` / ``set_json()``.
+    """
+
     def __init__(self, db_path: Path | str | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_registry_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
