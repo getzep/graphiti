@@ -99,7 +99,7 @@ async def extract_nodes(
         filtered_entities, entity_types_context, excluded_entity_types, episode
     )
 
-    logger.debug(f'Extracted nodes: {[(n.name, n.uuid) for n in extracted_nodes]}')
+    logger.debug(f'Extracted nodes: {[n.uuid for n in extracted_nodes]}')
     return extracted_nodes
 
 
@@ -188,7 +188,7 @@ def _create_entity_nodes(
 
         # Check if this entity type should be excluded
         if excluded_entity_types and entity_type_name in excluded_entity_types:
-            logger.debug(f'Excluding entity "{extracted_entity.name}" of type "{entity_type_name}"')
+            logger.debug(f'Excluding entity of type "{entity_type_name}"')
             continue
 
         labels: list[str] = list({'Entity', str(entity_type_name)})
@@ -201,7 +201,7 @@ def _create_entity_nodes(
             created_at=utc_now(),
         )
         extracted_nodes.append(new_node)
-        logger.debug(f'Created new node: {new_node.name} (UUID: {new_node.uuid})')
+        logger.debug(f'Created new node: {new_node.uuid}')
 
     return extracted_nodes
 
@@ -285,15 +285,15 @@ async def _resolve_with_llm(
     if llm_extracted_nodes:
         sample_size = min(3, len(extracted_nodes_context))
         logger.debug(
-            'First %d entities: %s',
+            'First %d entity IDs: %s',
             sample_size,
-            [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[:sample_size]],
+            [ctx['id'] for ctx in extracted_nodes_context[:sample_size]],
         )
         if len(extracted_nodes_context) > 3:
             logger.debug(
-                'Last %d entities: %s',
+                'Last %d entity IDs: %s',
                 sample_size,
-                [(ctx['id'], ctx['name']) for ctx in extracted_nodes_context[-sample_size:]],
+                [ctx['id'] for ctx in extracted_nodes_context[-sample_size:]],
             )
 
     existing_nodes_context = [
@@ -382,9 +382,10 @@ async def _resolve_with_llm(
             resolved_node = existing_nodes_by_name[duplicate_name]
         else:
             logger.warning(
-                'Invalid duplicate_name %r for extracted node %s; treating as no duplicate.',
-                duplicate_name,
+                'Invalid duplicate_name for extracted node %s; treating as no duplicate. '
+                'duplicate_name was: %r',
                 extracted_node.uuid,
+                duplicate_name[:50] + '...' if len(duplicate_name) > 50 else duplicate_name,
             )
             resolved_node = extracted_node
 
@@ -437,7 +438,7 @@ async def resolve_extracted_nodes(
 
     logger.debug(
         'Resolved nodes: %s',
-        [(node.name, node.uuid) for node in state.resolved_nodes if node is not None],
+        [node.uuid for node in state.resolved_nodes if node is not None],
     )
 
     return (
@@ -663,7 +664,10 @@ async def _process_summary_flight(
             for node in matching_nodes:
                 node.summary = truncated_summary
         else:
-            logger.warning(f'LLM returned summary for unknown entity: {summarized_entity.name}')
+            logger.warning(
+                'LLM returned summary for unknown entity (first 30 chars): %.30s',
+                summarized_entity.name,
+            )
 
 
 def _build_episode_context(
