@@ -351,7 +351,5 @@ class EdgeNamespace:
 
     def __getattr__(self, name: str) -> object:
         if name in ('entity', 'episodic', 'community', 'has_episode', 'next_episode'):
-            raise NotImplementedError(
-                f'{self._driver_name} does not implement {name}_edge_ops'
-            )
+            raise NotImplementedError(f'{self._driver_name} does not implement {name}_edge_ops')
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
