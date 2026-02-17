@@ -18,10 +18,11 @@ import logging
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.kuzu.operations.record_parsers import parse_kuzu_entity_node
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
 from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
-from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
+from graphiti_core.driver.record_parsers import community_node_from_record
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
@@ -33,7 +34,7 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 logger = logging.getLogger(__name__)
 
 
-class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
+class KuzuGraphMaintenanceOperations(GraphMaintenanceOperations):
     async def clear_data(
         self,
         executor: QueryExecutor,
@@ -42,7 +43,9 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         if group_ids is None:
             await executor.execute_query('MATCH (n) DETACH DELETE n')
         else:
-            for label in ['Entity', 'Episodic', 'Community']:
+            # Kuzu requires deleting RelatesToNode_ intermediates in addition to
+            # Entity, Episodic, and Community nodes.
+            for label in ['RelatesToNode_', 'Entity', 'Episodic', 'Community']:
                 await executor.execute_query(
                     f"""
                     MATCH (n:{label})
@@ -60,8 +63,10 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         if delete_existing:
             await self.delete_all_indexes(executor)
 
-        range_indices = get_range_indices(GraphProvider.NEO4J)
-        fulltext_indices = get_fulltext_indices(GraphProvider.NEO4J)
+        # Kuzu schema is static (created in setup_schema), so range indices
+        # return an empty list. Only FTS indices need to be created here.
+        range_indices = get_range_indices(GraphProvider.KUZU)
+        fulltext_indices = get_fulltext_indices(GraphProvider.KUZU)
         index_queries = range_indices + fulltext_indices
 
         await semaphore_gather(*[executor.execute_query(q) for q in index_queries])
@@ -70,7 +75,8 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         self,
         executor: QueryExecutor,
     ) -> None:
-        await executor.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
+        # Kuzu does not have a standard way to drop all indexes programmatically.
+        pass
 
     async def get_community_clusters(
         self,
@@ -101,17 +107,17 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                 WHERE n.group_id IN $group_ids
                 RETURN
                 """
-                + get_entity_node_return_query(GraphProvider.NEO4J),
+                + get_entity_node_return_query(GraphProvider.KUZU),
                 group_ids=[group_id],
-                routing_='r',
             )
-            nodes = [entity_node_from_record(r) for r in node_records]
+            nodes = [parse_kuzu_entity_node(r) for r in node_records]
 
             for node in nodes:
+                # Kuzu edges are modeled through RelatesToNode_ intermediate nodes
                 records, _, _ = await executor.execute_query(
                     """
-                    MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
-                    WITH count(e) AS count, m.uuid AS uuid
+                    MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]->(:RelatesToNode_)-[:RELATES_TO]-(m:Entity {group_id: $group_id})
+                    WITH count(*) AS count, m.uuid AS uuid
                     RETURN
                         uuid,
                         count
@@ -137,11 +143,10 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                     WHERE n.uuid IN $uuids
                     RETURN
                     """
-                    + get_entity_node_return_query(GraphProvider.NEO4J),
+                    + get_entity_node_return_query(GraphProvider.KUZU),
                     uuids=cluster,
-                    routing_='r',
                 )
-                community_clusters.append([entity_node_from_record(r) for r in cluster_records])
+                community_clusters.append([parse_kuzu_entity_node(r) for r in cluster_records])
 
         return community_clusters
 
@@ -174,10 +179,11 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         if len(records) > 0:
             return
 
-        # If the node has no community, find the mode community of surrounding entities
+        # If the node has no community, find the mode community of surrounding
+        # entities. Kuzu uses RelatesToNode_ as an intermediate for RELATES_TO edges.
         records, _, _ = await executor.execute_query(
             """
-            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]->(:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
             RETURN
             """
             + COMMUNITY_NODE_RETURN,
@@ -197,12 +203,11 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
             WHERE episode.uuid IN $uuids
             RETURN DISTINCT
             """
-            + get_entity_node_return_query(GraphProvider.NEO4J),
+            + get_entity_node_return_query(GraphProvider.KUZU),
             uuids=episode_uuids,
-            routing_='r',
         )
 
-        return [entity_node_from_record(r) for r in records]
+        return [parse_kuzu_entity_node(r) for r in records]
 
     async def get_communities_by_nodes(
         self,
@@ -219,7 +224,6 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
             """
             + COMMUNITY_NODE_RETURN,
             uuids=node_uuids,
-            routing_='r',
         )
 
         return [community_node_from_record(r) for r in records]

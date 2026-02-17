@@ -14,26 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
 from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
-from graphiti_core.helpers import semaphore_gather
 from graphiti_core.models.nodes.node_db_queries import (
-    COMMUNITY_NODE_RETURN,
+    COMMUNITY_NODE_RETURN_NEPTUNE,
     get_entity_node_return_query,
 )
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 
+if TYPE_CHECKING:
+    from graphiti_core.driver.neptune_driver import NeptuneDriver
+
 logger = logging.getLogger(__name__)
 
 
-class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
+class NeptuneGraphMaintenanceOperations(GraphMaintenanceOperations):
+    def __init__(self, driver: NeptuneDriver | None = None):
+        self._driver = driver
+
     async def clear_data(
         self,
         executor: QueryExecutor,
@@ -57,20 +63,21 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         executor: QueryExecutor,
         delete_existing: bool = False,
     ) -> None:
+        if self._driver is None:
+            return
+
         if delete_existing:
-            await self.delete_all_indexes(executor)
+            await self._driver.delete_aoss_indices()
 
-        range_indices = get_range_indices(GraphProvider.NEO4J)
-        fulltext_indices = get_fulltext_indices(GraphProvider.NEO4J)
-        index_queries = range_indices + fulltext_indices
-
-        await semaphore_gather(*[executor.execute_query(q) for q in index_queries])
+        await self._driver.create_aoss_indices()
 
     async def delete_all_indexes(
         self,
         executor: QueryExecutor,
     ) -> None:
-        await executor.execute_query('CALL db.indexes() YIELD name DROP INDEX name')
+        if self._driver is None:
+            return
+        await self._driver.delete_aoss_indices()
 
     async def get_community_clusters(
         self,
@@ -101,9 +108,8 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                 WHERE n.group_id IN $group_ids
                 RETURN
                 """
-                + get_entity_node_return_query(GraphProvider.NEO4J),
+                + get_entity_node_return_query(GraphProvider.NEPTUNE),
                 group_ids=[group_id],
-                routing_='r',
             )
             nodes = [entity_node_from_record(r) for r in node_records]
 
@@ -137,9 +143,8 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
                     WHERE n.uuid IN $uuids
                     RETURN
                     """
-                    + get_entity_node_return_query(GraphProvider.NEO4J),
+                    + get_entity_node_return_query(GraphProvider.NEPTUNE),
                     uuids=cluster,
-                    routing_='r',
                 )
                 community_clusters.append([entity_node_from_record(r) for r in cluster_records])
 
@@ -165,9 +170,10 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         records, _, _ = await executor.execute_query(
             """
             MATCH (c:Community)-[:HAS_MEMBER]->(n:Entity {uuid: $entity_uuid})
+            WITH c AS n
             RETURN
             """
-            + COMMUNITY_NODE_RETURN,
+            + COMMUNITY_NODE_RETURN_NEPTUNE,
             entity_uuid=entity.uuid,
         )
 
@@ -178,9 +184,10 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
         records, _, _ = await executor.execute_query(
             """
             MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
+            WITH c AS n
             RETURN
             """
-            + COMMUNITY_NODE_RETURN,
+            + COMMUNITY_NODE_RETURN_NEPTUNE,
             entity_uuid=entity.uuid,
         )
 
@@ -197,9 +204,8 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
             WHERE episode.uuid IN $uuids
             RETURN DISTINCT
             """
-            + get_entity_node_return_query(GraphProvider.NEO4J),
+            + get_entity_node_return_query(GraphProvider.NEPTUNE),
             uuids=episode_uuids,
-            routing_='r',
         )
 
         return [entity_node_from_record(r) for r in records]
@@ -213,13 +219,12 @@ class Neo4jGraphMaintenanceOperations(GraphMaintenanceOperations):
 
         records, _, _ = await executor.execute_query(
             """
-            MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)
+            MATCH (n:Community)-[:HAS_MEMBER]->(m:Entity)
             WHERE m.uuid IN $uuids
             RETURN DISTINCT
             """
-            + COMMUNITY_NODE_RETURN,
+            + COMMUNITY_NODE_RETURN_NEPTUNE,
             uuids=node_uuids,
-            routing_='r',
         )
 
         return [community_node_from_record(r) for r in records]

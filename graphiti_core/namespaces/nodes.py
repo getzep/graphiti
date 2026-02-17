@@ -351,7 +351,5 @@ class NodeNamespace:
 
     def __getattr__(self, name: str) -> object:
         if name in ('entity', 'episode', 'community', 'saga'):
-            raise NotImplementedError(
-                f'{self._driver_name} does not implement {name}_node_ops'
-            )
+            raise NotImplementedError(f'{self._driver_name} does not implement {name}_node_ops')
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
