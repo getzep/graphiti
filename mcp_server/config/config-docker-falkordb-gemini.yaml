@@ -1,0 +1,74 @@
+# Graphiti MCP Server Configuration for Docker with FalkorDB
+# This configuration is optimized for running with docker-compose-falkordb.yml
+
+server:
+  transport: "http" # Use HTTP for MCP connection
+  host: "0.0.0.0"
+  port: 8000
+
+llm:
+  provider: "gemini"
+  model: "gemini-3-flash-preview"
+  max_tokens: 8192
+  temperature: 1.0
+
+  providers:
+    gemini:
+      # Option 1: Use Google AI API with API key
+      # Get your free API key from: https://aistudio.google.com/app/apikey
+      # api_key: ${GOOGLE_API_KEY}
+
+      # Option 2: Use Vertex AI with Application Default Credentials (ADC)
+      # Set these if using ADC instead of API key:
+      # - GOOGLE_GENAI_USE_VERTEXAI=true environment variable
+      # - GOOGLE_CLOUD_PROJECT environment variable
+      # - GOOGLE_CLOUD_LOCATION environment variable
+      # - Run: gcloud auth application-default login
+      project_id: ${GOOGLE_CLOUD_PROJECT}
+      location: ${GOOGLE_CLOUD_LOCATION}
+
+embedder:
+  provider: "gemini"
+  model: "models/text-embedding-004"
+  dimensions: 768
+
+  providers:
+    gemini:
+      # Same authentication options as LLM provider above
+      # api_key: ${GOOGLE_API_KEY}
+      project_id: ${GOOGLE_CLOUD_PROJECT}
+      location: ${GOOGLE_CLOUD_LOCATION}
+
+database:
+  provider: "falkordb" # Using FalkorDB for this configuration
+
+  providers:
+    falkordb:
+      # Use environment variable if set, otherwise use Docker service hostname
+      uri: ${FALKORDB_URI:-redis://falkordb:6379}
+      password: ${FALKORDB_PASSWORD:-}
+      database: ${FALKORDB_DATABASE:-default_db}
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:-main}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:-}
+  user_id: ${USER_ID:-mcp_user}
+  entity_types:
+    - name: "Preference"
+      description: "User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)"
+    - name: "Requirement"
+      description: "Specific needs, features, or functionality that must be fulfilled"
+    - name: "Procedure"
+      description: "Standard operating procedures and sequential instructions"
+    - name: "Location"
+      description: "Physical or virtual places where activities occur"
+    - name: "Event"
+      description: "Time-bound activities, occurrences, or experiences"
+    - name: "Organization"
+      description: "Companies, institutions, groups, or formal entities"
+    - name: "Document"
+      description: "Information content in various forms (books, articles, reports, etc.)"
+    - name: "Topic"
+      description: "Subject of conversation, interest, or knowledge domain (use as last resort)"
+    - name: "Object"
+      description: "Physical items, tools, devices, or possessions (use as last resort)"

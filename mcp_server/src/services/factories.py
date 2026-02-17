@@ -214,7 +214,13 @@ class LLMClientFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_api_key('Gemini', api_key, logger)
+                # Gemini supports Vertex AI with ADC, so API key is optional
+                if api_key:
+                    logger.info('Creating Gemini client with API key (Google AI)')
+                else:
+                    logger.info(
+                        'Creating Gemini client with Vertex AI (using Application Default Credentials)'
+                    )
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
@@ -222,6 +228,14 @@ class LLMClientFactory:
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+
+                # Set Vertex AI project and location in environment for ADC
+                import os
+                if not api_key and config.providers.gemini.project_id:
+                    os.environ.setdefault('GOOGLE_CLOUD_PROJECT', config.providers.gemini.project_id)
+                if not api_key and config.providers.gemini.location:
+                    os.environ.setdefault('GOOGLE_CLOUD_LOCATION', config.providers.gemini.location)
+
                 return GeminiClient(config=llm_config)
 
             case 'groq':
@@ -323,7 +337,13 @@ class EmbedderFactory:
                     raise ValueError('Gemini provider configuration not found')
 
                 api_key = config.providers.gemini.api_key
-                _validate_api_key('Gemini Embedder', api_key, logger)
+                # Gemini supports Vertex AI with ADC, so API key is optional
+                if api_key:
+                    logger.info('Creating Gemini embedder with API key (Google AI)')
+                else:
+                    logger.info(
+                        'Creating Gemini embedder with Vertex AI (using Application Default Credentials)'
+                    )
 
                 from graphiti_core.embedder.gemini import GeminiEmbedderConfig
 
@@ -332,6 +352,14 @@ class EmbedderFactory:
                     embedding_model=config.model or 'models/text-embedding-004',
                     embedding_dim=config.dimensions or 768,
                 )
+
+                # Set Vertex AI project and location in environment for ADC
+                import os
+                if not api_key and config.providers.gemini.project_id:
+                    os.environ.setdefault('GOOGLE_CLOUD_PROJECT', config.providers.gemini.project_id)
+                if not api_key and config.providers.gemini.location:
+                    os.environ.setdefault('GOOGLE_CLOUD_LOCATION', config.providers.gemini.location)
+
                 return GeminiEmbedder(config=gemini_config)
 
             case 'voyage':

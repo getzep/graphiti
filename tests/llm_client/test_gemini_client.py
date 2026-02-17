@@ -60,7 +60,7 @@ def gemini_client(mock_gemini_client):
 class TestGeminiClientInitialization:
     """Tests for GeminiClient initialization."""
 
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_with_config(self, mock_client):
         """Test initialization with a config object."""
         config = LLMConfig(
@@ -73,7 +73,7 @@ class TestGeminiClientInitialization:
         assert client.temperature == 0.5
         assert client.max_tokens == 1000
 
-    @patch('google.genai.Client')
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_with_default_model(self, mock_client):
         """Test initialization with default model when none is provided."""
         config = LLMConfig(api_key='test_api_key', model=DEFAULT_MODEL)
@@ -81,22 +81,92 @@ class TestGeminiClientInitialization:
 
         assert client.model == DEFAULT_MODEL
 
-    @patch('google.genai.Client')
+    @patch.dict('os.environ', {}, clear=True)  # Clear all env vars
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_without_config(self, mock_client):
         """Test initialization without a config uses defaults."""
-        client = GeminiClient(cache=False)
+        # Since no API key is set, this will fail with ValueError asking for GOOGLE_CLOUD_PROJECT
+        # Let's set a dummy GOOGLE_CLOUD_PROJECT to allow the test to proceed
+        with patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}):
+            client = GeminiClient(cache=False)
 
-        assert client.config is not None
-        # When no config.model is set, it will be None, not DEFAULT_MODEL
-        assert client.model is None
+            assert client.config is not None
+            # When no config.model is set, it will be None, not DEFAULT_MODEL
+            assert client.model is None
+            # Verify the client was created with Vertex AI (no API key)
+            mock_client.assert_called_once_with(
+                vertexai=True, project='test-project', location='us-central1'
+            )
 
-    @patch('google.genai.Client')
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
     def test_init_with_thinking_config(self, mock_client):
         """Test initialization with thinking config."""
         with patch('google.genai.types.ThinkingConfig') as mock_thinking_config:
             thinking_config = mock_thinking_config.return_value
             client = GeminiClient(thinking_config=thinking_config)
             assert client.thinking_config == thinking_config
+
+    @patch.dict('os.environ', {'GOOGLE_API_KEY': 'env_api_key'})
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_with_env_var(self, mock_client):
+        """Test initialization with GOOGLE_API_KEY environment variable."""
+        client = GeminiClient(cache=False)
+
+        # Verify the client was created with the env var API key
+        mock_client.assert_called_once_with(api_key='env_api_key')
+        assert client.config.api_key == 'env_api_key'
+
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_with_adc_fallback(self, mock_client):
+        """Test initialization falls back to ADC when no API key is provided."""
+        client = GeminiClient(cache=False)
+
+        # Verify the client was created with Vertex AI (ADC mode)
+        mock_client.assert_called_once_with(
+            vertexai=True, project='test-project', location='us-central1'
+        )
+        assert client.config.api_key is None
+
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_explicit_api_key_overrides_env(self, mock_client):
+        """Test that explicit API key in config overrides environment variable."""
+        with patch.dict('os.environ', {'GOOGLE_API_KEY': 'env_api_key'}):
+            config = LLMConfig(api_key='explicit_api_key')
+            client = GeminiClient(config=config, cache=False)
+
+            # Explicit config should take precedence
+            mock_client.assert_called_once_with(api_key='explicit_api_key')
+            assert client.config.api_key == 'explicit_api_key'
+
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_auth_error_helpful_message(self, mock_client):
+        """Test that authentication errors provide helpful setup instructions."""
+        mock_client.side_effect = Exception('Authentication failed: invalid credentials')
+
+        with pytest.raises(Exception) as exc_info:
+            GeminiClient(cache=False)
+
+        error_message = str(exc_info.value)
+        assert 'Google authentication failed' in error_message
+        assert 'GOOGLE_API_KEY' in error_message
+        assert 'gcloud auth application-default login' in error_message
+        assert 'GOOGLE_APPLICATION_CREDENTIALS' in error_message
+
+    @patch.dict('os.environ', {'GOOGLE_CLOUD_PROJECT': 'test-project'}, clear=True)
+    @patch('graphiti_core.llm_client.gemini_utils.genai.Client')
+    def test_init_non_auth_error_bubbles_up(self, mock_client):
+        """Test that non-authentication errors are raised normally."""
+        mock_client.side_effect = ValueError('Some other error')
+
+        with pytest.raises(ValueError) as exc_info:
+            GeminiClient(cache=False)
+
+        # Should get the original error, not our helpful auth message
+        assert 'Some other error' in str(exc_info.value)
+        assert 'GOOGLE_API_KEY' not in str(exc_info.value)
 
 
 class TestGeminiClientGenerateResponse:

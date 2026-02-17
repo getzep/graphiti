@@ -17,7 +17,24 @@ dependencies = [
 azure = [
     "azure-identity>=1.21.0",
 ]
-providers = [
+# Individual provider groups for conditional installation
+google-genai = [
+    "google-genai>=1.62.0",
+]
+anthropic = [
+    "anthropic>=0.49.0",
+]
+groq = [
+    "groq>=0.2.0",
+]
+voyageai = [
+    "voyageai>=0.2.3",
+]
+sentence-transformers = [
+    "sentence-transformers>=2.0.0",
+]
+# Convenience group to install all providers
+all-providers = [
     "google-genai>=1.62.0",
     "anthropic>=0.49.0",
     "groq>=0.2.0",
