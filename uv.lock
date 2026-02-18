@@ -732,6 +732,26 @@ wheels = [
 ]
 
 [[package]]
+name = "falkordblite"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "falkordb", marker = "python_full_version >= '3.12'" },
+    { name = "psutil", marker = "python_full_version >= '3.12'" },
+    { name = "redis", marker = "python_full_version >= '3.12'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/6c/1d8033accaccf16a5f332392d67984e038c3557070fc707f8f90047266f6/falkordblite-0.8.0.tar.gz", hash = "sha256:10e8f8eb09a9745359596862128b9561ce987f59b2e9085a6f0fc17925cc9ac2", size = 18067759, upload-time = "2026-02-04T21:02:24.912Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/37/aff88ab1d5cad619954914a37e22444b45bc593011ccef0b5f53d74a7495/falkordblite-0.8.0-cp312-cp312-macosx_10_13_x86_64.macosx_15_0_arm64.whl", hash = "sha256:168869fc2febf71827c2ac1137611748d4db02cf289ca40d818a47ed387566e4", size = 14928627, upload-time = "2026-02-04T21:02:08.097Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/b1/e4a8981d616d8f4560a32be9b32d991539a4e0c623d7cae9b8b70a046717/falkordblite-0.8.0-cp312-cp312-manylinux_2_39_x86_64.whl", hash = "sha256:40e18e258c3f8c7fa98dc55563dbb299dd675742ffc8bd802667f71b141576b7", size = 29610229, upload-time = "2026-02-04T21:02:10.992Z" },
+    { url = "https://files.pythonhosted.org/packages/46/9a/f22a8a2f599a2b73971d8142080c0a0e26ce279ddce99958b4efc8e672bb/falkordblite-0.8.0-cp313-cp313-macosx_10_13_x86_64.macosx_15_0_arm64.whl", hash = "sha256:a41c8d97c31cf7b01f63741976772b2f85c7bba86fbed0a4cb064fea577e5a13", size = 14928596, upload-time = "2026-02-04T21:02:13.906Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/92/ede6a7ab6fbff17fc4bfb20cc6c4a24bae9858e99d024699f38974438d86/falkordblite-0.8.0-cp313-cp313-manylinux_2_39_x86_64.whl", hash = "sha256:d001aac653dd2e86898c5b37315c6c59d300f75a47037fad8be9db17361ea33b", size = 29610229, upload-time = "2026-02-04T21:02:16.676Z" },
+    { url = "https://files.pythonhosted.org/packages/87/c4/7f3ea57527c28c047c3e056c3f34b2fbc8155dde85e51ec585ebe1bc7213/falkordblite-0.8.0-cp314-cp314-macosx_10_15_x86_64.macosx_15_0_arm64.whl", hash = "sha256:96d0741574d4b382d626615d7d1c384f3aa75d60b272fab2b85f354a4ba7e218", size = 14928606, upload-time = "2026-02-04T21:02:19.062Z" },
+    { url = "https://files.pythonhosted.org/packages/59/19/a1c7d636d533d1a94a4ca74cf063fa4a46086d3e49bd54d7e3cb4efda188/falkordblite-0.8.0-cp314-cp314-manylinux_2_39_x86_64.whl", hash = "sha256:dfd305640dd5363ecaf84a9472e44b50b741d9bc314b2f1ddec4d7426e4d7ec4", size = 29610230, upload-time = "2026-02-04T21:02:21.869Z" },
+]
+
+[[package]]
 name = "fastjsonschema"
 version = "2.21.2"
 source = { registry = "https://pypi.org/simple" }
@@ -950,7 +970,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.27.1"
+version = "0.28.0"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
@@ -997,6 +1017,9 @@ dev = [
 falkordb = [
     { name = "falkordb" },
 ]
+falkordblite = [
+    { name = "falkordblite", marker = "python_full_version >= '3.12'" },
+]
 google-genai = [
     { name = "google-genai" },
 ]
@@ -1037,6 +1060,7 @@ requires-dist = [
     { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
     { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
     { name = "falkordb", marker = "extra == 'falkordb'", specifier = ">=1.1.2,<2.0.0" },
+    { name = "falkordblite", marker = "python_full_version >= '3.12' and extra == 'falkordblite'", specifier = ">=0.8.0,<1.0.0" },
     { name = "google-genai", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.62.0" },
     { name = "groq", marker = "extra == 'dev'", specifier = ">=0.2.0" },
@@ -1075,7 +1099,7 @@ requires-dist = [
     { name = "voyageai", marker = "extra == 'dev'", specifier = ">=0.2.3" },
     { name = "voyageai", marker = "extra == 'voyageai'", specifier = ">=0.2.3" },
 ]
-provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
+provides-extras = ["anthropic", "groq", "google-genai", "kuzu", "falkordb", "falkordblite", "voyageai", "neo4j-opensearch", "sentence-transformers", "neptune", "tracing", "dev"]
 
 [[package]]
 name = "groq"
