@@ -30,8 +30,9 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 MCP_URL = "http://localhost:8000/mcp"
-FALKORDB_CONTAINER = "graphiti-falkordb"
-MCP_CONTAINER = "graphiti-mcp"
+REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
+REDIS_PORT = "6379"
+MCP_LOG = Path(os.environ.get("MCP_LOG", "/tmp/graphiti-mcp.log"))
 SUBPROCESS_TIMEOUT = 30  # seconds for redis-cli calls
 
 # Allowlist pattern for graph/group names (prevents Cypher injection)
@@ -92,8 +93,7 @@ def _cypher(graph: str, query: str) -> str:
     """Run a Cypher query against a FalkorDB graph via redis-cli."""
     _validate_name(graph)
     return subprocess.check_output(
-        ["docker", "exec", FALKORDB_CONTAINER, "redis-cli", "-p", "6379",
-         "GRAPH.QUERY", graph, query],
+        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.QUERY", graph, query],
         text=True, timeout=SUBPROCESS_TIMEOUT,
     )
 
@@ -169,8 +169,6 @@ class MCPClient:
             parsed = json.loads(data_lines[-1])
         else:
             parsed = json.loads(body) if body.strip() else {}
-        if not parsed:
-            raise RuntimeError("empty response from MCP server")
         return parsed
 
     def init(self) -> None:
@@ -202,14 +200,19 @@ def sanitize(text: str) -> str:
 
 
 def last_openai_ts() -> float:
-    """Epoch of most recent OpenAI call in MCP container logs (assumes UTC)."""
+    """Epoch of most recent OpenAI call in MCP logs (assumes UTC)."""
     try:
-        logs = subprocess.check_output(
-            ["docker", "logs", "--tail", "200", MCP_CONTAINER],
-            text=True, stderr=subprocess.STDOUT, timeout=10)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        # Read tail of native MCP log file (or fall back to journalctl/docker)
+        if MCP_LOG.exists():
+            lines_raw = subprocess.check_output(
+                ["tail", "-200", str(MCP_LOG)], text=True, timeout=10).splitlines()
+        else:
+            # Fallback: try launchd stdout
+            lines_raw = subprocess.check_output(
+                ["tail", "-200", "/tmp/graphiti-mcp.log"], text=True, timeout=10).splitlines()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return 0.0
-    lines = [l for l in logs.splitlines() if "api.openai.com" in l]
+    lines = [line for line in lines_raw if "api.openai.com" in line]
     if not lines:
         return 0.0
     m = re.match(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})", lines[-1])

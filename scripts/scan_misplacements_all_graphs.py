@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
 
-FALKORDB_CONTAINER = "graphiti-falkordb"
+REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
+REDIS_PORT = "6379"
 SUBPROCESS_TIMEOUT = 30
 SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
 SAFE_OUTPUT_ROOTS = [Path.cwd(), Path("_tmp").resolve(), Path("/tmp")]
@@ -40,8 +42,7 @@ def _cypher(graph: str, query: str) -> str:
     if not SAFE_NAME_RE.match(graph):
         raise ValueError(f"unsafe graph name: {graph!r}")
     return subprocess.check_output(
-        ["docker", "exec", FALKORDB_CONTAINER, "redis-cli", "-p", "6379",
-         "GRAPH.QUERY", graph, query],
+        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.QUERY", graph, query],
         text=True, timeout=SUBPROCESS_TIMEOUT,
     )
 
@@ -59,7 +60,7 @@ def main() -> None:
     args = ap.parse_args()
 
     raw = subprocess.check_output(
-        ["docker", "exec", FALKORDB_CONTAINER, "redis-cli", "-p", "6379", "GRAPH.LIST"],
+        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.LIST"],
         text=True, timeout=SUBPROCESS_TIMEOUT)
     graphs = [x.strip() for x in raw.splitlines() if x.strip() and SAFE_NAME_RE.match(x.strip())]
 
