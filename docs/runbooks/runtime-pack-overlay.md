@@ -64,6 +64,13 @@ Current source contract:
 
 This allows CLR/Antfarm runtime injection even when engineering learnings are still converging in graph backends.
 
+Canonical consumer pattern now includes both CLR-backed and classic Antfarm lanes (private overlay-defined profiles), e.g.:
+- CLR/manual lanes: `clr_manual`, `clr_antfarm`
+- `feature-dev-clr` roles: planner/developer/reviewer
+- classic `feature-dev` roles: planner/developer/reviewer
+- `bug-fix` roles: triage/fix
+- `security-audit` roles: scan/fix
+
 ## Private overlay pattern
 In your private repo, keep real versions of:
 - `config/runtime_pack_registry.json`
