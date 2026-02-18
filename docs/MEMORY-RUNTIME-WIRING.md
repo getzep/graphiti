@@ -65,6 +65,18 @@ rather than raw exception messages to avoid leaking internal state.
 `shell=True`), preventing shell injection even if an identifier were to bypass
 validation.
 
+## Runtime pack injection policy (Graphiti/CLR)
+
+Runtime pack routing is performed by `scripts/runtime_pack_router.py`.
+
+Canonical policy controls now enforced in code:
+- Multi-group retrieval matrix per pack via `retrieval.group_ids_by_mode`.
+- ChatGPT lane gating via per-profile `chatgpt_mode = off|scoped|global`.
+- Scoped is the intended safe default when mode is omitted.
+- Engineering learnings can be materialized at runtime (`--materialize`) from latest loop artifacts.
+
+See also: `docs/runbooks/runtime-pack-overlay.md`.
+
 ## Canonical runtime checkout
 
 Operational runtime should execute from the canonical runtime checkout linked by:

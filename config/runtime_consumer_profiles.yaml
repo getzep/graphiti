@@ -9,7 +9,11 @@
       "schema_version": 1,
       "task": "Draft a concise summary",
       "injection_text": "Example summary profile",
-      "pack_ids": ["example_summary_pack"]
+      "pack_ids": ["example_summary_pack"],
+      "pack_modes": {
+        "example_summary_pack": "short"
+      },
+      "chatgpt_mode": "off"
     },
     {
       "consumer": "main_session_example_research",
@@ -19,7 +23,11 @@
       "schema_version": 1,
       "task": "Synthesize research notes",
       "injection_text": "Example research profile",
-      "pack_ids": ["example_research_pack"]
+      "pack_ids": ["example_research_pack"],
+      "pack_modes": {
+        "example_research_pack": "long"
+      },
+      "chatgpt_mode": "scoped"
     }
   ]
 }

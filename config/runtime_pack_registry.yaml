@@ -5,13 +5,33 @@
       "pack_id": "example_summary_pack",
       "path": "workflows/example_summary.pack.yaml",
       "scope": "group-safe",
-      "query_template": "${path}"
+      "query_template": "${path}",
+      "retrieval": {
+        "group_ids_by_mode": {
+          "default": ["s1_sessions_main", "s1_curated_refs"]
+        },
+        "chatgpt_lane": {
+          "group_id": "s1_chatgpt_history",
+          "allow_scoped": false,
+          "allow_global": false
+        }
+      }
     },
     {
       "pack_id": "example_research_pack",
       "path": "workflows/example_research.pack.yaml",
       "scope": "private",
-      "query_template": "${path}"
+      "query_template": "${path}",
+      "retrieval": {
+        "group_ids_by_mode": {
+          "default": ["s1_sessions_main", "s1_curated_refs", "learning_self_audit"]
+        },
+        "chatgpt_lane": {
+          "group_id": "s1_chatgpt_history",
+          "allow_scoped": true,
+          "allow_global": true
+        }
+      }
     }
   ]
 }

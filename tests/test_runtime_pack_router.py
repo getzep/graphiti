@@ -36,26 +36,42 @@ class RuntimePackRouterTests(unittest.TestCase):
             destination = workflows_dir / filename
             destination.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
 
-    def _route(self, repo: Path, *, consumer: str, workflow_id: str, step_id: str, task: str) -> dict:
+    def _route(
+        self,
+        repo: Path,
+        *,
+        consumer: str,
+        workflow_id: str,
+        step_id: str,
+        task: str,
+        materialize: bool = False,
+        scope: str | None = None,
+    ) -> dict:
         out = repo / 'plan.json'
+        cmd = [
+            sys.executable,
+            str(SCRIPT),
+            '--consumer',
+            consumer,
+            '--workflow-id',
+            workflow_id,
+            '--step-id',
+            step_id,
+            '--repo',
+            str(repo),
+            '--task',
+            task,
+            '--validate',
+            '--out',
+            str(out),
+        ]
+        if materialize:
+            cmd.append('--materialize')
+        if scope:
+            cmd.extend(['--scope', scope])
+
         result = subprocess.run(
-            [
-                sys.executable,
-                str(SCRIPT),
-                '--consumer',
-                consumer,
-                '--workflow-id',
-                workflow_id,
-                '--step-id',
-                step_id,
-                '--repo',
-                str(repo),
-                '--task',
-                task,
-                '--validate',
-                '--out',
-                str(out),
-            ],
+            cmd,
             capture_output=True,
             text=True,
             check=False,
@@ -94,6 +110,10 @@ class RuntimePackRouterTests(unittest.TestCase):
                 self.assertTrue(plan['consumer'].startswith('main_session_example_'))
                 self.assertIn('scope', plan)
                 self.assertIn('packs', plan)
+                self.assertIn('selected_packs', plan)
+                self.assertIn('dropped_packs', plan)
+                self.assertIn('decision_path', plan)
+                self.assertIn('budget_summary', plan)
 
             replay = self._route(
                 repo,
@@ -103,6 +123,29 @@ class RuntimePackRouterTests(unittest.TestCase):
                 task='Draft summary',
             )
             self.assertEqual(summary_plan, replay)
+
+    def test_router_accepts_scope_and_materialize_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / 'repo'
+            repo.mkdir(parents=True)
+            self._seed_repo(repo)
+
+            plan = self._route(
+                repo,
+                consumer='main_session_example_research',
+                workflow_id='example_research',
+                step_id='synthesize',
+                task='Synthesize notes',
+                materialize=True,
+                scope='private',
+            )
+
+            self.assertEqual(plan['scope'], 'private')
+            self.assertEqual(len(plan['selected_packs']), 1)
+            selected = plan['selected_packs'][0]
+            self.assertEqual(selected['pack_id'], 'example_research_pack')
+            self.assertIn('materialized_excerpt', selected)
+            self.assertEqual(plan['budget_summary']['selected_count'], 1)
 
 
 class RuntimePackRouterFixturesTests(unittest.TestCase):
