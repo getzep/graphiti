@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -108,6 +109,7 @@ def configure_uvicorn_logging():
 
 
 logger = logging.getLogger(__name__)
+SAFE_GROUP_ID_RE = re.compile(r'^[a-zA-Z0-9_]+$')
 
 # Create global config instance - will be properly initialized later
 config: GraphitiConfig
@@ -168,27 +170,104 @@ class GraphitiService:
         self.client: Graphiti | None = None
         self.entity_types = None
 
+        # Shared client dependencies (used for per-group FalkorDB routing)
+        self._llm_client: Any = None
+        self._embedder_client: Any = None
+        self._db_config: dict[str, Any] | None = None
+
+        # Per-group Graphiti clients for FalkorDB mode
+        self._clients_by_group: dict[str, Graphiti] = {}
+        self._client_lock = asyncio.Lock()
+
+    def _validate_group_id(self, group_id: str) -> str:
+        """Validate group_id for safe use as FalkorDB graph/database name."""
+        if not SAFE_GROUP_ID_RE.match(group_id):
+            raise ValueError(f'Invalid group_id for FalkorDB routing: {group_id!r}')
+        return group_id
+
+    async def _build_client(self, *, database_override: str | None = None) -> Graphiti:
+        """Build a Graphiti client for the configured backend.
+
+        For FalkorDB, database_override controls the target graph/database name.
+        """
+        if self._db_config is None:
+            raise RuntimeError('Database config not initialized')
+
+        provider = self.config.database.provider.lower()
+        if provider == 'falkordb':
+            from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+            db_name = database_override or self._db_config['database']
+            falkor_driver = FalkorDriver(
+                host=self._db_config['host'],
+                port=self._db_config['port'],
+                password=self._db_config['password'],
+                database=db_name,
+            )
+            client = Graphiti(
+                graph_driver=falkor_driver,
+                llm_client=self._llm_client,
+                embedder=self._embedder_client,
+                max_coroutines=self.semaphore_limit,
+            )
+        else:
+            client = Graphiti(
+                uri=self._db_config['uri'],
+                user=self._db_config['user'],
+                password=self._db_config['password'],
+                llm_client=self._llm_client,
+                embedder=self._embedder_client,
+                max_coroutines=self.semaphore_limit,
+            )
+
+        await client.build_indices_and_constraints()
+        return client
+
+    async def get_client_for_group(self, group_id: str) -> Graphiti:
+        """Get a Graphiti client routed to the requested group.
+
+        In FalkorDB mode, each group is backed by a dedicated database/graph. In
+        other backends, this falls back to the default singleton client.
+        """
+        if self.config.database.provider.lower() != 'falkordb':
+            return await self.get_client()
+
+        effective_group = self._validate_group_id(group_id or self.config.graphiti.group_id)
+
+        if effective_group in self._clients_by_group:
+            return self._clients_by_group[effective_group]
+
+        async with self._client_lock:
+            if effective_group in self._clients_by_group:
+                return self._clients_by_group[effective_group]
+
+            logger.info(f'Initializing routed FalkorDB client for group_id={effective_group}')
+            client = await self._build_client(database_override=effective_group)
+            self._clients_by_group[effective_group] = client
+            return client
+
     async def initialize(self) -> None:
         """Initialize the Graphiti client with factory-created components."""
         try:
             # Create clients using factories
-            llm_client = None
-            embedder_client = None
+            self._llm_client = None
+            self._embedder_client = None
 
             # Create LLM client based on configured provider
             try:
-                llm_client = LLMClientFactory.create(self.config.llm)
+                self._llm_client = LLMClientFactory.create(self.config.llm)
             except Exception as e:
                 logger.warning(f'Failed to create LLM client: {e}')
 
             # Create embedder client based on configured provider
             try:
-                embedder_client = EmbedderFactory.create(self.config.embedder)
+                self._embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
-            # Get database configuration
+            # Get and store database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
+            self._db_config = db_config
 
             # Build entity types from configuration
             custom_types = None
@@ -209,35 +288,9 @@ class GraphitiService:
             # Store entity types for later use
             self.entity_types = custom_types
 
-            # Initialize Graphiti client with appropriate driver
+            # Initialize default Graphiti client for configured database
             try:
-                if self.config.database.provider.lower() == 'falkordb':
-                    # For FalkorDB, create a FalkorDriver instance directly
-                    from graphiti_core.driver.falkordb_driver import FalkorDriver
-
-                    falkor_driver = FalkorDriver(
-                        host=db_config['host'],
-                        port=db_config['port'],
-                        password=db_config['password'],
-                        database=db_config['database'],
-                    )
-
-                    self.client = Graphiti(
-                        graph_driver=falkor_driver,
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
-                else:
-                    # For Neo4j (default), use the original approach
-                    self.client = Graphiti(
-                        uri=db_config['uri'],
-                        user=db_config['user'],
-                        password=db_config['password'],
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
+                self.client = await self._build_client()
             except Exception as db_error:
                 # Check for connection errors
                 error_msg = str(db_error).lower()
@@ -278,20 +331,22 @@ class GraphitiService:
                 # Re-raise other errors
                 raise
 
-            # Build indices
-            await self.client.build_indices_and_constraints()
+            # Cache the default group client in FalkorDB mode for reuse.
+            if self.config.database.provider.lower() == 'falkordb' and self.config.graphiti.group_id:
+                default_group = self._validate_group_id(self.config.graphiti.group_id)
+                self._clients_by_group[default_group] = self.client
 
             logger.info('Successfully initialized Graphiti client')
 
             # Log configuration details
-            if llm_client:
+            if self._llm_client:
                 logger.info(
                     f'Using LLM provider: {self.config.llm.provider} / {self.config.llm.model}'
                 )
             else:
                 logger.info('No LLM client configured - entity extraction will be limited')
 
-            if embedder_client:
+            if self._embedder_client:
                 logger.info(f'Using Embedder provider: {self.config.embedder.provider}')
             else:
                 logger.info('No Embedder client configured - search will be limited')
@@ -892,8 +947,12 @@ async def initialize_server() -> ServerConfig:
     graphiti_client = await graphiti_service.get_client()
     semaphore = graphiti_service.semaphore
 
-    # Initialize queue service with the client
-    await queue_service.initialize(graphiti_client)
+    # Initialize queue service with per-group routing for add_memory.
+    # This prevents cross-graph contamination when multiple corpora are ingested.
+    await queue_service.initialize(
+        graphiti_client=graphiti_client,
+        client_resolver=graphiti_service.get_client_for_group,
+    )
 
     # Set MCP server settings
     if config.server.host:

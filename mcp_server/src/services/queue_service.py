@@ -18,8 +18,10 @@ class QueueService:
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
-        # Store the graphiti client after initialization
+        # Legacy single Graphiti client (fallback)
         self._graphiti_client: Any = None
+        # Optional per-group client resolver
+        self._graphiti_client_resolver: Callable[[str], Awaitable[Any]] | None = None
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -89,14 +91,39 @@ class QueueService:
         """Check if a worker is running for a group_id."""
         return self._queue_workers.get(group_id, False)
 
-    async def initialize(self, graphiti_client: Any) -> None:
-        """Initialize the queue service with a graphiti client.
+    async def initialize(
+        self,
+        graphiti_client: Any | None = None,
+        client_resolver: Callable[[str], Awaitable[Any]] | None = None,
+    ) -> None:
+        """Initialize the queue service with client routing.
 
         Args:
-            graphiti_client: The graphiti client instance to use for processing episodes
+            graphiti_client: Optional single Graphiti client (legacy fallback)
+            client_resolver: Optional async resolver returning a Graphiti client for a group_id
         """
+        if graphiti_client is None and client_resolver is None:
+            raise RuntimeError(
+                'Queue service initialize() requires graphiti_client or client_resolver.'
+            )
+
         self._graphiti_client = graphiti_client
-        logger.info('Queue service initialized with graphiti client')
+        self._graphiti_client_resolver = client_resolver
+
+        if client_resolver is not None:
+            logger.info('Queue service initialized with per-group client resolver')
+        else:
+            logger.info('Queue service initialized with single graphiti client (legacy mode)')
+
+    async def _get_client_for_group(self, group_id: str) -> Any:
+        """Resolve the Graphiti client for a group."""
+        if self._graphiti_client_resolver is not None:
+            return await self._graphiti_client_resolver(group_id)
+
+        if self._graphiti_client is None:
+            raise RuntimeError('Queue service not initialized. Call initialize() first.')
+
+        return self._graphiti_client
 
     async def add_episode(
         self,
@@ -122,7 +149,7 @@ class QueueService:
         Returns:
             The position in the queue
         """
-        if self._graphiti_client is None:
+        if self._graphiti_client is None and self._graphiti_client_resolver is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
 
         async def process_episode():
@@ -130,8 +157,10 @@ class QueueService:
             try:
                 logger.info(f'Processing episode {uuid} for group {group_id}')
 
+                client = await self._get_client_for_group(group_id)
+
                 # Process the episode using the graphiti client
-                await self._graphiti_client.add_episode(
+                await client.add_episode(
                     name=name,
                     episode_body=content,
                     source_description=source_description,
