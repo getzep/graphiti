@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 _NAME_ENTROPY_THRESHOLD = 1.5
 _MIN_NAME_LENGTH = 6
 _MIN_TOKEN_COUNT = 2
-_FUZZY_JACCARD_THRESHOLD = 0.9
+_FUZZY_JACCARD_THRESHOLD = 0.95
+_MAX_EDIT_DISTANCE_FOR_AUTO_MERGE = 2
 _MINHASH_PERMUTATIONS = 32
 _MINHASH_BAND_SIZE = 4
 
@@ -74,6 +75,32 @@ def _name_entropy(normalized_name: str) -> float:
         entropy -= probability * math.log2(probability)
 
     return entropy
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings.
+
+    Used as a secondary guard in fuzzy dedup: high Jaccard similarity can be
+    misleading for names with long shared prefixes and small suffix differences
+    (e.g., ``"Service Bulletin SB-2024-001 Rev A"`` vs ``"...Rev B"``).
+    Edit distance catches structural differences that n-gram Jaccard misses.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = list(range(len(s2) + 1))
+    for c1 in s1:
+        current_row = [previous_row[0] + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
 
 
 def _has_high_entropy(normalized_name: str) -> bool:
@@ -237,6 +264,17 @@ def _resolve_with_similarity(
                 best_candidate = indexes.nodes_by_uuid.get(candidate_id)
 
         if best_candidate is not None and best_score >= _FUZZY_JACCARD_THRESHOLD:
+            # Edit-distance guard: high Jaccard can be misleading for names with
+            # long shared prefixes and small suffix differences (e.g., sequential
+            # identifiers like "Report-001" vs "Report-002").  If the normalized
+            # names differ by more than a couple of characters, defer to the LLM
+            # instead of auto-merging.
+            candidate_fuzzy = _normalize_name_for_fuzzy(best_candidate.name)
+            edit_dist = _levenshtein_distance(normalized_fuzzy, candidate_fuzzy)
+            if edit_dist > _MAX_EDIT_DISTANCE_FOR_AUTO_MERGE:
+                state.unresolved_indices.append(idx)
+                continue
+
             state.resolved_nodes[idx] = best_candidate
             state.uuid_map[node.uuid] = best_candidate.uuid
             if best_candidate.uuid != node.uuid:
@@ -252,11 +290,13 @@ __all__ = [
     '_normalize_string_exact',
     '_normalize_name_for_fuzzy',
     '_has_high_entropy',
+    '_levenshtein_distance',
     '_minhash_signature',
     '_lsh_bands',
     '_jaccard_similarity',
     '_cached_shingles',
     '_FUZZY_JACCARD_THRESHOLD',
+    '_MAX_EDIT_DISTANCE_FOR_AUTO_MERGE',
     '_build_candidate_indexes',
     '_resolve_with_similarity',
 ]
