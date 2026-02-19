@@ -29,10 +29,10 @@ from pathlib import Path
 # Config
 # ---------------------------------------------------------------------------
 
-MCP_URL = "http://localhost:8000/mcp"
+MCP_URL = os.environ.get("MCP_URL", "http://localhost:8000/mcp")
 REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
 REDIS_PORT = "6379"
-MCP_LOG = Path(os.environ.get("MCP_LOG", "/tmp/graphiti-mcp.log"))
+MCP_LOG = Path(os.environ.get("MCP_LOG", "/Users/archibald/clawd/tools/falkordb/logs/graphiti-mcp-stderr.log"))
 SUBPROCESS_TIMEOUT = 30  # seconds for redis-cli calls
 
 # Allowlist pattern for graph/group names (prevents Cypher injection)
@@ -209,7 +209,7 @@ def last_openai_ts() -> float:
         else:
             # Fallback: try launchd stdout
             lines_raw = subprocess.check_output(
-                ["tail", "-200", "/tmp/graphiti-mcp.log"], text=True, timeout=10).splitlines()
+                ["tail", "-200", str(MCP_LOG)], text=True, timeout=10).splitlines()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return 0.0
     lines = [line for line in lines_raw if "api.openai.com" in line]
@@ -218,8 +218,11 @@ def last_openai_ts() -> float:
     m = re.match(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})", lines[-1])
     if not m:
         return 0.0
+    # MCP logs are written in local time (launchd), so interpret the timestamp
+    # in the local timezone to avoid false "OpenAI quiet" stall detection.
+    local_tz = datetime.now().astimezone().tzinfo or timezone.utc
     return datetime.fromisoformat(f"{m.group(1)} {m.group(2)}").replace(
-        tzinfo=timezone.utc).timestamp()
+        tzinfo=local_tz).timestamp()
 
 
 def load_evidence(group_id: str, evidence_dir: Path) -> dict[str, dict]:
@@ -348,6 +351,7 @@ def main() -> None:
     ap.add_argument("--max-misplace-growth", type=int, default=5)
     ap.add_argument("--force", action="store_true", help="re-ingest all (skip dedup)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--mcp-url", default=MCP_URL, help="MCP endpoint URL")
     args = ap.parse_args()
 
     groups = [g.strip() for g in args.groups.split(",") if g.strip()]
@@ -373,7 +377,7 @@ def main() -> None:
                 log(f"  ... +{len(missing) - 5} more")
         return
 
-    mcp = MCPClient()
+    mcp = MCPClient(args.mcp_url)
     mcp.init()
     log(f"MCP session={mcp.sid}")
 

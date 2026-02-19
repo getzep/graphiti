@@ -2,11 +2,15 @@
 
 import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_SAFE_GROUP_ID_RE = re.compile(r'^[a-zA-Z0-9_]+$')
+_MAX_QUEUE_SIZE = 1000
 
 
 class QueueService:
@@ -37,49 +41,56 @@ class QueueService:
         """
         # Initialize queue for this group_id if it doesn't exist
         if group_id not in self._episode_queues:
-            self._episode_queues[group_id] = asyncio.Queue()
+            self._episode_queues[group_id] = asyncio.Queue(maxsize=_MAX_QUEUE_SIZE)
 
         # Add the episode processing function to the queue
         await self._episode_queues[group_id].put(process_func)
 
-        # Start a worker for this queue if one isn't already running
-        if not self._queue_workers.get(group_id, False):
-            asyncio.create_task(self._process_episode_queue(group_id))
+        # Start a worker for this queue if one isn't already running.
+        # Store the Task immediately to prevent both GC and duplicate spawns.
+        existing = self._queue_workers.get(group_id)
+        if existing is None or existing.done():
+            task = asyncio.create_task(self._process_episode_queue(group_id))
+            self._queue_workers[group_id] = task
 
         return self._episode_queues[group_id].qsize()
 
     async def _process_episode_queue(self, group_id: str) -> None:
         """Process episodes for a specific group_id sequentially.
 
-        This function runs as a long-lived task that processes episodes
-        from the queue one at a time.
+        Runs as a long-lived task. On unexpected errors, restarts with
+        exponential backoff (up to 60s) to avoid silent work loss.
         """
-        logger.info(f'Starting episode queue worker for group_id: {group_id}')
-        self._queue_workers[group_id] = True
+        logger.info('Starting episode queue worker for group_id: %s', group_id)
+        backoff = 1.0
+        max_backoff = 60.0
 
-        try:
-            while True:
-                # Get the next episode processing function from the queue
-                # This will wait if the queue is empty
-                process_func = await self._episode_queues[group_id].get()
-
-                try:
-                    # Process the episode
-                    await process_func()
-                except Exception as e:
-                    logger.error(
-                        f'Error processing queued episode for group_id {group_id}: {str(e)}'
-                    )
-                finally:
-                    # Mark the task as done regardless of success/failure
-                    self._episode_queues[group_id].task_done()
-        except asyncio.CancelledError:
-            logger.info(f'Episode queue worker for group_id {group_id} was cancelled')
-        except Exception as e:
-            logger.error(f'Unexpected error in queue worker for group_id {group_id}: {str(e)}')
-        finally:
-            self._queue_workers[group_id] = False
-            logger.info(f'Stopped episode queue worker for group_id: {group_id}')
+        while True:
+            try:
+                while True:
+                    process_func = await self._episode_queues[group_id].get()
+                    try:
+                        await process_func()
+                        backoff = 1.0  # reset on success
+                    except Exception as e:
+                        logger.error(
+                            'Error processing queued episode for group_id %s: %s',
+                            group_id, type(e).__name__,
+                        )
+                    finally:
+                        self._episode_queues[group_id].task_done()
+            except asyncio.CancelledError:
+                logger.info('Episode queue worker for group_id %s was cancelled', group_id)
+                return  # honour cancellation — do not restart
+            except Exception as e:
+                remaining = self._episode_queues[group_id].qsize()
+                logger.error(
+                    'Queue worker for group_id %s crashed (%s), %d items queued. '
+                    'Restarting in %.0fs...',
+                    group_id, type(e).__name__, remaining, backoff,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
 
     def get_queue_size(self, group_id: str) -> int:
         """Get the current queue size for a group_id."""

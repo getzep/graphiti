@@ -16,7 +16,7 @@ Usage (recommended):
   python3 scripts/mcp_ingest_sessions.py --group-id s1_sessions_main --limit 500 --shards 4 --shard-index 0
 
 Notes:
-- Requires the Graphiti MCP server running locally (docker compose).
+- Requires the Graphiti MCP server running locally (launchd native service or docker compose).
 - Uses a strong sanitizer to avoid FalkorDB RediSearch syntax errors.
 - Incremental mode uses a single (best-effort) watermark per --group-id (not per session source).
 """
@@ -359,7 +359,8 @@ def main():
                 "group_id": args.group_id,
                 "source": "text",
                 "source_description": src_desc[:200],
-                "uuid": episode_uuid,
+                # NOTE: do NOT pass "uuid" — standalone MCP breaks with client-generated UUIDs
+                # ("node X not found" error). Let the server generate its own.
             },
         )
 

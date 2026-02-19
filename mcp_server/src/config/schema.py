@@ -289,3 +289,9 @@ class GraphitiConfig(BaseSettings):
             self.graphiti.group_id = args.group_id
         if hasattr(args, 'user_id') and args.user_id:
             self.graphiti.user_id = args.user_id
+
+        # Override server host/port from CLI
+        if hasattr(args, 'host') and args.host:
+            self.server.host = args.host
+        if hasattr(args, 'port') and args.port:
+            self.server.port = args.port

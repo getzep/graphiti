@@ -33,6 +33,7 @@ from models.response_types import (
     SuccessResponse,
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.ontology_registry import OntologyRegistry
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
@@ -361,8 +362,20 @@ class GraphitiService:
             logger.info(f'Using group_id: {self.config.graphiti.group_id}')
 
         except Exception as e:
-            logger.error(f'Failed to initialize Graphiti client: {e}')
+            logger.error('Failed to initialize Graphiti client: %s', type(e).__name__)
             raise
+
+    def resolve_entity_types(self, group_id: str) -> dict | None:
+        """Resolve entity types for a group, falling back to the global default.
+
+        If the ontology registry has a profile for this group_id, return its
+        entity_types.  Otherwise return the global entity_types from config.yaml.
+        """
+        if self.ontology_registry is not None:
+            profile = self.ontology_registry.get(group_id)
+            if profile is not None:
+                return profile.entity_types
+        return self.entity_types
 
     async def get_client(self) -> Graphiti:
         """Get the Graphiti client, initializing if necessary."""
@@ -439,19 +452,21 @@ async def add_memory(
                 logger.warning(f"Unknown source type '{source}', using 'text' as default")
                 episode_type = EpisodeType.text
 
-        # Submit to queue service for async processing
+        # Submit to queue service for async processing.
+        # Entity types are resolved per-group by the queue service's ontology
+        # resolver (lane-specific when configured, global default otherwise).
         await queue_service.add_episode(
             group_id=effective_group_id,
             name=name,
             content=episode_body,
             source_description=source_description,
             episode_type=episode_type,
-            entity_types=graphiti_service.entity_types,
-            uuid=uuid or None,  # Ensure None is passed if uuid is None
+            uuid=uuid or None,
+            fallback_entity_types=graphiti_service.entity_types,
         )
 
         return SuccessResponse(
-            message=f"Episode '{name}' queued for processing in group '{effective_group_id}'"
+            message=f"Episode queued for processing in group '{effective_group_id}'"
         )
     except Exception as e:
         error_msg = str(e)
@@ -480,8 +495,6 @@ async def search_nodes(
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        client = await graphiti_service.get_client()
-
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             group_ids
@@ -490,6 +503,10 @@ async def search_nodes(
             if config.graphiti.group_id
             else []
         )
+
+        # Route to the correct FalkorDB graph for the target group
+        primary_group = effective_group_ids[0] if effective_group_ids else config.graphiti.group_id
+        client = await graphiti_service.get_client_for_group(primary_group)
 
         # Create search filters
         search_filters = SearchFilters(
@@ -564,8 +581,6 @@ async def search_memory_facts(
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
-        client = await graphiti_service.get_client()
-
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             group_ids
@@ -574,6 +589,10 @@ async def search_memory_facts(
             if config.graphiti.group_id
             else []
         )
+
+        # Route to the correct FalkorDB graph for the target group
+        primary_group = effective_group_ids[0] if effective_group_ids else config.graphiti.group_id
+        client = await graphiti_service.get_client_for_group(primary_group)
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
@@ -689,8 +708,6 @@ async def get_episodes(
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        client = await graphiti_service.get_client()
-
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
             group_ids
@@ -699,6 +716,10 @@ async def get_episodes(
             if config.graphiti.group_id
             else []
         )
+
+        # Route to the correct FalkorDB graph for the target group
+        primary_group = effective_group_ids[0] if effective_group_ids else config.graphiti.group_id
+        client = await graphiti_service.get_client_for_group(primary_group)
 
         # Get episodes from the driver directly
         from graphiti_core.nodes import EpisodicNode
@@ -753,15 +774,19 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
-        client = await graphiti_service.get_client()
-
         # Use the provided group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+            group_ids if group_ids is not None
+            else [config.graphiti.group_id] if config.graphiti.group_id
+            else []
         )
 
         if not effective_group_ids:
             return ErrorResponse(error='No group IDs specified for clearing')
+
+        # Route to the correct FalkorDB graph for the target group
+        primary_group = effective_group_ids[0]
+        client = await graphiti_service.get_client_for_group(primary_group)
 
         # Clear data for the specified group IDs
         await clear_data(client.driver, group_ids=effective_group_ids)
@@ -1016,7 +1041,7 @@ def main():
     except KeyboardInterrupt:
         logger.info('Server shutting down...')
     except Exception as e:
-        logger.error(f'Error initializing Graphiti MCP server: {str(e)}')
+        logger.error('Error initializing Graphiti MCP server: %s', type(e).__name__)
         raise
 
 
