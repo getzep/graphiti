@@ -221,7 +221,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     edge_types = {'OCCURRED_AT': OccurredAtEdge}
     edge_type_map = {('Event', 'Entity'): ['OCCURRED_AT']}
 
-    resolved_edges, invalidated_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
         clients,
         [extracted_edge],
         episode,
@@ -232,6 +232,7 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
 
     assert resolved_edges[0].name == 'INTERACTED_WITH'
     assert invalidated_edges == []
+    assert new_edges == resolved_edges  # No duplicates, so all edges are new
 
 
 @pytest.mark.asyncio
@@ -431,7 +432,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
         valid_at=datetime.now(timezone.utc),
     )
 
-    resolved_edges, invalidated_edges = await resolve_extracted_edges(
+    resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
         clients,
         [edge1, edge2, edge3],
         episode,
@@ -445,6 +446,7 @@ async def test_resolve_extracted_edges_fast_path_deduplication(monkeypatch):
     assert resolve_call_count == 1
     assert len(resolved_edges) == 1
     assert invalidated_edges == []
+    assert new_edges == resolved_edges  # All edges are new (no graph duplicates)
 
 
 class InterpersonalRelationship(BaseModel):
@@ -501,9 +503,7 @@ def test_edge_type_signatures_map_preserves_multiple_signatures():
     edge_types_context = [
         {
             'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(
-                type_name, [('Entity', 'Entity')]
-            ),
+            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
             'fact_type_description': type_model.__doc__,
         }
         for type_name, type_model in edge_types.items()
@@ -547,9 +547,7 @@ def test_edge_type_signatures_map_single_signature_still_works():
     edge_types_context = [
         {
             'fact_type_name': type_name,
-            'fact_type_signatures': edge_type_signatures_map.get(
-                type_name, [('Entity', 'Entity')]
-            ),
+            'fact_type_signatures': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
             'fact_type_description': type_model.__doc__,
         }
         for type_name, type_model in edge_types.items()

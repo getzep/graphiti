@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -37,7 +38,7 @@ from graphiti_core.edges import (
     create_entity_edge_embeddings,
 )
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
-from graphiti_core.errors import NodeNotFoundError
+from graphiti_core.errors import EdgeNotFoundError, NodeNotFoundError
 from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import (
     get_default_group_id,
@@ -46,6 +47,7 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -235,6 +237,10 @@ class Graphiti:
             tracer=self.tracer,
         )
 
+        # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
+        self.nodes = NodeNamespace(self.driver, self.embedder)
+        self.edges = EdgeNamespace(self.driver, self.embedder)
+
         # Capture telemetry event
         self._capture_initialization_telemetry()
 
@@ -258,6 +264,18 @@ class Graphiti:
         except Exception:
             # Silently handle telemetry errors
             pass
+
+    @property
+    def token_tracker(self):
+        """Access the LLM client's token usage tracker.
+
+        Returns the TokenUsageTracker from the LLM client, which can be used to:
+        - Get token usage by prompt type: tracker.get_usage()
+        - Get total token usage: tracker.get_total_usage()
+        - Print a formatted summary: tracker.print_summary()
+        - Reset tracking: tracker.reset()
+        """
+        return self.llm_client.token_tracker
 
     def _get_provider_type(self, client) -> str:
         """Get provider type from client class name."""
@@ -439,8 +457,17 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
-    ) -> tuple[list[EntityEdge], list[EntityEdge]]:
-        """Extract edges from episode and resolve against existing graph."""
+    ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
+        """Extract edges from episode and resolve against existing graph.
+
+        Returns
+        -------
+        tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]
+            A tuple of (resolved_edges, invalidated_edges, new_edges) where:
+            - resolved_edges: All edges after resolution
+            - invalidated_edges: Edges invalidated by new information
+            - new_edges: Only edges that are new to the graph (not duplicates)
+        """
         extracted_edges = await extract_edges(
             self.clients,
             episode,
@@ -454,7 +481,7 @@ class Graphiti:
 
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
-        resolved_edges, invalidated_edges = await resolve_extracted_edges(
+        resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
             self.clients,
             edges,
             episode,
@@ -463,7 +490,7 @@ class Graphiti:
             edge_type_map,
         )
 
-        return resolved_edges, invalidated_edges
+        return resolved_edges, invalidated_edges, new_edges
 
     async def _process_episode_data(
         self,
@@ -699,6 +726,8 @@ class Graphiti:
         for result in edge_results:
             resolved_edges.extend(result[0])
             invalidated_edges.extend(result[1])
+            # result[2] is new_edges - not used in bulk flow since attributes
+            # are extracted before edge resolution
 
         return final_hydrated_nodes, resolved_edges, invalidated_edges, uuid_map
 
@@ -916,7 +945,11 @@ class Graphiti:
                 )
 
                 # Extract and resolve edges in parallel with attribute extraction
-                resolved_edges, invalidated_edges = await self._extract_and_resolve_edges(
+                (
+                    resolved_edges,
+                    invalidated_edges,
+                    new_edges,
+                ) = await self._extract_and_resolve_edges(
                     episode,
                     extracted_nodes,
                     previous_episodes,
@@ -930,14 +963,15 @@ class Graphiti:
 
                 entity_edges = resolved_edges + invalidated_edges
 
-                # Extract node attributes
+                # Extract node attributes - only pass new edges for summary generation
+                # to avoid duplicating facts that already exist in the graph
                 hydrated_nodes = await extract_attributes_from_nodes(
                     self.clients,
                     nodes,
                     episode,
                     previous_episodes,
                     entity_types,
-                    edges=entity_edges,
+                    edges=new_edges,
                 )
 
                 # Process and save episode data (including saga association if provided)
@@ -1464,6 +1498,26 @@ class Graphiti:
 
         edge.source_node_uuid = resolved_source.uuid
         edge.target_node_uuid = resolved_target.uuid
+
+        # Check if an edge with this UUID already exists with different source/target nodes.
+        # If so, generate a new UUID to create a new edge instead of overwriting.
+        try:
+            existing_edge = await EntityEdge.get_by_uuid(self.driver, edge.uuid)
+            # Edge exists - check if source/target nodes match
+            if (
+                existing_edge.source_node_uuid != edge.source_node_uuid
+                or existing_edge.target_node_uuid != edge.target_node_uuid
+            ):
+                # Source/target mismatch - generate new UUID to create a new edge
+                old_uuid = edge.uuid
+                edge.uuid = str(uuid4())
+                logger.info(
+                    f'Edge UUID {old_uuid} already exists with different source/target nodes. '
+                    f'Generated new UUID {edge.uuid} to avoid overwriting.'
+                )
+        except EdgeNotFoundError:
+            # Edge doesn't exist yet, proceed normally
+            pass
 
         valid_edges = await EntityEdge.get_between_nodes(
             self.driver, edge.source_node_uuid, edge.target_node_uuid

@@ -147,11 +147,9 @@ class GeminiClient(LLMClient):
                     safety_info.append(f'{category}: {probability}')
 
         safety_details = (
-            ', '.join(
-                safety_info) if safety_info else 'Content blocked for safety reasons'
+            ', '.join(safety_info) if safety_info else 'Content blocked for safety reasons'
         )
-        raise Exception(
-            f'Response blocked by Gemini safety filters: {safety_details}')
+        raise Exception(f'Response blocked by Gemini safety filters: {safety_details}')
 
     def _check_prompt_blocks(self, response) -> None:
         """Check if prompt was blocked and raise appropriate exceptions."""
@@ -241,7 +239,7 @@ class GeminiClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, typing.Any]:
+    ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Gemini language model.
 
@@ -252,7 +250,7 @@ class GeminiClient(LLMClient):
             model_size (ModelSize): The size of the model to use (small or medium).
 
         Returns:
-            dict[str, typing.Any]: The response from the language model.
+            tuple[dict[str, typing.Any], int, int]: The response dict, input tokens, and output tokens.
 
         Raises:
             RateLimitError: If the API rate limit is exceeded.
@@ -282,8 +280,7 @@ class GeminiClient(LLMClient):
             for m in messages:
                 m.content = self._clean_input(m.content)
                 gemini_messages.append(
-                    types.Content(role=m.role, parts=[
-                                  types.Part.from_text(text=m.content)])
+                    types.Content(role=m.role, parts=[types.Part.from_text(text=m.content)])
                 )
 
             # Get the appropriate model for the requested size
@@ -309,6 +306,13 @@ class GeminiClient(LLMClient):
                 config=generation_config,
             )
 
+            # Extract token usage from the response
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+                output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+
             # Always capture the raw output for debugging
             raw_output = getattr(response, 'text', None)
 
@@ -322,29 +326,25 @@ class GeminiClient(LLMClient):
                     if not raw_output:
                         raise ValueError('No response text')
 
-                    validated_model = response_model.model_validate(
-                        json.loads(raw_output))
+                    validated_model = response_model.model_validate(json.loads(raw_output))
 
                     # Return as a dictionary for API consistency
-                    return validated_model.model_dump()
+                    return validated_model.model_dump(), input_tokens, output_tokens
                 except Exception as e:
                     if raw_output:
                         logger.error(
                             '🦀 LLM generation failed parsing as JSON, will try to salvage.'
                         )
-                        logger.error(self._get_failed_generation_log(
-                            gemini_messages, raw_output))
+                        logger.error(self._get_failed_generation_log(gemini_messages, raw_output))
                         # Try to salvage
                         salvaged = self.salvage_json(raw_output)
                         if salvaged is not None:
-                            logger.warning(
-                                'Salvaged partial JSON from truncated/malformed output.')
-                            return salvaged
-                    raise Exception(
-                        f'Failed to parse structured response: {e}') from e
+                            logger.warning('Salvaged partial JSON from truncated/malformed output.')
+                            return salvaged, input_tokens, output_tokens
+                    raise Exception(f'Failed to parse structured response: {e}') from e
 
             # Otherwise, return the response text as a dictionary
-            return {'content': raw_output}
+            return {'content': raw_output}, input_tokens, output_tokens
 
         except Exception as e:
             # Check if it's a rate limit error based on Gemini API error codes
@@ -401,15 +401,23 @@ class GeminiClient(LLMClient):
             retry_count = 0
             last_error = None
             last_output = None
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while retry_count < self.MAX_RETRIES:
                 try:
-                    response = await self._generate_response(
+                    response, input_tokens, output_tokens = await self._generate_response(
                         messages=messages,
                         response_model=response_model,
                         max_tokens=max_tokens,
                         model_size=model_size,
                     )
+                    total_input_tokens += input_tokens
+                    total_output_tokens += output_tokens
+
+                    # Record token usage
+                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
+
                     last_output = (
                         response.get('content')
                         if isinstance(response, dict) and 'content' in response
@@ -424,14 +432,11 @@ class GeminiClient(LLMClient):
                     last_error = e
 
                     # Check if this is a safety block - these typically shouldn't be retried
-                    error_text = str(e) or (
-                        str(e.__cause__) if e.__cause__ else '')
+                    error_text = str(e) or (str(e.__cause__) if e.__cause__ else '')
                     if 'safety' in error_text.lower() or 'blocked' in error_text.lower():
-                        logger.warning(
-                            f'Content blocked by safety filters: {e}')
+                        logger.warning(f'Content blocked by safety filters: {e}')
                         span.set_status('error', str(e))
-                        raise Exception(
-                            f'Content blocked by safety filters: {e}') from e
+                        raise Exception(f'Content blocked by safety filters: {e}') from e
 
                     retry_count += 1
 
@@ -452,10 +457,8 @@ class GeminiClient(LLMClient):
 
             # If we exit the loop without returning, all retries are exhausted
             logger.error('🦀 LLM generation failed and retries are exhausted.')
-            logger.error(self._get_failed_generation_log(
-                messages, last_output))
-            logger.error(
-                f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
+            logger.error(self._get_failed_generation_log(messages, last_output))
+            logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {last_error}')
             span.set_status('error', str(last_error))
             span.record_exception(last_error) if last_error else None
             raise last_error or Exception('Max retries exceeded')

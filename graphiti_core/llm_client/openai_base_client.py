@@ -113,21 +113,44 @@ class BaseOpenAIClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
-    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
-        """Handle structured response parsing and validation."""
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
+        """Handle structured response parsing and validation.
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens)
+        """
         response_object = response.output_text
 
-        if response_object:
-            return json.loads(response_object)
-        elif response_object.refusal:
-            raise RefusalError(response_object.refusal)
-        else:
-            raise Exception(f'Invalid response from LLM: {response_object.model_dump()}')
+        # Extract token usage
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage') and response.usage:
+            input_tokens = getattr(response.usage, 'input_tokens', 0) or 0
+            output_tokens = getattr(response.usage, 'output_tokens', 0) or 0
 
-    def _handle_json_response(self, response: Any) -> dict[str, Any]:
-        """Handle JSON response parsing."""
+        if response_object:
+            return json.loads(response_object), input_tokens, output_tokens
+        elif hasattr(response, 'refusal') and response.refusal:
+            raise RefusalError(response.refusal)
+        else:
+            raise Exception(f'Invalid response from LLM: {response}')
+
+    def _handle_json_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
+        """Handle JSON response parsing.
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens)
+        """
         result = response.choices[0].message.content or '{}'
-        return json.loads(result)
+
+        # Extract token usage
+        input_tokens = 0
+        output_tokens = 0
+        if hasattr(response, 'usage') and response.usage:
+            input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
+            output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
+
+        return json.loads(result), input_tokens, output_tokens
 
     async def _generate_response(
         self,
@@ -135,8 +158,12 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, Any]:
-        """Generate a response using the appropriate client implementation."""
+    ) -> tuple[dict[str, Any], int, int]:
+        """Generate a response using the appropriate client implementation.
+
+        Returns:
+            tuple: (response_dict, input_tokens, output_tokens)
+        """
         openai_messages = self._convert_messages_to_openai_format(messages)
         model = self._get_model_for_size(model_size)
 
@@ -210,12 +237,20 @@ class BaseOpenAIClient(LLMClient):
 
             retry_count = 0
             last_error = None
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while retry_count <= self.MAX_RETRIES:
                 try:
-                    response = await self._generate_response(
+                    response, input_tokens, output_tokens = await self._generate_response(
                         messages, response_model, max_tokens, model_size
                     )
+                    total_input_tokens += input_tokens
+                    total_output_tokens += output_tokens
+
+                    # Record token usage
+                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
+
                     return response
                 except (RateLimitError, RefusalError):
                     # These errors should not trigger retries

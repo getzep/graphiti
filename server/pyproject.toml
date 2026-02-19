@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
-    "graphiti-core",
+    "graphiti-core>=0.28.1",
     "pydantic-settings>=2.4.0",
     "uvicorn>=0.30.6",
     "httpx>=0.28.1",
