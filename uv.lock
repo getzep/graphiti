@@ -642,27 +642,6 @@ wheels = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
-]
-
-[[package]]
-name = "diskcache-stubs"
-version = "5.6.3.6.20240818"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/d6/b741a916707520349a3853a3f436aaf5df6e06a2c1499636072b1b3ce45d/diskcache_stubs-5.6.3.6.20240818.tar.gz", hash = "sha256:b6eb43899e906b3167a20ac09a9a226f30267a306a96542ea720ebbfc3282796", size = 13524, upload-time = "2024-08-18T07:50:11.943Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/76/288d91c284ac1787f01c8260af5ea89dcfa6c0abc9acd601d01cf6f72f86/diskcache_stubs-5.6.3.6.20240818-py3-none-any.whl", hash = "sha256:e1db90940b344140730976abe79f57f5b43ca296cbb43fa95da0c69b12d5de4f", size = 18391, upload-time = "2024-08-18T07:50:10.723Z" },
-]
-
-[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -950,10 +929,9 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.27.1"
+version = "0.28.0"
 source = { editable = "." }
 dependencies = [
-    { name = "diskcache" },
     { name = "neo4j" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -971,7 +949,6 @@ anthropic = [
 dev = [
     { name = "anthropic" },
     { name = "boto3" },
-    { name = "diskcache-stubs" },
     { name = "falkordb" },
     { name = "google-genai" },
     { name = "groq" },
@@ -1033,8 +1010,6 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neo4j-opensearch'", specifier = ">=1.39.16" },
     { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
-    { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "diskcache-stubs", marker = "extra == 'dev'", specifier = ">=5.6.3.6.20240818" },
     { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
     { name = "falkordb", marker = "extra == 'falkordb'", specifier = ">=1.1.2,<2.0.0" },
     { name = "google-genai", marker = "extra == 'dev'", specifier = ">=1.8.0" },

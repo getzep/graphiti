@@ -21,12 +21,12 @@ import typing
 from abc import ABC, abstractmethod
 
 import httpx
-from diskcache import Cache
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
 from ..tracer import NoOpTracer, Tracer
+from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
 from .token_tracker import TokenUsageTracker
@@ -85,7 +85,7 @@ class LLMClient(ABC):
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
-            self.cache_dir = Cache(DEFAULT_CACHE_DIR)
+            self.cache_dir = LLMCache(DEFAULT_CACHE_DIR)
 
     def set_tracer(self, tracer: Tracer) -> None:
         """Set the tracer for this LLM client."""
