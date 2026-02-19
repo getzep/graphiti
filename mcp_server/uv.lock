@@ -500,15 +500,6 @@ wheels = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
-]
-
-[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -717,10 +708,9 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.28.0"
+version = "0.28.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "diskcache" },
     { name = "neo4j" },
     { name = "numpy" },
     { name = "openai" },
@@ -729,9 +719,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/64/0bf4e06266ac9927befcc577f178e3b4b6d7e46f4e2dbd6695b684d92764/graphiti_core-0.28.0.tar.gz", hash = "sha256:aa0b04a0424cf6d6b6eb6e1c0d1b00cc4a7fc3eaf78e775257c1c46c289607bc", size = 6828236, upload-time = "2026-02-17T20:24:20.505Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/37/16fbfe70ac27be1eaffc024d4ff6cde93fd69937129aac058e02d530dad4/graphiti_core-0.28.1.tar.gz", hash = "sha256:8ce03b9d4d6f513e816dda8df84212e3a7d8cbfee215b0d19ed1604215d4c8a3", size = 6829248, upload-time = "2026-02-19T15:10:29.283Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/3f/7e172be0bcd2d3a99cc31e0cfdfc5060c9b5588be47e2c5a5b6619e8bce2/graphiti_core-0.28.0-py3-none-any.whl", hash = "sha256:eef81fda34fab81eba484b1eb8c019606f144709cd43521da4cd15ac19bdd6cf", size = 310300, upload-time = "2026-02-17T20:24:18.962Z" },
+    { url = "https://files.pythonhosted.org/packages/03/38/30ee63b4b07691f500e392929224368e0df78fa9ec3f5e743bde48461ce2/graphiti_core-0.28.1-py3-none-any.whl", hash = "sha256:c437362e092dc34933070d54c69232892b72bba6fea9a02c964bd769d9281ea4", size = 311602, upload-time = "2026-02-19T15:10:27.304Z" },
 ]
 
 [package.optional-dependencies]
@@ -1172,7 +1162,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.49.0" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.62.0" },
-    { name = "graphiti-core", extras = ["falkordb"], specifier = "==0.28.0" },
+    { name = "graphiti-core", extras = ["falkordb"], specifier = "==0.28.1" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
     { name = "mcp", specifier = ">=1.9.4" },
     { name = "openai", specifier = ">=1.91.0" },
