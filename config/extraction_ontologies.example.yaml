@@ -1,0 +1,145 @@
+# extraction_ontologies.example.yaml
+#
+# Maps group_id → lane-specific extraction ontology.
+# Each lane defines:
+#   entity_types  — what kinds of entities to extract
+#   relationship_types — what edges connect those entities
+#   extraction_emphasis — free-text prompt guidance for the LLM extractor
+#
+# group_ids not listed here fall back to the default entity types
+# configured in your GraphitiConfig (graphiti.entity_types).
+#
+# Schema version: 1
+# Docs: docs/custom-ontologies.md
+
+schema_version: 1
+
+# ─────────────────────────────────────────────────────────────────────
+# Lane 1: Customer Support Tickets
+# ─────────────────────────────────────────────────────────────────────
+customer_support_tickets:
+  extraction_emphasis: >
+    Focus on extracting the customer's core problem, the product
+    features involved, resolution steps taken, and whether the issue
+    was resolved or escalated. Prioritize actionable patterns over
+    one-off complaints.
+
+  entity_types:
+    - name: CustomerIssue
+      description: >
+        A specific problem or complaint reported by a customer.
+        Extract the symptom, affected feature, and severity if stated.
+
+    - name: ProductFeature
+      description: >
+        A product capability, module, or component referenced in the ticket.
+
+    - name: ResolutionStep
+      description: >
+        An action taken by support staff to diagnose or fix the issue.
+
+    - name: Workaround
+      description: >
+        A temporary fix or alternative path suggested to the customer.
+
+  relationship_types:
+    - name: AFFECTS
+      description: "CustomerIssue → ProductFeature it impacts"
+
+    - name: RESOLVED_BY
+      description: "CustomerIssue → ResolutionStep that fixed it"
+
+    - name: WORKED_AROUND_BY
+      description: "CustomerIssue → Workaround applied"
+
+    - name: ESCALATED_TO
+      description: "CustomerIssue → team or tier it was escalated to"
+
+# ─────────────────────────────────────────────────────────────────────
+# Lane 2: Product Feedback
+# ─────────────────────────────────────────────────────────────────────
+product_feedback:
+  extraction_emphasis: >
+    Extract feature requests, usability observations, and sentiment
+    signals. Distinguish between explicit requests ("I want X") and
+    implicit needs ("I keep having to do Y manually"). Capture the
+    user persona or segment when identifiable.
+
+  entity_types:
+    - name: FeatureRequest
+      description: >
+        A specific capability or improvement the user wants.
+
+    - name: UsabilityObservation
+      description: >
+        A friction point, confusion, or delight moment in the user experience.
+
+    - name: UserPersona
+      description: >
+        The type of user providing feedback (e.g., power user, new user,
+        admin). Extract only when identifiable from context.
+
+    - name: CompetitorMention
+      description: >
+        A reference to a competing product or alternative tool.
+
+  relationship_types:
+    - name: REQUESTED_BY
+      description: "FeatureRequest → UserPersona who asked for it"
+
+    - name: OBSERVED_IN
+      description: "UsabilityObservation → product area where it occurred"
+
+    - name: COMPARED_TO
+      description: "ProductFeature → CompetitorMention"
+
+    - name: BLOCKED_BY
+      description: "FeatureRequest → existing limitation or dependency"
+
+# ─────────────────────────────────────────────────────────────────────
+# Lane 3: Engineering Incidents
+# ─────────────────────────────────────────────────────────────────────
+engineering_incidents:
+  extraction_emphasis: >
+    Focus on root causes, blast radius, remediation steps, and
+    lessons learned. Extract specific tool/API behaviors that
+    contributed to the incident. Prioritize patterns that prevent
+    recurrence over narrative details.
+
+  entity_types:
+    - name: IncidentReport
+      description: >
+        A production incident or outage event, including severity and duration.
+
+    - name: RootCause
+      description: >
+        The underlying technical reason the incident occurred.
+
+    - name: RemediationStep
+      description: >
+        An action taken to resolve the incident or prevent recurrence.
+
+    - name: AffectedService
+      description: >
+        A service, component, or system impacted by the incident.
+
+    - name: ToolApiBehavior
+      description: >
+        A specific tool or API quirk that contributed to the incident
+        (e.g., unexpected return value, race condition, config gotcha).
+
+  relationship_types:
+    - name: CAUSED_BY
+      description: "IncidentReport → RootCause"
+
+    - name: FIXED_BY
+      description: "IncidentReport → RemediationStep"
+
+    - name: IMPACTED
+      description: "IncidentReport → AffectedService"
+
+    - name: PREVENTS
+      description: "RemediationStep → future IncidentReport pattern"
+
+    - name: CONTRIBUTED_TO
+      description: "ToolApiBehavior → IncidentReport"

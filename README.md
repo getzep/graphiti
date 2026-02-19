@@ -142,6 +142,7 @@ python3 scripts/delta_tool.py state-import -- \
 
 ## Docs index (fork-specific)
 
+- `docs/custom-ontologies.md` — defining per-lane extraction ontologies (custom entity types per `group_id`)
 - `docs/public/BOUNDARY-CONTRACT.md`
 - `docs/public/MIGRATION-SYNC-TOOLKIT.md`
 - `docs/public/RELEASE-CHECKLIST.md`
