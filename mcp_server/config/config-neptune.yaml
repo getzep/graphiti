@@ -1,43 +1,39 @@
-# Graphiti MCP Server Configuration
-# This file supports environment variable expansion using ${VAR_NAME} or ${VAR_NAME:default_value}
-#
-# IMPORTANT: Set SEMAPHORE_LIMIT environment variable to control episode processing concurrency
-# Default: 10 (suitable for OpenAI Tier 3, mid-tier Anthropic)
-# See README.md "Concurrency and LLM Provider 429 Rate Limit Errors" section for tuning guidance
+# Graphiti MCP Server Configuration for AWS Neptune
+# This configuration is optimized for AWS Neptune Database or Analytics
 
 server:
-  transport: "http"  # Options: stdio, sse (deprecated), http
+  transport: "http"  # HTTP transport (SSE is deprecated)
   host: "0.0.0.0"
   port: 8000
-  
+
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
+  model: "gpt-5-mini"
   max_tokens: 4096
-  
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     anthropic:
       api_key: ${ANTHROPIC_API_KEY}
       api_url: ${ANTHROPIC_API_URL:https://api.anthropic.com}
       max_retries: 3
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     groq:
       api_key: ${GROQ_API_KEY}
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
@@ -46,52 +42,69 @@ embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
   model: "text-embedding-3-small"
   dimensions: 1536
-  
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
-      
+
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
       api_url: ${AZURE_OPENAI_EMBEDDINGS_ENDPOINT}
       api_version: ${AZURE_OPENAI_API_VERSION:2024-10-21}
       deployment_name: ${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
       use_azure_ad: ${USE_AZURE_AD:false}
-      
+
     gemini:
       api_key: ${GOOGLE_API_KEY}
       project_id: ${GOOGLE_PROJECT_ID:}
       location: ${GOOGLE_LOCATION:us-central1}
-      
+
     voyage:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb, neptune
+  provider: "neptune"  # Using AWS Neptune for this configuration
 
   providers:
-    falkordb:
-      uri: ${FALKORDB_URI:redis://localhost:6379}
-      password: ${FALKORDB_PASSWORD:}
-      database: ${FALKORDB_DATABASE:default_db}
-
-    neo4j:
-      uri: ${NEO4J_URI:bolt://localhost:7687}
-      username: ${NEO4J_USER:neo4j}
-      password: ${NEO4J_PASSWORD}
-      database: ${NEO4J_DATABASE:neo4j}
-      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
-
     neptune:
+      # Neptune Graph Endpoint
+      # For Neptune Database: neptune-db://your-cluster.region.neptune.amazonaws.com
+      # For Neptune Analytics: neptune-graph://g-your-graph-id
       host: ${NEPTUNE_HOST:neptune-db://localhost}
+
+      # Amazon OpenSearch Serverless (AOSS) Endpoint for full-text search
+      # Required for hybrid search capabilities
+      # Example: your-collection.us-east-1.aoss.amazonaws.com
       aoss_host: ${AOSS_HOST}
+
+      # Neptune connection port (default: 8182 for Neptune Database)
       port: ${NEPTUNE_PORT:8182}
+
+      # AOSS connection port (default: 443 for HTTPS)
       aoss_port: ${AOSS_PORT:443}
+
+      # AWS Region (e.g., us-east-1, us-west-2)
+      # If not specified, will be detected from AWS CLI or instance metadata
       region: ${AWS_REGION:}
+
+      # AWS Credentials:
+      # Neptune uses the standard AWS credential chain:
+      # 1. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+      # 2. AWS credentials file (~/.aws/credentials)
+      # 3. AWS CLI configuration (aws configure)
+      # 4. IAM role (when running on EC2, ECS, Lambda, etc.)
+      #
+      # Configure credentials using one of these methods:
+      # - Run: aws configure
+      # - Set environment variables:
+      #   export AWS_ACCESS_KEY_ID="your-access-key"
+      #   export AWS_SECRET_ACCESS_KEY="your-secret-key"
+      #   export AWS_SESSION_TOKEN="your-session-token"  # Optional for temporary credentials
+      # - Use IAM role when running on AWS infrastructure
 
 graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}

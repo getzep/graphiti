@@ -191,11 +191,62 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class NeptuneProviderConfig(BaseModel):
+    """Neptune provider configuration."""
+
+    host: str = 'neptune-db://localhost'
+    aoss_host: str | None = None
+    port: int = Field(default=8182, ge=1, le=65535)
+    aoss_port: int = Field(default=443, ge=1, le=65535)
+    region: str | None = None
+
+    def model_post_init(self, __context) -> None:
+        """Validate and normalize Neptune-specific requirements."""
+        # Auto-detect and add protocol if missing
+        if not self.host.startswith(
+            ('neptune-db://', 'neptune-graph://', 'bolt://', 'http://', 'https://')
+        ):
+            # Check if it looks like a Neptune Analytics graph ID (starts with 'g-')
+            if self.host.startswith('g-'):
+                self.host = f'neptune-graph://{self.host}'
+            # Check if it contains 'neptune.amazonaws.com' (Neptune Database cluster)
+            elif 'neptune.amazonaws.com' in self.host:
+                self.host = f'neptune-db://{self.host}'
+            # Otherwise default to Neptune Database protocol
+            else:
+                self.host = f'neptune-db://{self.host}'
+
+        # Validate protocol is correct
+        if not self.host.startswith(('neptune-db://', 'neptune-graph://')):
+            raise ValueError(
+                'Neptune host must start with neptune-db:// or neptune-graph://\n'
+                'Examples:\n'
+                '  - Database: neptune-db://my-cluster.us-east-1.neptune.amazonaws.com\n'
+                '  - Analytics: neptune-graph://g-abc123xyz'
+            )
+
+        if not self.aoss_host:
+            raise ValueError(
+                'Neptune requires aoss_host for full-text search.\n'
+                'Set AOSS_HOST environment variable or add to config:\n'
+                '  database:\n'
+                '    providers:\n'
+                '      neptune:\n'
+                '        aoss_host: "your-aoss-endpoint.us-east-1.aoss.amazonaws.com"\n'
+                'Note: Provide hostname only, without https:// prefix'
+            )
+
+        # Strip protocol prefix from aoss_host if present (OpenSearch expects just the hostname)
+        if self.aoss_host.startswith(('https://', 'http://')):
+            self.aoss_host = self.aoss_host.replace('https://', '').replace('http://', '')
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    neptune: NeptuneProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):
