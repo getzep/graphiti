@@ -225,10 +225,10 @@ For the full sync procedure, see [Upstream Sync Runbook](docs/runbooks/upstream-
 - [Runtime Pack Overlay](docs/runbooks/runtime-pack-overlay.md) — how private packs map to agents
 
 ### Operations
+- [Sessions Ingestion](docs/runbooks/sessions-ingestion.md) — architecture, batch & steady-state config, high-throughput tuning, sub-chunking, post-processing, troubleshooting
+- [Adding Data Sources](docs/runbooks/adding-data-sources.md) — onboarding new content: group_id, ontology design, adapter patterns, cron setup
 - [Upstream Sync Runbook](docs/runbooks/upstream-sync-openclaw.md)
 - [State Migration Runbook](docs/runbooks/state-migration.md)
-- [High-Throughput Extraction](docs/runbooks/high-throughput-extraction.md)
-- [Sessions Sub-Chunking](docs/runbooks/sessions-subchunking.md)
 - [Publicization & Backup](docs/runbooks/publicization-backup-cutover.md)
 
 ### Technical Contracts
