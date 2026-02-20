@@ -48,28 +48,64 @@ This fork solves these problems by adding three layers on top of Graphiti's grap
 
 ### The Fact Ledger (Canonical Truth)
 
-The graph database is **not** the source of truth. The **Fact Ledger** is — an append-only log that records every promotion, supersession, and invalidation with full provenance. The graph and markdown exports are both derived and rebuildable from the ledger.
+The graph database is **not** the source of truth. The **Fact Ledger** is — an append-only, hash-chained log that records every promotion, supersession, and invalidation with full provenance. The graph and markdown exports are both derived and rebuildable from the ledger.
 
-This means you can audit every fact back to its source evidence, replay history, or roll back to any prior state.
+Each domain has its own ledger:
+- **Personal truth** (`state/fact_ledger.db`) — preferences, identity, relationships, style
+- **Engineering learnings** (`state/fact_ledger_engineering.db`) — tool behaviors, failure patterns, architecture decisions
+- **Operational learnings** (`state/fact_ledger_learning.db`) — self-audit findings, preference misses
+
+Facts enter via a quarantine queue (`candidates.db`) and must pass through a **Promotion Policy** before being written to the ledger. This means you can audit every fact back to its source evidence, replay history, or roll back to any prior state.
 
 ### Promotion Policy (Truth Firewall)
 
 Not everything ingested becomes truth. The Promotion Policy governs how candidate facts move from "observed" to "promoted":
 
-- **Trust boundary:** Only owner-authored evidence is eligible for auto-promotion.
+- **Trust boundary:** Only owner-authored evidence is eligible for auto-promotion. Non-owner content can create entities but facts stay quarantined.
 - **Assertion gating:** Questions, hypotheticals, and quotes are blocked. Only decisions, preferences, and factual assertions can promote.
 - **Risk tiers:** Low-risk facts (preferences) can auto-promote at high confidence (>0.90). Medium and high-risk facts require human approval.
 - **Conflict detection:** Contradictions are flagged. The system never silently overwrites existing truth.
 - **Corroboration:** Independent evidence from multiple sources carries more weight than repeated mentions from the same source. Same-lineage evidence (e.g., a curated summary derived from a session) gets bounded boost caps to prevent confidence inflation.
 
+### Candidate Generation Policy
+
+Not all graph groups generate promotion candidates. Groups are classified by their role in the truth pipeline:
+
+| Role | Groups | Behavior |
+|---|---|---|
+| **Candidate-generating** | Sessions, ChatGPT history, curated refs, bootstrap memory | RELATES_TO edges from anchor entities (owner, agent, org) are imported into `candidates.db` for promotion evaluation |
+| **Corroboration-only** | Content packs (inspiration, writing samples, content strategy) | Provide Lane B evidence for boosting candidate confidence. Never generate their own candidates. Custom ontologies extract craft patterns (RhetoricalMove, HookPattern), not personal facts. |
+| **Separate domain** | Engineering learnings, self-audit | Have their own ledger pipelines with dedicated ingest scripts. Different trust semantics and consumer profiles. |
+
+### Trust-Aware Retrieval
+
+Promotion status feeds back into retrieval quality. Entities and relationships in the graph carry an optional `trust_score` property that biases search result ranking:
+
+| Status | `trust_score` | Effect |
+|---|---|---|
+| Promoted core truth (in fact ledger) | 1.0 | Strongest boost — surfaces verified facts when relevance is comparable |
+| Corroborated candidate (multiple independent sources) | 0.6 | Moderate boost — rewards evidence convergence |
+| Standard candidate (single source) | 0.25 | Minimal boost — "we've seen this" signal |
+| Not in candidates pipeline | NULL | **Neutral baseline — no boost, no penalty.** Content packs, engineering entities, and other non-candidate nodes rank purely on relevance. |
+
+The boost is **post-RRF additive**: `final_score = rrf_score + (trust_score × trust_weight)`. Default `trust_weight` is 0.15, configurable via `GRAPHITI_TRUST_WEIGHT` env var. Setting it to 0 disables trust boosting entirely (identical to vanilla RRF).
+
+For implementation details, see [Retrieval Trust Scoring](docs/retrieval-trust-scoring.md).
+
 ### Dual-Lane Retrieval
 
 Memory retrieval and fact verification are separate concerns:
 
-- **Lane A (Runtime Retrieval):** Fast graph queries to answer user requests in real-time. Sources: sessions, curated references, ChatGPT history (query-gated).
+- **Lane A (Runtime Retrieval):** Fast graph queries to answer user requests in real-time. Sources: sessions, curated references, ChatGPT history (query-gated). Trust-boosted reranking surfaces promoted facts.
 - **Lane B (Corroboration):** Background verification that checks new candidate facts against the ledger and historical evidence before promotion. Sources: everything including derived memory logs.
 
 The lanes never cross: runtime retrieval is never used for promotion decisions, and corroboration is never used for real-time answers.
+
+### Content & Workflow Pack Injection
+
+Content and workflow packs inject **parallel** to normal retrieval, not through it. The OpenClaw Pack Injector plugin fires on `before_agent_start`, detects intent, resolves which packs to load, and injects assembled context as `<pack-context>` blocks into the agent's prompt. Normal retrieval (agent-initiated MCP search) still runs separately.
+
+Pack retrieval queries the same MCP search endpoints, but since content pack entities have NULL `trust_score`, trust boosting has zero effect on pack results — they rank purely on relevance. This is correct by design: content packs should surface the most relevant craft patterns, not filter by personal truth approval status.
 
 ### Graph Lanes & Custom Ontologies
 
@@ -221,6 +257,7 @@ For the full sync procedure, see [Upstream Sync Runbook](docs/runbooks/upstream-
 
 ### Architecture & Concepts
 - [Custom Ontologies](docs/custom-ontologies.md) — defining per-lane extraction entity types
+- [Retrieval Trust Scoring](docs/retrieval-trust-scoring.md) — how promoted/corroborated facts boost search ranking
 - [Memory Runtime Wiring](docs/MEMORY-RUNTIME-WIRING.md) — Graphiti-primary retrieval + QMD failover contract
 - [Runtime Pack Overlay](docs/runbooks/runtime-pack-overlay.md) — how private packs map to agents
 
