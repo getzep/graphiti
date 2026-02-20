@@ -54,12 +54,14 @@ from graphiti_core.search.search_utils import (
     get_embeddings_for_communities,
     get_embeddings_for_edges,
     get_embeddings_for_nodes,
+    load_trust_scores,
     maximal_marginal_relevance,
     node_bfs_search,
     node_distance_reranker,
     node_fulltext_search,
     node_similarity_search,
     rrf,
+    rrf_with_trust_boost,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,6 +130,7 @@ async def search(
             bfs_origin_node_uuids,
             config.limit,
             config.reranker_min_score,
+            config.trust_weight,
         ),
         node_search(
             driver,
@@ -141,6 +144,7 @@ async def search(
             bfs_origin_node_uuids,
             config.limit,
             config.reranker_min_score,
+            config.trust_weight,
         ),
         episode_search(
             driver,
@@ -195,6 +199,7 @@ async def edge_search(
     bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
+    trust_weight: float = 0.0,
 ) -> tuple[list[EntityEdge], list[float]]:
     if config is None:
         return [], []
@@ -255,7 +260,18 @@ async def edge_search(
     if config.reranker == EdgeReranker.rrf or config.reranker == EdgeReranker.episode_mentions:
         search_result_uuids = [[edge.uuid for edge in result] for result in search_results]
 
-        reranked_uuids, edge_scores = rrf(search_result_uuids, min_score=reranker_min_score)
+        if trust_weight > 0 and config.reranker == EdgeReranker.rrf:
+            # RRF with additive trust boost
+            all_uuids = list({uuid for result in search_result_uuids for uuid in result})
+            trust_scores = await load_trust_scores(driver, all_uuids, node_type='RELATES_TO')
+            reranked_uuids, edge_scores = rrf_with_trust_boost(
+                search_result_uuids,
+                trust_scores,
+                trust_weight=trust_weight,
+                min_score=reranker_min_score,
+            )
+        else:
+            reranked_uuids, edge_scores = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == EdgeReranker.mmr:
         search_result_uuids_and_vectors = await get_embeddings_for_edges(
             driver, list(edge_uuid_map.values())
@@ -318,6 +334,7 @@ async def node_search(
     bfs_origin_node_uuids: list[str] | None = None,
     limit=DEFAULT_SEARCH_LIMIT,
     reranker_min_score: float = 0,
+    trust_weight: float = 0.0,
 ) -> tuple[list[EntityNode], list[float]]:
     if config is None:
         return [], []
@@ -375,7 +392,18 @@ async def node_search(
     reranked_uuids: list[str] = []
     node_scores: list[float] = []
     if config.reranker == NodeReranker.rrf:
-        reranked_uuids, node_scores = rrf(search_result_uuids, min_score=reranker_min_score)
+        if trust_weight > 0:
+            # RRF with additive trust boost
+            all_uuids = list({uuid for result in search_result_uuids for uuid in result})
+            trust_scores = await load_trust_scores(driver, all_uuids, node_type='Entity')
+            reranked_uuids, node_scores = rrf_with_trust_boost(
+                search_result_uuids,
+                trust_scores,
+                trust_weight=trust_weight,
+                min_score=reranker_min_score,
+            )
+        else:
+            reranked_uuids, node_scores = rrf(search_result_uuids, min_score=reranker_min_score)
     elif config.reranker == NodeReranker.mmr:
         search_result_uuids_and_vectors = await get_embeddings_for_nodes(
             driver, list(node_uuid_map.values())

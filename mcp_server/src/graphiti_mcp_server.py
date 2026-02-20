@@ -33,7 +33,6 @@ from models.response_types import (
     SuccessResponse,
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
-from services.ontology_registry import OntologyRegistry
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
@@ -75,6 +74,13 @@ else:
 #
 # DEFAULT: 10 (suitable for OpenAI Tier 3, mid-tier Anthropic)
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
+
+# Trust-aware retrieval: additive boost for facts with trust_score property.
+# Set to 0.0 to disable trust boosting entirely (identical to vanilla RRF).
+try:
+    TRUST_WEIGHT = float(os.environ.get('GRAPHITI_TRUST_WEIGHT', '0.0'))
+except (ValueError, TypeError):
+    TRUST_WEIGHT = 0.0
 
 
 # Configure structured logging with timestamps
@@ -513,12 +519,13 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
-        # Use the search_ method with node search config
+        # Use the search_ method with node search config (trust-aware)
         from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
+        search_config = NODE_HYBRID_SEARCH_RRF.model_copy(update={'trust_weight': TRUST_WEIGHT})
         results = await client.search_(
             query=query,
-            config=NODE_HYBRID_SEARCH_RRF,
+            config=search_config,
             group_ids=effective_group_ids,
             search_filter=search_filters,
         )
@@ -594,12 +601,29 @@ async def search_memory_facts(
         primary_group = effective_group_ids[0] if effective_group_ids else config.graphiti.group_id
         client = await graphiti_service.get_client_for_group(primary_group)
 
-        relevant_edges = await client.search(
-            group_ids=effective_group_ids,
+        # Use search_ with trust-aware config for trust-boosted retrieval
+        from graphiti_core.search.search_config_recipes import (
+            EDGE_HYBRID_SEARCH_NODE_DISTANCE,
+            EDGE_HYBRID_SEARCH_RRF,
+        )
+
+        base_config = (
+            EDGE_HYBRID_SEARCH_RRF
+            if center_node_uuid is None
+            else EDGE_HYBRID_SEARCH_NODE_DISTANCE
+        )
+        search_config = base_config.model_copy(
+            update={'limit': max_facts, 'trust_weight': TRUST_WEIGHT}
+        )
+
+        results = await client.search_(
             query=query,
-            num_results=max_facts,
+            config=search_config,
+            group_ids=effective_group_ids,
             center_node_uuid=center_node_uuid,
         )
+
+        relevant_edges = results.edges[:max_facts] if results.edges else []
 
         if not relevant_edges:
             return FactSearchResponse(message='No relevant facts found', facts=[])

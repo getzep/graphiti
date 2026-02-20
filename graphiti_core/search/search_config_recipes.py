@@ -221,3 +221,20 @@ COMMUNITY_HYBRID_SEARCH_CROSS_ENCODER = SearchConfig(
     ),
     limit=3,
 )
+
+# Trust-boosted hybrid search recipes
+EDGE_HYBRID_SEARCH_RRF_TRUST = SearchConfig(
+    edge_config=EdgeSearchConfig(
+        search_methods=[EdgeSearchMethod.bm25, EdgeSearchMethod.cosine_similarity],
+        reranker=EdgeReranker.rrf,
+    ),
+    trust_weight=0.15,
+)
+
+NODE_HYBRID_SEARCH_RRF_TRUST = SearchConfig(
+    node_config=NodeSearchConfig(
+        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+        reranker=NodeReranker.rrf,
+    ),
+    trust_weight=0.15,
+)

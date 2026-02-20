@@ -116,6 +116,9 @@ class SearchConfig(BaseModel):
     community_config: CommunitySearchConfig | None = Field(default=None)
     limit: int = Field(default=DEFAULT_SEARCH_LIMIT)
     reranker_min_score: float = Field(default=0)
+    trust_weight: float = Field(
+        default=0.0
+    )  # Additive trust boost multiplier. 0.0 = disabled (backwards compat).
 
 
 class SearchResults(BaseModel):

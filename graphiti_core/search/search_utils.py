@@ -1792,6 +1792,81 @@ def rrf(
     ]
 
 
+def rrf_with_trust_boost(
+    results: list[list[str]],
+    trust_scores: dict[str, float],
+    rank_const: int = 1,
+    trust_weight: float = 0.0,
+    min_score: float = 0,
+) -> tuple[list[str], list[float]]:
+    """RRF reranking with additive trust score boost.
+
+    Computes standard RRF scores, then adds trust_score * trust_weight
+    for each result. Results with no trust_score entry get +0.0 (neutral).
+
+    Args:
+        results: List of ranked UUID lists from each search method
+        trust_scores: Mapping of UUID -> trust_score (0.0-1.0).
+                      Missing UUIDs treated as 0.0 (no boost, no penalty).
+        rank_const: RRF constant (default 1, matching Graphiti's default)
+        trust_weight: Multiplier for trust boost (default 0.15).
+                      Set to 0.0 to disable trust boosting entirely.
+        min_score: Minimum final score threshold
+
+    Returns:
+        Tuple of (sorted UUIDs, sorted scores) with trust boost applied
+    """
+    # Step 1: Standard RRF
+    uuids, rrf_scores = rrf(results, rank_const, min_score=0)
+
+    # Step 2: Apply trust boost
+    boosted: list[tuple[str, float]] = []
+    for uuid, score in zip(uuids, rrf_scores, strict=True):
+        trust = trust_scores.get(uuid, 0.0)
+        final = score + (trust * trust_weight)
+        boosted.append((uuid, final))
+
+    # Step 3: Re-sort by boosted score
+    boosted.sort(key=lambda x: x[1], reverse=True)
+
+    return (
+        [u for u, s in boosted if s >= min_score],
+        [s for _, s in boosted if s >= min_score],
+    )
+
+
+async def load_trust_scores(
+    driver: GraphDriver,
+    uuids: list[str],
+    node_type: str = 'Entity',
+) -> dict[str, float]:
+    """Batch-load trust_score property for a list of UUIDs.
+
+    Returns dict mapping UUID -> trust_score. UUIDs without
+    a trust_score property are omitted (caller treats missing as 0.0).
+    """
+    if not uuids:
+        return {}
+
+    if node_type == 'Entity':
+        query = """
+        UNWIND $uuids AS uuid
+        MATCH (n:Entity {uuid: uuid})
+        WHERE n.trust_score IS NOT NULL
+        RETURN n.uuid AS uuid, n.trust_score AS trust_score
+        """
+    else:  # RELATES_TO edge
+        query = """
+        UNWIND $uuids AS uuid
+        MATCH ()-[r:RELATES_TO {uuid: uuid}]->()
+        WHERE r.trust_score IS NOT NULL
+        RETURN r.uuid AS uuid, r.trust_score AS trust_score
+        """
+
+    records, _, _ = await driver.execute_query(query, uuids=uuids)
+    return {r['uuid']: float(r['trust_score']) for r in records}
+
+
 async def node_distance_reranker(
     driver: GraphDriver,
     node_uuids: list[str],
