@@ -1,54 +1,45 @@
 #!/usr/bin/env python3
-"""Delete misplaced episodic nodes across all FalkorDB graphs.
+"""Delete misplaced episodic nodes across all graphs.
 
 A node is misplaced if it lives in graph G but has group_id != G.
 Always run --dry-run first to inspect what would be deleted.
+
+On Neo4j (single DB) misplacements cannot occur — the script reports zero and exits.
+
+Supports both Neo4j and FalkorDB via --backend flag.
 
 Usage:
   python3 scripts/cleanup_misplacements_all_graphs.py --dry-run
   python3 scripts/cleanup_misplacements_all_graphs.py
   python3 scripts/cleanup_misplacements_all_graphs.py --only-prefix s1_content
+  python3 scripts/cleanup_misplacements_all_graphs.py --backend falkordb --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import re
-import subprocess
 
-REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
-REDIS_PORT = "6379"
-SUBPROCESS_TIMEOUT = 30
-SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
-
-
-def _cypher(graph: str, query: str) -> str:
-    if not SAFE_NAME_RE.match(graph):
-        raise ValueError(f"unsafe graph name: {graph!r}")
-    return subprocess.check_output(
-        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.QUERY", graph, query],
-        text=True, timeout=SUBPROCESS_TIMEOUT,
-    )
-
-
-def _count(output: str) -> int:
-    for line in output.splitlines()[1:]:
-        if line.strip().isdigit():
-            return int(line.strip())
-    return 0
+from graph_cli import SAFE_NAME_RE, list_graphs, parse_count, run_cypher
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Delete misplaced episodes from all graphs")
+    ap.add_argument("--backend", choices=["neo4j", "falkordb"], default="neo4j",
+                    help="graph database backend (default: neo4j)")
     ap.add_argument("--dry-run", action="store_true", help="show what would be deleted")
     ap.add_argument("--only-prefix", default="", help="filter graphs by name prefix")
     args = ap.parse_args()
 
-    raw = subprocess.check_output(
-        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.LIST"],
-        text=True, timeout=SUBPROCESS_TIMEOUT)
-    graphs = [x.strip() for x in raw.splitlines() if x.strip() and SAFE_NAME_RE.match(x.strip())]
+    backend = args.backend
+
+    if backend == "neo4j":
+        # Neo4j uses a single database — nodes are scoped by group_id, so
+        # cross-graph misplacement cannot occur.  Nothing to clean up.
+        print("backend=neo4j — single DB, misplacement N/A")
+        print("\ngraphs_touched=0  total_misplaced=0")
+        return
+
+    graphs = list_graphs(backend)
 
     if args.only_prefix:
         if not SAFE_NAME_RE.match(args.only_prefix):
@@ -57,17 +48,19 @@ def main() -> None:
 
     total = touched = 0
     for g in graphs:
-        bad = _count(_cypher(
-            g, f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' RETURN count(e)"))
-        if bad <= 0:
+        bad = parse_count(run_cypher(
+            backend, g,
+            f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' RETURN count(e)"))
+        if bad is None or bad <= 0:
             continue
         touched += 1
         total += bad
         label = "(would delete)" if args.dry_run else "(deleted)"
         print(f"{g}: {bad} misplaced {label}")
         if not args.dry_run:
-            out = _cypher(
-                g, f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' DETACH DELETE e")
+            out = run_cypher(
+                backend, g,
+                f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' DETACH DELETE e")
             for line in out.splitlines():
                 if "deleted" in line.lower():
                     print(f"  {line.strip()}")

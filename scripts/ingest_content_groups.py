@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Strict sequential content-group ingestion into Graphiti MCP.
 
-Processes one group at a time: enqueue → drain → assert → next.
+Processes one group at a time: enqueue -> drain -> assert -> next.
 Stops on excessive cross-contamination or extraction stall.
+
+Supports both Neo4j and FalkorDB via --backend flag.
 
 Usage:
   python3 scripts/ingest_content_groups.py --dry-run
@@ -10,6 +12,7 @@ Usage:
   python3 scripts/ingest_content_groups.py --groups s1_content_strategy
   python3 scripts/ingest_content_groups.py --force   # skip dedup
   python3 scripts/ingest_content_groups.py --evidence-dir /path/to/evidence
+  python3 scripts/ingest_content_groups.py --backend falkordb
 """
 
 from __future__ import annotations
@@ -25,20 +28,17 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from graph_cli import SAFE_NAME_RE, parse_count, run_cypher
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
 MCP_URL = os.environ.get("MCP_URL", "http://localhost:8000/mcp")
-REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
-REDIS_PORT = "6379"
 MCP_LOG = Path(os.environ.get("MCP_LOG", "/Users/archibald/clawd/tools/falkordb/logs/graphiti-mcp-stderr.log"))
-SUBPROCESS_TIMEOUT = 30  # seconds for redis-cli calls
+SUBPROCESS_TIMEOUT = 30  # seconds for DB CLI calls
 
-# Allowlist pattern for graph/group names (prevents Cypher injection)
-SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
-
-CONTENT_GROUPS = [  # smallest first — fast feedback, catch problems early
+CONTENT_GROUPS = [  # smallest first -- fast feedback, catch problems early
     "s1_content_strategy",
     "s1_writing_samples",
     "s1_inspiration_short_form",
@@ -60,6 +60,9 @@ GROUP_EVIDENCE_FILES = {
     "s1_inspiration_short_form": "inspiration_short_form_v1.json",
     "s1_inspiration_long_form": "inspiration_long_form_v1.json",
 }
+
+# Module-level backend, set in main() before any queries run.
+_backend: str = "neo4j"
 
 
 # ---------------------------------------------------------------------------
@@ -86,37 +89,27 @@ def _validate_evidence_dir(p: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# FalkorDB helpers
+# DB helpers (delegate to graph_cli)
 # ---------------------------------------------------------------------------
 
 def _cypher(graph: str, query: str) -> str:
-    """Run a Cypher query against a FalkorDB graph via redis-cli."""
+    """Run a Cypher query against the configured backend."""
     _validate_name(graph)
-    return subprocess.check_output(
-        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.QUERY", graph, query],
-        text=True, timeout=SUBPROCESS_TIMEOUT,
-    )
+    return run_cypher(_backend, graph, query, timeout=SUBPROCESS_TIMEOUT)
 
 
 def _count(output: str) -> int:
-    """Parse a single-row integer result from GRAPH.QUERY output.
-
-    Redis-cli output for `RETURN count(e)` looks like:
-        count(e)
-        42
-        ...stats lines...
-    We grab the first purely-numeric non-header line.
-    """
-    lines = output.splitlines()
-    for line in lines[1:]:  # skip header row
-        s = line.strip()
-        if s.isdigit():
-            return int(s)
-    return 0
+    """Parse a single-row integer result from query output. Returns 0 on parse failure."""
+    result = parse_count(output)
+    return result if result is not None else 0
 
 
 def correct_chunk_keys(group_id: str) -> set[str]:
-    """Chunk keys present in the right graph with matching group_id."""
+    """Chunk keys present with matching group_id.
+
+    The query already filters by group_id, so it works on both backends
+    (FalkorDB scopes by graph; Neo4j single-DB scopes by the WHERE clause).
+    """
     gid = _validate_name(group_id)
     out = _cypher(gid, f"MATCH (e:Episodic) WHERE e.group_id = '{gid}' RETURN e.source_description")
     keys: set[str] = set()
@@ -128,7 +121,12 @@ def correct_chunk_keys(group_id: str) -> set[str]:
 
 
 def misplaced_total(groups: list[str]) -> int:
-    """Count episodes sitting in the wrong graph across given groups."""
+    """Count episodes sitting in the wrong graph across given groups.
+
+    On Neo4j (single DB) cross-graph misplacement cannot occur, so return 0.
+    """
+    if _backend == "neo4j":
+        return 0
     total = 0
     for g in groups:
         gid = _validate_name(g)
@@ -202,14 +200,8 @@ def sanitize(text: str) -> str:
 def last_openai_ts() -> float:
     """Epoch of most recent OpenAI call in MCP logs (assumes UTC)."""
     try:
-        # Read tail of native MCP log file (or fall back to journalctl/docker)
-        if MCP_LOG.exists():
-            lines_raw = subprocess.check_output(
-                ["tail", "-200", str(MCP_LOG)], text=True, timeout=10).splitlines()
-        else:
-            # Fallback: try launchd stdout
-            lines_raw = subprocess.check_output(
-                ["tail", "-200", str(MCP_LOG)], text=True, timeout=10).splitlines()
+        lines_raw = subprocess.check_output(
+            ["tail", "-200", str(MCP_LOG)], text=True, timeout=10).splitlines()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return 0.0
     lines = [line for line in lines_raw if "api.openai.com" in line]
@@ -218,8 +210,6 @@ def last_openai_ts() -> float:
     m = re.match(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})", lines[-1])
     if not m:
         return 0.0
-    # MCP logs are written in local time (launchd), so interpret the timestamp
-    # in the local timezone to avoid false "OpenAI quiet" stall detection.
     local_tz = datetime.now().astimezone().tzinfo or timezone.utc
     return datetime.fromisoformat(f"{m.group(1)} {m.group(2)}").replace(
         tzinfo=local_tz).timestamp()
@@ -227,11 +217,11 @@ def last_openai_ts() -> float:
 
 def load_evidence(group_id: str, evidence_dir: Path) -> dict[str, dict]:
     if group_id not in GROUP_EVIDENCE_FILES:
-        log(f"  ⚠ unknown group {group_id!r} — known: {list(GROUP_EVIDENCE_FILES)}")
+        log(f"  \u26a0 unknown group {group_id!r} \u2014 known: {list(GROUP_EVIDENCE_FILES)}")
         return {}
     path = evidence_dir / GROUP_EVIDENCE_FILES[group_id]
     if not path.exists():
-        log(f"  ⚠ evidence file not found: {path}")
+        log(f"  \u26a0 evidence file not found: {path}")
         return {}
     return {e["chunk_key"]: e for e in json.loads(path.read_text()) if e.get("chunk_key")}
 
@@ -254,10 +244,10 @@ def wait_for_drain(
         log(f"    {current}/{expected} ({elapsed}s)")
 
         if current >= expected:
-            log("  ✅ drain complete")
+            log("  \u2705 drain complete")
             return True
         if time.time() - start > max_wait_s:
-            log(f"  ⏰ timeout after {max_wait_s}s")
+            log(f"  \u23f0 timeout after {max_wait_s}s")
             return False
 
         stable = stable + 1 if current == prev else 0
@@ -294,7 +284,7 @@ def process_group(
     log(f"  expected={len(evidence)} correct={len(present)} to_queue={len(to_queue)}")
 
     if not to_queue:
-        log("  nothing to queue ✓")
+        log("  nothing to queue \u2713")
         return {"group": group_id, "queued": 0, "errors": 0, "drained": True}
 
     before = misplaced_total(CONTENT_GROUPS)
@@ -311,13 +301,13 @@ def process_group(
             if "error" in res:
                 err += 1
                 if err <= 3:
-                    log(f"  ⚠ {ck}: {json.dumps(res.get('error', ''))[:200]}")
+                    log(f"  \u26a0 {ck}: {json.dumps(res.get('error', ''))[:200]}")
             else:
                 ok += 1
         except Exception as ex:
             err += 1
             if err <= 3:
-                log(f"  ⚠ {ck}: {ex}")
+                log(f"  \u26a0 {ck}: {ex}")
         if i <= 3 or i == len(to_queue) or i % 25 == 0:
             log(f"  [{i}/{len(to_queue)}] {ck}")
         time.sleep(sleep_s)
@@ -327,7 +317,7 @@ def process_group(
     growth = misplaced_total(CONTENT_GROUPS) - before
     log(f"  misplacement_growth={growth}")
     if growth > max_misplace_growth:
-        log(f"  ❌ growth {growth} > threshold {max_misplace_growth}, stopping")
+        log(f"  \u274c growth {growth} > threshold {max_misplace_growth}, stopping")
         return {"group": group_id, "queued": ok, "errors": err, "drained": False}
 
     drained = wait_for_drain(
@@ -341,7 +331,11 @@ def process_group(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    global _backend
+
     ap = argparse.ArgumentParser(description="Strict sequential content-group ingestion")
+    ap.add_argument("--backend", choices=["neo4j", "falkordb"], default="neo4j",
+                    help="graph database backend (default: neo4j)")
     ap.add_argument("--groups", default=",".join(CONTENT_GROUPS))
     ap.add_argument("--evidence-dir", type=Path, default=DEFAULT_EVIDENCE_DIR)
     ap.add_argument("--sleep", type=float, default=2.0, help="seconds between enqueue calls")
@@ -354,6 +348,8 @@ def main() -> None:
     ap.add_argument("--mcp-url", default=MCP_URL, help="MCP endpoint URL")
     args = ap.parse_args()
 
+    _backend = args.backend
+
     groups = [g.strip() for g in args.groups.split(",") if g.strip()]
 
     # Validate all group names upfront
@@ -363,7 +359,7 @@ def main() -> None:
     # Validate evidence dir resolves under allowed roots
     args.evidence_dir = _validate_evidence_dir(args.evidence_dir)
 
-    log(f"groups={groups} force={args.force} dry_run={args.dry_run}")
+    log(f"backend={_backend} groups={groups} force={args.force} dry_run={args.dry_run}")
 
     if args.dry_run:
         for gid in groups:
@@ -395,13 +391,13 @@ def main() -> None:
 
     log("\n== Summary ==")
     for r in results:
-        icon = "✅" if r["drained"] else "⏳"
+        icon = "\u2705" if r["drained"] else "\u23f3"
         log(f"  {icon} {r['group']}: queued={r['queued']} errors={r['errors']}")
 
     if any(not r["drained"] for r in results if r["queued"] > 0):
-        log("⚠ re-run to continue remaining groups")
+        log("\u26a0 re-run to continue remaining groups")
         sys.exit(1)
-    log("✅ all groups complete")
+    log("\u2705 all groups complete")
 
 
 if __name__ == "__main__":

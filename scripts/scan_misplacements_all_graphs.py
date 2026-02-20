@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Scan all FalkorDB graphs for misplaced episodic nodes.
+"""Scan all graphs for misplaced episodic nodes.
 
 A node is misplaced if it lives in graph G but has group_id != G.
 Outputs a JSON report and prints a summary table.
 
+On Neo4j (single DB) misplacements cannot occur — the script reports zero and exits.
+
+Supports both Neo4j and FalkorDB via --backend flag.
+
 Usage:
   python3 scripts/scan_misplacements_all_graphs.py
   python3 scripts/scan_misplacements_all_graphs.py -o /tmp/report.json
+  python3 scripts/scan_misplacements_all_graphs.py --backend falkordb
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
-import subprocess
 from pathlib import Path
 
-REDIS_CLI = os.environ.get("REDIS_CLI", "/opt/homebrew/opt/redis/bin/redis-cli")
-REDIS_PORT = "6379"
-SUBPROCESS_TIMEOUT = 30
-SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
+from graph_cli import list_graphs, parse_count, run_cypher
+
 SAFE_OUTPUT_ROOTS = [Path.cwd(), Path("_tmp").resolve(), Path("/tmp")]
 DEFAULT_OUT = Path("_tmp/misplacements_all_graphs.json")
 
@@ -38,39 +38,38 @@ def _validate_output_path(p: Path) -> Path:
     raise ValueError(f"output path {p} resolves outside allowed directories: {resolved}")
 
 
-def _cypher(graph: str, query: str) -> str:
-    if not SAFE_NAME_RE.match(graph):
-        raise ValueError(f"unsafe graph name: {graph!r}")
-    return subprocess.check_output(
-        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.QUERY", graph, query],
-        text=True, timeout=SUBPROCESS_TIMEOUT,
-    )
-
-
-def _count(output: str) -> int:
-    for line in output.splitlines()[1:]:
-        if line.strip().isdigit():
-            return int(line.strip())
-    return 0
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Scan all graphs for misplaced episodes")
+    ap.add_argument("--backend", choices=["neo4j", "falkordb"], default="neo4j",
+                    help="graph database backend (default: neo4j)")
     ap.add_argument("-o", "--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
 
-    raw = subprocess.check_output(
-        [REDIS_CLI, "-p", REDIS_PORT, "GRAPH.LIST"],
-        text=True, timeout=SUBPROCESS_TIMEOUT)
-    graphs = [x.strip() for x in raw.splitlines() if x.strip() and SAFE_NAME_RE.match(x.strip())]
+    backend = args.backend
+
+    if backend == "neo4j":
+        # Neo4j uses a single database — cross-graph misplacement cannot occur.
+        report = {"graphs_scanned": 0, "affected": 0, "total_misplaced": 0, "details": []}
+        out_path = _validate_output_path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report, indent=2))
+        print("backend=neo4j — single DB, misplacement N/A")
+        print(f"scanned=0  affected=0  total_misplaced=0  report={out_path}")
+        return
+
+    graphs = list_graphs(backend)
 
     rows = []
     for g in graphs:
-        total = _count(_cypher(g, "MATCH (e:Episodic) RETURN count(e)"))
-        if total == 0:
+        total = parse_count(run_cypher(
+            backend, g, "MATCH (e:Episodic) RETURN count(e)"))
+        if total is None or total == 0:
             continue
-        bad = _count(_cypher(
-            g, f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' RETURN count(e)"))
+        bad = parse_count(run_cypher(
+            backend, g,
+            f"MATCH (e:Episodic) WHERE e.group_id IS NOT NULL AND e.group_id <> '{g}' RETURN count(e)"))
+        if bad is None:
+            continue
         if bad > 0:
             rows.append({"graph": g, "episodes": total, "misplaced": bad})
 

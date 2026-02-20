@@ -13,6 +13,10 @@ Graphiti extraction speed and reliability at scale are bounded by three limits, 
 
 Each section below covers one limit: what it is, how to detect it, how to raise it safely.
 
+### Backend Recommendation
+
+**Neo4j is strongly recommended for high-throughput extraction.** FalkorDB's single-threaded write model saturates at low concurrency (~2 parallel pipelines), while Neo4j scales linearly with the M4 Pro's multi-core architecture. All scripts in `scripts/` support both backends via the `--backend neo4j|falkordb` flag (see `graph_cli.py`).
+
 ## 1. Database Concurrency Limits
 
 ### FalkorDB: MAX_QUEUED_QUERIES (legacy only)
@@ -119,6 +123,21 @@ Single-instance throughput is insufficient for a large backlog (roughly >500 epi
 
 ### Example: 3 instances for `my_graph` (Neo4j default)
 
+#### With Neo4j (recommended)
+
+```bash
+SEMAPHORE_LIMIT=20 GRAPHITI_GROUP_ID=my_graph \
+  python mcp_server/main.py --port 8001 --database-provider neo4j --group-id my_graph &
+
+SEMAPHORE_LIMIT=20 GRAPHITI_GROUP_ID=my_graph \
+  python mcp_server/main.py --port 8002 --database-provider neo4j --group-id my_graph &
+
+SEMAPHORE_LIMIT=20 GRAPHITI_GROUP_ID=my_graph \
+  python mcp_server/main.py --port 8003 --database-provider neo4j --group-id my_graph &
+```
+
+#### With FalkorDB
+
 ```bash
 SEMAPHORE_LIMIT=15 GRAPHITI_GROUP_ID=my_graph \
   NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=... \
@@ -172,6 +191,14 @@ min_MAX_QUEUED_QUERIES = total_concurrent_slots * 3
 
 ### Episode count (progress indicator)
 
+**Neo4j:**
+
+```bash
+cypher-shell -u neo4j "MATCH (e:Episodic) WHERE e.group_id = 'my_graph' RETURN count(e)"
+```
+
+**FalkorDB:**
+
 ```bash
 # Neo4j (default)
 cypher-shell -u neo4j -p "$NEO4J_PASSWORD" \
@@ -182,6 +209,12 @@ redis-cli -p 6379 GRAPH.QUERY <db> "MATCH (e:Episodic) RETURN count(e)"
 ```
 
 Replace `<group_id>` and `<db>` with your target lane.
+
+You can also use the backend-agnostic CLI:
+
+```bash
+python scripts/extraction_monitor.py --backend neo4j  # or --backend falkordb
+```
 
 ### FalkorDB queue pressure
 
