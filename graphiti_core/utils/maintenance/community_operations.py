@@ -37,6 +37,41 @@ async def get_community_clusters(
 
     community_clusters: list[list[EntityNode]] = []
 
+    # Fast path: use FalkorDB's native label-propagation algorithm
+    if driver.provider == GraphProvider.FALKORDB:
+        try:
+            records, _, _ = await driver.execute_query(
+                """
+                CALL algo.labelPropagation({nodeLabels: ['Entity']})
+                YIELD node, communityId
+                RETURN node.uuid AS uuid, communityId
+                """
+            )
+
+            clusters_by_id: dict[int, list[str]] = defaultdict(list)
+            for record in records:
+                clusters_by_id[record['communityId']].append(record['uuid'])
+
+            cluster_uuid_lists = [uuids for uuids in clusters_by_id.values() if len(uuids) > 1]
+
+            community_clusters.extend(
+                list(
+                    await semaphore_gather(
+                        *[
+                            EntityNode.get_by_uuids(driver, cluster)
+                            for cluster in cluster_uuid_lists
+                        ]
+                    )
+                )
+            )
+
+            return community_clusters
+        except Exception as e:
+            logger.warning(
+                'FalkorDB native label propagation failed, falling back to default: %s', e
+            )
+            community_clusters.clear()
+
     if group_ids is None:
         group_id_values, _, _ = await driver.execute_query(
             """
