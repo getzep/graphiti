@@ -2,6 +2,9 @@
 
 ## Overview
 
+**Default backend (2026-02-19): Neo4j.** FalkorDB is legacy-only.
+Use Neo4j for any high-throughput ingest to avoid Redis single-thread bottlenecks.
+
 Graphiti extraction speed and reliability at scale are bounded by three limits, encountered in this order:
 
 1. **Database query queue depth** — FalkorDB and Neo4j both cap concurrent inflight queries. Exceed the cap and the database rejects work.
@@ -12,7 +15,7 @@ Each section below covers one limit: what it is, how to detect it, how to raise 
 
 ## 1. Database Concurrency Limits
 
-### FalkorDB: MAX_QUEUED_QUERIES
+### FalkorDB: MAX_QUEUED_QUERIES (legacy only)
 
 FalkorDB queues incoming graph queries up to a configurable maximum. When the queue is full, new queries are rejected immediately with:
 
@@ -108,22 +111,29 @@ Single-instance throughput is insufficient for a large backlog (roughly >500 epi
 
 ### How to shard
 
-1. Launch N MCP instances on different ports. Each instance points at the same target graph via `FALKORDB_DATABASE` and `GRAPHITI_GROUP_ID`.
+1. Launch N MCP instances on different ports.
+   - **Neo4j (default):** all instances point at the same Neo4j DB (`NEO4J_URI`), and use `GRAPHITI_GROUP_ID` to namespace data within the single DB.
+   - **FalkorDB (legacy):** set `FALKORDB_DATABASE` per graph.
 2. Partition episodes across instances by shard index (modulo N on episode index).
 3. Pass `--mcp-url http://localhost:<PORT>/mcp` to the ingestion script for each shard.
 
-### Example: 3 instances for `my_graph`
+### Example: 3 instances for `my_graph` (Neo4j default)
 
 ```bash
-SEMAPHORE_LIMIT=15 FALKORDB_DATABASE=my_graph GRAPHITI_GROUP_ID=my_graph \
-  python mcp_server/main.py --port 8001 &
+SEMAPHORE_LIMIT=15 GRAPHITI_GROUP_ID=my_graph \
+  NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=... \
+  python mcp_server/main.py --database-provider neo4j --port 8001 &
 
-SEMAPHORE_LIMIT=15 FALKORDB_DATABASE=my_graph GRAPHITI_GROUP_ID=my_graph \
-  python mcp_server/main.py --port 8002 &
+SEMAPHORE_LIMIT=15 GRAPHITI_GROUP_ID=my_graph \
+  NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=... \
+  python mcp_server/main.py --database-provider neo4j --port 8002 &
 
-SEMAPHORE_LIMIT=15 FALKORDB_DATABASE=my_graph GRAPHITI_GROUP_ID=my_graph \
-  python mcp_server/main.py --port 8003 &
+SEMAPHORE_LIMIT=15 GRAPHITI_GROUP_ID=my_graph \
+  NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=... \
+  python mcp_server/main.py --database-provider neo4j --port 8003 &
 ```
+
+**FalkorDB (legacy) example:** replace the `NEO4J_*` vars with `FALKORDB_DATABASE=my_graph` and set `--database-provider falkordb`.
 
 Then run the ingestion script three times in parallel, each targeting one shard:
 
@@ -163,10 +173,15 @@ min_MAX_QUEUED_QUERIES = total_concurrent_slots * 3
 ### Episode count (progress indicator)
 
 ```bash
+# Neo4j (default)
+cypher-shell -u neo4j -p "$NEO4J_PASSWORD" \
+  "MATCH (e:Episodic) WHERE e.group_id = '<group_id>' RETURN count(e)"
+
+# FalkorDB (legacy)
 redis-cli -p 6379 GRAPH.QUERY <db> "MATCH (e:Episodic) RETURN count(e)"
 ```
 
-Replace `<db>` with your `FALKORDB_DATABASE` value.
+Replace `<group_id>` and `<db>` with your target lane.
 
 ### FalkorDB queue pressure
 
@@ -185,3 +200,16 @@ Watch for HTTP 429 responses in MCP server logs. If they appear, reduce `SEMAPHO
 ### Workers vs. MCP drain
 
 Ingestion worker processes exit 0 when **queuing** is done, not when extraction is complete. The MCP server drains queued episodes asynchronously. To know when extraction is truly finished, poll the episode count — not the worker process exit state.
+
+---
+
+## FalkorDB-only scripts (legacy)
+
+These scripts are FalkorDB-specific and should **not** be used with Neo4j:
+
+- `scripts/cleanup_misplacements_all_graphs.py`
+- `scripts/scan_misplacements_all_graphs.py`
+- `scripts/extraction_monitor.py`
+- `scripts/ingest_content_groups.py`
+
+(Neo4j equivalents require different queries and group_id scoping.)
