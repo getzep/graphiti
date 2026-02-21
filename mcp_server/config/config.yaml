@@ -11,7 +11,7 @@ server:
   port: 8000
   
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
+  provider: "openai"  # Options: openai, openai_generic, azure_openai, anthropic, gemini, groq
   model: "gpt-4o-mini"
   max_tokens: 4096
   
@@ -69,6 +69,18 @@ embedder:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
+
+reranker:
+  provider: "openai"  # Options: openai, gemini, bge
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+
+    # bge provider has no configuration - it's local/CPU-only
 
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
