@@ -139,6 +139,32 @@ See [`config/extraction_ontologies.example.yaml`](../config/extraction_ontologie
 - **Relationship descriptions should name their endpoints.** "CustomerIssue → ResolutionStep that fixed it" is better than "connects issues to fixes".
 - **Review and iterate.** Run extraction on a sample, review the entities created, and refine descriptions based on what the LLM gets right/wrong.
 
+## Operational Safety Notes
+
+### Relationship type enforcement is guidance, not a hard gate
+
+Current extraction uses ontology relationship types as prompt guidance. It does **not** guarantee that every emitted edge label is one of `relationship_types[].name`.
+
+For governance-critical workflows, do not key policy logic directly off free-form relation labels unless you add a separate canonical mapping/validation layer.
+
+### Defensive filtering for malformed legacy edges
+
+Graph read paths now defensively skip malformed `RELATES_TO` rows that are missing required fields (`uuid`, `group_id`, `episodes`) in the main retrieval/hydration methods.
+
+This hardening prevents legacy null-field edge rows from crashing deserialization during ingestion/dedupe flows.
+
+### Migration-only deterministic dedupe mode
+
+A migration-safe dedupe fallback exists for controlled backfills:
+- `add_episode(..., dedupe_mode='deterministic')`
+
+Behavior:
+- exact-match dedupe still runs
+- semantic LLM duplicate/contradiction resolution is skipped
+- intended only for controlled migration/backfill workflows
+
+Default remains `dedupe_mode='semantic'` for normal operation.
+
 ## Related Docs
 
 - [Graphiti upstream docs](https://help.getzep.com/graphiti) — core runtime, drivers, entity types API

@@ -826,6 +826,11 @@ class Graphiti:
             query to find the most recent episode. Useful for efficiently adding multiple episodes
             to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
             as this parameter for the next episode.
+        dedupe_mode : Literal['semantic', 'deterministic']
+            Edge deduplication strategy.
+            - 'semantic' (default): uses LLM duplicate + contradiction resolution.
+            - 'deterministic': migration-safe mode that skips semantic duplicate/contradiction
+              resolution (exact-match dedupe still runs). Intended for controlled backfills.
 
         Returns
         -------
