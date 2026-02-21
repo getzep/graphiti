@@ -285,6 +285,7 @@ For the full sync procedure, see [Upstream Sync Runbook](docs/runbooks/upstream-
 - Publicization execution lanes completed: adapter wiring, backup wiring, cron cutover.
 - Integration gate: **GO** (`reports/publicization/integration-report.md`).
 - Boundary policy: **ALLOW=370 / BLOCK=0 / AMBIGUOUS=0**.
+- **Truth pipeline: live (Phases 1–3 complete).** Personal fact ledger (`state/fact_ledger.db`) shipped with 64 backfilled PROMOTE events (hash chain verified). Trust score sync live — 448 RELATES_TO edges and 382 Entity nodes updated. Trust-aware retrieval (`rrf_with_trust_boost`, `EDGE_HYBRID_SEARCH_RRF_TRUST`, `NODE_HYBRID_SEARCH_RRF_TRUST`) merged in PR #63. `GRAPHITI_TRUST_WEIGHT=0` verified identical to vanilla RRF. Content packs confirmed isolated (NULL trust_score, zero distortion).
 
 ## CI Policy
 

@@ -81,6 +81,20 @@ SET n.trust_score = max_trust
 
 3. Run the sync as part of daily graph maintenance (after dedup and timeline repair)
 
+### UUID Matching
+
+The sync script matches candidates to graph edges via the UUID stored in `evidence_refs_json[0].evidence_id`. Each candidate row in the candidates DB records the RELATES_TO edge UUID at extraction time, enabling a direct 1:1 match — no fuzzy matching required.
+
+### Migration Note: FalkorDB → Neo4j (or any graph backend change)
+
+If candidates were migrated from a prior graph backend (e.g., FalkorDB → Neo4j via re-extraction), the `evidence_refs_json[0].evidence_id` fields may contain UUIDs from the **old** backend that no longer exist in the new graph. In this case:
+
+- Edge UUID matching will silently produce zero matches for affected candidates
+- Trust scores will not be applied to the migrated facts, even if they were approved
+- **Resolution:** Write a re-linking script that matches candidates to new-graph RELATES_TO edges via `subject` + `predicate` (or `fact` text similarity), then updates `evidence_refs_json` with the new UUIDs before running the sync
+
+This is a known gap after any graph re-extraction. Candidates created directly in the target graph (post-migration) will have correct UUIDs and sync normally.
+
 ## Interaction with Content & Workflow Packs
 
 Content packs inject context **parallel** to normal retrieval via the Pack Injector plugin hook. The pack router internally calls the same MCP search endpoints, but since content pack entities typically have no `trust_score` property, trust boosting has zero effect on pack retrieval — results rank purely on relevance.
