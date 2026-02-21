@@ -663,6 +663,14 @@
       "created_at": "2026-02-20T11:44:09Z",
       "repoId": 840056306,
       "pullRequestNo": 1245
+    },
+    {
+      "name": "sprotasovitsky",
+      "id": 2283799,
+      "comment_id": 3939356268,
+      "created_at": "2026-02-21T20:06:15Z",
+      "repoId": 840056306,
+      "pullRequestNo": 1254
     }
   ]
 }
