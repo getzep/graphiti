@@ -860,12 +860,17 @@ async def initialize_server() -> ServerConfig:
     logger.info(f'  - Transport: {config.server.transport}')
 
     # Log graphiti-core version
+    graphiti_version = None
     try:
         import graphiti_core
 
-        graphiti_version = getattr(graphiti_core, '__version__', 'unknown')
-        logger.info(f'  - Graphiti Core: {graphiti_version}')
+        graphiti_version = getattr(graphiti_core, '__version__', None)
     except Exception:
+        logger.warning('Unable to import graphiti_core module')
+
+    if graphiti_version and graphiti_version != 'unknown':
+        logger.info(f'  - Graphiti Core: {graphiti_version}')
+    else:
         # Check for Docker-stored version file
         version_file = Path('/app/.graphiti-core-version')
         if version_file.exists():
