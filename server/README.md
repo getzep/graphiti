@@ -33,6 +33,11 @@ Only stable releases are built automatically (pre-release versions are skipped).
 
    ```
    OPENAI_API_KEY=your_openai_api_key
+   # Optional (useful for Azure OpenAI / local gateways)
+   OPENAI_BASE_URL=https://api.openai.com/v1
+   # Optional (defaults depend on graphiti-core)
+   MODEL_NAME=gpt-4o-mini
+   EMBEDDING_MODEL_NAME=text-embedding-3-small
    NEO4J_USER=your_neo4j_user
    NEO4J_PASSWORD=your_neo4j_password
    NEO4J_PORT=your_neo4j_port
@@ -76,3 +81,71 @@ Only stable releases are built automatically (pre-release versions are skipped).
 6. You may access the swagger docs at `http://localhost:8000/docs`. You may also access redocs at `http://localhost:8000/redoc`.
 
 7. You may also access the neo4j browser at `http://localhost:7474` (the port depends on the neo4j instance you are using).
+
+## Healthcheck
+
+- `GET /healthcheck` returns a simple JSON payload (`{"status":"healthy"}`) when the service is up.
+
+## Schema Selection (Agent Memory)
+
+`POST /messages` supports an optional `schema_id` to select a service-owned ontology.
+
+### `agent_memory_v1`
+
+Designed for agent “memory” extraction across tools like Copilot Chat and Codex (ownership, preferences, terminology, tasks).
+
+If `schema_id` is omitted, the service auto-selects `agent_memory_v1` when a message contains `<graphiti_episode ...>`.
+
+Example:
+
+```bash
+curl -sS http://localhost:8000/messages \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "group_id": "workspace-demo",
+    "schema_id": "agent_memory_v1",
+    "messages": [{
+      "role_type": "user",
+      "role": "user",
+      "content": "<graphiti_episode kind=\"memory_directive\">terminology (workspace): \"playbook\" means \"runbook docs\"</graphiti_episode>",
+      "source_description": "demo"
+    }]
+  }'
+```
+
+To retrieve facts:
+
+```bash
+curl -sS http://localhost:8000/search \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "group_ids": ["workspace-demo"],
+    "query": "What does playbook mean here?",
+    "max_facts": 5
+  }'
+```
+
+## Shared Memory Across Tools (Canonical Group IDs)
+
+To share durable memory across multiple clients (e.g. Copilot Chat + Codex), use the same `group_id` for the same scope.
+
+The Graphiti service can resolve a canonical `group_id` from a `(scope, key)` pair:
+
+```bash
+curl -sS http://localhost:8000/groups/resolve \
+  -H 'content-type: application/json' \
+  -d '{
+    "scope": "user",
+    "key": "github_login:yulongbai-nov"
+  }'
+```
+
+Recommended key for user scope:
+
+- Use GitHub login (common across tools): `github_login:<login>`
+  - CLI: parse from `gh auth status`
+  - VS Code: use the GitHub auth session account label
+
+## Troubleshooting
+
+- If `POST /messages` returns `202` but no episodes/facts appear, ensure you are running a build that keeps a single Graphiti client alive for background jobs (app-scoped client + app-scoped worker). Rebuild/redeploy the container (`docker compose up -d --build`).
