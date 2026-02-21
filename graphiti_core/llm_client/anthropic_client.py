@@ -66,6 +66,7 @@ AnthropicModel = Literal[
 ]
 
 DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
+DEFAULT_SMALL_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 
 # Maximum output tokens for different Anthropic models
 # Based on official Anthropic documentation (as of 2025)
@@ -136,6 +137,9 @@ class AnthropicClient(LLMClient):
         if config.model is None:
             config.model = DEFAULT_MODEL
 
+        if config.small_model is None:
+            config.small_model = DEFAULT_SMALL_MODEL
+
         super().__init__(config, cache)
         # Explicitly set the instance model to the config model to prevent type checking errors
         self.model = typing.cast(AnthropicModel, config.model)
@@ -147,6 +151,13 @@ class AnthropicClient(LLMClient):
             )
         else:
             self.client = client
+
+    def _get_model_for_size(self, model_size: ModelSize) -> str:
+        """Get the appropriate model name based on the requested size."""
+        if model_size == ModelSize.small:
+            return self.small_model or DEFAULT_SMALL_MODEL
+        else:
+            return self.model or DEFAULT_MODEL
 
     def _extract_json_from_text(self, text: str) -> dict[str, typing.Any]:
         """Extract JSON from text content.
@@ -278,9 +289,12 @@ class AnthropicClient(LLMClient):
         user_messages = [{'role': m.role, 'content': m.content} for m in messages[1:]]
         user_messages_cast = typing.cast(list[MessageParam], user_messages)
 
+        # Resolve the model based on the requested size
+        model = self._get_model_for_size(model_size)
+
         # Resolve max_tokens dynamically based on the model's capabilities
         # This allows different models to use their full output capacity
-        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, self.model)
+        max_creation_tokens: int = self._resolve_max_tokens(max_tokens, model)
 
         try:
             # Create the appropriate tool based on whether response_model is provided
@@ -290,7 +304,7 @@ class AnthropicClient(LLMClient):
                 max_tokens=max_creation_tokens,
                 temperature=self.temperature,
                 messages=user_messages_cast,
-                model=self.model,
+                model=model,
                 tools=tools,
                 tool_choice=tool_choice,
             )
