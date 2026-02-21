@@ -69,6 +69,9 @@ try:
 except ImportError:
     HAS_GROQ = False
 
+# Default temperature matching graphiti-core's DEFAULT_TEMPERATURE
+_DEFAULT_TEMPERATURE = 1.0
+
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
@@ -202,7 +205,7 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    temperature=config.temperature if config.temperature is not None else _DEFAULT_TEMPERATURE,
                     max_tokens=config.max_tokens,
                 )
                 return AnthropicClient(config=llm_config)
@@ -219,7 +222,7 @@ class LLMClientFactory:
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     model=config.model,
-                    temperature=config.temperature,
+                    temperature=config.temperature if config.temperature is not None else _DEFAULT_TEMPERATURE,
                     max_tokens=config.max_tokens,
                 )
                 return GeminiClient(config=llm_config)
@@ -237,7 +240,7 @@ class LLMClientFactory:
                     api_key=api_key,
                     base_url=config.providers.groq.api_url,
                     model=config.model,
-                    temperature=config.temperature,
+                    temperature=config.temperature if config.temperature is not None else _DEFAULT_TEMPERATURE,
                     max_tokens=config.max_tokens,
                 )
                 return GroqClient(config=llm_config)
