@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from datetime import datetime
 from time import time
 
@@ -544,6 +545,37 @@ async def resolve_extracted_edge(
             if episode is not None and episode.uuid not in resolved.episodes:
                 resolved.episodes.append(episode.uuid)
             return resolved, [], []
+
+    # Migration-only deterministic dedupe mode:
+    # Skip LLM duplicate/contradiction resolution and keep exact-match-only behavior.
+    # This mode is intended for controlled backfills where semantic dedupe may be unstable.
+    dedupe_mode = os.getenv('GRAPHITI_DEDUPE_MODE', 'semantic').lower().strip()
+    if dedupe_mode == 'deterministic':
+        resolved_edge = extracted_edge
+
+        # Preserve optional structured attribute extraction for allowed edge types.
+        edge_model = edge_type_candidates.get(resolved_edge.name) if edge_type_candidates else None
+        if edge_model is not None and len(edge_model.model_fields) != 0 and episode is not None:
+            edge_attributes_context = {
+                'episode_content': episode.content,
+                'reference_time': episode.valid_at,
+                'fact': resolved_edge.fact,
+            }
+            edge_attributes_response = await llm_client.generate_response(
+                prompt_library.extract_edges.extract_attributes(edge_attributes_context),
+                response_model=edge_model,  # type: ignore
+                model_size=ModelSize.small,
+                prompt_name='extract_edges.extract_attributes',
+            )
+            resolved_edge.attributes = edge_attributes_response
+        else:
+            resolved_edge.attributes = {}
+
+        logger.info(
+            'resolve_extracted_edge: GRAPHITI_DEDUPE_MODE=deterministic, skipping semantic dedupe for edge %s',
+            resolved_edge.name,
+        )
+        return resolved_edge, [], []
 
     start = time()
 
