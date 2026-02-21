@@ -422,27 +422,47 @@ async def resolve_extracted_edges(
         edge_types_lst.append(extracted_edge_types)
 
     # resolve edges with related edges in the graph and find invalidation candidates
+    # Keep semantic mode call signature backward-compatible for test monkeypatches.
+    if dedupe_mode == 'semantic':
+        resolve_coros = [
+            resolve_extracted_edge(
+                llm_client,
+                extracted_edge,
+                related_edges,
+                existing_edges,
+                episode,
+                extracted_edge_types,
+            )
+            for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
+                extracted_edges,
+                related_edges_lists,
+                edge_invalidation_candidates,
+                edge_types_lst,
+                strict=True,
+            )
+        ]
+    else:
+        resolve_coros = [
+            resolve_extracted_edge(
+                llm_client,
+                extracted_edge,
+                related_edges,
+                existing_edges,
+                episode,
+                extracted_edge_types,
+                dedupe_mode=dedupe_mode,
+            )
+            for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
+                extracted_edges,
+                related_edges_lists,
+                edge_invalidation_candidates,
+                edge_types_lst,
+                strict=True,
+            )
+        ]
+
     results: list[tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]] = list(
-        await semaphore_gather(
-            *[
-                resolve_extracted_edge(
-                    llm_client,
-                    extracted_edge,
-                    related_edges,
-                    existing_edges,
-                    episode,
-                    extracted_edge_types,
-                    dedupe_mode=dedupe_mode,
-                )
-                for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
-                    extracted_edges,
-                    related_edges_lists,
-                    edge_invalidation_candidates,
-                    edge_types_lst,
-                    strict=True,
-                )
-            ]
-        )
+        await semaphore_gather(*resolve_coros)
     )
 
     resolved_edges: list[EntityEdge] = []
