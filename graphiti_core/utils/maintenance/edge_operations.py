@@ -15,9 +15,9 @@ limitations under the License.
 """
 
 import logging
-import os
 from datetime import datetime
 from time import time
+from typing import Literal
 
 from pydantic import BaseModel
 from typing_extensions import LiteralString
@@ -307,6 +307,7 @@ async def resolve_extracted_edges(
     entities: list[EntityNode],
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
+    dedupe_mode: Literal['semantic', 'deterministic'] = 'semantic',
 ) -> tuple[list[EntityEdge], list[EntityEdge]]:
     # Fast path: deduplicate exact matches within the extracted edges before parallel processing
     seen: dict[tuple[str, str, str], EntityEdge] = {}
@@ -431,6 +432,7 @@ async def resolve_extracted_edges(
                     existing_edges,
                     episode,
                     extracted_edge_types,
+                    dedupe_mode=dedupe_mode,
                 )
                 for extracted_edge, related_edges, existing_edges, extracted_edge_types in zip(
                     extracted_edges,
@@ -507,6 +509,7 @@ async def resolve_extracted_edge(
     existing_edges: list[EntityEdge],
     episode: EpisodicNode,
     edge_type_candidates: dict[str, type[BaseModel]] | None = None,
+    dedupe_mode: Literal['semantic', 'deterministic'] = 'semantic',
 ) -> tuple[EntityEdge, list[EntityEdge], list[EntityEdge]]:
     """Resolve an extracted edge against existing graph context.
 
@@ -549,7 +552,6 @@ async def resolve_extracted_edge(
     # Migration-only deterministic dedupe mode:
     # Skip LLM duplicate/contradiction resolution and keep exact-match-only behavior.
     # This mode is intended for controlled backfills where semantic dedupe may be unstable.
-    dedupe_mode = os.getenv('GRAPHITI_DEDUPE_MODE', 'semantic').lower().strip()
     if dedupe_mode == 'deterministic':
         resolved_edge = extracted_edge
 
@@ -572,7 +574,7 @@ async def resolve_extracted_edge(
             resolved_edge.attributes = {}
 
         logger.info(
-            'resolve_extracted_edge: GRAPHITI_DEDUPE_MODE=deterministic, skipping semantic dedupe for edge %s',
+            'resolve_extracted_edge: dedupe_mode=deterministic, skipping semantic dedupe for edge %s',
             resolved_edge.name,
         )
         return resolved_edge, [], []

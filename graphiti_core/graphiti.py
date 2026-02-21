@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import Literal
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -440,6 +441,7 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
+        dedupe_mode: Literal['semantic', 'deterministic'] = 'semantic',
     ) -> tuple[list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode and resolve against existing graph."""
         extracted_edges = await extract_edges(
@@ -462,6 +464,7 @@ class Graphiti:
             nodes,
             edge_types or {},
             edge_type_map,
+            dedupe_mode=dedupe_mode,
         )
 
         return resolved_edges, invalidated_edges
@@ -775,6 +778,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        dedupe_mode: Literal['semantic', 'deterministic'] = 'semantic',
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -927,6 +931,7 @@ class Graphiti:
                     nodes,
                     uuid_map,
                     custom_extraction_instructions,
+                    dedupe_mode=dedupe_mode,
                 )
 
                 entity_edges = resolved_edges + invalidated_edges
