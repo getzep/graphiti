@@ -1,6 +1,8 @@
-# Graphiti OpenClaw — Memory Runtime for Agents
+# Graphiti OpenClaw — Dual-Brain Memory Runtime for Agents
 
-This repository is a **production delta layer** on top of [upstream Graphiti](https://github.com/getzep/graphiti). It turns Graphiti from a graph-memory library into a policy-governed, pack-driven memory runtime for OpenClaw agents.
+This repository is a **production delta layer** on top of [upstream Graphiti](https://github.com/getzep/graphiti). It turns Graphiti from a graph-memory library into a **dual-brain, policy-governed memory runtime** for OpenClaw agents.
+
+The key insight: **A single LLM-powered brain can't be trusted with your memories.** We added a second brain—a strict, append-only Fact Ledger—that acts as a thermostat to keep the semantic engine honest.
 
 If you're looking for the core Graphiti framework docs:
 - Upstream repo: <https://github.com/getzep/graphiti>
@@ -8,14 +10,29 @@ If you're looking for the core Graphiti framework docs:
 
 ---
 
-## Why This Exists
+## Why This Exists: The Dual-Brain Philosophy
 
-Plain vector search (RAG) is good at recall ("find documents about X") but terrible at **truth management**:
+Plain vector search (RAG) is good at recall ("find documents about X") but terrible at **truth management**. And even Graphiti—a breakthrough temporal knowledge graph—relies 100% on an LLM to decide what's true. We call this "Brain 1 only."
 
-- **No temporal reasoning.** "I prefer coffee" and "I stopped drinking coffee" both match a query about coffee. Which is current?
-- **No supersession.** When a fact changes, old versions linger as equal-confidence results.
-- **No relationships.** "Who is the CEO of the company Yuan met last week?" requires traversal, not keyword matching.
-- **No promotion gates.** Anything ingested becomes "truth" with no audit trail.
+**Brain 1 alone is unreliable for high-stakes decisions.** When your AI manages your calendar, drafts your deals, and handles your relationships, you can't trust an LLM to silently invalidate facts or decide what supersedes what. There's no audit trail. There's no rollback. If the LLM hallucinates over your metadata, you'll never know.
+
+**We built Brain 2: A Fact Ledger.**
+
+Brain 1 (Neo4j) holds all the semantic richness—messy, probabilistic, non-deterministic. Brain 2 (SQLite) holds deterministic truth—append-only, auditable, hash-chained. At retrieval time, a trust multiplier combines them: `final_score = semantic_relevance + (trust_score × trust_weight)`.
+
+Promoted facts get a `trust_score = 1.0`. Hallucinations don't. You get deterministic truth out of a non-deterministic graph.
+
+This architecture solves three problems vanilla Graphiti can't:
+
+- **No silent truth mutations.** Every promotion, supersession, and invalidation is logged in Brain 2 with full provenance.
+- **No LLM hallucinations becoming doctrine.** Strangers' claims stay quarantined until you approve them.
+- **Agents that learn.** After every coding run, learnings are extracted and promoted to Brain 2 with `trust_score = 1.0`. The next run gets them injected as context. Knowledge compounds instead of evaporating.
+
+For the full architecture deep-dive, see [The Dual-Brain Architecture](docs/DUAL-BRAIN-ARCHITECTURE.md).
+
+---
+
+## How It Works: Three Layers
 
 This fork solves these problems by adding three layers on top of Graphiti's graph engine:
 
@@ -285,7 +302,7 @@ For the full sync procedure, see [Upstream Sync Runbook](docs/runbooks/upstream-
 - Publicization execution lanes completed: adapter wiring, backup wiring, cron cutover.
 - Integration gate: **GO** (`reports/publicization/integration-report.md`).
 - Boundary policy: **ALLOW=370 / BLOCK=0 / AMBIGUOUS=0**.
-- **Truth pipeline: live (Phases 1–3 complete).** Personal fact ledger (`state/fact_ledger.db`) shipped with 64 backfilled PROMOTE events (hash chain verified). Trust score sync live — 448 RELATES_TO edges and 382 Entity nodes updated. Trust-aware retrieval (`rrf_with_trust_boost`, `EDGE_HYBRID_SEARCH_RRF_TRUST`, `NODE_HYBRID_SEARCH_RRF_TRUST`) merged in PR #63. `GRAPHITI_TRUST_WEIGHT=0` verified identical to vanilla RRF. Content packs confirmed isolated (NULL trust_score, zero distortion).
+- **Truth pipeline: operational, with deterministic migration closeout policy.** Fact ledger + trust-aware retrieval are live, and curated-facts migration now uses deterministic disposition-aware validation (rather than ad-hoc/manual overrides) for unresolved legacy mappings. Content packs remain isolated (NULL trust_score, zero distortion).
 
 ## CI Policy
 
