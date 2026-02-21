@@ -89,16 +89,21 @@ async def get_community_clusters(
     return community_clusters
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
+def label_propagation(
+    projection: dict[str, list[Neighbor]], max_iterations: int = 30
+) -> list[list[str]]:
     # Implement the label propagation community detection algorithm.
     # 1. Start with each node being assigned its own community
     # 2. Each node will take on the community of the plurality of its neighbors
     # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+    # 4. Continue until no communities change during propagation or max_iterations is reached
+    #
+    # Synchronous label propagation can oscillate on bipartite or near-bipartite
+    # subgraphs, so a max iteration cap is required to guarantee termination.
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    for iteration in range(max_iterations):
         no_change = True
         new_community_map: dict[str, int] = {}
 
@@ -125,9 +130,15 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
                 no_change = False
 
         if no_change:
+            logger.debug(f'Label propagation converged after {iteration + 1} iterations')
             break
 
         community_map = new_community_map
+    else:
+        logger.warning(
+            f'Label propagation did not converge after {max_iterations} iterations, '
+            f'returning best approximation'
+        )
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
