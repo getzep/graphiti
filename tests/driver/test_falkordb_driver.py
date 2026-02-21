@@ -362,6 +362,54 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(True) is True
 
 
+class TestBuildFulltextQuery:
+    """Test FalkorDB RediSearch fulltext query construction."""
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def setup_method(self):
+        self.mock_client = MagicMock()
+        with patch('graphiti_core.driver.falkordb_driver.FalkorDB'):
+            self.driver = FalkorDriver()
+        self.driver.client = self.mock_client
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_basic_query_with_group_ids(self):
+        result = self.driver.build_fulltext_query('fuel spill airport', ['aviation_safety'])
+        assert '(@group_id:"aviation_safety")' in result
+        assert 'fuel' in result
+        assert 'spill' in result
+        assert 'airport' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_empty_query_with_group_ids_returns_group_filter_only(self):
+        """Regression: empty query must NOT produce invalid empty parens '()'."""
+        result = self.driver.build_fulltext_query('', ['aviation_safety_quality'])
+        assert result == '(@group_id:"aviation_safety_quality")'
+        assert '()' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_empty_query_without_group_ids_returns_empty(self):
+        result = self.driver.build_fulltext_query('', None)
+        assert result == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_stopword_only_query_with_group_ids(self):
+        """Query of only stopwords should return group filter, not empty parens."""
+        result = self.driver.build_fulltext_query('the a an', ['my_graph'])
+        assert '()' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_multiple_group_ids(self):
+        result = self.driver.build_fulltext_query('test', ['graph1', 'graph2'])
+        assert '(@group_id:"graph1"|"graph2")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_no_group_ids(self):
+        result = self.driver.build_fulltext_query('fuel spill', None)
+        assert '@group_id' not in result
+        assert 'fuel' in result
+
+
 # Simple integration test
 class TestFalkorDriverIntegration:
     """Simple integration test for FalkorDB driver."""
