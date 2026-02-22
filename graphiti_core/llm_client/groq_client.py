@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import typing
 from typing import TYPE_CHECKING
@@ -35,6 +34,7 @@ else:
 from pydantic import BaseModel
 
 from ..prompts.models import Message
+from ..utils.json_utils import safe_json_loads
 from .client import LLMClient
 from .config import LLMConfig, ModelSize
 from .errors import RateLimitError
@@ -77,7 +77,7 @@ class GroqClient(LLMClient):
                 response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
-            return json.loads(result)
+            return safe_json_loads(result)
         except groq.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
