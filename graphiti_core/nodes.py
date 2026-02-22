@@ -1012,7 +1012,30 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
+    elif provider == GraphProvider.NEO4J:
+        # Neo4j: Try new JSON format first, fall back to old spread format
+        raw_attrs = record.get('attributes', '')
+        if raw_attrs and isinstance(raw_attrs, str):
+            # New format: JSON string in n.attributes
+            attributes = json.loads(raw_attrs)
+        else:
+            # Old format: attributes spread as individual properties
+            all_props = record.get('all_properties', {})
+            if all_props:
+                attributes = dict(all_props)
+                # Remove known system fields
+                attributes.pop('uuid', None)
+                attributes.pop('name', None)
+                attributes.pop('group_id', None)
+                attributes.pop('name_embedding', None)
+                attributes.pop('summary', None)
+                attributes.pop('created_at', None)
+                attributes.pop('labels', None)
+                attributes.pop('attributes', None)  # Remove the empty attributes field
+            else:
+                attributes = {}
     else:
+        # FalkorDB, Neptune: Original behavior
         attributes = record['attributes']
         attributes.pop('uuid', None)
         attributes.pop('name', None)
