@@ -37,29 +37,19 @@ class ExtractedEntities(BaseModel):
     extracted_entities: list[ExtractedEntity] = Field(..., description='List of extracted entities')
 
 
-class MissedEntities(BaseModel):
-    missed_entities: list[str] = Field(..., description="Names of entities that weren't extracted")
-
-
-class EntityClassificationTriple(BaseModel):
-    uuid: str = Field(description='UUID of the entity')
-    name: str = Field(description='Name of the entity')
-    entity_type: str | None = Field(
-        default=None,
-        description='Type of the entity. Must be one of the provided types or None',
-    )
-
-
-class EntityClassification(BaseModel):
-    entity_classifications: list[EntityClassificationTriple] = Field(
-        ..., description='List of entities classification triples.'
-    )
-
-
 class EntitySummary(BaseModel):
-    summary: str = Field(
+    summary: str = Field(..., description='Summary of the entity')
+
+
+class SummarizedEntity(BaseModel):
+    name: str = Field(..., description='Name of the entity being summarized')
+    summary: str = Field(..., description='Updated summary for the entity')
+
+
+class SummarizedEntities(BaseModel):
+    summaries: list[SummarizedEntity] = Field(
         ...,
-        description=f'Summary containing the important information about the entity. Under {MAX_SUMMARY_CHARS} characters.',
+        description='List of entity summaries. Only include entities that need summary updates.',
     )
 
 
@@ -67,20 +57,20 @@ class Prompt(Protocol):
     extract_message: PromptVersion
     extract_json: PromptVersion
     extract_text: PromptVersion
-    reflexion: PromptVersion
     classify_nodes: PromptVersion
     extract_attributes: PromptVersion
     extract_summary: PromptVersion
+    extract_summaries_batch: PromptVersion
 
 
 class Versions(TypedDict):
     extract_message: PromptFunction
     extract_json: PromptFunction
     extract_text: PromptFunction
-    reflexion: PromptFunction
     classify_nodes: PromptFunction
     extract_attributes: PromptFunction
     extract_summary: PromptFunction
+    extract_summaries_batch: PromptFunction
 
 
 def extract_message(context: dict[str, Any]) -> list[Message]:
@@ -196,30 +186,6 @@ Guidelines:
     ]
 
 
-def reflexion(context: dict[str, Any]) -> list[Message]:
-    sys_prompt = """You are an AI assistant that determines which entities have not been extracted from the given context"""
-
-    user_prompt = f"""
-<PREVIOUS MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
-</PREVIOUS MESSAGES>
-<CURRENT MESSAGE>
-{context['episode_content']}
-</CURRENT MESSAGE>
-
-<EXTRACTED ENTITIES>
-{context['extracted_entities']}
-</EXTRACTED ENTITIES>
-
-Given the above previous messages, current message, and list of extracted entities; determine if any entities haven't been
-extracted.
-"""
-    return [
-        Message(role='system', content=sys_prompt),
-        Message(role='user', content=user_prompt),
-    ]
-
-
 def classify_nodes(context: dict[str, Any]) -> list[Message]:
     sys_prompt = """You are an AI assistant that classifies entity nodes given the context from which they were extracted"""
 
@@ -291,7 +257,7 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
             role='user',
             content=f"""
         Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
-        from the messages and relevant information from the existing summary.
+        from the messages and relevant information from the existing summary. Summary must be under {MAX_SUMMARY_CHARS} characters.
 
         {summary_instructions}
 
@@ -308,12 +274,43 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def extract_summaries_batch(context: dict[str, Any]) -> list[Message]:
+    return [
+        Message(
+            role='system',
+            content='You are a helpful assistant that generates concise entity summaries from provided context.',
+        ),
+        Message(
+            role='user',
+            content=f"""
+Given the MESSAGES and a list of ENTITIES, generate an updated summary for each entity that needs one.
+Each summary must be under {MAX_SUMMARY_CHARS} characters.
+
+{summary_instructions}
+
+<MESSAGES>
+{to_prompt_json(context['previous_episodes'])}
+{to_prompt_json(context['episode_content'])}
+</MESSAGES>
+
+<ENTITIES>
+{to_prompt_json(context['entities'])}
+</ENTITIES>
+
+For each entity, combine relevant information from the MESSAGES with any existing summary content.
+Only return summaries for entities that have meaningful information to summarize.
+If an entity has no relevant information in the messages and no existing summary, you may skip it.
+""",
+        ),
+    ]
+
+
 versions: Versions = {
     'extract_message': extract_message,
     'extract_json': extract_json,
     'extract_text': extract_text,
-    'reflexion': reflexion,
     'extract_summary': extract_summary,
+    'extract_summaries_batch': extract_summaries_batch,
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
 }

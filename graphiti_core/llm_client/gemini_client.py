@@ -44,11 +44,14 @@ else:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'gemini-2.5-flash'
+DEFAULT_MODEL = 'gemini-3-flash-preview'
 DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite'
 
 # Maximum output tokens for different Gemini models
 GEMINI_MODEL_MAX_TOKENS = {
+    # Gemini 3 (preview) models
+    'gemini-3-pro-preview': 65536,
+    'gemini-3-flash-preview': 65536,
     # Gemini 2.5 models
     'gemini-2.5-pro': 65536,
     'gemini-2.5-flash': 65536,
@@ -236,7 +239,7 @@ class GeminiClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, typing.Any]:
+    ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Gemini language model.
 
@@ -247,7 +250,7 @@ class GeminiClient(LLMClient):
             model_size (ModelSize): The size of the model to use (small or medium).
 
         Returns:
-            dict[str, typing.Any]: The response from the language model.
+            tuple[dict[str, typing.Any], int, int]: The response dict, input tokens, and output tokens.
 
         Raises:
             RateLimitError: If the API rate limit is exceeded.
@@ -303,6 +306,13 @@ class GeminiClient(LLMClient):
                 config=generation_config,
             )
 
+            # Extract token usage from the response
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
+                output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
+
             # Always capture the raw output for debugging
             raw_output = getattr(response, 'text', None)
 
@@ -319,7 +329,7 @@ class GeminiClient(LLMClient):
                     validated_model = response_model.model_validate(json.loads(raw_output))
 
                     # Return as a dictionary for API consistency
-                    return validated_model.model_dump()
+                    return validated_model.model_dump(), input_tokens, output_tokens
                 except Exception as e:
                     if raw_output:
                         logger.error(
@@ -330,11 +340,11 @@ class GeminiClient(LLMClient):
                         salvaged = self.salvage_json(raw_output)
                         if salvaged is not None:
                             logger.warning('Salvaged partial JSON from truncated/malformed output.')
-                            return salvaged
+                            return salvaged, input_tokens, output_tokens
                     raise Exception(f'Failed to parse structured response: {e}') from e
 
             # Otherwise, return the response text as a dictionary
-            return {'content': raw_output}
+            return {'content': raw_output}, input_tokens, output_tokens
 
         except Exception as e:
             # Check if it's a rate limit error based on Gemini API error codes
@@ -391,15 +401,23 @@ class GeminiClient(LLMClient):
             retry_count = 0
             last_error = None
             last_output = None
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while retry_count < self.MAX_RETRIES:
                 try:
-                    response = await self._generate_response(
+                    response, input_tokens, output_tokens = await self._generate_response(
                         messages=messages,
                         response_model=response_model,
                         max_tokens=max_tokens,
                         model_size=model_size,
                     )
+                    total_input_tokens += input_tokens
+                    total_output_tokens += output_tokens
+
+                    # Record token usage
+                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
+
                     last_output = (
                         response.get('content')
                         if isinstance(response, dict) and 'content' in response

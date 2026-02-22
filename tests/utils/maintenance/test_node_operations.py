@@ -26,8 +26,8 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
 )
 from graphiti_core.utils.maintenance.node_operations import (
     _collect_candidate_nodes,
+    _extract_entity_summaries_batch,
     _resolve_with_llm,
-    extract_attributes_from_node,
     extract_attributes_from_nodes,
     resolve_extracted_nodes,
 )
@@ -76,10 +76,6 @@ async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
     )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
-    )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
         clients,
@@ -100,9 +96,8 @@ async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
         'entity_resolutions': [
             {
                 'id': 0,
-                'duplicate_idx': -1,
                 'name': 'Joe',
-                'duplicates': [],
+                'duplicate_name': '',
             }
         ]
     }
@@ -115,10 +110,6 @@ async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
     )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
@@ -146,10 +137,6 @@ async def test_resolve_nodes_fuzzy_match(monkeypatch):
     monkeypatch.setattr(
         'graphiti_core.utils.maintenance.node_operations.search',
         fake_search,
-    )
-    monkeypatch.setattr(
-        'graphiti_core.utils.maintenance.node_operations.filter_existing_duplicate_of_edges',
-        AsyncMock(return_value=[]),
     )
 
     resolved, uuid_map, _ = await resolve_extracted_nodes(
@@ -319,9 +306,8 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 0,
                     'name': 'Dizzy Gillespie',
-                    'duplicates': [0],
+                    'duplicate_name': 'Dizzy Gillespie',
                 }
             ]
         }
@@ -341,7 +327,6 @@ async def test_resolve_with_llm_updates_unresolved(monkeypatch):
 
     assert state.resolved_nodes[0].uuid == candidate.uuid
     assert state.uuid_map[extracted.uuid] == candidate.uuid
-    assert captured_context['existing_nodes'][0]['idx'] == 0
     assert isinstance(captured_context['existing_nodes'], list)
     assert state.duplicate_pairs == [(extracted, candidate)]
 
@@ -364,9 +349,8 @@ async def test_resolve_with_llm_ignores_out_of_range_relative_ids(monkeypatch, c
             'entity_resolutions': [
                 {
                     'id': 5,
-                    'duplicate_idx': -1,
                     'name': 'Dexter',
-                    'duplicates': [],
+                    'duplicate_name': '',
                 }
             ]
         }
@@ -406,15 +390,13 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 0,
                     'name': 'Dizzy Gillespie',
-                    'duplicates': [0],
+                    'duplicate_name': 'Dizzy Gillespie',
                 },
                 {
                     'id': 0,
-                    'duplicate_idx': -1,
                     'name': 'Dizzy',
-                    'duplicates': [],
+                    'duplicate_name': '',
                 },
             ]
         }
@@ -436,7 +418,7 @@ async def test_resolve_with_llm_ignores_duplicate_relative_ids(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monkeypatch):
+async def test_resolve_with_llm_invalid_duplicate_name_defaults_to_extracted(monkeypatch):
     extracted = EntityNode(name='Dexter', group_id='group', labels=['Entity'])
 
     indexes = _build_candidate_indexes([])
@@ -453,9 +435,8 @@ async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monk
             'entity_resolutions': [
                 {
                     'id': 0,
-                    'duplicate_idx': 10,
                     'name': 'Dexter',
-                    'duplicates': [],
+                    'duplicate_name': 'NonExistent Entity',
                 }
             ]
         }
@@ -477,98 +458,66 @@ async def test_resolve_with_llm_invalid_duplicate_idx_defaults_to_extracted(monk
 
 
 @pytest.mark.asyncio
-async def test_extract_attributes_without_callback_generates_summary():
-    """Test that summary is generated when no callback is provided (default behavior)."""
+async def test_batch_summaries_short_summary_no_llm():
+    """Test that short summaries are kept as-is without LLM call (optimization)."""
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
-        return_value={'summary': 'Generated summary', 'attributes': {}}
+        return_value={'summaries': [{'name': 'Test Node', 'summary': 'Generated summary'}]}
     )
 
     node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Old summary')
     episode = _make_episode()
 
-    result = await extract_attributes_from_node(
+    await _extract_entity_summaries_batch(
         llm_client,
-        node,
+        [node],
         episode=episode,
         previous_episodes=[],
-        entity_type=None,
-        should_summarize_node=None,  # No callback provided
+        should_summarize_node=None,
+        edges_by_node={},
     )
 
-    # Summary should be generated
-    assert result.summary == 'Generated summary'
-    # LLM should have been called for summary
-    assert llm_client.generate_response.call_count == 1
+    # Short summary should be kept as-is without LLM call
+    assert node.summary == 'Old summary'
+    # LLM should NOT have been called (summary is short enough)
+    llm_client.generate_response.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_extract_attributes_with_callback_skip_summary():
+async def test_batch_summaries_callback_skip_summary():
     """Test that summary is NOT regenerated when callback returns False."""
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
-        return_value={'summary': 'This should not be used', 'attributes': {}}
+        return_value={'summaries': [{'name': 'Test Node', 'summary': 'This should not be used'}]}
     )
 
     node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Old summary')
     episode = _make_episode()
 
     # Callback that always returns False (skip summary generation)
-    async def skip_summary_filter(node: EntityNode) -> bool:
+    async def skip_summary_filter(n: EntityNode) -> bool:
         return False
 
-    result = await extract_attributes_from_node(
+    await _extract_entity_summaries_batch(
         llm_client,
-        node,
+        [node],
         episode=episode,
         previous_episodes=[],
-        entity_type=None,
         should_summarize_node=skip_summary_filter,
+        edges_by_node={},
     )
 
     # Summary should remain unchanged
-    assert result.summary == 'Old summary'
+    assert node.summary == 'Old summary'
     # LLM should NOT have been called for summary
-    assert llm_client.generate_response.call_count == 0
+    llm_client.generate_response.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_extract_attributes_with_callback_generate_summary():
-    """Test that summary is regenerated when callback returns True."""
-    llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(
-        return_value={'summary': 'New generated summary', 'attributes': {}}
-    )
-
-    node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Old summary')
-    episode = _make_episode()
-
-    # Callback that always returns True (generate summary)
-    async def generate_summary_filter(node: EntityNode) -> bool:
-        return True
-
-    result = await extract_attributes_from_node(
-        llm_client,
-        node,
-        episode=episode,
-        previous_episodes=[],
-        entity_type=None,
-        should_summarize_node=generate_summary_filter,
-    )
-
-    # Summary should be updated
-    assert result.summary == 'New generated summary'
-    # LLM should have been called for summary
-    assert llm_client.generate_response.call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_extract_attributes_with_selective_callback():
+async def test_batch_summaries_selective_callback():
     """Test callback that selectively skips summaries based on node properties."""
     llm_client = MagicMock()
-    llm_client.generate_response = AsyncMock(
-        return_value={'summary': 'Generated summary', 'attributes': {}}
-    )
+    llm_client.generate_response = AsyncMock(return_value={'summaries': []})
 
     user_node = EntityNode(name='User', group_id='group', labels=['Entity', 'User'], summary='Old')
     topic_node = EntityNode(
@@ -578,42 +527,31 @@ async def test_extract_attributes_with_selective_callback():
     episode = _make_episode()
 
     # Callback that skips User nodes but generates for others
-    async def selective_filter(node: EntityNode) -> bool:
-        return 'User' not in node.labels
+    async def selective_filter(n: EntityNode) -> bool:
+        return 'User' not in n.labels
 
-    result_user = await extract_attributes_from_node(
+    await _extract_entity_summaries_batch(
         llm_client,
-        user_node,
+        [user_node, topic_node],
         episode=episode,
         previous_episodes=[],
-        entity_type=None,
         should_summarize_node=selective_filter,
+        edges_by_node={},
     )
 
-    result_topic = await extract_attributes_from_node(
-        llm_client,
-        topic_node,
-        episode=episode,
-        previous_episodes=[],
-        entity_type=None,
-        should_summarize_node=selective_filter,
-    )
-
-    # User summary should remain unchanged
-    assert result_user.summary == 'Old'
-    # Topic summary should be generated
-    assert result_topic.summary == 'Generated summary'
-    # LLM should have been called only once (for topic)
-    assert llm_client.generate_response.call_count == 1
+    # User summary should remain unchanged (callback returned False)
+    assert user_node.summary == 'Old'
+    # Topic summary should also remain unchanged (short summary optimization)
+    assert topic_node.summary == 'Old'
+    # LLM should NOT have been called (summaries are short enough)
+    llm_client.generate_response.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_extract_attributes_from_nodes_with_callback():
     """Test that callback is properly passed through extract_attributes_from_nodes."""
     clients, _ = _make_clients()
-    clients.llm_client.generate_response = AsyncMock(
-        return_value={'summary': 'New summary', 'attributes': {}}
-    )
+    clients.llm_client.generate_response = AsyncMock(return_value={'summaries': []})
     clients.embedder.create = AsyncMock(return_value=[0.1, 0.2, 0.3])
     clients.embedder.create_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
 
@@ -625,9 +563,9 @@ async def test_extract_attributes_from_nodes_with_callback():
     call_tracker = []
 
     # Callback that tracks which nodes it's called with
-    async def tracking_filter(node: EntityNode) -> bool:
-        call_tracker.append(node.name)
-        return 'User' not in node.labels
+    async def tracking_filter(n: EntityNode) -> bool:
+        call_tracker.append(n.name)
+        return 'User' not in n.labels
 
     results = await extract_attributes_from_nodes(
         clients,
@@ -643,9 +581,51 @@ async def test_extract_attributes_from_nodes_with_callback():
     assert 'Node1' in call_tracker
     assert 'Node2' in call_tracker
 
-    # Node1 (User) should keep old summary, Node2 (Topic) should get new summary
+    # Both nodes should keep old summaries (short summary optimization skips LLM)
     node1_result = next(n for n in results if n.name == 'Node1')
     node2_result = next(n for n in results if n.name == 'Node2')
 
     assert node1_result.summary == 'Old1'
-    assert node2_result.summary == 'New summary'
+    assert node2_result.summary == 'Old2'
+
+
+@pytest.mark.asyncio
+async def test_batch_summaries_calls_llm_for_long_summary():
+    """Test that LLM is called when summary exceeds character limit."""
+    from graphiti_core.edges import EntityEdge
+    from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS
+
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'summaries': [{'name': 'Test Node', 'summary': 'Condensed summary'}]}
+    )
+
+    node = EntityNode(name='Test Node', group_id='group', labels=['Entity'], summary='Short')
+    episode = _make_episode()
+
+    # Create edges with long facts that exceed the threshold
+    long_fact = 'x' * (MAX_SUMMARY_CHARS * 2)
+    edge = EntityEdge(
+        uuid='edge1',
+        group_id='group',
+        source_node_uuid=node.uuid,
+        target_node_uuid='other-uuid',
+        name='test_edge',
+        fact=long_fact,
+        created_at=utc_now(),
+    )
+
+    edges_by_node = {node.uuid: [edge, edge]}  # Multiple long edges
+
+    await _extract_entity_summaries_batch(
+        llm_client,
+        [node],
+        episode=episode,
+        previous_episodes=[],
+        should_summarize_node=None,
+        edges_by_node=edges_by_node,
+    )
+
+    # LLM should have been called to condense the long summary
+    llm_client.generate_response.assert_awaited_once()
+    assert node.summary == 'Condensed summary'

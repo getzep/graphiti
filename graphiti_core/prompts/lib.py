@@ -25,18 +25,12 @@ from .dedupe_nodes import versions as dedupe_nodes_versions
 from .eval import Prompt as EvalPrompt
 from .eval import Versions as EvalVersions
 from .eval import versions as eval_versions
-from .extract_edge_dates import Prompt as ExtractEdgeDatesPrompt
-from .extract_edge_dates import Versions as ExtractEdgeDatesVersions
-from .extract_edge_dates import versions as extract_edge_dates_versions
 from .extract_edges import Prompt as ExtractEdgesPrompt
 from .extract_edges import Versions as ExtractEdgesVersions
 from .extract_edges import versions as extract_edges_versions
 from .extract_nodes import Prompt as ExtractNodesPrompt
 from .extract_nodes import Versions as ExtractNodesVersions
 from .extract_nodes import versions as extract_nodes_versions
-from .invalidate_edges import Prompt as InvalidateEdgesPrompt
-from .invalidate_edges import Versions as InvalidateEdgesVersions
-from .invalidate_edges import versions as invalidate_edges_versions
 from .models import Message, PromptFunction
 from .prompt_helpers import DO_NOT_ESCAPE_UNICODE
 from .summarize_nodes import Prompt as SummarizeNodesPrompt
@@ -49,8 +43,6 @@ class PromptLibrary(Protocol):
     dedupe_nodes: DedupeNodesPrompt
     extract_edges: ExtractEdgesPrompt
     dedupe_edges: DedupeEdgesPrompt
-    invalidate_edges: InvalidateEdgesPrompt
-    extract_edge_dates: ExtractEdgeDatesPrompt
     summarize_nodes: SummarizeNodesPrompt
     eval: EvalPrompt
 
@@ -60,8 +52,6 @@ class PromptLibraryImpl(TypedDict):
     dedupe_nodes: DedupeNodesVersions
     extract_edges: ExtractEdgesVersions
     dedupe_edges: DedupeEdgesVersions
-    invalidate_edges: InvalidateEdgesVersions
-    extract_edge_dates: ExtractEdgeDatesVersions
     summarize_nodes: SummarizeNodesVersions
     eval: EvalVersions
 
@@ -94,8 +84,6 @@ PROMPT_LIBRARY_IMPL: PromptLibraryImpl = {
     'dedupe_nodes': dedupe_nodes_versions,
     'extract_edges': extract_edges_versions,
     'dedupe_edges': dedupe_edges_versions,
-    'invalidate_edges': invalidate_edges_versions,
-    'extract_edge_dates': extract_edge_dates_versions,
     'summarize_nodes': summarize_nodes_versions,
     'eval': eval_versions,
 }

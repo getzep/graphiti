@@ -20,6 +20,30 @@ from typing import Any
 import kuzu
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.kuzu.operations.community_edge_ops import KuzuCommunityEdgeOperations
+from graphiti_core.driver.kuzu.operations.community_node_ops import KuzuCommunityNodeOperations
+from graphiti_core.driver.kuzu.operations.entity_edge_ops import KuzuEntityEdgeOperations
+from graphiti_core.driver.kuzu.operations.entity_node_ops import KuzuEntityNodeOperations
+from graphiti_core.driver.kuzu.operations.episode_node_ops import KuzuEpisodeNodeOperations
+from graphiti_core.driver.kuzu.operations.episodic_edge_ops import KuzuEpisodicEdgeOperations
+from graphiti_core.driver.kuzu.operations.graph_ops import KuzuGraphMaintenanceOperations
+from graphiti_core.driver.kuzu.operations.has_episode_edge_ops import KuzuHasEpisodeEdgeOperations
+from graphiti_core.driver.kuzu.operations.next_episode_edge_ops import (
+    KuzuNextEpisodeEdgeOperations,
+)
+from graphiti_core.driver.kuzu.operations.saga_node_ops import KuzuSagaNodeOperations
+from graphiti_core.driver.kuzu.operations.search_ops import KuzuSearchOperations
+from graphiti_core.driver.operations.community_edge_ops import CommunityEdgeOperations
+from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
+from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
+from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
+from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
+from graphiti_core.driver.operations.episodic_edge_ops import EpisodicEdgeOperations
+from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeOperations
+from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
+from graphiti_core.driver.operations.search_ops import SearchOperations
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +111,24 @@ SCHEMA_QUERIES = """
         group_id STRING,
         created_at TIMESTAMP
     );
+    CREATE NODE TABLE IF NOT EXISTS Saga (
+        uuid STRING PRIMARY KEY,
+        name STRING,
+        group_id STRING,
+        created_at TIMESTAMP
+    );
+    CREATE REL TABLE IF NOT EXISTS HAS_EPISODE(
+        FROM Saga TO Episodic,
+        uuid STRING,
+        group_id STRING,
+        created_at TIMESTAMP
+    );
+    CREATE REL TABLE IF NOT EXISTS NEXT_EPISODE(
+        FROM Episodic TO Episodic,
+        uuid STRING,
+        group_id STRING,
+        created_at TIMESTAMP
+    );
 """
 
 
@@ -105,6 +147,65 @@ class KuzuDriver(GraphDriver):
         self.setup_schema()
 
         self.client = kuzu.AsyncConnection(self.db, max_concurrent_queries=max_concurrent_queries)
+
+        # Instantiate Kuzu operations
+        self._entity_node_ops = KuzuEntityNodeOperations()
+        self._episode_node_ops = KuzuEpisodeNodeOperations()
+        self._community_node_ops = KuzuCommunityNodeOperations()
+        self._saga_node_ops = KuzuSagaNodeOperations()
+        self._entity_edge_ops = KuzuEntityEdgeOperations()
+        self._episodic_edge_ops = KuzuEpisodicEdgeOperations()
+        self._community_edge_ops = KuzuCommunityEdgeOperations()
+        self._has_episode_edge_ops = KuzuHasEpisodeEdgeOperations()
+        self._next_episode_edge_ops = KuzuNextEpisodeEdgeOperations()
+        self._search_ops = KuzuSearchOperations()
+        self._graph_ops = KuzuGraphMaintenanceOperations()
+
+    # --- Operations properties ---
+
+    @property
+    def entity_node_ops(self) -> EntityNodeOperations:
+        return self._entity_node_ops
+
+    @property
+    def episode_node_ops(self) -> EpisodeNodeOperations:
+        return self._episode_node_ops
+
+    @property
+    def community_node_ops(self) -> CommunityNodeOperations:
+        return self._community_node_ops
+
+    @property
+    def saga_node_ops(self) -> SagaNodeOperations:
+        return self._saga_node_ops
+
+    @property
+    def entity_edge_ops(self) -> EntityEdgeOperations:
+        return self._entity_edge_ops
+
+    @property
+    def episodic_edge_ops(self) -> EpisodicEdgeOperations:
+        return self._episodic_edge_ops
+
+    @property
+    def community_edge_ops(self) -> CommunityEdgeOperations:
+        return self._community_edge_ops
+
+    @property
+    def has_episode_edge_ops(self) -> HasEpisodeEdgeOperations:
+        return self._has_episode_edge_ops
+
+    @property
+    def next_episode_edge_ops(self) -> NextEpisodeEdgeOperations:
+        return self._next_episode_edge_ops
+
+    @property
+    def search_ops(self) -> SearchOperations:
+        return self._search_ops
+
+    @property
+    def graph_ops(self) -> GraphMaintenanceOperations:
+        return self._graph_ops
 
     async def execute_query(
         self, cypher_query_: str, **kwargs: Any

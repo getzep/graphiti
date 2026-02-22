@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.25.5"
+version = "0.28.1"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -13,7 +13,6 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "pydantic>=2.11.5",
     "neo4j>=5.26.0",
-    "diskcache>=5.6.3",
     "openai>=1.91.0",
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
@@ -28,7 +27,7 @@ Repository = "https://github.com/getzep/graphiti"
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.49.0"]
 groq = ["groq>=0.2.0"]
-google-genai = ["google-genai>=1.8.0"]
+google-genai = ["google-genai>=1.62.0"]
 kuzu = ["kuzu>=0.11.3"]
 falkordb = ["falkordb>=1.1.2,<2.0.0"]
 voyageai = ["voyageai>=0.2.3"]
@@ -48,7 +47,6 @@ dev = [
     "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
-    "diskcache-stubs>=5.6.3.6.20240818",
     "langgraph>=0.2.15",
     "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
@@ -103,4 +101,3 @@ docstring-code-format = true
 include = ["graphiti_core"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
-

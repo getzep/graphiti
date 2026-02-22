@@ -34,46 +34,41 @@ else:
         ) from None
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.falkordb import STOPWORDS as STOPWORDS
+from graphiti_core.driver.falkordb.operations.community_edge_ops import (
+    FalkorCommunityEdgeOperations,
+)
+from graphiti_core.driver.falkordb.operations.community_node_ops import (
+    FalkorCommunityNodeOperations,
+)
+from graphiti_core.driver.falkordb.operations.entity_edge_ops import FalkorEntityEdgeOperations
+from graphiti_core.driver.falkordb.operations.entity_node_ops import FalkorEntityNodeOperations
+from graphiti_core.driver.falkordb.operations.episode_node_ops import FalkorEpisodeNodeOperations
+from graphiti_core.driver.falkordb.operations.episodic_edge_ops import FalkorEpisodicEdgeOperations
+from graphiti_core.driver.falkordb.operations.graph_ops import FalkorGraphMaintenanceOperations
+from graphiti_core.driver.falkordb.operations.has_episode_edge_ops import (
+    FalkorHasEpisodeEdgeOperations,
+)
+from graphiti_core.driver.falkordb.operations.next_episode_edge_ops import (
+    FalkorNextEpisodeEdgeOperations,
+)
+from graphiti_core.driver.falkordb.operations.saga_node_ops import FalkorSagaNodeOperations
+from graphiti_core.driver.falkordb.operations.search_ops import FalkorSearchOperations
+from graphiti_core.driver.operations.community_edge_ops import CommunityEdgeOperations
+from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
+from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
+from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
+from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
+from graphiti_core.driver.operations.episodic_edge_ops import EpisodicEdgeOperations
+from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeOperations
+from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
+from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
-
-STOPWORDS = [
-    'a',
-    'is',
-    'the',
-    'an',
-    'and',
-    'are',
-    'as',
-    'at',
-    'be',
-    'but',
-    'by',
-    'for',
-    'if',
-    'in',
-    'into',
-    'it',
-    'no',
-    'not',
-    'of',
-    'on',
-    'or',
-    'such',
-    'that',
-    'their',
-    'then',
-    'there',
-    'these',
-    'they',
-    'this',
-    'to',
-    'was',
-    'will',
-    'with',
-]
 
 
 class FalkorDriverSession(GraphDriverSession):
@@ -149,6 +144,19 @@ class FalkorDriver(GraphDriver):
         else:
             self.client = FalkorDB(host=host, port=port, username=username, password=password)
 
+        # Instantiate FalkorDB operations
+        self._entity_node_ops = FalkorEntityNodeOperations()
+        self._episode_node_ops = FalkorEpisodeNodeOperations()
+        self._community_node_ops = FalkorCommunityNodeOperations()
+        self._saga_node_ops = FalkorSagaNodeOperations()
+        self._entity_edge_ops = FalkorEntityEdgeOperations()
+        self._episodic_edge_ops = FalkorEpisodicEdgeOperations()
+        self._community_edge_ops = FalkorCommunityEdgeOperations()
+        self._has_episode_edge_ops = FalkorHasEpisodeEdgeOperations()
+        self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
+        self._search_ops = FalkorSearchOperations()
+        self._graph_ops = FalkorGraphMaintenanceOperations()
+
         # Schedule the indices and constraints to be built
         try:
             # Try to get the current event loop
@@ -158,6 +166,52 @@ class FalkorDriver(GraphDriver):
         except RuntimeError:
             # No event loop running, this will be handled later
             pass
+
+    # --- Operations properties ---
+
+    @property
+    def entity_node_ops(self) -> EntityNodeOperations:
+        return self._entity_node_ops
+
+    @property
+    def episode_node_ops(self) -> EpisodeNodeOperations:
+        return self._episode_node_ops
+
+    @property
+    def community_node_ops(self) -> CommunityNodeOperations:
+        return self._community_node_ops
+
+    @property
+    def saga_node_ops(self) -> SagaNodeOperations:
+        return self._saga_node_ops
+
+    @property
+    def entity_edge_ops(self) -> EntityEdgeOperations:
+        return self._entity_edge_ops
+
+    @property
+    def episodic_edge_ops(self) -> EpisodicEdgeOperations:
+        return self._episodic_edge_ops
+
+    @property
+    def community_edge_ops(self) -> CommunityEdgeOperations:
+        return self._community_edge_ops
+
+    @property
+    def has_episode_edge_ops(self) -> HasEpisodeEdgeOperations:
+        return self._has_episode_edge_ops
+
+    @property
+    def next_episode_edge_ops(self) -> NextEpisodeEdgeOperations:
+        return self._next_episode_edge_ops
+
+    @property
+    def search_ops(self) -> SearchOperations:
+        return self._search_ops
+
+    @property
+    def graph_ops(self) -> GraphMaintenanceOperations:
+        return self._graph_ops
 
     def _get_graph(self, graph_name: str | None) -> FalkorGraph:
         # FalkorDB requires a non-None database name for multi-tenant graphs; the default is "default_db"
@@ -321,6 +375,9 @@ class FalkorDriver(GraphDriver):
                 '=': ' ',
                 '~': ' ',
                 '?': ' ',
+                '|': ' ',
+                '/': ' ',
+                '\\': ' ',
             }
         )
         sanitized = query.translate(separator_map)
@@ -343,14 +400,17 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            group_values = '|'.join(group_ids)
+            # Escape group_ids with quotes to prevent RediSearch syntax errors
+            # with reserved words like "main" or special characters like hyphens
+            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 
         sanitized_query = self.sanitize(query)
 
-        # Remove stopwords from the sanitized query
+        # Remove stopwords and empty tokens from the sanitized query
         query_words = sanitized_query.split()
-        filtered_words = [word for word in query_words if word.lower() not in STOPWORDS]
+        filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
         sanitized_query = ' | '.join(filtered_words)
 
         # If the query is too long return no query

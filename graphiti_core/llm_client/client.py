@@ -21,14 +21,15 @@ import typing
 from abc import ABC, abstractmethod
 
 import httpx
-from diskcache import Cache
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential
 
 from ..prompts.models import Message
 from ..tracer import NoOpTracer, Tracer
+from .cache import LLMCache
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError
+from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
@@ -80,10 +81,11 @@ class LLMClient(ABC):
         self.cache_enabled = cache
         self.cache_dir = None
         self.tracer: Tracer = NoOpTracer()
+        self.token_tracker: TokenUsageTracker = TokenUsageTracker()
 
         # Only create the cache directory if caching is enabled
         if self.cache_enabled:
-            self.cache_dir = Cache(DEFAULT_CACHE_DIR)
+            self.cache_dir = LLMCache(DEFAULT_CACHE_DIR)
 
     def set_tracer(self, tracer: Tracer) -> None:
         """Set the tracer for this LLM client."""
@@ -232,15 +234,14 @@ class LLMClient(ABC):
 
     def _get_failed_generation_log(self, messages: list[Message], output: str | None) -> str:
         """
-        Log the full input messages, the raw output (if any), and the exception for debugging failed generations.
+        Log structural metadata and truncated raw output for debugging failed
+        generations, without including full message content that may contain PII.
         """
-        log = ''
-        log += f'Input messages: {json.dumps([m.model_dump() for m in messages], indent=2)}\n'
+        log = f'Input messages: {len(messages)} message(s), '
+        log += f'roles: {[m.role for m in messages]}\n'
         if output is not None:
-            if len(output) > 4000:
-                log += f'Raw output: {output[:2000]}... (truncated) ...{output[-2000:]}\n'
-            else:
-                log += f'Raw output: {output}\n'
+            truncated = output[:500] + '...' if len(output) > 500 else output
+            log += f'Raw output (truncated): {truncated}\n'
         else:
             log += 'No raw output available'
         return log
