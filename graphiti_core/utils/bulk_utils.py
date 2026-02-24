@@ -250,6 +250,15 @@ async def add_nodes_and_edges_bulk_tx(
             entity_edges=edges,
         )
 
+    # Dual-write to vector store if attached
+    if driver.vector_store is not None:
+        try:
+            await driver.vector_store.save_episodic_nodes(episodic_nodes)
+            await driver.vector_store.save_entity_nodes(entity_nodes)
+            await driver.vector_store.save_entity_edges(entity_edges)
+        except Exception:
+            logger.warning('Failed to sync bulk data to vector store', exc_info=True)
+
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,
