@@ -1,9 +1,12 @@
-"""Factory classes for creating LLM, Embedder, and Database clients."""
+"""Factory classes for creating LLM, Embedder, Database, and VectorStore clients."""
+
+from typing import Any
 
 from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    VectorStoreAppConfig,
 )
 
 # Try to import FalkorDriver if available
@@ -433,3 +436,25 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class VectorStoreFactory:
+    """Factory for creating VectorStoreClient instances from configuration."""
+
+    @staticmethod
+    def create(config: VectorStoreAppConfig) -> Any:
+        """Create a VectorStoreClient based on the configured provider.
+
+        Returns None if no provider is configured.
+        """
+        if config.provider is None:
+            return None
+
+        provider = config.provider.lower()
+
+        match provider:
+            case _:
+                raise ValueError(
+                    f'Unsupported vector store provider: {provider}. '
+                    f'Install a provider package (e.g. pip install "graphiti-core[milvus]").'
+                )
