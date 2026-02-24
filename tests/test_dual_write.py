@@ -24,6 +24,17 @@ def _mock_driver(*, with_vector_store: bool = True):
         driver.vector_store.upsert = AsyncMock()
         driver.vector_store.delete = AsyncMock()
         driver.vector_store.reset_collections = AsyncMock()
+        # Domain-aware methods
+        driver.vector_store.save_entity_nodes = AsyncMock()
+        driver.vector_store.save_entity_edges = AsyncMock()
+        driver.vector_store.save_episodic_nodes = AsyncMock()
+        driver.vector_store.save_community_nodes = AsyncMock()
+        driver.vector_store.delete_entity_nodes = AsyncMock()
+        driver.vector_store.delete_entity_edges = AsyncMock()
+        driver.vector_store.delete_nodes_by_uuids = AsyncMock()
+        driver.vector_store.delete_community_nodes = AsyncMock()
+        driver.vector_store.delete_by_group_ids = AsyncMock()
+        driver.vector_store.clear_all = AsyncMock()
     else:
         driver.vector_store = None
 
@@ -79,11 +90,9 @@ class TestEntityNodeDualWrite:
         await node.save(driver)
 
         driver.execute_query.assert_called_once()
-        driver.vector_store.ensure_ready.assert_called_once()
-        driver.vector_store.upsert.assert_called_once()
-        call_kwargs = driver.vector_store.upsert.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_entity_nodes'
-        assert call_kwargs['data'][0]['uuid'] == 'node-1'
+        driver.vector_store.save_entity_nodes.assert_called_once()
+        call_args = driver.vector_store.save_entity_nodes.call_args
+        assert call_args[0][0][0].uuid == 'node-1'
 
     @pytest.mark.asyncio
     async def test_save_skips_vector_store_when_not_set(self):
@@ -97,7 +106,7 @@ class TestEntityNodeDualWrite:
     @pytest.mark.asyncio
     async def test_save_succeeds_when_vector_store_fails(self):
         driver = _mock_driver(with_vector_store=True)
-        driver.vector_store.upsert.side_effect = Exception('connection error')
+        driver.vector_store.save_entity_nodes.side_effect = Exception('connection error')
         node = _make_entity_node()
 
         await node.save(driver)
@@ -116,7 +125,7 @@ class TestEntityNodeDualWrite:
 
         driver.graph_operations_interface.node_save.assert_called_once()
         driver.execute_query.assert_not_called()
-        driver.vector_store.upsert.assert_not_called()
+        driver.vector_store.save_entity_nodes.assert_not_called()
 
 
 # ---- CommunityNode.save() dual-write ----
@@ -131,14 +140,12 @@ class TestCommunityNodeDualWrite:
         await node.save(driver)
 
         driver.execute_query.assert_called_once()
-        driver.vector_store.upsert.assert_called_once()
-        call_kwargs = driver.vector_store.upsert.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_community_nodes'
+        driver.vector_store.save_community_nodes.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_save_succeeds_when_vector_store_fails(self):
         driver = _mock_driver(with_vector_store=True)
-        driver.vector_store.upsert.side_effect = Exception('timeout')
+        driver.vector_store.save_community_nodes.side_effect = Exception('timeout')
         node = _make_community_node()
 
         await node.save(driver)
@@ -170,17 +177,16 @@ class TestEntityEdgeDualWrite:
         await edge.save(driver)
 
         driver.execute_query.assert_called_once()
-        driver.vector_store.upsert.assert_called_once()
-        call_kwargs = driver.vector_store.upsert.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_entity_edges'
-        assert call_kwargs['data'][0]['uuid'] == 'edge-1'
+        driver.vector_store.save_entity_edges.assert_called_once()
+        call_args = driver.vector_store.save_entity_edges.call_args
+        assert call_args[0][0][0].uuid == 'edge-1'
 
     @pytest.mark.asyncio
     async def test_save_succeeds_when_vector_store_fails(self):
         from graphiti_core.edges import EntityEdge
 
         driver = _mock_driver(with_vector_store=True)
-        driver.vector_store.upsert.side_effect = Exception('nope')
+        driver.vector_store.save_entity_edges.side_effect = Exception('nope')
         edge = EntityEdge(
             uuid='edge-2',
             source_node_uuid='src-1',
@@ -246,8 +252,10 @@ class TestBulkDualWrite:
             driver=driver,
         )
 
-        # Vector store should have been called for episodic, entity, and edge collections
-        assert driver.vector_store.upsert.call_count == 3
+        # Vector store should have been called for episodic, entity, and edge
+        driver.vector_store.save_episodic_nodes.assert_called_once()
+        driver.vector_store.save_entity_nodes.assert_called_once()
+        driver.vector_store.save_entity_edges.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_bulk_skips_vector_store_when_not_set(self):
@@ -266,7 +274,7 @@ class TestBulkDualWrite:
         from graphiti_core.utils.bulk_utils import add_nodes_and_edges_bulk_tx
 
         driver = _mock_driver(with_vector_store=True)
-        driver.vector_store.upsert.side_effect = Exception('vector store down')
+        driver.vector_store.save_episodic_nodes.side_effect = Exception('vector store down')
         tx = AsyncMock()
 
         node = _make_entity_node()
@@ -300,10 +308,10 @@ class TestNodeDeleteDualWrite:
 
         await node.delete(driver)
 
-        # Graph DB delete happened (3 calls for Entity, Episodic, Community in fallback)
+        # Graph DB delete happened
         assert driver.execute_query.call_count >= 1
-        # Vector store delete called for all 3 node collections
-        assert driver.vector_store.delete.call_count == 3
+        # Vector store delete called via domain-aware method
+        driver.vector_store.delete_nodes_by_uuids.assert_called_once_with(['node-1'])
 
     @pytest.mark.asyncio
     async def test_delete_skips_vector_store_when_not_set(self):
@@ -317,7 +325,7 @@ class TestNodeDeleteDualWrite:
     @pytest.mark.asyncio
     async def test_delete_succeeds_when_vector_store_fails(self):
         driver = _mock_driver(with_vector_store=True)
-        driver.vector_store.delete.side_effect = Exception('vector store down')
+        driver.vector_store.delete_nodes_by_uuids.side_effect = Exception('vector store down')
         node = _make_entity_node()
 
         await node.delete(driver)
@@ -337,11 +345,8 @@ class TestNodeDeleteByUuidsDualWrite:
 
         await Node.delete_by_uuids(driver, ['uuid-1', 'uuid-2'])
 
-        # Vector store delete called for all 3 node collections
-        assert driver.vector_store.delete.call_count == 3
-        call_kwargs = driver.vector_store.delete.call_args_list[0].kwargs
-        assert 'uuid-1' in call_kwargs['filter_expr']
-        assert 'uuid-2' in call_kwargs['filter_expr']
+        # Vector store delete called via domain-aware method
+        driver.vector_store.delete_nodes_by_uuids.assert_called_once_with(['uuid-1', 'uuid-2'])
 
     @pytest.mark.asyncio
     async def test_delete_by_uuids_skips_empty_list(self):
@@ -352,7 +357,7 @@ class TestNodeDeleteByUuidsDualWrite:
         await Node.delete_by_uuids(driver, [])
 
         # No vector store delete for empty list
-        driver.vector_store.delete.assert_not_called()
+        driver.vector_store.delete_nodes_by_uuids.assert_not_called()
 
 
 # ---- EntityEdge.delete() dual-write ----
@@ -378,10 +383,7 @@ class TestEdgeDeleteDualWrite:
 
         await edge.delete(driver)
 
-        driver.vector_store.delete.assert_called_once()
-        call_kwargs = driver.vector_store.delete.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_entity_edges'
-        assert 'edge-del-1' in call_kwargs['filter_expr']
+        driver.vector_store.delete_entity_edges.assert_called_once_with(['edge-del-1'])
 
     @pytest.mark.asyncio
     async def test_delete_by_uuids_removes_from_vector_store(self):
@@ -391,11 +393,7 @@ class TestEdgeDeleteDualWrite:
 
         await EntityEdge.delete_by_uuids(driver, ['e1', 'e2'])
 
-        driver.vector_store.delete.assert_called_once()
-        call_kwargs = driver.vector_store.delete.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_entity_edges'
-        assert 'e1' in call_kwargs['filter_expr']
-        assert 'e2' in call_kwargs['filter_expr']
+        driver.vector_store.delete_entity_edges.assert_called_once_with(['e1', 'e2'])
 
 
 # ---- clear_data() dual-write ----
@@ -410,7 +408,7 @@ class TestClearDataDualWrite:
 
         await clear_data(driver, group_ids=None)
 
-        driver.vector_store.reset_collections.assert_called_once()
+        driver.vector_store.clear_all.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_clear_by_group_ids_deletes_from_vector_store(self):
@@ -420,11 +418,7 @@ class TestClearDataDualWrite:
 
         await clear_data(driver, group_ids=['g1', 'g2'])
 
-        # Should delete from all 4 collections (3 nodes + 1 edges)
-        assert driver.vector_store.delete.call_count == 4
-        call_kwargs = driver.vector_store.delete.call_args_list[0].kwargs
-        assert 'g1' in call_kwargs['filter_expr']
-        assert 'g2' in call_kwargs['filter_expr']
+        driver.vector_store.delete_by_group_ids.assert_called_once_with(['g1', 'g2'])
 
     @pytest.mark.asyncio
     async def test_clear_skips_vector_store_when_not_set(self):
@@ -447,9 +441,7 @@ class TestRemoveCommunitiesDualWrite:
 
         await remove_communities(driver)
 
-        driver.vector_store.delete.assert_called_once()
-        call_kwargs = driver.vector_store.delete.call_args.kwargs
-        assert call_kwargs['collection_name'] == 'test_community_nodes'
+        driver.vector_store.delete_community_nodes.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_remove_communities_skips_vector_store_when_not_set(self):

@@ -210,9 +210,13 @@ class Graphiti:
             self.driver = Neo4jDriver(uri, user, password)
 
         # Attach vector store to driver for dual-write and search
+        # NOTE: Only set vector_store + search_interface. Do NOT set
+        # graph_operations_interface — that replaces the graph DB entirely.
+        # Dual-write to Milvus happens via vector_store hooks in bulk_utils,
+        # nodes.py, edges.py, etc.
         if vector_store is not None:
             self.driver.vector_store = vector_store
-            # Auto-attach MilvusSearchInterface if search_interface not already set
+            # Auto-attach MilvusSearchInterface if not already set
             try:
                 from graphiti_core.vector_store.milvus_client import MilvusVectorStoreClient
 

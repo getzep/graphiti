@@ -132,7 +132,7 @@ class MilvusGraphOperationsInterface(GraphOperationsInterface):
     ) -> dict[str, list[float]]:
         if not nodes:
             return {}
-        uuids = [n.uuid for n in nodes]
+        uuids = [n['uuid'] if isinstance(n, dict) else n.uuid for n in nodes]
         uuids_str = ', '.join(f'"{u}"' for u in uuids)
         results = await self._vs_client.query(
             collection_name=self._vs_client.collection_name(COLLECTION_ENTITY_NODES),
@@ -212,7 +212,7 @@ class MilvusGraphOperationsInterface(GraphOperationsInterface):
     ) -> dict[str, list[float]]:
         if not edges:
             return {}
-        uuids = [e.uuid for e in edges]
+        uuids = [e['uuid'] if isinstance(e, dict) else e.uuid for e in edges]
         uuids_str = ', '.join(f'"{u}"' for u in uuids)
         results = await self._vs_client.query(
             collection_name=self._vs_client.collection_name(COLLECTION_ENTITY_EDGES),
@@ -283,6 +283,21 @@ class MilvusGraphOperationsInterface(GraphOperationsInterface):
             collection_name=self._vs_client.collection_name(COLLECTION_EPISODIC_NODES),
             filter_expr=f'group_id == "{group_id}"',
         )
+
+    # ---------------------------------
+    # EpisodicEdge: no-op (graph-only)
+    # ---------------------------------
+
+    async def episodic_edge_save_bulk(
+        self,
+        _cls: Any,
+        driver: Any,
+        transaction: Any,
+        episodic_edges: list[Any],
+        batch_size: int = 100,
+    ) -> None:
+        """No-op: episodic edges (MENTIONS) are graph-only, not stored in Milvus."""
+        pass
 
     # -----------------------
     # CommunityNode: Save/Delete

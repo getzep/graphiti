@@ -305,17 +305,24 @@ def get_community_node_collection_schema(dim: int = DEFAULT_EMBEDDING_DIM) -> tu
 # ---- Serialization: Graphiti models <-> Milvus dicts ----
 
 
+def _get(obj: Any, key: str, default: Any = None) -> Any:
+    """Get attribute from object or dict, supporting both access patterns."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def entity_node_to_milvus_dict(node: Any) -> dict[str, Any]:
-    """Serialize an EntityNode to a Milvus-compatible dict for upsert."""
+    """Serialize an EntityNode (object or dict) to a Milvus-compatible dict for upsert."""
     return {
-        'uuid': node.uuid,
-        'group_id': node.group_id,
-        'name': (node.name or '')[:512],
-        'summary': (node.summary or '')[:8192],
-        'labels': node.labels or [],
-        'created_at': datetime_to_epoch_ms(node.created_at),
-        'attributes': node.attributes or {},
-        'name_embedding': node.name_embedding or [0.0] * DEFAULT_EMBEDDING_DIM,
+        'uuid': _get(node, 'uuid'),
+        'group_id': _get(node, 'group_id'),
+        'name': (_get(node, 'name') or '')[:512],
+        'summary': (_get(node, 'summary') or '')[:8192],
+        'labels': _get(node, 'labels') or [],
+        'created_at': datetime_to_epoch_ms(_get(node, 'created_at')),
+        'attributes': _get(node, 'attributes') or {},
+        'name_embedding': _get(node, 'name_embedding') or [0.0] * DEFAULT_EMBEDDING_DIM,
     }
 
 
@@ -344,21 +351,21 @@ def milvus_dict_to_entity_node(data: dict[str, Any]) -> Any:
 
 
 def entity_edge_to_milvus_dict(edge: Any) -> dict[str, Any]:
-    """Serialize an EntityEdge to a Milvus-compatible dict for upsert."""
+    """Serialize an EntityEdge (object or dict) to a Milvus-compatible dict for upsert."""
     return {
-        'uuid': edge.uuid,
-        'group_id': edge.group_id,
-        'source_node_uuid': edge.source_node_uuid,
-        'target_node_uuid': edge.target_node_uuid,
-        'name': (edge.name or '')[:512],
-        'fact': (edge.fact or '')[:8192],
-        'episodes': edge.episodes or [],
-        'created_at': datetime_to_epoch_ms(edge.created_at),
-        'expired_at': datetime_to_epoch_ms(edge.expired_at),
-        'valid_at': datetime_to_epoch_ms(edge.valid_at),
-        'invalid_at': datetime_to_epoch_ms(edge.invalid_at),
-        'attributes': edge.attributes or {},
-        'fact_embedding': edge.fact_embedding or [0.0] * DEFAULT_EMBEDDING_DIM,
+        'uuid': _get(edge, 'uuid'),
+        'group_id': _get(edge, 'group_id'),
+        'source_node_uuid': _get(edge, 'source_node_uuid'),
+        'target_node_uuid': _get(edge, 'target_node_uuid'),
+        'name': (_get(edge, 'name') or '')[:512],
+        'fact': (_get(edge, 'fact') or '')[:8192],
+        'episodes': _get(edge, 'episodes') or [],
+        'created_at': datetime_to_epoch_ms(_get(edge, 'created_at')),
+        'expired_at': datetime_to_epoch_ms(_get(edge, 'expired_at')),
+        'valid_at': datetime_to_epoch_ms(_get(edge, 'valid_at')),
+        'invalid_at': datetime_to_epoch_ms(_get(edge, 'invalid_at')),
+        'attributes': _get(edge, 'attributes') or {},
+        'fact_embedding': _get(edge, 'fact_embedding') or [0.0] * DEFAULT_EMBEDDING_DIM,
     }
 
 
@@ -392,17 +399,19 @@ def milvus_dict_to_entity_edge(data: dict[str, Any]) -> Any:
 
 
 def episodic_node_to_milvus_dict(node: Any) -> dict[str, Any]:
-    """Serialize an EpisodicNode to a Milvus-compatible dict for upsert."""
+    """Serialize an EpisodicNode (object or dict) to a Milvus-compatible dict for upsert."""
+    source = _get(node, 'source')
+    source = source.value if hasattr(source, 'value') else str(source) if source is not None else ''
     return {
-        'uuid': node.uuid,
-        'group_id': node.group_id,
-        'name': (node.name or '')[:512],
-        'content': (node.content or '')[:65535],
-        'source': node.source.value if hasattr(node.source, 'value') else str(node.source),
-        'source_description': (node.source_description or '')[:512],
-        'created_at': datetime_to_epoch_ms(node.created_at),
-        'valid_at': datetime_to_epoch_ms(node.valid_at),
-        'entity_edges': node.entity_edges or [],
+        'uuid': _get(node, 'uuid'),
+        'group_id': _get(node, 'group_id'),
+        'name': (_get(node, 'name') or '')[:512],
+        'content': (_get(node, 'content') or '')[:65535],
+        'source': source,
+        'source_description': (_get(node, 'source_description') or '')[:512],
+        'created_at': datetime_to_epoch_ms(_get(node, 'created_at')),
+        'valid_at': datetime_to_epoch_ms(_get(node, 'valid_at')),
+        'entity_edges': _get(node, 'entity_edges') or [],
     }
 
 

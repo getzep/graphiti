@@ -223,6 +223,8 @@ class GraphitiService:
                     logger.warning(f'Failed to create vector store client: {e}')
 
             # Initialize Graphiti client with appropriate driver
+            # Note: vector_store is attached after creation for PyPI compatibility
+            # (the vector_store param was added in our feature branch, not yet in PyPI)
             try:
                 if self.config.database.provider.lower() == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
@@ -240,7 +242,6 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
-                        vector_store=vector_store_client,
                     )
                 else:
                     # For Neo4j (default), use the original approach
@@ -251,7 +252,6 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
-                        vector_store=vector_store_client,
                     )
             except Exception as db_error:
                 # Check for connection errors
@@ -292,6 +292,28 @@ class GraphitiService:
                         ) from db_error
                 # Re-raise other errors
                 raise
+
+            # Attach vector store as search overlay (works with any graph DB)
+            # NOTE: Only set vector_store + search_interface. Do NOT set
+            # graph_operations_interface — that replaces the graph DB entirely.
+            # Dual-write to Milvus happens via vector_store hooks in bulk_utils,
+            # nodes.py, edges.py, etc.
+            if vector_store_client is not None:
+                self.client.driver.vector_store = vector_store_client
+                try:
+                    from graphiti_core.vector_store.milvus_client import MilvusVectorStoreClient
+
+                    if isinstance(vector_store_client, MilvusVectorStoreClient):
+                        from graphiti_core.vector_store.milvus_search_interface import (
+                            MilvusSearchInterface,
+                        )
+
+                        self.client.driver.search_interface = MilvusSearchInterface(
+                            vs_client=vector_store_client
+                        )
+                        logger.info('Milvus search overlay attached')
+                except ImportError:
+                    logger.warning('Milvus interfaces not available, using vector_store only')
 
             # Build indices
             await self.client.build_indices_and_constraints()

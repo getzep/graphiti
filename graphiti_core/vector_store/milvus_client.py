@@ -23,6 +23,10 @@ from graphiti_core.vector_store.milvus_utils import (
     COLLECTION_ENTITY_EDGES,
     COLLECTION_ENTITY_NODES,
     COLLECTION_EPISODIC_NODES,
+    community_node_to_milvus_dict,
+    entity_edge_to_milvus_dict,
+    entity_node_to_milvus_dict,
+    episodic_node_to_milvus_dict,
     get_community_node_collection_schema,
     get_entity_edge_collection_schema,
     get_entity_node_collection_schema,
@@ -182,3 +186,110 @@ class MilvusVectorStoreClient(VectorStoreClient):
         if self._client is not None:
             await self._client.close()
             self._client = None
+
+    # ------------------------------------------------------------------
+    # Domain-aware save/delete
+    # ------------------------------------------------------------------
+
+    async def save_entity_nodes(self, nodes: list[Any]) -> None:
+        if not nodes:
+            return
+        await self.ensure_ready()
+        await self._client.upsert(
+            collection_name=self.collection_name(COLLECTION_ENTITY_NODES),
+            data=[entity_node_to_milvus_dict(n) for n in nodes],
+        )
+
+    async def save_entity_edges(self, edges: list[Any]) -> None:
+        if not edges:
+            return
+        await self.ensure_ready()
+        await self._client.upsert(
+            collection_name=self.collection_name(COLLECTION_ENTITY_EDGES),
+            data=[entity_edge_to_milvus_dict(e) for e in edges],
+        )
+
+    async def save_episodic_nodes(self, nodes: list[Any]) -> None:
+        if not nodes:
+            return
+        await self.ensure_ready()
+        await self._client.upsert(
+            collection_name=self.collection_name(COLLECTION_EPISODIC_NODES),
+            data=[episodic_node_to_milvus_dict(n) for n in nodes],
+        )
+
+    async def save_community_nodes(self, nodes: list[Any]) -> None:
+        if not nodes:
+            return
+        await self.ensure_ready()
+        await self._client.upsert(
+            collection_name=self.collection_name(COLLECTION_COMMUNITY_NODES),
+            data=[community_node_to_milvus_dict(n) for n in nodes],
+        )
+
+    async def delete_entity_nodes(self, uuids: list[str]) -> None:
+        if not uuids:
+            return
+        await self.ensure_ready()
+        uuid_list = ', '.join(f'"{u}"' for u in uuids)
+        await self._client.delete(
+            collection_name=self.collection_name(COLLECTION_ENTITY_NODES),
+            filter=f'uuid in [{uuid_list}]',
+        )
+
+    async def delete_entity_edges(self, uuids: list[str]) -> None:
+        if not uuids:
+            return
+        await self.ensure_ready()
+        uuid_list = ', '.join(f'"{u}"' for u in uuids)
+        await self._client.delete(
+            collection_name=self.collection_name(COLLECTION_ENTITY_EDGES),
+            filter=f'uuid in [{uuid_list}]',
+        )
+
+    async def delete_nodes_by_uuids(self, uuids: list[str]) -> None:
+        if not uuids:
+            return
+        await self.ensure_ready()
+        uuid_list = ', '.join(f'"{u}"' for u in uuids)
+        filter_expr = f'uuid in [{uuid_list}]'
+        for suffix in [
+            COLLECTION_ENTITY_NODES,
+            COLLECTION_EPISODIC_NODES,
+            COLLECTION_COMMUNITY_NODES,
+        ]:
+            await self._client.delete(
+                collection_name=self.collection_name(suffix),
+                filter=filter_expr,
+            )
+
+    async def delete_community_nodes(self, uuids: list[str] | None = None) -> None:
+        await self.ensure_ready()
+        if uuids is None:
+            await self._client.delete(
+                collection_name=self.collection_name(COLLECTION_COMMUNITY_NODES),
+                filter='uuid != ""',
+            )
+        elif uuids:
+            uuid_list = ', '.join(f'"{u}"' for u in uuids)
+            await self._client.delete(
+                collection_name=self.collection_name(COLLECTION_COMMUNITY_NODES),
+                filter=f'uuid in [{uuid_list}]',
+            )
+
+    async def delete_by_group_ids(self, group_ids: list[str]) -> None:
+        if not group_ids:
+            return
+        await self.ensure_ready()
+        gid_list = ', '.join(f'"{g}"' for g in group_ids)
+        filter_expr = f'group_id in [{gid_list}]'
+        for suffix in [
+            COLLECTION_ENTITY_NODES,
+            COLLECTION_EPISODIC_NODES,
+            COLLECTION_COMMUNITY_NODES,
+            COLLECTION_ENTITY_EDGES,
+        ]:
+            await self._client.delete(
+                collection_name=self.collection_name(suffix),
+                filter=filter_expr,
+            )

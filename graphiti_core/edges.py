@@ -91,13 +91,7 @@ class Edge(BaseModel, ABC):
 
         if driver.vector_store is not None:
             try:
-                from graphiti_core.vector_store.milvus_utils import COLLECTION_ENTITY_EDGES
-
-                await driver.vector_store.ensure_ready()
-                await driver.vector_store.delete(
-                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
-                    filter_expr=f'uuid == "{self.uuid}"',
-                )
+                await driver.vector_store.delete_entity_edges([self.uuid])
             except Exception:
                 logger.warning(
                     f'Failed to delete edge {self.uuid} from vector store', exc_info=True
@@ -144,14 +138,7 @@ class Edge(BaseModel, ABC):
 
         if driver.vector_store is not None and uuids:
             try:
-                from graphiti_core.vector_store.milvus_utils import COLLECTION_ENTITY_EDGES
-
-                await driver.vector_store.ensure_ready()
-                uuid_list = ', '.join(f'"{u}"' for u in uuids)
-                await driver.vector_store.delete(
-                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
-                    filter_expr=f'uuid in [{uuid_list}]',
-                )
+                await driver.vector_store.delete_entity_edges(uuids)
             except Exception:
                 logger.warning('Failed to delete edges from vector store', exc_info=True)
 
@@ -393,16 +380,7 @@ class EntityEdge(Edge):
 
         if driver.vector_store is not None:
             try:
-                from graphiti_core.vector_store.milvus_utils import (
-                    COLLECTION_ENTITY_EDGES,
-                    entity_edge_to_milvus_dict,
-                )
-
-                await driver.vector_store.ensure_ready()
-                await driver.vector_store.upsert(
-                    collection_name=driver.vector_store.collection_name(COLLECTION_ENTITY_EDGES),
-                    data=[entity_edge_to_milvus_dict(self)],
-                )
+                await driver.vector_store.save_entity_edges([self])
             except Exception:
                 logger.warning(f'Failed to sync edge {self.uuid} to vector store', exc_info=True)
 
