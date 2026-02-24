@@ -11,14 +11,15 @@ server:
   port: 8000
   
 llm:
-  provider: "openai"  # Options: openai, openai_generic, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
-  max_tokens: 4096
-  
+  provider: ${LLM_PROVIDER:openai_generic}  # Options: openai, openai_generic, azure_openai, anthropic, gemini, groq
+  model: ${LLM_MODEL:nvidia/Qwen3-Next-80B-A3B-Instruct-NVFP4}
+  max_tokens: ${LLM_MAX_TOKENS:8192}
+  temperature: 0.0
+
   providers:
     openai:
-      api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_key: ${OPENAI_API_KEY:not-needed}
+      api_url: ${LLM_API_URL:http://dgx-spark:8000/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -44,13 +45,13 @@ llm:
 
 embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
-  dimensions: 1536
-  
+  model: ${EMBEDDER_MODEL:nomic-embed-text:v1.5}
+  dimensions: ${EMBEDDER_DIMENSIONS:768}
+
   providers:
     openai:
-      api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_key: ${EMBEDDER_API_KEY:not-needed}
+      api_url: ${EMBEDDER_API_URL:http://minisforum:11434/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -71,7 +72,7 @@ embedder:
       model: "voyage-3"
 
 reranker:
-  provider: "openai"  # Options: openai, gemini, bge
+  provider: ${RERANKER_PROVIDER:bge}  # Options: openai, gemini, bge
 
   providers:
     openai:
