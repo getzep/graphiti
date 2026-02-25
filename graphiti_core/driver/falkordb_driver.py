@@ -397,14 +397,13 @@ class FalkorDriver(GraphDriver):
         - AND is implicit with space: (@group_id:value) (text)
         - OR uses pipe within parentheses: (@group_id:value1|value2)
         """
-        if group_ids is None or len(group_ids) == 0:
-            group_filter = ''
-        else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-            group_values = '|'.join(escaped_group_ids)
-            group_filter = f'(@group_id:{group_values})'
+        # NOTE: group_id filtering is intentionally NOT included in the fulltext
+        # query. RediSearch treats hyphens as NOT operators even inside double
+        # quotes, which breaks UUID-formatted group_ids (e.g.,
+        # "f2c59d63-a7a7-b5e6-8000-000000000000"). This is safe because all
+        # callers already apply a Cypher-level `WHERE n.group_id IN $group_ids`
+        # filter that guarantees multi-tenant isolation.
+        # See: https://github.com/getzep/graphiti/issues/1269
 
         sanitized_query = self.sanitize(query)
 
@@ -417,6 +416,6 @@ class FalkorDriver(GraphDriver):
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
             return ''
 
-        full_query = group_filter + ' (' + sanitized_query + ')'
+        full_query = '(' + sanitized_query + ')'
 
         return full_query
