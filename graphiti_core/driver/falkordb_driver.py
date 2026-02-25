@@ -413,7 +413,7 @@ class FalkorDriver(GraphDriver):
         sanitized_query = ' | '.join(filtered_words)
 
         # If the query is too long return no query
-        if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+        if len(sanitized_query.split(' ')) >= max_query_length:
             return ''
 
         full_query = '(' + sanitized_query + ')'

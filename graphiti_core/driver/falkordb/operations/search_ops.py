@@ -115,7 +115,7 @@ def _build_falkor_fulltext_query(
     filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
     sanitized_query = ' | '.join(filtered_words)
 
-    if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+    if len(sanitized_query.split(' ')) >= max_query_length:
         return ''
 
     full_query = '(' + sanitized_query + ')'
