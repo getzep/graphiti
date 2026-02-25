@@ -158,6 +158,33 @@ class ResolvedEntityTypes(BaseModel):
 TypeScore = TopTypeCandidate
 
 
+# Phase 2: Subtype refinement models (two-phase type recognition)
+class RefinedEntityType(BaseModel):
+    """Result of Phase 2 subtype refinement for a single entity."""
+
+    entity_name: str = Field(..., description='Name of the entity being refined')
+    refined_type: str | None = Field(
+        None,
+        description='The specific subtype name (e.g., "Ticket"), or null if no subtype matches well',
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description='Confidence score for the refinement decision',
+    )
+    reasoning: str = Field(..., description='Brief explanation for the decision')
+
+
+class RefinedEntityTypes(BaseModel):
+    """Batch result of Phase 2 subtype refinement."""
+
+    refinements: list[RefinedEntityType] = Field(
+        ...,
+        description='Type refinement results for each entity',
+    )
+
+
 class ExtractedEntities(BaseModel):
     extracted_entities: list[ExtractedEntity] = Field(
         ...,
@@ -930,6 +957,77 @@ Example for 1 entity with 2 candidates:
     ]
 
 
+def refine_types_from_summary(context: dict[str, Any]) -> list[Message]:
+    """Phase 2: Refine entity types from Kernel to specific subtypes.
+
+    Uses entity summary (NOT original episode content) to determine
+    if an entity should be classified as a more specific subtype.
+
+    Context:
+    - kernel_type: The Kernel type (e.g., "Event")
+    - subtypes: List of subtype definitions [{name, description}, ...]
+    - entities: List of entities to refine [{name, summary, attributes}, ...]
+    """
+    sys_prompt = """You are a precise entity type classifier for a knowledge graph.
+
+Given entity summaries that have already been classified into a general Kernel type,
+determine if each entity should be refined to a more specific subtype.
+
+**IMPORTANT**:
+- Use ONLY the entity name, summary, and attributes provided.
+- The original source text is NOT available - do not speculate about information not in the summary.
+- If the summary does not clearly indicate a specific subtype, keep the entity at the Kernel type level."""
+
+    subtypes_json = context.get('subtypes', [])
+    if isinstance(subtypes_json, list) and subtypes_json:
+        subtypes_desc = '\n'.join([
+            f"- **{st.get('name', '')}**: {st.get('description', '')}"
+            for st in subtypes_json
+        ])
+    else:
+        subtypes_desc = '(No subtypes defined)'
+
+    entities_json = context.get('entities', [])
+    if isinstance(entities_json, list):
+        entities_desc = '\n'.join([
+            f"- **{e.get('name', '')}**\n  Summary: {e.get('summary', 'N/A')}\n  Attributes: {e.get('attributes', {})}"
+            for e in entities_json
+        ])
+    else:
+        entities_desc = str(entities_json)
+
+    user_prompt = f"""
+The following entities have been classified as "{context.get('kernel_type', 'Entity')}".
+Determine if any should be refined to a more specific subtype.
+
+<AVAILABLE SUBTYPES of {context.get('kernel_type', 'Entity')}>
+{subtypes_desc}
+</AVAILABLE SUBTYPES>
+
+<ENTITIES TO REFINE>
+{entities_desc}
+</ENTITIES TO REFINE>
+
+For each entity, respond with:
+- entity_name: The exact name from input
+- refined_type: The subtype name (e.g., "Ticket") or null if none matches well
+- confidence: 0.0-1.0 score for your decision
+- reasoning: Brief explanation (1-2 sentences)
+
+**Decision Guidelines**:
+- Score >= 0.7: Clearly matches a subtype based on summary content
+- Score 0.5-0.7: Somewhat matches but not definitive
+- Score < 0.5 or null: Does not clearly match any subtype, keep as "{context.get('kernel_type', 'Entity')}"
+
+If the entity summary doesn't provide enough evidence for a specific subtype,
+set refined_type to null (the entity stays as "{context.get('kernel_type', 'Entity')}").
+"""
+    return [
+        Message(role='system', content=sys_prompt),
+        Message(role='user', content=user_prompt),
+    ]
+
+
 versions: Versions = {
     'extract_message': extract_message,
     'extract_json': extract_json,
@@ -944,4 +1042,5 @@ versions: Versions = {
     'classify_nodes': classify_nodes,
     'extract_attributes': extract_attributes,
     'resolve_ambiguous_types': resolve_ambiguous_types,
+    'refine_types_from_summary': refine_types_from_summary,  # EasyOps: Phase 2 subtype refinement
 }

@@ -97,6 +97,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     extract_attributes_from_nodes,
     extract_nodes,
     filter_extracted_nodes,
+    refine_entity_types_from_summary,
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
@@ -732,6 +733,7 @@ class Graphiti:
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        kernel_to_subtypes: dict[str, list[str]] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -847,10 +849,27 @@ class Graphiti:
                     else {('Entity', 'Entity'): []}
                 )
 
-                # Extract nodes
+                # Phase 1: Extract nodes with Kernel types only (if two-phase recognition is enabled)
+                # When kernel_to_subtypes is provided, only pass 15 Kernel types to LLM
+                # Subtypes will be refined in Phase 2 after summary generation
                 step_start = time()
+                if kernel_to_subtypes:
+                    # Import here to avoid circular dependency
+                    from elevo_memory.core.kernel_types import (
+                        get_kernel_entity_models,
+                        get_kernel_edge_models,
+                        get_kernel_edge_type_map,
+                    )
+                    kernel_entity_types = get_kernel_entity_models()
+                    kernel_edge_types = get_kernel_edge_models()
+                    kernel_edge_type_map = get_kernel_edge_type_map()
+                    logger.info(f'Phase 1: Using {len(kernel_entity_types)} Kernel entity types, {len(kernel_edge_types)} Kernel edge types')
+                else:
+                    kernel_entity_types = entity_types
+                    kernel_edge_types = edge_types
+                    kernel_edge_type_map = edge_type_map
                 extracted_nodes = await extract_nodes(
-                    self.clients, episode, previous_episodes, entity_types, excluded_entity_types
+                    self.clients, episode, previous_episodes, kernel_entity_types, excluded_entity_types
                 )
                 perf_logger.info(f'[PERF] extract_nodes (LLM): {(time() - step_start)*1000:.0f}ms, count={len(extracted_nodes)}')
 
@@ -869,9 +888,9 @@ class Graphiti:
                     episode,
                     extracted_nodes,
                     previous_episodes,
-                    edge_type_map or edge_type_map_default,
+                    kernel_edge_type_map or edge_type_map_default,  # Use Kernel edge_type_map when two-phase recognition is enabled
                     group_id,
-                    edge_types,
+                    kernel_edge_types,  # Use Kernel edge types when two-phase recognition is enabled
                 )
                 (nodes, uuid_map, duplicate_pairs), extracted_edges = await semaphore_gather(
                     resolve_task, extract_edges_task
@@ -898,8 +917,8 @@ class Graphiti:
                     edges_with_pointers,
                     episode,
                     nodes,
-                    edge_types or {},
-                    edge_type_map or edge_type_map_default,
+                    kernel_edge_types or {},  # Use Kernel edge types when two-phase recognition is enabled
+                    kernel_edge_type_map or edge_type_map_default,  # Use Kernel edge_type_map when two-phase recognition is enabled
                 )
                 extract_attrs_task = extract_attributes_from_nodes(
                     self.clients, nodes, episode, previous_episodes, entity_types
@@ -911,6 +930,7 @@ class Graphiti:
 
                 # Filter entities using Knowledge Graph Builder's Principles (after attributes/summary extracted)
                 # EasyOps: Restored filter_extracted_nodes - Step 2 (reclassify) is disabled in node_operations.py
+                # NOTE: This must happen BEFORE Phase 2 subtype refinement, so we validate against Kernel types
                 step_start = time()
                 entity_types_context = [
                     {
@@ -919,14 +939,16 @@ class Graphiti:
                         'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types.',
                     }
                 ]
-                if entity_types:
+                # Use Kernel types for validation when two-phase recognition is enabled
+                filter_entity_types = kernel_entity_types if kernel_to_subtypes else entity_types
+                if filter_entity_types:
                     entity_types_context += [
                         {
                             'entity_type_id': i + 1,
                             'entity_type_name': type_name,
                             'entity_type_description': type_model.__doc__,
                         }
-                        for i, (type_name, type_model) in enumerate(entity_types.items())
+                        for i, (type_name, type_model) in enumerate(filter_entity_types.items())
                     ]
                 entities_to_remove, _ = await filter_extracted_nodes(
                     self.llm_client,
@@ -952,6 +974,21 @@ class Graphiti:
                     ]
                     logger.info(f'Filtered {original_count - len(hydrated_nodes)} entities: {entities_to_remove}')
                 perf_logger.info(f'[PERF] filter_entities: {(time() - step_start)*1000:.0f}ms, removed={len(entities_to_remove)}')
+
+                # Phase 2: Refine entity types from Kernel to subtypes (if two-phase recognition is enabled)
+                # This uses entity summaries (generated above) to determine specific subtypes
+                # NOTE: This happens AFTER filtering, so only validated entities get refined
+                if kernel_to_subtypes:
+                    step_start = time()
+                    hydrated_nodes = await refine_entity_types_from_summary(
+                        self.llm_client,
+                        hydrated_nodes,
+                        kernel_to_subtypes,
+                        entity_types or {},
+                        group_id,
+                        max_coroutines=self.max_coroutines,
+                    )
+                    perf_logger.info(f'[PERF] refine_entity_types (Phase 2): {(time() - step_start)*1000:.0f}ms')
 
                 entity_edges = resolved_edges + invalidated_edges
 

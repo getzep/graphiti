@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from time import time
 from typing import Any
@@ -50,6 +51,7 @@ from graphiti_core.prompts.extract_nodes import (
     ExtractedEntity,
     ExtractedEntityWithScores,
     MissedEntities,
+    RefinedEntityTypes,
     ResolvedEntityTypes,
     TopTypeCandidate,
     TypeScore,
@@ -1359,3 +1361,210 @@ def _build_episode_context(
             [ep.content for ep in previous_episodes] if previous_episodes is not None else []
         ),
     }
+
+
+# =============================================================================
+# Phase 2: Subtype Refinement (Two-Phase Type Recognition)
+# =============================================================================
+
+
+def _get_primary_type(labels: list[str]) -> str:
+    """Get the most specific (non-Entity) type from labels."""
+    for label in labels:
+        if label != 'Entity':
+            return label
+    return 'Entity'
+
+
+def _update_labels(labels: list[str], kernel_type: str, refined_type: str) -> list[str]:
+    """
+    Update labels to include full inheritance chain.
+
+    Input: labels=["Entity", "Event"], kernel="Event", refined="Ticket"
+    Output: ["Entity", "Event", "Ticket"]
+
+    Ensures:
+    1. Entity is always first
+    2. Kernel type is present
+    3. Refined type is appended
+    4. No duplicates
+    """
+    # Start with Entity
+    new_labels = ['Entity']
+
+    # Add Kernel type if not Entity
+    if kernel_type != 'Entity' and kernel_type not in new_labels:
+        new_labels.append(kernel_type)
+
+    # Add refined type
+    if refined_type not in new_labels:
+        new_labels.append(refined_type)
+
+    return new_labels
+
+
+async def refine_entity_types_from_summary(
+    llm_client: LLMClient,
+    nodes: list[EntityNode],
+    kernel_to_subtypes: dict[str, list[str]],
+    entity_types: dict[str, type[BaseModel]],
+    group_id: str,
+    max_coroutines: int | None = None,
+) -> list[EntityNode]:
+    """
+    Phase 2: Refine entity types from Kernel to specific subtypes.
+
+    Triggered after extract_attributes_from_nodes() when summaries are available.
+    Only refines entities whose current type is a Kernel type with defined subtypes.
+
+    Process:
+    1. Group nodes by Kernel type
+    2. For each Kernel type with subtypes, call LLM to determine specific subtype
+    3. Update node labels with inheritance chain (e.g., ["Entity", "Event", "Ticket"])
+    4. Store refinement confidence and reasoning
+
+    Args:
+        llm_client: LLM client for inference
+        nodes: Entities with summaries already generated
+        kernel_to_subtypes: {kernel_type: [subtype_names]} mapping
+        entity_types: Full entity type definitions (for subtype descriptions)
+        group_id: Tenant ID for logging
+        max_coroutines: Concurrency limit for parallel LLM calls
+
+    Returns:
+        Updated nodes with refined types and labels
+    """
+    perf_logger = logging.getLogger('graphiti.performance')
+    start = time()
+
+    # Identify nodes that need refinement
+    nodes_to_refine: list[tuple[EntityNode, str, list[str]]] = []
+    for node in nodes:
+        current_type = _get_primary_type(node.labels)
+        if current_type in kernel_to_subtypes:
+            subtypes = kernel_to_subtypes[current_type]
+            if subtypes:  # Only refine if subtypes exist
+                nodes_to_refine.append((node, current_type, subtypes))
+
+    if not nodes_to_refine:
+        logger.debug('Phase 2: No nodes require subtype refinement')
+        return nodes
+
+    logger.info(f'Phase 2: Refining {len(nodes_to_refine)} nodes with potential subtypes')
+
+    # Group by Kernel type for batch processing
+    by_kernel: dict[str, list[EntityNode]] = defaultdict(list)
+    kernel_subtypes_map: dict[str, list[str]] = {}
+
+    for node, kernel_type, subtypes in nodes_to_refine:
+        by_kernel[kernel_type].append(node)
+        kernel_subtypes_map[kernel_type] = subtypes
+
+    async def _refine_batch(
+        kernel_type: str,
+        batch_nodes: list[EntityNode],
+    ) -> None:
+        """Refine a batch of nodes belonging to the same Kernel type."""
+        subtypes = kernel_subtypes_map[kernel_type]
+
+        # Build subtype definitions for prompt
+        subtypes_defs = []
+        for st_name in subtypes:
+            st_model = entity_types.get(st_name)
+            if st_model:
+                subtypes_defs.append({
+                    'name': st_name,
+                    'description': st_model.__doc__ or f'Subtype: {st_name}',
+                })
+            else:
+                subtypes_defs.append({
+                    'name': st_name,
+                    'description': f'Subtype of {kernel_type}',
+                })
+
+        # Build entities context (name + summary + attributes)
+        entities_context = [
+            {
+                'name': node.name,
+                'summary': node.summary or '',
+                'attributes': node.attributes or {},
+            }
+            for node in batch_nodes
+        ]
+
+        context = {
+            'kernel_type': kernel_type,
+            'subtypes': subtypes_defs,
+            'entities': entities_context,
+        }
+
+        try:
+            response = await llm_client.generate_response(
+                prompt_library.extract_nodes.refine_types_from_summary(context),
+                response_model=RefinedEntityTypes,
+                group_id=group_id,
+                prompt_name='extract_nodes.refine_types_from_summary',
+            )
+
+            refinements = RefinedEntityTypes(**response)
+
+            # Build refinement map by entity name
+            refinement_map = {r.entity_name: r for r in refinements.refinements}
+
+            # Apply refinements
+            for node in batch_nodes:
+                if node.name in refinement_map:
+                    r = refinement_map[node.name]
+
+                    if r.refined_type and r.refined_type in subtypes:
+                        # Update labels to include inheritance chain
+                        node.labels = _update_labels(node.labels, kernel_type, r.refined_type)
+
+                        # Store Phase 2 confidence and reasoning
+                        node.type_confidence = r.confidence
+                        node.reasoning = (
+                            f'[Phase 2 refinement] {r.reasoning}\n'
+                            f'Refined from {kernel_type} to {r.refined_type}'
+                        )
+
+                        # Update type_scores with Phase 2 data
+                        if node.type_scores is None:
+                            node.type_scores = {}
+                        node.type_scores['phase2_refinement'] = {
+                            'kernel_type': kernel_type,
+                            'refined_type': r.refined_type,
+                            'confidence': r.confidence,
+                            'reasoning': r.reasoning,
+                        }
+
+                        logger.info(
+                            f'Phase 2: Refined "{node.name}" from {kernel_type} to {r.refined_type} '
+                            f'(confidence: {r.confidence:.2f})'
+                        )
+                    else:
+                        # Keep as Kernel type (Fallback)
+                        logger.debug(
+                            f'Phase 2: Kept "{node.name}" as {kernel_type} '
+                            f'(no matching subtype, refined_type={r.refined_type})'
+                        )
+
+        except Exception as e:
+            logger.warning(f'Phase 2 refinement failed for {kernel_type}: {e}')
+
+    # Run refinements in parallel by Kernel type (using semaphore_gather)
+    await semaphore_gather(
+        *[_refine_batch(kt, batch_nodes) for kt, batch_nodes in by_kernel.items()],
+        max_coroutines=max_coroutines,
+    )
+
+    end = time()
+    refined_count = sum(
+        1 for node, kt, _ in nodes_to_refine
+        if _get_primary_type(node.labels) != kt  # Type was changed
+    )
+    perf_logger.info(
+        f'[PERF] refine_entity_types (Phase 2): {(end - start)*1000:.0f}ms, '
+        f'candidates={len(nodes_to_refine)}, refined={refined_count}'
+    )
+
+    return nodes
