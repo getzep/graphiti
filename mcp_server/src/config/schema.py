@@ -191,6 +191,16 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class MilvusProviderConfig(BaseModel):
+    """Milvus provider configuration."""
+
+    uri: str = 'http://localhost:19530'
+    token: str | None = None
+    db_name: str = 'default'
+    embedding_dim: int = 1024
+    collection_prefix: str = 'graphiti'
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
@@ -205,16 +215,19 @@ class DatabaseConfig(BaseModel):
     providers: DatabaseProvidersConfig = Field(default_factory=DatabaseProvidersConfig)
 
 
-class VectorStoreAppConfig(BaseModel):
-    """Vector store configuration.
+class VectorStoreProvidersConfig(BaseModel):
+    """Vector store providers configuration."""
 
-    Provider-specific configuration (e.g. Milvus) is added by the
-    respective provider package.
-    """
+    milvus: MilvusProviderConfig | None = None
+
+
+class VectorStoreAppConfig(BaseModel):
+    """Vector store configuration."""
 
     provider: str | None = Field(
         default=None, description='Vector store provider (e.g. milvus). None = disabled.'
     )
+    providers: VectorStoreProvidersConfig = Field(default_factory=VectorStoreProvidersConfig)
 
 
 class EntityTypeConfig(BaseModel):

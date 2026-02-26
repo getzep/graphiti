@@ -211,10 +211,13 @@ class GraphitiService:
 
             # Create vector store client if configured
             vector_store_client = None
-            if self.config.vector_store.provider:
+            if os.environ.get('MILVUS_URI') or self.config.vector_store.provider:
                 try:
                     from services.factories import VectorStoreFactory
 
+                    # If MILVUS_URI is set but config doesn't specify provider, auto-detect
+                    if os.environ.get('MILVUS_URI') and not self.config.vector_store.provider:
+                        self.config.vector_store.provider = 'milvus'
                     vector_store_client = VectorStoreFactory.create(self.config.vector_store)
                 except Exception as e:
                     logger.warning(f'Failed to create vector store client: {e}')
@@ -293,10 +296,24 @@ class GraphitiService:
             # Attach vector store as search overlay (works with any graph DB)
             # NOTE: Only set vector_store + search_interface. Do NOT set
             # graph_operations_interface — that replaces the graph DB entirely.
-            # Dual-write happens via vector_store hooks in bulk_utils,
+            # Dual-write to Milvus happens via vector_store hooks in bulk_utils,
             # nodes.py, edges.py, etc.
             if vector_store_client is not None:
                 self.client.driver.vector_store = vector_store_client
+                try:
+                    from graphiti_core.vector_store.milvus_client import MilvusVectorStoreClient
+
+                    if isinstance(vector_store_client, MilvusVectorStoreClient):
+                        from graphiti_core.vector_store.milvus_search_interface import (
+                            MilvusSearchInterface,
+                        )
+
+                        self.client.driver.search_interface = MilvusSearchInterface(
+                            vs_client=vector_store_client
+                        )
+                        logger.info('Milvus search overlay attached')
+                except ImportError:
+                    logger.warning('Milvus interfaces not available, using vector_store only')
 
             # Build indices
             await self.client.build_indices_and_constraints()

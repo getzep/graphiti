@@ -46,6 +46,14 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-group dev
 
+# Optional: install pymilvus for Milvus vector store support
+# Set INSTALL_MILVUS=true in docker-compose build args to enable
+ARG INSTALL_MILVUS=false
+RUN if [ "$INSTALL_MILVUS" = "true" ]; then \
+        echo "Installing pymilvus for Milvus vector store support..." && \
+        uv pip install "pymilvus>=2.5.3"; \
+    fi
+
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
 

@@ -52,6 +52,16 @@ except ImportError:
     HAS_AZURE_LLM = False
 
 try:
+    from graphiti_core.vector_store.milvus_client import (  # noqa: F401
+        MilvusVectorStoreClient,
+        MilvusVectorStoreConfig,
+    )
+
+    HAS_MILVUS = True
+except ImportError:
+    HAS_MILVUS = False
+
+try:
     from graphiti_core.llm_client.anthropic_client import AnthropicClient
 
     HAS_ANTHROPIC = True
@@ -447,14 +457,46 @@ class VectorStoreFactory:
 
         Returns None if no provider is configured.
         """
+        import logging
+        import os
+
+        logger = logging.getLogger(__name__)
+
         if config.provider is None:
             return None
 
         provider = config.provider.lower()
 
         match provider:
-            case _:
-                raise ValueError(
-                    f'Unsupported vector store provider: {provider}. '
-                    f'Install a provider package (e.g. pip install "graphiti-core[milvus]").'
+            case 'milvus':
+                if not HAS_MILVUS:
+                    raise ValueError(
+                        'Milvus not available. Install with: pip install "graphiti-core[milvus]"'
+                    )
+                if config.providers.milvus:
+                    milvus_config = config.providers.milvus
+                else:
+                    from config.schema import MilvusProviderConfig
+
+                    milvus_config = MilvusProviderConfig()
+
+                uri = os.environ.get('MILVUS_URI', milvus_config.uri)
+                token = os.environ.get('MILVUS_TOKEN', milvus_config.token)
+                embedding_dim = int(
+                    os.environ.get('MILVUS_EMBEDDING_DIM', str(milvus_config.embedding_dim))
                 )
+                prefix = os.environ.get(
+                    'MILVUS_COLLECTION_PREFIX', milvus_config.collection_prefix
+                )
+
+                vs_config = MilvusVectorStoreConfig(
+                    uri=uri,
+                    token=token,
+                    embedding_dim=embedding_dim,
+                    collection_prefix=prefix,
+                )
+                logger.info(f'Creating Milvus vector store client: uri={uri}, prefix={prefix}')
+                return MilvusVectorStoreClient(config=vs_config)
+
+            case _:
+                raise ValueError(f'Unsupported vector store provider: {provider}')
