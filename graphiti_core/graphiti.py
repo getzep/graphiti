@@ -212,10 +212,25 @@ class Graphiti:
         # Attach vector store to driver for dual-write and search
         # NOTE: Only set vector_store + search_interface. Do NOT set
         # graph_operations_interface — that replaces the graph DB entirely.
-        # Dual-write happens via vector_store hooks in bulk_utils,
+        # Dual-write to Milvus happens via vector_store hooks in bulk_utils,
         # nodes.py, edges.py, etc.
         if vector_store is not None:
             self.driver.vector_store = vector_store
+            # Auto-attach MilvusSearchInterface if not already set
+            try:
+                from graphiti_core.vector_store.milvus_client import MilvusVectorStoreClient
+
+                if (
+                    isinstance(vector_store, MilvusVectorStoreClient)
+                    and self.driver.search_interface is None
+                ):
+                    from graphiti_core.vector_store.milvus_search_interface import (
+                        MilvusSearchInterface,
+                    )
+
+                    self.driver.search_interface = MilvusSearchInterface(vs_client=vector_store)
+            except ImportError:
+                pass
 
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
