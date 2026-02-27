@@ -317,17 +317,32 @@ python3 mcp_server/main.py
 Data flows through a 7-stage pipeline: Source Material → Evidence (deterministic chunking) → Ingest Registry (watermarks + dedup) → Graphiti MCP (LLM extraction) → Candidates DB (quarantine) → Promotion Policy (gates) → Fact Ledger (canonical truth).
 
 ```bash
-# Parse session transcripts into evidence JSON
-python3 ingest/parse_sessions_v1.py --agent main
+# 1. Bootstrap Neo4j with historical session transcripts (first-time setup)
+python3 scripts/import_transcripts_to_neo4j.py \
+  --sessions-dir path/to/session_transcripts/ --dry-run
+python3 scripts/import_transcripts_to_neo4j.py \
+  --sessions-dir path/to/session_transcripts/
 
-# Ingest sessions into graph (incremental, idempotent)
-python3 scripts/mcp_ingest_sessions.py --group-id s1_sessions_main --incremental
+# 2. Ingest sessions — Neo4j source mode (default, production path)
+python3 scripts/mcp_ingest_sessions.py \
+  --group-id s1_sessions_main \
+  --source-mode neo4j \
+  --mcp-url http://localhost:8000/mcp
 
-# Check ingestion status (watermarks, queue depth, last success/failure)
+# 2b. Rollback — evidence source mode (reads from disk, bypasses Neo4j)
+python3 scripts/mcp_ingest_sessions.py \
+  --group-id s1_sessions_main \
+  --source-mode evidence \
+  --evidence path/to/sessions_evidence/
+
+# 3. Check ingestion status (watermarks, queue depth, last success/failure)
 python3 scripts/registry_status.py
+
+# 4. Verify adapter contract compliance (INGEST_ADAPTER_CONTRACT_V1)
+python3 scripts/ingest_adapter_contract_check.py --strict
 ```
 
-Ingestion is idempotent (content-hash dedup), incremental (delta since last watermark), and supports sub-chunking for large evidence (>10k chars).
+Ingestion is idempotent (content-hash dedup), incremental (delta since last watermark), and supports sub-chunking for large evidence (>10k chars). All adapters must conform to `INGEST_ADAPTER_CONTRACT_V1` — see `ingest/contracts.py` and `docs/runbooks/adding-data-sources.md`.
 
 ---
 

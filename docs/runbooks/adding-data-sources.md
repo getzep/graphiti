@@ -311,3 +311,38 @@ After confirming the integration works:
 | `curated_snapshot_ingest.py` | Curated markdown snapshots (hash-gated) | For files that change infrequently |
 
 When writing a new adapter, start from the script closest to your source type. Copy the patterns (error handling, sub-chunking, cursor tracking) rather than writing from scratch.
+
+---
+
+## Ingest Adapter Contract (INGEST_ADAPTER_CONTRACT_V1)
+
+All ingest adapters must conform to **`INGEST_ADAPTER_CONTRACT_V1`**, defined in `ingest/contracts.py`. The contract is the normative spec for record and chunk shapes emitted by any adapter in this pipeline.
+
+### What the Contract Covers
+
+- **`IngestRecord`**: Required fields (`source_type`, `source_key`, `record_id`, `created_at`, `text`), allowed `source_type` values, and type constraints.
+- **`IngestChunk`**: Required fields (`chunk_id`, `chunk_key`, `source_key`, `record_ids`, `content`, `content_hash`, `boundary_reason`, `token_count`), and non-empty list invariants.
+- **`validate_determinism()`**: Verifies that two separate chunking passes over the same input produce byte-identical chunk IDs. Adapters must be deterministic — same input always produces the same chunks.
+
+### Verifying Your Adapter
+
+```bash
+# Run the built-in fixture tests
+python3 scripts/ingest_adapter_contract_check.py
+
+# Fail hard on any contract violation
+python3 scripts/ingest_adapter_contract_check.py --strict
+```
+
+### Contract Checklist for New Adapters
+
+| Check | Requirement |
+|-------|-------------|
+| `source_type` | One of `conversation`, `document`, `note`, `task`, `artifact` |
+| `record_id` | Deterministic — derived from source data, not randomly generated |
+| `chunk_id` | SHA-256 based, stable across re-runs |
+| `content_hash` | `sha256(content.encode()).hexdigest()` |
+| `record_ids` | Non-empty list of strings |
+| Determinism | Two runs over same input → identical chunk IDs |
+
+Adapters that fail the contract check will not be accepted into the pipeline.

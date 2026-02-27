@@ -1,0 +1,242 @@
+[
+  {
+    "id": "q001",
+    "query": "What is Yuan's workout schedule?",
+    "expected_facts": ["workout before 10:30am", "2.5 hour workout window"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main"],
+    "notes": "scheduling baseline"
+  },
+  {
+    "id": "q002",
+    "query": "What programming languages does Yuan prefer?",
+    "expected_facts": ["Python", "TypeScript"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main"],
+    "notes": "preference extraction"
+  },
+  {
+    "id": "q003",
+    "query": "What is Yuan's approach to AI agent memory?",
+    "expected_facts": ["dual-brain architecture", "fact ledger", "trust scoring"],
+    "expected_entities": ["Yuan Han Li", "Bicameral"],
+    "lane_alias": ["sessions_main"],
+    "notes": "technical philosophy"
+  },
+  {
+    "id": "q004",
+    "query": "What meetings does Yuan have scheduled this week?",
+    "expected_facts": ["calendar", "scheduled"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main"],
+    "notes": "temporal query"
+  },
+  {
+    "id": "q005",
+    "query": "How does Yuan handle crypto investments?",
+    "expected_facts": ["crypto", "investment", "portfolio"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main"],
+    "notes": "financial domain"
+  },
+  {
+    "id": "q006",
+    "query": "What tools does Yuan use for development?",
+    "expected_facts": ["Claude Code", "Neo4j", "Python"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main"],
+    "notes": "tooling preferences"
+  },
+  {
+    "id": "q007",
+    "query": "What patterns has OM observed about daily routines?",
+    "expected_facts": ["morning routine", "daily pattern"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM routine extraction"
+  },
+  {
+    "id": "q008",
+    "query": "What recurring themes appear in conversations?",
+    "expected_facts": ["recurring", "theme", "pattern"],
+    "expected_entities": [],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM theme detection"
+  },
+  {
+    "id": "q009",
+    "query": "What commitments has Yuan made recently?",
+    "expected_facts": ["commitment", "promise", "will do"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM commitment tracking"
+  },
+  {
+    "id": "q010",
+    "query": "What friction points have been observed?",
+    "expected_facts": ["friction", "problem", "blocker"],
+    "expected_entities": [],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM friction detection"
+  },
+  {
+    "id": "q011",
+    "query": "What decisions were made about the memory system architecture?",
+    "expected_facts": ["decision", "architecture", "memory system"],
+    "expected_entities": ["Bicameral"],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM decision tracking"
+  },
+  {
+    "id": "q012",
+    "query": "What operational rules have been established?",
+    "expected_facts": ["rule", "always", "never"],
+    "expected_entities": [],
+    "lane_alias": ["observational_memory"],
+    "notes": "OM operational rules"
+  },
+  {
+    "id": "q013",
+    "query": "What are Yuan's curated preferences for communication style?",
+    "expected_facts": ["communication", "style", "preference"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["curated"],
+    "notes": "curated preference"
+  },
+  {
+    "id": "q014",
+    "query": "What dietary preferences has Yuan specified?",
+    "expected_facts": ["diet", "food", "preference"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["curated"],
+    "notes": "curated lifestyle"
+  },
+  {
+    "id": "q015",
+    "query": "What are the established procedures for agent operations?",
+    "expected_facts": ["procedure", "operations", "standard"],
+    "expected_entities": ["Archibald"],
+    "lane_alias": ["curated"],
+    "notes": "curated procedures"
+  },
+  {
+    "id": "q016",
+    "query": "What requirements exist for the knowledge graph system?",
+    "expected_facts": ["requirement", "knowledge graph", "system"],
+    "expected_entities": ["Graphiti", "Bicameral"],
+    "lane_alias": ["curated"],
+    "notes": "curated requirements"
+  },
+  {
+    "id": "q017",
+    "query": "What locations are important to Yuan?",
+    "expected_facts": ["location", "place", "city"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["curated"],
+    "notes": "curated locations"
+  },
+  {
+    "id": "q018",
+    "query": "What organizations does Yuan work with?",
+    "expected_facts": ["organization", "company", "team"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["curated"],
+    "notes": "curated organizations"
+  },
+  {
+    "id": "q019",
+    "query": "What topics were discussed in ChatGPT conversations about finance?",
+    "expected_facts": ["finance", "investment", "money"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["chatgpt"],
+    "notes": "chatgpt finance domain"
+  },
+  {
+    "id": "q020",
+    "query": "What technical discussions happened in ChatGPT about programming?",
+    "expected_facts": ["programming", "code", "technical"],
+    "expected_entities": [],
+    "lane_alias": ["chatgpt"],
+    "notes": "chatgpt technical"
+  },
+  {
+    "id": "q021",
+    "query": "What research topics were explored in ChatGPT?",
+    "expected_facts": ["research", "explore", "learn"],
+    "expected_entities": [],
+    "lane_alias": ["chatgpt"],
+    "notes": "chatgpt research"
+  },
+  {
+    "id": "q022",
+    "query": "What creative projects were discussed in ChatGPT?",
+    "expected_facts": ["creative", "project", "idea"],
+    "expected_entities": [],
+    "lane_alias": ["chatgpt"],
+    "notes": "chatgpt creative"
+  },
+  {
+    "id": "q023",
+    "query": "What does Yuan know about crypto VC thesis and investment strategy?",
+    "expected_facts": ["crypto", "VC", "thesis", "investment"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main", "curated"],
+    "notes": "cross-lane: sessions + curated finance"
+  },
+  {
+    "id": "q024",
+    "query": "How has Yuan's workout routine evolved over time?",
+    "expected_facts": ["workout", "routine", "changed", "evolution"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main", "observational_memory"],
+    "notes": "cross-lane: sessions + OM temporal"
+  },
+  {
+    "id": "q025",
+    "query": "What are all known preferences about Yuan across all sources?",
+    "expected_facts": ["preference", "likes", "prefers"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main", "curated", "chatgpt"],
+    "notes": "cross-lane: multi-source preferences"
+  },
+  {
+    "id": "q026",
+    "query": "What technical decisions were discussed in sessions and confirmed in curated facts?",
+    "expected_facts": ["decision", "technical", "confirmed"],
+    "expected_entities": ["Bicameral", "Graphiti"],
+    "lane_alias": ["sessions_main", "curated"],
+    "notes": "cross-lane: sessions + curated decisions"
+  },
+  {
+    "id": "q027",
+    "query": "What patterns from OM match ChatGPT discussion topics?",
+    "expected_facts": ["pattern", "topic", "discussed"],
+    "expected_entities": [],
+    "lane_alias": ["observational_memory", "chatgpt"],
+    "notes": "cross-lane: OM + chatgpt overlap"
+  },
+  {
+    "id": "q028",
+    "query": "What are Yuan's relationships with people mentioned across all lanes?",
+    "expected_facts": ["relationship", "person", "knows"],
+    "expected_entities": ["Yuan Han Li"],
+    "lane_alias": ["sessions_main", "curated", "observational_memory", "chatgpt"],
+    "notes": "cross-lane: all-lane people graph"
+  },
+  {
+    "id": "q029",
+    "query": "What events were discussed in sessions and tracked by OM?",
+    "expected_facts": ["event", "meeting", "happened"],
+    "expected_entities": [],
+    "lane_alias": ["sessions_main", "observational_memory"],
+    "notes": "cross-lane: sessions + OM events"
+  },
+  {
+    "id": "q030",
+    "query": "What are the most important facts about the Bicameral system across all sources?",
+    "expected_facts": ["Bicameral", "dual-brain", "memory", "architecture"],
+    "expected_entities": ["Bicameral", "Graphiti"],
+    "lane_alias": ["sessions_main", "curated", "observational_memory"],
+    "notes": "cross-lane: system knowledge multi-hop"
+  }
+]

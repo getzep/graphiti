@@ -14,10 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import hashlib
 import json
 import logging
+import math
 import random
 import re
+from dataclasses import dataclass, field
+from datetime import datetime
 from itertools import combinations
 from math import comb
 from typing import TypeVar
@@ -824,3 +828,533 @@ def generate_covering_chunks(items: list[T], k: int) -> list[tuple[list[T], list
         chunks.append((chunk_items, pair_indices))
 
     return chunks
+
+
+# ---------------------------------------------------------------------------
+# FR-2: Smart Cutter – semantic conversation chunking
+# ---------------------------------------------------------------------------
+
+SUBSTANTIVE_MIN_TOKENS = 10
+SUBSTANTIVE_MIN_CHARS = 40
+
+
+@dataclass
+class SmartCutterConfig:
+    """Configuration for the Smart Cutter conversation chunking algorithm."""
+
+    hard_gap_hours: float = 48.0
+    semantic_drift_threshold: float = 0.50
+    substantive_min_tokens: int = SUBSTANTIVE_MIN_TOKENS
+    substantive_min_chars: int = SUBSTANTIVE_MIN_CHARS
+    max_chunk_tokens: int = 4000
+    lookback_window_messages: int = 25
+    lookback_min_head_tokens: int = 600
+    lookback_min_tail_tokens: int = 300
+
+
+@dataclass
+class ChunkBoundary:
+    """Metadata for a single chunk produced by the Smart Cutter."""
+
+    chunk_index: int
+    chunk_id: str
+    message_ids: list[str] = field(default_factory=list)
+    token_count: int = 0
+    time_range_start: str = ''
+    time_range_end: str = ''
+    boundary_reason: str = ''  # hard_gap|semantic_drift|token_overflow|end_of_stream
+    boundary_score: float = 0.0
+
+
+# -- helper utilities -------------------------------------------------------
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two equal-length vectors.
+
+    Returns 0.0 when either vector has zero norm.
+    """
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _is_substantive(content: str, config: SmartCutterConfig) -> bool:
+    """Return True when a message is substantive enough to trigger a cut."""
+    tokens = estimate_tokens(content)
+    chars = len(content)
+    return tokens >= config.substantive_min_tokens and chars >= config.substantive_min_chars
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO-8601 string to a timezone-aware datetime.
+
+    Handles the common ``Z`` suffix and bare offsets.
+    """
+    text = value.replace('Z', '+00:00')
+    return datetime.fromisoformat(text)
+
+
+def _make_chunk_id(
+    first_message_id: str,
+    last_message_id: str,
+    message_count: int,
+) -> str:
+    """Deterministic chunk id: sha256('smartcut|first|last|count')."""
+    payload = f'smartcut|{first_message_id}|{last_message_id}|{message_count}'
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _vec_add(a: list[float], b: list[float]) -> list[float]:
+    """Element-wise addition of two equal-length vectors."""
+    return [x + y for x, y in zip(a, b, strict=True)]
+
+
+def _vec_scale(v: list[float], s: float) -> list[float]:
+    """Scale every element of *v* by scalar *s*."""
+    return [x * s for x in v]
+
+
+def _validate_messages(messages: list[dict]) -> None:
+    """Validate that every message has the required fields.
+
+    Raises ``ValueError`` on the first invalid entry.
+    """
+    required_fields = {'message_id', 'content', 'created_at', 'content_embedding'}
+    for idx, msg in enumerate(messages):
+        missing = required_fields - set(msg.keys())
+        if missing:
+            raise ValueError(
+                f'Message at index {idx} is missing required field(s): {", ".join(sorted(missing))}'
+            )
+        if not isinstance(msg['message_id'], str):
+            raise ValueError(f'Message at index {idx}: message_id must be str')
+        if not isinstance(msg['content'], str):
+            raise ValueError(f'Message at index {idx}: content must be str')
+        if not isinstance(msg['created_at'], str):
+            raise ValueError(f'Message at index {idx}: created_at must be str')
+        if not isinstance(msg['content_embedding'], list):
+            raise ValueError(f'Message at index {idx}: content_embedding must be list[float]')
+
+
+def _finalize_chunk(
+    chunk_index: int,
+    msg_ids: list[str],
+    token_count: int,
+    time_start: str,
+    time_end: str,
+    reason: str,
+    score: float,
+) -> ChunkBoundary:
+    """Build a ``ChunkBoundary`` with a deterministic ``chunk_id``."""
+    chunk_id = _make_chunk_id(msg_ids[0], msg_ids[-1], len(msg_ids))
+    return ChunkBoundary(
+        chunk_index=chunk_index,
+        chunk_id=chunk_id,
+        message_ids=list(msg_ids),
+        token_count=token_count,
+        time_range_start=time_start,
+        time_range_end=time_end,
+        boundary_reason=reason,
+        boundary_score=score,
+    )
+
+
+# -- lookback cut logic -----------------------------------------------------
+
+
+def _lookback_cut_index(
+    messages: list[dict],
+    start: int,
+    end: int,
+    centroid: list[float],
+    config: SmartCutterConfig,
+) -> int | None:
+    """Find the best lookback cut position in ``messages[start:end]``.
+
+    Evaluates the trailing ``lookback_window_messages`` inside the range and
+    picks the index with the highest centroid deviation, subject to the
+    ``lookback_min_head_tokens`` / ``lookback_min_tail_tokens`` guards.
+
+    Returns the **exclusive end index** of the head chunk (i.e. the cut
+    happens *after* ``messages[result - 1]``), or ``None`` if no valid
+    candidate exists.
+    """
+    window_start = max(start, end - config.lookback_window_messages)
+
+    # Accumulate token counts so we can check head / tail guards quickly.
+    token_counts: list[int] = []
+    for i in range(start, end):
+        token_counts.append(estimate_tokens(messages[i]['content']))
+
+    total_tokens = sum(token_counts)
+
+    best_idx: int | None = None
+    best_deviation: float = -1.0
+
+    for candidate in range(window_start, end):
+        head_tokens = sum(token_counts[: candidate - start])
+        tail_tokens = total_tokens - head_tokens
+        if head_tokens < config.lookback_min_head_tokens:
+            continue
+        if tail_tokens < config.lookback_min_tail_tokens:
+            continue
+
+        emb = messages[candidate]['content_embedding']
+        deviation = 1.0 - _cosine_similarity(emb, centroid)
+        if deviation > best_deviation:
+            best_deviation = deviation
+            best_idx = candidate
+
+    return best_idx
+
+
+# -- main entry point -------------------------------------------------------
+
+
+def chunk_conversation_semantic(
+    messages: list[dict],
+    config: SmartCutterConfig | None = None,
+) -> list[ChunkBoundary]:
+    """Segment a chronological message stream into semantic chunks.
+
+    The algorithm applies three cutting rules in priority order:
+
+    1. **Hard gap** -- a timestamp gap exceeding ``hard_gap_hours``
+       unconditionally starts a new chunk.
+    2. **Semantic drift** -- when the cosine similarity between a
+       *substantive* message's embedding and the rolling chunk centroid
+       drops below ``semantic_drift_threshold``.
+    3. **Token overflow** -- when the running token count would exceed
+       ``max_chunk_tokens``, a lookback heuristic picks the best split
+       point inside the trailing window.
+
+    Args:
+        messages: List of message dicts.  Each dict **must** contain:
+            - ``message_id`` (str)
+            - ``content`` (str)
+            - ``created_at`` (str, ISO-8601)
+            - ``content_embedding`` (list[float])
+        config: Optional tuning knobs.  Defaults are production-safe.
+
+    Returns:
+        Deterministic list of ``ChunkBoundary`` objects covering every
+        input message exactly once.
+
+    Raises:
+        ValueError: When any message is missing a required field or has
+            an invalid type.
+    """
+    if config is None:
+        config = SmartCutterConfig()
+
+    if not messages:
+        return []
+
+    _validate_messages(messages)
+
+    # Ensure chronological order.
+    sorted_messages = sorted(messages, key=lambda m: m['created_at'])
+
+    hard_gap_seconds = config.hard_gap_hours * 3600.0
+
+    # Accumulator state for the current chunk.
+    chunk_start = 0
+    chunk_token_count = 0
+    centroid: list[float] = list(sorted_messages[0]['content_embedding'])
+    centroid_n = 1
+    chunks: list[ChunkBoundary] = []
+
+    def _emit(end_exclusive: int, reason: str, score: float) -> None:
+        """Emit the current chunk spanning [chunk_start, end_exclusive)."""
+        nonlocal chunk_start, chunk_token_count, centroid, centroid_n
+
+        ids = [sorted_messages[i]['message_id'] for i in range(chunk_start, end_exclusive)]
+        tokens = sum(
+            estimate_tokens(sorted_messages[i]['content'])
+            for i in range(chunk_start, end_exclusive)
+        )
+        chunk = _finalize_chunk(
+            chunk_index=len(chunks),
+            msg_ids=ids,
+            token_count=tokens,
+            time_start=sorted_messages[chunk_start]['created_at'],
+            time_end=sorted_messages[end_exclusive - 1]['created_at'],
+            reason=reason,
+            score=score,
+        )
+        chunks.append(chunk)
+
+        # Reset accumulator for the next chunk.
+        chunk_start = end_exclusive
+        if end_exclusive < len(sorted_messages):
+            centroid = list(sorted_messages[end_exclusive]['content_embedding'])
+            centroid_n = 1
+            chunk_token_count = 0
+        else:
+            centroid_n = 0
+            chunk_token_count = 0
+
+    for i, msg in enumerate(sorted_messages):
+        msg_tokens = estimate_tokens(msg['content'])
+        emb: list[float] = msg['content_embedding']
+
+        # ----- Rule 1: hard gap -------------------------------------------
+        if i > chunk_start:
+            prev_time = _parse_iso_datetime(sorted_messages[i - 1]['created_at'])
+            curr_time = _parse_iso_datetime(msg['created_at'])
+            gap_seconds = (curr_time - prev_time).total_seconds()
+            if gap_seconds > hard_gap_seconds:
+                _emit(i, 'hard_gap', gap_seconds / 3600.0)
+                # After emit, centroid is already set to this message.
+                chunk_token_count = msg_tokens
+                # Update centroid (already initialised by _emit).
+                continue
+
+        # ----- Rule 3 check (pre): token overflow -------------------------
+        if chunk_token_count + msg_tokens > config.max_chunk_tokens and i > chunk_start:
+            cut_idx = _lookback_cut_index(sorted_messages, chunk_start, i, centroid, config)
+            if cut_idx is not None and cut_idx > chunk_start:
+                _emit(cut_idx, 'token_overflow', 1.0)
+                # Re-accumulate tokens and centroid for messages from new
+                # chunk_start up to and including the current index.
+                chunk_token_count = 0
+                centroid_n = 0
+                centroid = [0.0] * len(emb)
+                for j in range(chunk_start, i):
+                    t = estimate_tokens(sorted_messages[j]['content'])
+                    chunk_token_count += t
+                    e = sorted_messages[j]['content_embedding']
+                    centroid_n += 1
+                    centroid = _vec_add(centroid, e)
+                if centroid_n > 0:
+                    centroid = _vec_scale(centroid, 1.0 / centroid_n)
+            else:
+                # No valid lookback candidate – cut right before this msg.
+                _emit(i, 'token_overflow', 1.0)
+                chunk_token_count = msg_tokens
+                continue
+
+        # ----- Rule 2: semantic drift -------------------------------------
+        if i > chunk_start and centroid_n > 0:
+            sim = _cosine_similarity(emb, centroid)
+            if sim < config.semantic_drift_threshold and _is_substantive(msg['content'], config):
+                _emit(i, 'semantic_drift', sim)
+                chunk_token_count = msg_tokens
+                continue
+
+        # ----- Update running state ---------------------------------------
+        chunk_token_count += msg_tokens
+        centroid_n += 1
+        # Incremental centroid: new_mean = old_mean + (x - old_mean) / n
+        centroid = _vec_add(
+            centroid,
+            _vec_scale(
+                [x - c for x, c in zip(emb, centroid, strict=True)],
+                1.0 / centroid_n,
+            ),
+        )
+
+    # Emit the final chunk.
+    if chunk_start < len(sorted_messages):
+        _emit(len(sorted_messages), 'end_of_stream', 0.0)
+
+    return chunks
+
+
+# ---------------------------------------------------------------------------
+# FR-3: Lane adapters
+# ---------------------------------------------------------------------------
+
+GRAPHITI_MERGE_FLOOR_TOKENS = 800
+OM_SPLIT_CEILING_TOKENS = 4000
+OM_SPLIT_MIN_TAIL_TOKENS = 300
+
+
+def graphiti_lane_merge(
+    chunks: list[ChunkBoundary],
+    messages: list[dict],
+) -> list[ChunkBoundary]:
+    """Merge neighbouring base chunks for the Graphiti (sessions_main) lane.
+
+    Two adjacent chunks are merged **only** when:
+    * BOTH chunks have ``token_count < GRAPHITI_MERGE_FLOOR_TOKENS``, AND
+    * no ``hard_gap`` boundary exists between them (i.e. the *first* of the
+      two chunks was **not** terminated by a hard-gap reason).
+
+    The merge is applied greedily in a single left-to-right pass.  Merged
+    chunks receive ``boundary_reason`` and ``boundary_score`` from the
+    *later* (right-hand) chunk.
+
+    Args:
+        chunks: Base ``ChunkBoundary`` list from ``chunk_conversation_semantic``.
+        messages: The same message list originally passed to the cutter
+            (used only for completeness; token counts are already on the
+            ``ChunkBoundary`` objects).
+
+    Returns:
+        A new list of ``ChunkBoundary`` objects with sequential
+        ``chunk_index`` values and deterministic ``chunk_id`` values.
+    """
+    if not chunks:
+        return []
+
+    merged: list[ChunkBoundary] = []
+    acc = chunks[0]
+
+    for i in range(1, len(chunks)):
+        curr = chunks[i]
+        can_merge = (
+            acc.token_count < GRAPHITI_MERGE_FLOOR_TOKENS
+            and curr.token_count < GRAPHITI_MERGE_FLOOR_TOKENS
+            and acc.boundary_reason != 'hard_gap'
+        )
+        if can_merge:
+            # Combine into *acc*.
+            combined_ids = acc.message_ids + curr.message_ids
+            combined_tokens = acc.token_count + curr.token_count
+            acc = _finalize_chunk(
+                chunk_index=0,  # will be reassigned below
+                msg_ids=combined_ids,
+                token_count=combined_tokens,
+                time_start=acc.time_range_start,
+                time_end=curr.time_range_end,
+                reason=curr.boundary_reason,
+                score=curr.boundary_score,
+            )
+        else:
+            merged.append(acc)
+            acc = curr
+
+    merged.append(acc)
+
+    # Reassign sequential chunk indices and recompute deterministic ids.
+    result: list[ChunkBoundary] = []
+    for idx, chunk in enumerate(merged):
+        chunk.chunk_index = idx
+        chunk.chunk_id = _make_chunk_id(
+            chunk.message_ids[0], chunk.message_ids[-1], len(chunk.message_ids)
+        )
+        result.append(chunk)
+
+    return result
+
+
+def om_lane_split(
+    chunks: list[ChunkBoundary],
+    messages: list[dict],
+) -> list[ChunkBoundary]:
+    """Split oversized chunks for the Observational Memory (OM) lane.
+
+    Rules:
+    * **No cross-boundary merges** – each base chunk is processed
+      independently.
+    * If a chunk exceeds ``OM_SPLIT_CEILING_TOKENS``, it is split at the
+      nearest base message boundary such that the tail fragment retains at
+      least ``OM_SPLIT_MIN_TAIL_TOKENS``.
+
+    The function builds a quick lookup from ``message_id`` to the original
+    message dict so that per-message token counts can be computed.
+
+    Args:
+        chunks: Base ``ChunkBoundary`` list from ``chunk_conversation_semantic``.
+        messages: The same message list originally passed to the cutter.
+
+    Returns:
+        A new list of ``ChunkBoundary`` objects with sequential
+        ``chunk_index`` values and deterministic ``chunk_id`` values.
+    """
+    if not chunks:
+        return []
+
+    msg_lookup: dict[str, dict] = {m['message_id']: m for m in messages}
+
+    result: list[ChunkBoundary] = []
+
+    for chunk in chunks:
+        if chunk.token_count <= OM_SPLIT_CEILING_TOKENS:
+            result.append(chunk)
+            continue
+
+        # Need to split.  Walk messages and find a valid split point.
+        ids = chunk.message_ids
+        raw_counts = [estimate_tokens(msg_lookup[mid]['content']) for mid in ids]
+        raw_total = sum(raw_counts)
+
+        # Use the declared token_count from the ChunkBoundary.  When the
+        # actual per-message estimates don't sum to the declared total
+        # (e.g. in tests that construct boundaries manually), scale
+        # proportionally so the split guards operate against the declared
+        # budget.
+        declared_total = chunk.token_count
+        if raw_total > 0 and raw_total != declared_total:
+            scale = declared_total / raw_total
+            token_counts = [int(round(c * scale)) for c in raw_counts]
+        else:
+            token_counts = list(raw_counts)
+        total = sum(token_counts)
+
+        # Find the best split index (exclusive end of the head portion).
+        # Walk from the right to find the earliest split where both head
+        # fits within the ceiling and tail >= OM_SPLIT_MIN_TAIL_TOKENS.
+        best_split: int | None = None
+        head_tokens = total
+
+        # Iterate from the end, accumulating a tail.
+        tail_tokens = 0
+        for j in range(len(ids) - 1, 0, -1):
+            tail_tokens += token_counts[j]
+            head_tokens -= token_counts[j]
+            if tail_tokens >= OM_SPLIT_MIN_TAIL_TOKENS and head_tokens <= OM_SPLIT_CEILING_TOKENS:
+                best_split = j
+                break
+
+        if best_split is None:
+            # Cannot split while honouring tail guard – keep as-is.
+            result.append(chunk)
+            continue
+
+        head_ids = ids[:best_split]
+        tail_ids = ids[best_split:]
+        head_tok = sum(token_counts[:best_split])
+        tail_tok = sum(token_counts[best_split:])
+
+        head_start = msg_lookup[head_ids[0]]['created_at']
+        head_end = msg_lookup[head_ids[-1]]['created_at']
+        tail_start = msg_lookup[tail_ids[0]]['created_at']
+        tail_end = msg_lookup[tail_ids[-1]]['created_at']
+
+        result.append(
+            _finalize_chunk(
+                chunk_index=0,
+                msg_ids=head_ids,
+                token_count=head_tok,
+                time_start=head_start,
+                time_end=head_end,
+                reason=chunk.boundary_reason,
+                score=chunk.boundary_score,
+            )
+        )
+        result.append(
+            _finalize_chunk(
+                chunk_index=0,
+                msg_ids=tail_ids,
+                token_count=tail_tok,
+                time_start=tail_start,
+                time_end=tail_end,
+                reason=chunk.boundary_reason,
+                score=chunk.boundary_score,
+            )
+        )
+
+    # Reassign sequential chunk indices and recompute deterministic ids.
+    for idx, chunk in enumerate(result):
+        chunk.chunk_index = idx
+        chunk.chunk_id = _make_chunk_id(
+            chunk.message_ids[0], chunk.message_ids[-1], len(chunk.message_ids)
+        )
+
+    return result

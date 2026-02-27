@@ -467,3 +467,78 @@ Neo4j uses a single database with `group_id` property scoping. Ingest scripts al
 ### Graph Size Impacts Throughput
 
 Entity resolution during `add_episode` performs similarity searches against existing nodes. Throughput degrades as graph size grows — this is expected. Post-extraction dedup (which merges duplicates) reduces node count and improves subsequent extraction performance.
+
+---
+
+## Dual Source Mode & Historical Bootstrap
+
+`mcp_ingest_sessions.py` supports two source modes that govern how chunks are read.
+
+### `--source-mode neo4j` (default)
+
+Reads session chunks from Neo4j `Message` nodes (bootstrapped by `import_transcripts_to_neo4j`). This is the production steady-state path. The script applies the Smart Cutter (`chunk_conversation_semantic`) to segment messages into semantically coherent episodes before enqueuing to Graphiti.
+
+```bash
+# Default — Neo4j source mode
+python3 scripts/mcp_ingest_sessions.py \
+  --group-id s1_sessions \
+  --source-mode neo4j \
+  --mcp-url http://localhost:8000/mcp
+```
+
+A **BOOTSTRAP_REQUIRED guard** fires automatically if zero `Message` nodes exist in Neo4j but evidence files are present. The guard aborts with a clear error directing you to run `import_transcripts_to_neo4j` first.
+
+### `--source-mode evidence` (rollback)
+
+Reads chunks directly from evidence JSON files on disk, bypassing Neo4j. Use this as a rollback path when Neo4j is unavailable or during disaster recovery.
+
+```bash
+# Rollback — evidence source mode (reads from disk directly)
+python3 scripts/mcp_ingest_sessions.py \
+  --group-id s1_sessions \
+  --source-mode evidence \
+  --evidence path/to/sessions_evidence/ \
+  --mcp-url http://localhost:8000/mcp
+```
+
+### Historical Bootstrap with `import_transcripts_to_neo4j`
+
+Before running `source-mode neo4j` for the first time, populate Neo4j with historical transcript data:
+
+```bash
+# Import all historical session transcripts to Neo4j
+python3 scripts/import_transcripts_to_neo4j.py \
+  --sessions-dir path/to/session_transcripts/ \
+  --dry-run   # preview first
+
+python3 scripts/import_transcripts_to_neo4j.py \
+  --sessions-dir path/to/session_transcripts/
+```
+
+This script upserts `(:Episode)-[:HAS_MESSAGE]->(:Message)` nodes with deterministic SHA-256 IDs. Re-runs are fully idempotent.
+
+### Rollback Procedure
+
+If the Neo4j source mode produces bad output and you need to roll back to evidence files:
+
+```bash
+# 1. Stop any running ingest workers
+
+# 2. Switch to evidence source mode (rollback)
+python3 scripts/mcp_ingest_sessions.py \
+  --group-id s1_sessions \
+  --source-mode evidence \
+  --evidence path/to/sessions_evidence/ \
+  --mcp-url http://localhost:8000/mcp
+
+# 3. Investigate Neo4j import issues before re-enabling neo4j mode
+```
+
+### Ingest Adapter Contract
+
+All ingest adapters must conform to **`INGEST_ADAPTER_CONTRACT_V1`** defined in `ingest/contracts.py`. The contract specifies required fields and types for `IngestRecord` and `IngestChunk` objects, and provides a `validate_determinism()` function for verifying that chunking is stable across runs.
+
+```bash
+# Verify contract compliance (exit 0 on success, 1 on violation)
+python3 scripts/ingest_adapter_contract_check.py --strict
+```

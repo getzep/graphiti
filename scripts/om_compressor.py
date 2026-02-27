@@ -1501,16 +1501,37 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_MAX_CHUNKS_PER_RUN,
     )
+    parser.add_argument(
+        "--mode",
+        choices=["steady", "backfill"],
+        default="steady",
+        help="steady = single-writer lock (default); backfill = parallel claim mode",
+    )
+    parser.add_argument(
+        "--build-manifest",
+        default=None,
+        help="Build OM backfill manifest from pending messages",
+    )
+    parser.add_argument(
+        "--claim-mode",
+        action="store_true",
+        help="Enable claim-based parallel execution (backfill mode only)",
+    )
+    parser.add_argument("--shards", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview without writing",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    lock_path = _resolve_lock_path()
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with lock_path.open("a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    if args.mode == "backfill":
+        # Backfill mode: skip file lock for parallel execution
         try:
             return run(args)
         except SchemaVersionMissingError as exc:
@@ -1519,8 +1540,22 @@ def main(argv: list[str] | None = None) -> int:
         except OMCompressorError as exc:
             print(str(exc), file=sys.stderr)
             return 1
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    else:
+        # Steady mode: use file lock (single-writer)
+        lock_path = _resolve_lock_path()
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                return run(args)
+            except SchemaVersionMissingError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            except OMCompressorError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 if __name__ == "__main__":
