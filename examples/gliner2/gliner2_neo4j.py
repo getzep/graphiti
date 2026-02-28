@@ -26,8 +26,9 @@ from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig
+from graphiti_core.llm_client.gemini_client import GeminiClient
 from graphiti_core.llm_client.gliner2_client import GLiNER2Client
-from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EpisodeType
 
 #################################################
@@ -119,29 +120,37 @@ async def main():
     # extraction, deduplication, and summarization.
     #################################################
 
-    # Create the OpenAI client for reasoning tasks
-    openai_client = OpenAIClient(
+    # Create the Gemini client for reasoning tasks
+    gemini_client = GeminiClient(
         config=LLMConfig(
-            api_key=os.environ.get('OPENAI_API_KEY'),
-            model='gpt-5.2',
-            small_model='gpt-5.2',
+            api_key=os.environ.get('GOOGLE_API_KEY'),
+            model='gemini-2.5-flash-lite',
+            small_model='gemini-2.5-flash-lite',
         ),
-        reasoning='none',
     )
 
     # Create the GLiNER2 hybrid client
     gliner2_client = GLiNER2Client(
         config=LLMConfig(model=gliner2_model),
-        llm_client=openai_client,
+        llm_client=gemini_client,
         threshold=0.5,
     )
 
-    # Initialize Graphiti with the GLiNER2 hybrid client
+    # Create the Gemini embedder
+    gemini_embedder = GeminiEmbedder(
+        config=GeminiEmbedderConfig(
+            api_key=os.environ.get('GOOGLE_API_KEY'),
+            embedding_model='gemini-embedding-001',
+        ),
+    )
+
+    # Initialize Graphiti with the GLiNER2 hybrid client and Gemini embedder
     graphiti = Graphiti(
         neo4j_uri,
         neo4j_user,
         neo4j_password,
         llm_client=gliner2_client,
+        embedder=gemini_embedder,
     )
 
     try:
