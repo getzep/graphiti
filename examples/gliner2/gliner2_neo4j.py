@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from logging import INFO
 
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.config import LLMConfig
@@ -30,13 +31,60 @@ from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EpisodeType
 
 #################################################
+# CUSTOM ENTITY TYPES
+#################################################
+# Define Pydantic models for entity classification.
+# GLiNER2 uses the class docstrings as label
+# descriptions for improved extraction accuracy.
+# The LLM client uses these for edge extraction
+# and summarization.
+#################################################
+
+
+class Person(BaseModel):
+    """A human person, real or fictional."""
+
+    occupation: str | None = Field(None, description='Professional role or job title')
+    political_party: str | None = Field(None, description='Political party affiliation')
+
+
+class Organization(BaseModel):
+    """An organization such as a company, government agency, university, or political party."""
+
+    org_type: str | None = Field(
+        None, description='Type of organization (e.g., bank, university, government agency)'
+    )
+
+
+class Location(BaseModel):
+    """A geographic location such as a city, state, or country."""
+
+    location_type: str | None = Field(
+        None, description='Type of location (e.g., city, state, county)'
+    )
+
+
+class Initiative(BaseModel):
+    """A program, policy, initiative, or legal action."""
+
+    description: str | None = Field(None, description='Brief description of the initiative')
+
+
+entity_types: dict[str, type[BaseModel]] = {
+    'Person': Person,
+    'Organization': Organization,
+    'Location': Location,
+    'Initiative': Initiative,
+}
+
+#################################################
 # CONFIGURATION
 #################################################
 # GLiNER2 is a lightweight extraction model
 # (205M-340M params) that runs locally on CPU.
-# It handles entity and relation extraction,
-# while an OpenAI client handles reasoning tasks
-# (deduplication, summarization).
+# It handles entity extraction (NER), while an
+# OpenAI client handles edge/fact extraction,
+# deduplication, summarization, and reasoning.
 #################################################
 
 # Configure logging
@@ -66,16 +114,19 @@ async def main():
     # INITIALIZATION
     #################################################
     # Set up a hybrid LLM client: GLiNER2 handles
-    # entity and relation extraction locally, while
-    # OpenAI handles deduplication, summarization,
-    # and other reasoning tasks.
+    # entity extraction locally using custom entity
+    # types as labels, while OpenAI handles edge/fact
+    # extraction, deduplication, and summarization.
     #################################################
 
     # Create the OpenAI client for reasoning tasks
     openai_client = OpenAIClient(
         config=LLMConfig(
             api_key=os.environ.get('OPENAI_API_KEY'),
+            model='gpt-5.2',
+            small_model='gpt-5.2',
         ),
+        reasoning='none',
     )
 
     # Create the GLiNER2 hybrid client
@@ -97,10 +148,11 @@ async def main():
         #################################################
         # ADDING EPISODES
         #################################################
-        # Entity and relation extraction from these
-        # episodes will be handled by GLiNER2 locally.
-        # Deduplication and summarization will be
-        # delegated to OpenAI.
+        # Entity extraction from these episodes will be
+        # handled by GLiNER2 locally using the custom
+        # entity types as labels. Edge/fact extraction,
+        # deduplication, and summarization are delegated
+        # to OpenAI.
         #################################################
 
         episodes = [
@@ -187,7 +239,7 @@ async def main():
         ]
 
         for i, episode in enumerate(episodes):
-            await graphiti.add_episode(
+            result = await graphiti.add_episode(
                 name=f'California Politics {i}',
                 episode_body=(
                     episode['content']
@@ -197,8 +249,30 @@ async def main():
                 source=episode['type'],
                 source_description=episode['description'],
                 reference_time=datetime.now(timezone.utc),
+                entity_types=entity_types,
             )
-            print(f'Added episode: California Politics {i} ({episode["type"].value})')
+
+            print(f'\n--- Episode: California Politics {i} ({episode["type"].value}) ---')
+
+            if result.nodes:
+                print(f'  Entities ({len(result.nodes)}):')
+                for node in result.nodes:
+                    labels_str = ', '.join(node.labels) if node.labels else 'Entity'
+                    print(f'    - {node.name} [{labels_str}]')
+                    if node.summary:
+                        print(f'      Summary: {node.summary}')
+                    if node.attributes:
+                        print(f'      Attributes: {node.attributes}')
+
+            if result.edges:
+                print(f'  Edges ({len(result.edges)}):')
+                for edge in result.edges:
+                    temporal = ''
+                    if edge.valid_at:
+                        temporal += f' (valid: {edge.valid_at.isoformat()})'
+                    if edge.invalid_at:
+                        temporal += f' (invalid: {edge.invalid_at.isoformat()})'
+                    print(f'    - [{edge.name}] {edge.fact}{temporal}')
 
         #################################################
         # SEARCH
@@ -216,7 +290,6 @@ async def main():
 
             print('Results:')
             for result in results:
-                print(f'  UUID: {result.uuid}')
                 print(f'  Fact: {result.fact}')
                 if hasattr(result, 'valid_at') and result.valid_at:
                     print(f'  Valid from: {result.valid_at}')
@@ -225,17 +298,16 @@ async def main():
                 print('  ---')
 
         #################################################
-        # TOKEN USAGE
-        #################################################
-        # GLiNER2 token estimates are approximate.
-        # The OpenAI client tracks actual API usage.
+        # ENTITY EXTRACTION LATENCY
         #################################################
 
-        print('\nGLiNER2 client token usage (estimated):')
-        gliner2_client.token_tracker.print_summary()
-
-        print('\nOpenAI client token usage:')
-        openai_client.token_tracker.print_summary()
+        latencies = gliner2_client.extraction_latencies
+        if latencies:
+            print(f'\nGLiNER2 entity extraction latency ({len(latencies)} calls):')
+            print(f'  Mean:  {sum(latencies) / len(latencies):.1f} ms')
+            print(f'  Min:   {min(latencies):.1f} ms')
+            print(f'  Max:   {max(latencies):.1f} ms')
+            print(f'  Total: {sum(latencies):.1f} ms')
 
     finally:
         await graphiti.close()

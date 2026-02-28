@@ -20,6 +20,7 @@ import json
 import logging
 import re
 import typing
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -85,6 +86,7 @@ class GLiNER2Client(LLMClient):
         self.threshold = threshold
         self.include_confidence = include_confidence
         self.llm_client = llm_client
+        self.extraction_latencies: list[float] = []
 
         model_id = config.model or DEFAULT_MODEL
         small_model_id = config.small_model or model_id
@@ -233,7 +235,12 @@ class GLiNER2Client(LLMClient):
             return {'extracted_entities': []}
 
         try:
-            return await self._handle_entity_extraction(model, text, messages)
+            t0 = perf_counter()
+            result = await self._handle_entity_extraction(model, text, messages)
+            latency_ms = (perf_counter() - t0) * 1000
+            self.extraction_latencies.append(latency_ms)
+            logger.info('GLiNER2 entity extraction: %.1f ms', latency_ms)
+            return result
         except Exception as e:
             error_msg = str(e).lower()
             if 'rate limit' in error_msg or '429' in error_msg:
