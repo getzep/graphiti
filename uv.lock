@@ -901,12 +901,12 @@ name = "gliner"
 version = "0.2.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "huggingface-hub" },
-    { name = "onnxruntime" },
-    { name = "sentencepiece" },
-    { name = "torch" },
-    { name = "tqdm" },
-    { name = "transformers" },
+    { name = "huggingface-hub", marker = "python_full_version >= '3.11'" },
+    { name = "onnxruntime", marker = "python_full_version >= '3.11'" },
+    { name = "sentencepiece", marker = "python_full_version >= '3.11'" },
+    { name = "torch", marker = "python_full_version >= '3.11'" },
+    { name = "tqdm", marker = "python_full_version >= '3.11'" },
+    { name = "transformers", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/0c/e57098620506889a94d24814a38ee983f5f6aad9f34d815b3f0e5afde8b1/gliner-0.2.25.tar.gz", hash = "sha256:ac5a8c7e4f17f837969e3594f2bf95dc05ba05a01780a16f79d5d443b3b0b98f", size = 172559, upload-time = "2026-02-11T14:33:35.372Z" }
 wheels = [
@@ -918,7 +918,7 @@ name = "gliner2"
 version = "1.2.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "gliner" },
+    { name = "gliner", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/09/57/a74f327fe088d496dc1b454d673db4741fd2806dcbd34951eb7b43a49a17/gliner2-1.2.4.tar.gz", hash = "sha256:ce816debc4b6f24f1d57e25d2c437bef82ebdfbf7bbc024c66c82db80c1c105f", size = 124644, upload-time = "2026-01-22T16:27:31.008Z" }
 wheels = [
@@ -1012,7 +1012,7 @@ falkordb = [
     { name = "falkordb" },
 ]
 gliner2 = [
-    { name = "gliner2" },
+    { name = "gliner2", marker = "python_full_version >= '3.11'" },
 ]
 google-genai = [
     { name = "google-genai" },
@@ -1052,7 +1052,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'neptune'", specifier = ">=1.39.16" },
     { name = "falkordb", marker = "extra == 'dev'", specifier = ">=1.1.2,<2.0.0" },
     { name = "falkordb", marker = "extra == 'falkordb'", specifier = ">=1.1.2,<2.0.0" },
-    { name = "gliner2", marker = "extra == 'gliner2'", specifier = ">=1.2.0" },
+    { name = "gliner2", marker = "python_full_version >= '3.11' and extra == 'gliner2'", specifier = ">=1.2.0" },
     { name = "google-genai", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.62.0" },
     { name = "groq", marker = "extra == 'dev'", specifier = ">=0.2.0" },
@@ -2615,12 +2615,11 @@ name = "onnxruntime"
 version = "1.24.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flatbuffers" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "flatbuffers", marker = "python_full_version >= '3.11'" },
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "packaging" },
-    { name = "protobuf" },
-    { name = "sympy" },
+    { name = "packaging", marker = "python_full_version >= '3.11'" },
+    { name = "protobuf", marker = "python_full_version >= '3.11'" },
+    { name = "sympy", marker = "python_full_version >= '3.11'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/4e/050c947924ffd8ff856d219d8f83ee3d4e7dc52d5a6770ff34a15675c437/onnxruntime-1.24.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:69d1c75997276106d24e65da2e69ec4302af1b117fef414e2154740cde0f6214", size = 17217298, upload-time = "2026-02-19T17:15:09.891Z" },
