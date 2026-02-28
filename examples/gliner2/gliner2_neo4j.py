@@ -107,7 +107,7 @@ if not neo4j_uri or not neo4j_user or not neo4j_password:
     raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
 # GLiNER2 model configuration
-gliner2_model = os.environ.get('GLINER2_MODEL', 'fastino/gliner2-base-v1')
+gliner2_model = os.environ.get('GLINER2_MODEL', 'fastino/gliner2-large-v1')
 
 
 async def main():
@@ -133,7 +133,7 @@ async def main():
     gliner2_client = GLiNER2Client(
         config=LLMConfig(model=gliner2_model),
         llm_client=gemini_client,
-        threshold=0.5,
+        threshold=0.7,
     )
 
     # Create the Gemini embedder
