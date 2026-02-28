@@ -44,18 +44,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = 'fastino/gliner2-base-v1'
 DEFAULT_THRESHOLD = 0.5
 
-# Response models that GLiNER2 handles natively
+# Response model that GLiNER2 handles natively
 _ENTITY_EXTRACTION_MODEL = 'ExtractedEntities'
-_EDGE_EXTRACTION_MODEL = 'ExtractedEdges'
 
 
 class GLiNER2Client(LLMClient):
-    """LLM client that uses GLiNER2 for entity and relation extraction.
+    """LLM client that uses GLiNER2 for entity extraction.
 
     GLiNER2 is a lightweight extraction model (205M-340M params) that handles
-    NER and relation extraction locally on CPU. Operations it cannot handle
-    (deduplication, summarization, etc.) are delegated to the required
-    llm_client.
+    named entity recognition locally on CPU. All other operations (edge/relation
+    extraction, deduplication, summarization, etc.) are delegated to the
+    required llm_client.
 
     Note: When using local models (no base_url), initialization loads model
     weights synchronously. Create this client before entering the async
@@ -164,36 +163,6 @@ class GLiNER2Client(LLMClient):
 
         return {'Entity': 'General entity'}, {'Entity': 0}
 
-    @staticmethod
-    def _extract_entity_names(messages: list[Message]) -> list[str]:
-        """Extract entity names from the <ENTITIES> tag for relation extraction."""
-        user_content = messages[-1].content if len(messages) > 1 else messages[0].content
-
-        match = re.search(r'<ENTITIES>\s*(.*?)\s*</ENTITIES>', user_content, re.DOTALL)
-        if match:
-            try:
-                entities = json.loads(match.group(1))
-                return [e['name'] for e in entities if 'name' in e]
-            except (json.JSONDecodeError, KeyError):
-                logger.warning('Failed to parse <ENTITIES> from message')
-
-        return []
-
-    @staticmethod
-    def _extract_relation_types(messages: list[Message]) -> list[str]:
-        """Extract relation/fact types from the <FACT_TYPES> tag if present."""
-        user_content = messages[-1].content if len(messages) > 1 else messages[0].content
-
-        match = re.search(r'<FACT_TYPES>\s*(.*?)\s*</FACT_TYPES>', user_content, re.DOTALL)
-        if match:
-            try:
-                fact_types = json.loads(match.group(1))
-                return [ft['fact_type_name'] for ft in fact_types if 'fact_type_name' in ft]
-            except (json.JSONDecodeError, KeyError):
-                logger.warning('Failed to parse <FACT_TYPES> from message')
-
-        return []
-
     # ── Extraction handlers ──────────────────────────────────────────
 
     async def _handle_entity_extraction(
@@ -233,86 +202,13 @@ class GLiNER2Client(LLMClient):
 
         return {'extracted_entities': extracted_entities}
 
-    async def _handle_relation_extraction(
-        self,
-        model: typing.Any,
-        text: str,
-        messages: list[Message],
-    ) -> dict[str, typing.Any]:
-        """Handle relation extraction using GLiNER2.
-
-        Maps GLiNER2 output format to Graphiti's ExtractedEdges format.
-        Note: GLiNER2 cannot extract temporal bounds (valid_at/invalid_at).
-        """
-        entity_names = self._extract_entity_names(messages)
-        relation_types = self._extract_relation_types(messages)
-
-        if not relation_types:
-            relation_types = ['RELATED_TO']
-
-        result = await asyncio.to_thread(
-            model.extract_relations,
-            text,
-            relation_types,
-            threshold=self.threshold,
-            include_confidence=self.include_confidence,
-        )
-
-        edges: list[dict[str, typing.Any]] = []
-        rel_dict = result.get('relation_extraction', {})
-
-        entity_name_set = (
-            {name.lower() for name in entity_names} if entity_names else None
-        )
-
-        for relation_type, pairs in rel_dict.items():
-            for pair in pairs:
-                # GLiNER2 returns tuples or dicts (when include_confidence=True)
-                if isinstance(pair, dict):
-                    head = pair.get('head', {}).get('text', '')
-                    tail = pair.get('tail', {}).get('text', '')
-                elif isinstance(pair, (list, tuple)) and len(pair) >= 2:
-                    head, tail = str(pair[0]), str(pair[1])
-                else:
-                    continue
-
-                if not head or not tail or head == tail:
-                    continue
-
-                # Filter to known entities if available (case-insensitive)
-                if entity_name_set and (
-                    head.lower() not in entity_name_set
-                    or tail.lower() not in entity_name_set
-                ):
-                    logger.debug(
-                        'Filtered relation (%s)-[%s]->(%s): entity not in known set',
-                        head,
-                        relation_type,
-                        tail,
-                    )
-                    continue
-
-                normalized_type = relation_type.upper().replace(' ', '_')
-                fact = f'{head} {relation_type.lower().replace("_", " ")} {tail}'
-
-                edges.append({
-                    'source_entity_name': head,
-                    'target_entity_name': tail,
-                    'relation_type': normalized_type,
-                    'fact': fact,
-                    'valid_at': None,
-                    'invalid_at': None,
-                })
-
-        return {'edges': edges}
-
     # ── Core dispatch ────────────────────────────────────────────────
 
     def _is_gliner2_operation(self, response_model: type[BaseModel] | None) -> bool:
         """Determine if the response_model maps to a GLiNER2-native operation."""
         if response_model is None:
             return False
-        return response_model.__name__ in (_ENTITY_EXTRACTION_MODEL, _EDGE_EXTRACTION_MODEL)
+        return response_model.__name__ == _ENTITY_EXTRACTION_MODEL
 
     async def _generate_response(
         self,
@@ -326,17 +222,10 @@ class GLiNER2Client(LLMClient):
 
         if not text:
             logger.warning('No text extracted from messages for GLiNER2 processing')
-            if response_model and response_model.__name__ == _ENTITY_EXTRACTION_MODEL:
-                return {'extracted_entities': []}
-            return {'edges': []}
-
-        model_name = response_model.__name__ if response_model else None
+            return {'extracted_entities': []}
 
         try:
-            if model_name == _ENTITY_EXTRACTION_MODEL:
-                return await self._handle_entity_extraction(model, text, messages)
-            elif model_name == _EDGE_EXTRACTION_MODEL:
-                return await self._handle_relation_extraction(model, text, messages)
+            return await self._handle_entity_extraction(model, text, messages)
         except Exception as e:
             error_msg = str(e).lower()
             if 'rate limit' in error_msg or '429' in error_msg:
@@ -345,9 +234,6 @@ class GLiNER2Client(LLMClient):
                 raise
             logger.error('GLiNER2 extraction error: %s', e)
             raise
-
-        # Should not be reached — generate_response handles delegation
-        raise RuntimeError('Unexpected call to _generate_response for non-GLiNER2 operation')
 
     async def generate_response(
         self,
