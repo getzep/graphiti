@@ -316,6 +316,11 @@ class GeminiClient(LLMClient):
             # Always capture the raw output for debugging
             raw_output = getattr(response, 'text', None)
 
+            # Strip markdown code block wrappers if Gemini wraps JSON despite application/json mime type
+            if raw_output:
+                raw_output = re.sub(r'^```(?:json)?\s*', '', raw_output.strip())
+                raw_output = re.sub(r'\s*```$', '', raw_output)
+
             # Check for safety and prompt blocks
             self._check_safety_blocks(response)
             self._check_prompt_blocks(response)
