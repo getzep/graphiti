@@ -50,9 +50,9 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Neo4j connection parameters
-neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+neo4j_uri = os.environ.get('NEO4J_URI')
+neo4j_user = os.environ.get('NEO4J_USER')
+neo4j_password = os.environ.get('NEO4J_PASSWORD')
 
 if not neo4j_uri or not neo4j_user or not neo4j_password:
     raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')

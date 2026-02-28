@@ -56,6 +56,10 @@ class GLiNER2Client(LLMClient):
     NER and relation extraction locally on CPU. Operations it cannot handle
     (deduplication, summarization, etc.) are delegated to the required
     llm_client.
+
+    Note: When using local models (no base_url), initialization loads model
+    weights synchronously. Create this client before entering the async
+    event loop (e.g., before ``asyncio.run()``).
     """
 
     def __init__(
@@ -257,7 +261,9 @@ class GLiNER2Client(LLMClient):
         edges: list[dict[str, typing.Any]] = []
         rel_dict = result.get('relation_extraction', {})
 
-        entity_name_set = set(entity_names) if entity_names else None
+        entity_name_set = (
+            {name.lower() for name in entity_names} if entity_names else None
+        )
 
         for relation_type, pairs in rel_dict.items():
             for pair in pairs:
@@ -273,8 +279,17 @@ class GLiNER2Client(LLMClient):
                 if not head or not tail or head == tail:
                     continue
 
-                # Filter to known entities if available
-                if entity_name_set and (head not in entity_name_set or tail not in entity_name_set):
+                # Filter to known entities if available (case-insensitive)
+                if entity_name_set and (
+                    head.lower() not in entity_name_set
+                    or tail.lower() not in entity_name_set
+                ):
+                    logger.debug(
+                        'Filtered relation (%s)-[%s]->(%s): entity not in known set',
+                        head,
+                        relation_type,
+                        tail,
+                    )
                     continue
 
                 normalized_type = relation_type.upper().replace(' ', '_')
@@ -383,11 +398,11 @@ class GLiNER2Client(LLMClient):
             span.add_attributes({'cache.hit': False})
 
             try:
-                response = await self._generate_response(
+                response = await self._generate_response_with_retry(
                     messages, response_model, max_tokens, model_size
                 )
 
-                # Estimate token usage
+                # Approximate token usage (GLiNER2 doesn't report actual tokens)
                 text = self._extract_text_from_messages(messages)
                 input_tokens = len(text) // 4
                 output_tokens = len(json.dumps(response)) // 4
