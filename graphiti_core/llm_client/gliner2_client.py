@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import ast
 import asyncio
 import json
 import logging
@@ -150,7 +151,14 @@ class GLiNER2Client(LLMClient):
         )
         if match:
             try:
-                entity_types = json.loads(match.group(1))
+                raw = match.group(1)
+                # Prompt templates interpolate Python list[dict] directly,
+                # producing Python repr (single quotes, None) rather than JSON.
+                try:
+                    entity_types = json.loads(raw)
+                except json.JSONDecodeError:
+                    entity_types = ast.literal_eval(raw)
+
                 labels_dict: dict[str, str] = {}
                 label_to_id: dict[str, int] = {}
                 for et in entity_types:
@@ -158,7 +166,7 @@ class GLiNER2Client(LLMClient):
                     labels_dict[name] = et.get('entity_type_description') or ''
                     label_to_id[name] = et['entity_type_id']
                 return labels_dict, label_to_id
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError, ValueError, SyntaxError):
                 logger.warning('Failed to parse <ENTITY TYPES> from message')
 
         return {'Entity': 'General entity'}, {'Entity': 0}
