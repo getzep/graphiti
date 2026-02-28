@@ -92,7 +92,7 @@ class GLiNER2Client(LLMClient):
         if config.base_url:
             logger.info('Initializing GLiNER2 in API mode: %s', config.base_url)
             self._model = GLiNER2.from_api(
-                api_key=config.api_key,
+                api_key=config.api_key or '',
                 api_base_url=config.base_url,
             )
             self._small_model = self._model
@@ -105,7 +105,7 @@ class GLiNER2Client(LLMClient):
             else:
                 self._small_model = self._model
 
-    def _get_model_for_size(self, model_size: ModelSize) -> 'GLiNER2':
+    def _get_model_for_size(self, model_size: ModelSize) -> typing.Any:
         if model_size == ModelSize.small:
             return self._small_model
         return self._model
@@ -198,7 +198,7 @@ class GLiNER2Client(LLMClient):
 
     async def _handle_entity_extraction(
         self,
-        model: 'GLiNER2',
+        model: typing.Any,
         text: str,
         messages: list[Message],
     ) -> dict[str, typing.Any]:
@@ -235,7 +235,7 @@ class GLiNER2Client(LLMClient):
 
     async def _handle_relation_extraction(
         self,
-        model: 'GLiNER2',
+        model: typing.Any,
         text: str,
         messages: list[Message],
     ) -> dict[str, typing.Any]:
