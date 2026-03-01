@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +30,7 @@ def _make_message_row(
     created_at: str,
     content: str = "test content",
     source_session_id: str = "session1",
-) -> "om_compressor.MessageRow":
+) -> om_compressor.MessageRow:
     return om_compressor.MessageRow(
         message_id=message_id,
         source_session_id=source_session_id,
@@ -45,7 +44,7 @@ def _make_message_row(
 def _make_extraction_node(
     node_id: str = "node1",
     source_message_ids: list[str] | None = None,
-) -> "om_compressor.ExtractionNode":
+) -> om_compressor.ExtractionNode:
     return om_compressor.ExtractionNode(
         node_id=node_id,
         node_type="Judgment",
@@ -316,16 +315,18 @@ class TestFetchBatchCursor:
                 return skippable_rows  # first call: two unskippable rows
             return []  # second call: nothing left (cursor advanced past them)
 
-        with patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch_batch_cursor):
-            with patch.object(om_backfill, "_neo4j_driver") as mock_driver:
-                mock_driver.return_value.__enter__ = lambda s: s
-                mock_driver.return_value.__exit__ = MagicMock(return_value=False)
-                mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
-                mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
-                mock_session.run.return_value.single.return_value = {"total": 2}
+        with (
+            patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch_batch_cursor),
+            patch.object(om_backfill, "_neo4j_driver") as mock_driver,
+        ):
+            mock_driver.return_value.__enter__ = lambda s: s
+            mock_driver.return_value.__exit__ = MagicMock(return_value=False)
+            mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
+            mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
+            mock_session.run.return_value.single.return_value = {"total": 2}
 
-                args = om_backfill.parse_args(["--apply"])
-                result = om_backfill.run(args)
+            args = om_backfill.parse_args(["--apply"])
+            result = om_backfill.run(args)
 
         # Must exit cleanly (return 0) and must NOT have looped more than twice
         assert result == 0
@@ -351,17 +352,19 @@ class TestFetchBatchCursor:
                 return batch_1
             return []
 
-        with patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch):
-            with patch.object(om_backfill, "_neo4j_driver") as mock_driver:
-                mock_session = MagicMock()
-                mock_driver.return_value.__enter__ = lambda s: s
-                mock_driver.return_value.__exit__ = MagicMock(return_value=False)
-                mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
-                mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
-                mock_session.run.return_value.single.return_value = {"total": 2}
+        with (
+            patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch),
+            patch.object(om_backfill, "_neo4j_driver") as mock_driver,
+        ):
+            mock_session = MagicMock()
+            mock_driver.return_value.__enter__ = lambda s: s
+            mock_driver.return_value.__exit__ = MagicMock(return_value=False)
+            mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
+            mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
+            mock_session.run.return_value.single.return_value = {"total": 2}
 
-                args = om_backfill.parse_args(["--dry-run"])
-                om_backfill.run(args)
+            args = om_backfill.parse_args(["--dry-run"])
+            om_backfill.run(args)
 
         # First call: cursor starts at ""
         assert cursors_seen[0] == ""

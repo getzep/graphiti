@@ -2272,8 +2272,8 @@ def _rank_extraction_nodes(nodes: list[ExtractionNode]) -> list[ExtractionNode]:
 
 
 def _derive_node_timestamps(
-    node: "ExtractionNode",
-    msg_by_id: dict[str, "MessageRow"],
+    node: ExtractionNode,
+    msg_by_id: dict[str, MessageRow],
 ) -> tuple[str | None, str | None]:
     """Derive first/last observed timestamps from a node's source messages.
 
@@ -2295,7 +2295,9 @@ def _derive_node_timestamps(
     if not src_timestamps:
         return None, None
 
-    fmt = lambda dt: dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    def fmt(dt: datetime) -> str:
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     return fmt(min(src_timestamps)), fmt(max(src_timestamps))
 
 
@@ -2471,7 +2473,9 @@ def _process_chunk_tx(
     # observed-node updates use event-time semantics, not wall-clock.
     _msg_ts_list = [parse_iso(m.created_at) for m in messages if m.created_at]
     _msg_ts_list = [dt for dt in _msg_ts_list if dt is not None]
-    _fmt = lambda dt: dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    def _fmt(dt: datetime) -> str:
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     msg_max_ts: str | None = _fmt(max(_msg_ts_list)) if _msg_ts_list else None
 
     for node_id in observed_node_ids:
