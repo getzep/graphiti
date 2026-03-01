@@ -18,7 +18,7 @@ llm:
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_url: ${OPENAI_API_URL:https://openrouter.ai/api/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -50,7 +50,7 @@ embedder:
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_url: ${OPENAI_API_URL:https://openrouter.ai/api/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
