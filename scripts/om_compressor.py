@@ -18,12 +18,15 @@ import ipaddress
 import json
 import os
 import re
+import socket
+import sqlite3
 import sys
 import tempfile
 import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,6 +55,12 @@ DEFAULT_MAX_CHUNKS_PER_RUN = 10
 DEAD_LETTER_ATTEMPTS = 3
 DEFAULT_EMBEDDING_MODEL = "embeddinggemma"
 DEFAULT_EMBEDDING_DIM = 768
+
+CLAIM_STATUS_PENDING = "pending"
+CLAIM_STATUS_CLAIMED = "claimed"
+CLAIM_STATUS_DONE = "done"
+CLAIM_STATUS_FAILED = "failed"
+DEFAULT_CLAIM_LEASE_SECONDS = 900
 
 STATUS_ACTIVE = {"open", "monitoring", "reopened"}
 STATUS_POOL = STATUS_ACTIVE | {"closed"}
@@ -1352,6 +1361,394 @@ def _fetch_parent_messages(session: Any, limit: int = MAX_PARENT_CHUNK_SIZE) -> 
     return out
 
 
+def _fetch_pending_messages_for_manifest(session: Any) -> list[MessageRow]:
+    rows = session.run(
+        """
+        MATCH (m:Message)
+        WHERE coalesce(m.om_extracted, false) = false
+          AND coalesce(m.om_dead_letter, false) = false
+        RETURN m.message_id AS message_id,
+               coalesce(m.source_session_id, 'unknown') AS source_session_id,
+               coalesce(m.content, '') AS content,
+               coalesce(m.created_at, $now_iso) AS created_at,
+               coalesce(m.content_embedding, []) AS content_embedding,
+               coalesce(m.om_extract_attempts, 0) AS om_extract_attempts
+        ORDER BY m.created_at ASC, m.message_id ASC
+        """,
+        {"now_iso": now_iso()},
+    ).data()
+
+    out: list[MessageRow] = []
+    for row in rows:
+        out.append(
+            MessageRow(
+                message_id=str(row["message_id"]),
+                source_session_id=str(row["source_session_id"]),
+                content=strip_untrusted_metadata(str(row["content"])),
+                created_at=str(row["created_at"]),
+                content_embedding=[float(v) for v in _safe_list(row.get("content_embedding"))],
+                om_extract_attempts=int(row.get("om_extract_attempts") or 0),
+            )
+        )
+    return out
+
+
+def _manifest_chunks(messages: list[MessageRow], extractor_version: str) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    for idx in range(0, len(messages), MAX_PARENT_CHUNK_SIZE):
+        group = messages[idx : idx + MAX_PARENT_CHUNK_SIZE]
+        if not group:
+            continue
+        chunk_id = _chunk_id(group, extractor_version)
+        chunks.append(
+            {
+                "chunk_id": chunk_id,
+                "chunk_index": len(chunks),
+                "message_ids": [m.message_id for m in group],
+                "message_count": len(group),
+                "time_range_start": group[0].created_at,
+                "time_range_end": group[-1].created_at,
+                "extractor_version": extractor_version,
+            }
+        )
+    return chunks
+
+
+def _write_manifest(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False))
+            fh.write("\n")
+
+
+def _load_manifest(path: Path) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    if not path.exists():
+        return out
+
+    with path.open("r", encoding="utf-8", errors="ignore") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            chunk_id = str(obj.get("chunk_id") or "").strip()
+            message_ids = obj.get("message_ids")
+            if not chunk_id or not isinstance(message_ids, list):
+                continue
+            obj["message_ids"] = [str(mid) for mid in message_ids if str(mid)]
+            out[chunk_id] = obj
+    return out
+
+
+def _claim_lease_seconds() -> int:
+    raw = (os.environ.get("OM_CLAIM_LEASE_SECONDS") or "").strip()
+    if not raw:
+        return DEFAULT_CLAIM_LEASE_SECONDS
+    try:
+        seconds = int(raw)
+    except ValueError as exc:
+        raise OMCompressorError("OM_CLAIM_LEASE_SECONDS must be an integer") from exc
+    if seconds <= 0:
+        raise OMCompressorError("OM_CLAIM_LEASE_SECONDS must be > 0")
+    return seconds
+
+
+def _claim_shard(chunk_id: str) -> int:
+    return int(hashlib.sha256(chunk_id.encode("utf-8")).hexdigest()[:8], 16)
+
+
+def init_claim_db(path: str) -> sqlite3.Connection:
+    conn = sqlite3.connect(path, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chunk_claims (
+            chunk_id TEXT PRIMARY KEY,
+            claim_shard INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending',
+            worker_id TEXT,
+            claimed_at TEXT,
+            lease_expires_at TEXT,
+            completed_at TEXT,
+            fail_count INTEGER NOT NULL DEFAULT 0,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            error TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunk_claims_status_shard "
+        "ON chunk_claims(status, claim_shard)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunk_claims_lease "
+        "ON chunk_claims(lease_expires_at)"
+    )
+    _ensure_claim_db_columns(conn)
+    conn.commit()
+    return conn
+
+
+def _ensure_claim_db_columns(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(chunk_claims)").fetchall()}
+
+    migrations: list[tuple[str, str]] = [
+        ("claim_shard", "ALTER TABLE chunk_claims ADD COLUMN claim_shard INTEGER NOT NULL DEFAULT 0"),
+        ("lease_expires_at", "ALTER TABLE chunk_claims ADD COLUMN lease_expires_at TEXT"),
+        ("attempt_count", "ALTER TABLE chunk_claims ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0"),
+    ]
+    for column, ddl in migrations:
+        if column not in columns:
+            conn.execute(ddl)
+
+    rows = conn.execute("SELECT chunk_id, claim_shard FROM chunk_claims").fetchall()
+    for chunk_id_raw, shard_raw in rows:
+        chunk_id = str(chunk_id_raw)
+        expected = _claim_shard(chunk_id)
+        current = int(shard_raw or 0)
+        if current != expected:
+            conn.execute(
+                "UPDATE chunk_claims SET claim_shard=? WHERE chunk_id=?",
+                (expected, chunk_id),
+            )
+
+
+def seed_claims(conn: sqlite3.Connection, chunk_ids: list[str]) -> None:
+    for chunk_id in chunk_ids:
+        shard = _claim_shard(chunk_id)
+        conn.execute(
+            "INSERT OR IGNORE INTO chunk_claims (chunk_id, claim_shard, status) VALUES (?, ?, ?)",
+            (chunk_id, shard, CLAIM_STATUS_PENDING),
+        )
+        conn.execute(
+            "UPDATE chunk_claims SET claim_shard=? WHERE chunk_id=? AND claim_shard != ?",
+            (shard, chunk_id, shard),
+        )
+        # Reset previously failed chunks so they can be retried on the next run.
+        # Only resets status=failed → pending; leaves done/claimed/pending rows untouched.
+        # Dead-letter threshold: chunks that have failed >= DEAD_LETTER_ATTEMPTS times are
+        # NOT reset — retrying them indefinitely causes head-of-line blocking (poison pill).
+        # Leave them in failed status for dead-letter inspection and manual triage.
+        conn.execute(
+            """
+            UPDATE chunk_claims
+            SET status = ?,
+                worker_id = NULL,
+                claimed_at = NULL,
+                lease_expires_at = NULL,
+                completed_at = NULL,
+                error = NULL
+            WHERE chunk_id = ?
+              AND status = ?
+              AND COALESCE(fail_count, 0) < ?
+            """,
+            (CLAIM_STATUS_PENDING, chunk_id, CLAIM_STATUS_FAILED, DEAD_LETTER_ATTEMPTS),
+        )
+    conn.commit()
+
+
+def claim_chunk(
+    conn: sqlite3.Connection,
+    *,
+    worker_id: str,
+    shards: int,
+    shard_index: int,
+    lease_seconds: int,
+) -> str | None:
+    now = now_iso()
+    lease_until = datetime.fromtimestamp(
+        datetime.now(timezone.utc).replace(microsecond=0).timestamp() + max(1, int(lease_seconds)),
+        tz=timezone.utc,
+    )
+    lease_expires_at = lease_until.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    conn.execute("BEGIN IMMEDIATE")
+    if sqlite3.sqlite_version_info >= (3, 35, 0):
+        cursor = conn.execute(
+            """
+            WITH candidate AS (
+                SELECT chunk_id
+                FROM chunk_claims
+                WHERE (
+                    status = ? OR
+                    (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at < ?)
+                )
+                  AND (claim_shard % ?) = ?
+                ORDER BY
+                    CASE WHEN status = ? THEN 0 ELSE 1 END,
+                    claimed_at ASC,
+                    chunk_id ASC
+                LIMIT 1
+            )
+            UPDATE chunk_claims
+            SET status = ?,
+                worker_id = ?,
+                claimed_at = ?,
+                lease_expires_at = ?,
+                error = NULL,
+                attempt_count = COALESCE(attempt_count, 0) + 1
+            WHERE chunk_id = (SELECT chunk_id FROM candidate)
+            RETURNING chunk_id
+            """,
+            (
+                CLAIM_STATUS_PENDING,
+                CLAIM_STATUS_CLAIMED,
+                now,
+                int(shards),
+                int(shard_index),
+                CLAIM_STATUS_CLAIMED,
+                CLAIM_STATUS_CLAIMED,
+                worker_id,
+                now,
+                lease_expires_at,
+            ),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return str(row[0]) if row else None
+
+    row = conn.execute(
+        """
+        SELECT chunk_id
+        FROM chunk_claims
+        WHERE (
+            status = ? OR
+            (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at < ?)
+        )
+          AND (claim_shard % ?) = ?
+        ORDER BY
+            CASE WHEN status = ? THEN 0 ELSE 1 END,
+            claimed_at ASC,
+            chunk_id ASC
+        LIMIT 1
+        """,
+        (
+            CLAIM_STATUS_PENDING,
+            CLAIM_STATUS_CLAIMED,
+            now,
+            int(shards),
+            int(shard_index),
+            CLAIM_STATUS_CLAIMED,
+        ),
+    ).fetchone()
+    if row is None:
+        conn.commit()
+        return None
+
+    chunk_id = str(row[0])
+    cursor = conn.execute(
+        """
+        UPDATE chunk_claims
+        SET status = ?,
+            worker_id = ?,
+            claimed_at = ?,
+            lease_expires_at = ?,
+            error = NULL,
+            attempt_count = COALESCE(attempt_count, 0) + 1
+        WHERE chunk_id = ?
+          AND (
+            status = ? OR
+            (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at < ?)
+          )
+        """,
+        (
+            CLAIM_STATUS_CLAIMED,
+            worker_id,
+            now,
+            lease_expires_at,
+            chunk_id,
+            CLAIM_STATUS_PENDING,
+            CLAIM_STATUS_CLAIMED,
+            now,
+        ),
+    )
+    conn.commit()
+    if cursor.rowcount <= 0:
+        return None
+    return chunk_id
+
+
+def _claim_done(conn: sqlite3.Connection, *, chunk_id: str, worker_id: str) -> bool:
+    completed_at = now_iso()
+    cursor = conn.execute(
+        """
+        UPDATE chunk_claims
+        SET status = ?,
+            completed_at = ?,
+            lease_expires_at = NULL,
+            error = NULL
+        WHERE chunk_id = ?
+          AND status = ?
+          AND worker_id = ?
+        """,
+        (CLAIM_STATUS_DONE, completed_at, chunk_id, CLAIM_STATUS_CLAIMED, worker_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def _claim_fail(conn: sqlite3.Connection, *, chunk_id: str, worker_id: str, error: str) -> bool:
+    completed_at = now_iso()
+    cursor = conn.execute(
+        """
+        UPDATE chunk_claims
+        SET status = ?,
+            completed_at = ?,
+            lease_expires_at = NULL,
+            worker_id = NULL,
+            fail_count = COALESCE(fail_count, 0) + 1,
+            error = ?
+        WHERE chunk_id = ?
+          AND status = ?
+          AND worker_id = ?
+        """,
+        (
+            CLAIM_STATUS_FAILED,
+            completed_at,
+            str(error)[:500],
+            chunk_id,
+            CLAIM_STATUS_CLAIMED,
+            worker_id,
+        ),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def _confirm_chunk_done(session: Any, *, message_ids: list[str], chunk_id: str) -> bool:
+    if not message_ids:
+        return False
+
+    row = session.run(
+        """
+        MATCH (m:Message)
+        WHERE m.message_id IN $message_ids
+        RETURN count(m) AS total,
+               count(CASE
+                    WHEN coalesce(m.om_extracted, false) = true
+                     AND coalesce(m.om_chunk_id, '') = $chunk_id
+                    THEN 1
+               END) AS confirmed
+        """,
+        {"message_ids": message_ids, "chunk_id": chunk_id},
+    ).single()
+
+    if row is None:
+        return False
+    total = int(row.get("total") or 0)
+    confirmed = int(row.get("confirmed") or 0)
+    expected = len(message_ids)
+    return total == expected and confirmed == expected
+
+
 def _fetch_structured_parent(session: Any) -> ParentState | None:
     row = session.run(
         """
@@ -2136,13 +2533,307 @@ def _process_structured_parent(session: Any, parent: ParentState, cfg: Extractor
     return success
 
 
+def _claim_db_path_for_manifest(manifest_path: Path) -> Path:
+    return manifest_path.with_name(f"{manifest_path.name}.claims.db")
+
+
+def _make_worker_id(shards: int, shard_index: int) -> str:
+    """Generate a globally unique worker ID for claim-mode multi-host execution.
+
+    Format: om-{hostname}-{shards}/{shard_index}-{pid}-{rand8}
+
+    Hostname makes the ID unique across machines; pid is unique within a host
+    at a given moment; the random 8-hex suffix prevents collisions across
+    crash/restart cycles that produce the same PID on the same host.
+    The shards/shard_index component preserves observability in log queries.
+    """
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    rand = uuid.uuid4().hex[:8]
+    return f"om-{hostname}-{shards}/{shard_index}-{pid}-{rand}"
+
+
+def _run_build_manifest(
+    session: Any,
+    *,
+    cfg: ExtractorConfig,
+    manifest_path: Path,
+    dry_run: bool,
+) -> int:
+    pending = _fetch_pending_messages_for_manifest(session)
+    rows = _manifest_chunks(pending, cfg.extractor_version)
+
+    if dry_run:
+        print(
+            f"DRY RUN: would write manifest {manifest_path} "
+            f"({len(rows)} chunks / {len(pending)} messages)"
+        )
+        return 0
+
+    _write_manifest(manifest_path, rows)
+    claim_db_path = _claim_db_path_for_manifest(manifest_path)
+    conn = init_claim_db(str(claim_db_path))
+    try:
+        seed_claims(conn, [str(row["chunk_id"]) for row in rows])
+    finally:
+        conn.close()
+
+    emit_event(
+        "OM_MANIFEST_BUILT",
+        manifest_path=str(manifest_path),
+        claim_db_path=str(claim_db_path),
+        chunks=len(rows),
+        messages=len(pending),
+        extractor_version=cfg.extractor_version,
+    )
+    return 0
+
+
+def _run_claim_mode(
+    session: Any,
+    *,
+    args: argparse.Namespace,
+    cfg: ExtractorConfig,
+    dry_run: bool,
+) -> int:
+    if not args.build_manifest:
+        raise OMCompressorError("--claim-mode requires --build-manifest")
+    if int(args.shards) <= 0:
+        raise OMCompressorError("--shards must be >= 1")
+    if int(args.shard_index) < 0 or int(args.shard_index) >= int(args.shards):
+        raise OMCompressorError("--shard-index must be within [0, shards)")
+
+    manifest_path = Path(args.build_manifest)
+    manifest = _load_manifest(manifest_path)
+    if not manifest:
+        raise OMCompressorError(f"manifest is empty or missing: {manifest_path}")
+
+    manifest_versions = {
+        str(row.get("extractor_version") or "").strip()
+        for row in manifest.values()
+        if str(row.get("extractor_version") or "").strip()
+    }
+    if manifest_versions and cfg.extractor_version not in manifest_versions:
+        raise OMCompressorError(
+            "manifest extractor_version mismatch; rebuild manifest with current ontology/model config"
+        )
+
+    candidate_chunk_ids = [
+        chunk_id
+        for chunk_id in manifest
+        if (_claim_shard(chunk_id) % int(args.shards)) == int(args.shard_index)
+    ]
+    if dry_run:
+        print(
+            f"DRY RUN: shard {args.shard_index}/{args.shards} "
+            f"would be eligible for {len(candidate_chunk_ids)} chunks from {manifest_path}"
+        )
+        return 0
+
+    claim_db_path = _claim_db_path_for_manifest(manifest_path)
+    conn = init_claim_db(str(claim_db_path))
+    try:
+        seed_claims(conn, list(manifest.keys()))
+
+        # Reconcile stale rows: pending claim rows whose chunk_id is not in the current
+        # manifest can never be processed (they belong to a previous manifest generation).
+        # Mark them failed so they don't waste workers trying to claim them.
+        # Uses a SQLite temp table to handle arbitrarily large manifests safely.
+        conn.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS _om_manifest_ids (chunk_id TEXT PRIMARY KEY)"
+        )
+        conn.execute("DELETE FROM _om_manifest_ids")
+        conn.executemany(
+            "INSERT OR IGNORE INTO _om_manifest_ids VALUES (?)",
+            [(cid,) for cid in manifest],
+        )
+        conn.execute(
+            """
+            UPDATE chunk_claims
+            SET status = ?,
+                error = 'stale: chunk not in current manifest',
+                completed_at = ?
+            WHERE status = ?
+              AND chunk_id NOT IN (SELECT chunk_id FROM _om_manifest_ids)
+            """,
+            (CLAIM_STATUS_FAILED, now_iso(), CLAIM_STATUS_PENDING),
+        )
+        conn.execute("DROP TABLE IF EXISTS _om_manifest_ids")
+        conn.commit()
+
+        worker_id = _make_worker_id(int(args.shards), int(args.shard_index))
+        lease_seconds = _claim_lease_seconds()
+        processed = 0
+        total_attempts = 0  # total chunks claimed (successes + soft failures)
+        had_failures = False  # tracks any confirmation/ownership/processing failure in this run
+        max_chunks = max(1, int(args.max_chunks_per_run))
+
+        while total_attempts < max_chunks:
+            chunk_id = claim_chunk(
+                conn,
+                worker_id=worker_id,
+                shards=int(args.shards),
+                shard_index=int(args.shard_index),
+                lease_seconds=lease_seconds,
+            )
+            if not chunk_id:
+                break
+            total_attempts += 1
+
+            manifest_row = manifest.get(chunk_id)
+            if not manifest_row:
+                fail_ok = _claim_fail(
+                    conn,
+                    chunk_id=chunk_id,
+                    worker_id=worker_id,
+                    error="chunk missing from manifest",
+                )
+                if not fail_ok:
+                    emit_event(
+                        "OM_CLAIM_OWNERSHIP_LOST",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        phase="manifest_missing",
+                    )
+                emit_event("OM_CHUNK_FAILED", chunk_id=chunk_id, error="chunk missing from manifest")
+                had_failures = True
+                continue
+
+            message_ids = [str(mid) for mid in _safe_list(manifest_row.get("message_ids")) if str(mid)]
+            chunk_messages = _fetch_messages_by_ids(session, message_ids)
+            if len(chunk_messages) != len(message_ids):
+                fail_ok = _claim_fail(
+                    conn,
+                    chunk_id=chunk_id,
+                    worker_id=worker_id,
+                    error="manifest message_ids no longer resolvable in Neo4j",
+                )
+                if not fail_ok:
+                    emit_event(
+                        "OM_CLAIM_OWNERSHIP_LOST",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        phase="message_resolve_fail",
+                    )
+                emit_event(
+                    "OM_CHUNK_FAILED",
+                    chunk_id=chunk_id,
+                    error="manifest message_ids no longer resolvable in Neo4j",
+                )
+                had_failures = True
+                continue
+
+            try:
+                _, observed_ids = _activate_energy_scores(session, chunk_messages)
+                result = _process_chunk(
+                    session,
+                    messages=chunk_messages,
+                    chunk_id=chunk_id,
+                    cfg=cfg,
+                    observed_node_ids=observed_ids,
+                )
+
+                if not _confirm_chunk_done(
+                    session,
+                    message_ids=[m.message_id for m in chunk_messages],
+                    chunk_id=chunk_id,
+                ):
+                    fail_ok = _claim_fail(
+                        conn,
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        error="done-confirm failed (message not durably marked extracted)",
+                    )
+                    if not fail_ok:
+                        # _claim_fail returned False — ownership was already lost (race).
+                        emit_event(
+                            "OM_CLAIM_OWNERSHIP_LOST",
+                            chunk_id=chunk_id,
+                            worker_id=worker_id,
+                            phase="confirm_fail",
+                        )
+                    emit_event(
+                        "OM_CHUNK_DONE_CONFIRM_FAILED",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                    )
+                    had_failures = True
+                    continue
+
+                # Attempt to transition claim → done; False means another worker
+                # already modified this row (ownership-lost / race condition).
+                done_ok = _claim_done(conn, chunk_id=chunk_id, worker_id=worker_id)
+                if not done_ok:
+                    emit_event(
+                        "OM_CLAIM_OWNERSHIP_LOST",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        phase="done",
+                    )
+                    had_failures = True
+                    continue  # do not count as success, do not emit OM_CHUNK_PROCESSED
+
+                emit_event(
+                    "OM_CHUNK_PROCESSED",
+                    **result,
+                    worker_id=worker_id,
+                    shard_index=int(args.shard_index),
+                    shards=int(args.shards),
+                )
+                processed += 1
+            except NodeContentMismatchError as exc:
+                fail_ok = _claim_fail(conn, chunk_id=chunk_id, worker_id=worker_id, error=str(exc))
+                if not fail_ok:
+                    emit_event(
+                        "OM_CLAIM_OWNERSHIP_LOST",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        phase="node_mismatch_fail",
+                    )
+                emit_event(
+                    "OM_NODE_CONTENT_MISMATCH",
+                    node_id=exc.node_id,
+                    existing_content_hash=exc.existing_hash,
+                    incoming_content_hash=exc.incoming_hash,
+                )
+                return 1  # Hard error — data integrity; abort this shard immediately
+            except Exception as exc:
+                fail_ok = _claim_fail(conn, chunk_id=chunk_id, worker_id=worker_id, error=str(exc))
+                if not fail_ok:
+                    emit_event(
+                        "OM_CLAIM_OWNERSHIP_LOST",
+                        chunk_id=chunk_id,
+                        worker_id=worker_id,
+                        phase="processing_fail",
+                    )
+                emit_event("OM_CHUNK_FAILED", chunk_id=chunk_id, error=str(exc))
+                return 1
+    finally:
+        conn.close()
+
+    # Return non-zero if any chunk in this run failed confirmation, processing,
+    # or ownership transition — even if other chunks succeeded.
+    return 1 if had_failures else 0
+
+
 def run(args: argparse.Namespace) -> int:
-    dry_run = getattr(args, 'dry_run', False)
+    dry_run = getattr(args, "dry_run", False)
     cfg = _load_extractor_config(_resolve_ontology_config_path(args.config))
 
     driver = _neo4j_driver()
     with driver, driver.session(database=os.environ.get("NEO4J_DATABASE", "neo4j")) as session:
         _ensure_neo4j_constraints(session)
+
+        if args.build_manifest and not args.claim_mode:
+            return _run_build_manifest(
+                session,
+                cfg=cfg,
+                manifest_path=Path(args.build_manifest),
+                dry_run=dry_run,
+            )
+
+        if args.claim_mode:
+            return _run_claim_mode(session, args=args, cfg=cfg, dry_run=dry_run)
 
         parent = _fetch_structured_parent(session)
         if parent is not None:
@@ -2155,61 +2846,67 @@ def run(args: argparse.Namespace) -> int:
         processed = 0
         max_chunks = max(1, int(args.max_chunks_per_run))
         while processed < max_chunks:
-                backlog_count, oldest_hours = _fetch_backlog_stats(session)
-                trigger = backlog_count >= 50 or (oldest_hours is not None and oldest_hours >= 48.0)
-                if not args.force and not trigger:
-                    if processed == 0:
-                        emit_event(
-                            "OM_TRIGGER_NOT_MET",
-                            backlog_count=backlog_count,
-                            oldest_backlog_age_hours=oldest_hours,
-                        )
-                    break
-
-                chunk_messages = _fetch_parent_messages(session, MAX_PARENT_CHUNK_SIZE)
-                if not chunk_messages:
-                    break
-
-                chunk_id = _chunk_id(chunk_messages, cfg.extractor_version)
-                if dry_run:
-                    print(
-                        f"DRY RUN: would process chunk {chunk_id} "
-                        f"({len(chunk_messages)} messages, "
-                        f"backlog={backlog_count}, oldest={oldest_hours:.1f}h)"
-                    )
-                    processed += 1
-                    continue
-                try:
-                    _, observed_ids = _activate_energy_scores(session, chunk_messages)
-                    result = _process_chunk(
-                        session,
-                        messages=chunk_messages,
-                        chunk_id=chunk_id,
-                        cfg=cfg,
-                        observed_node_ids=observed_ids,
-                    )
-                    emit_event("OM_CHUNK_PROCESSED", **result)
-                    processed += 1
-                except NodeContentMismatchError as exc:
+            backlog_count, oldest_hours = _fetch_backlog_stats(session)
+            trigger = backlog_count >= 50 or (oldest_hours is not None and oldest_hours >= 48.0)
+            if not args.force and not trigger:
+                if processed == 0:
                     emit_event(
-                        "OM_NODE_CONTENT_MISMATCH",
-                        node_id=exc.node_id,
-                        existing_content_hash=exc.existing_hash,
-                        incoming_content_hash=exc.incoming_hash,
+                        "OM_TRIGGER_NOT_MET",
+                        backlog_count=backlog_count,
+                        oldest_backlog_age_hours=oldest_hours,
                     )
-                    return 1
-                except Exception as exc:
-                    if len(chunk_messages) > 1:
-                        _handle_parent_failure(
-                            session,
-                            chunk_id=chunk_id,
-                            messages=chunk_messages,
-                            cfg=cfg,
-                        )
-                    else:
-                        _increment_message_attempt(session, chunk_messages[0], error=str(exc), chunk_id=chunk_id)
-                    emit_event("OM_CHUNK_FAILED", chunk_id=chunk_id, error=str(exc))
-                    return 1
+                break
+
+            chunk_messages = _fetch_parent_messages(session, MAX_PARENT_CHUNK_SIZE)
+            if not chunk_messages:
+                break
+
+            chunk_id = _chunk_id(chunk_messages, cfg.extractor_version)
+            if dry_run:
+                oldest_repr = f"{oldest_hours:.1f}h" if oldest_hours is not None else "n/a"
+                print(
+                    f"DRY RUN: would process chunk {chunk_id} "
+                    f"({len(chunk_messages)} messages, "
+                    f"backlog={backlog_count}, oldest={oldest_repr})"
+                )
+                processed += 1
+                continue
+            try:
+                _, observed_ids = _activate_energy_scores(session, chunk_messages)
+                result = _process_chunk(
+                    session,
+                    messages=chunk_messages,
+                    chunk_id=chunk_id,
+                    cfg=cfg,
+                    observed_node_ids=observed_ids,
+                )
+                emit_event("OM_CHUNK_PROCESSED", **result)
+                processed += 1
+            except NodeContentMismatchError as exc:
+                emit_event(
+                    "OM_NODE_CONTENT_MISMATCH",
+                    node_id=exc.node_id,
+                    existing_content_hash=exc.existing_hash,
+                    incoming_content_hash=exc.incoming_hash,
+                )
+                return 1
+            except Exception as exc:
+                if len(chunk_messages) > 1:
+                    _handle_parent_failure(
+                        session,
+                        chunk_id=chunk_id,
+                        messages=chunk_messages,
+                        cfg=cfg,
+                    )
+                else:
+                    _increment_message_attempt(
+                        session,
+                        chunk_messages[0],
+                        error=str(exc),
+                        chunk_id=chunk_id,
+                    )
+                emit_event("OM_CHUNK_FAILED", chunk_id=chunk_id, error=str(exc))
+                return 1
 
     return 0
 
@@ -2255,6 +2952,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.claim_mode and args.mode != "backfill":
+        print("--claim-mode requires --mode backfill", file=sys.stderr)
+        return 1
 
     if args.mode == "backfill":
         # Backfill mode: skip file lock for parallel execution

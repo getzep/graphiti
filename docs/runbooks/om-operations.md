@@ -210,6 +210,44 @@ python3 scripts/om_compressor.py --max-chunks-per-run 5
 python3 scripts/om_compressor.py --config /path/to/extraction_ontologies.yaml
 ```
 
+### High-throughput backfill (manifest + claim mode)
+
+FR-11 backfill throughput uses a two-phase flow:
+
+1. Build a deterministic chunk manifest from current pending OM messages.
+2. Run one or more shard workers in claim mode against that manifest.
+
+```bash
+# Phase A: build manifest + seed claim-state DB (<manifest>.claims.db)
+python3 scripts/om_compressor.py \
+  --mode backfill \
+  --build-manifest state/om_backfill_manifest.jsonl
+
+# Phase B: shard workers (run in parallel processes/hosts)
+python3 scripts/om_compressor.py \
+  --mode backfill \
+  --claim-mode \
+  --build-manifest state/om_backfill_manifest.jsonl \
+  --shards 4 \
+  --shard-index 0 \
+  --max-chunks-per-run 100
+```
+
+Claim semantics:
+- Claim state is persisted in SQLite (`<manifest>.claims.db`, table `chunk_claims`).
+- Rows move `pending -> claimed -> done` (or `failed` on hard error).
+- Claimed rows include a lease (`lease_expires_at`), so stale/abandoned claims are reclaimable.
+- Done-confirm is enforced: claim row is marked `done` **only after** successful OM extraction/write and
+  a Neo4j confirmation query verifies all chunk messages are marked extracted for that chunk ID.
+- Shard isolation uses deterministic `chunk_id` hashing (`claim_shard % shards == shard_index`) to prevent
+  overlapping execution across workers.
+
+Optional lease override:
+
+```bash
+OM_CLAIM_LEASE_SECONDS=1800 python3 scripts/om_compressor.py --mode backfill --claim-mode ...
+```
+
 ### Ontology Config
 
 Default: `mcp_server/config/extraction_ontologies.yaml`
@@ -246,8 +284,10 @@ Allowed edge types (enforced via allowlist + regex — no free-form interpolatio
 | Event | When |
 |---|---|
 | `OM_TRIGGER_NOT_MET` | Backlog below threshold, nothing processed |
+| `OM_MANIFEST_BUILT` | Backfill manifest + claim DB seeded (`--build-manifest`) |
 | `OM_CHUNK_PROCESSED` | Successful chunk (includes `messages`, `nodes`, `edges` counts) |
-| `OM_CHUNK_FAILED` | Chunk extraction error |
+| `OM_CHUNK_DONE_CONFIRM_FAILED` | Extraction returned but Neo4j done-confirm check failed; claim not marked done |
+| `OM_CHUNK_FAILED` | Chunk extraction/claim processing error |
 | `OM_NODE_CONTENT_MISMATCH` | Existing OMNode has different content hash — exits code 1 |
 | `OM_DEAD_LETTER` | Message promoted to dead-letter queue |
 

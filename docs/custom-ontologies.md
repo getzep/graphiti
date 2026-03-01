@@ -272,6 +272,11 @@ relation type strings are blocked at write time):
 MOTIVATES   GENERATES   SUPERSEDES   ADDRESSES   RESOLVES
 ```
 
+`SUPERSEDES` is the canonical supersession relation (active voice: new → old).
+If your storage backend materializes edges under a generic relationship type
+(e.g. `RELATES_TO`), score semantic relation meaning from the relation-name
+property (`r.name`), not from `type(r)` alone.
+
 ### YAML Config for OM Extractor
 
 The `om_extractor` block in `mcp_server/config/extraction_ontologies.yaml` controls
