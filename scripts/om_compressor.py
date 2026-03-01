@@ -79,6 +79,92 @@ class OMCompressorError(RuntimeError):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Standalone SSRF helpers (used by fallback URL validation paths so that the
+# same checks apply whether or not graphiti_core is importable)
+# ---------------------------------------------------------------------------
+
+_TRUTHY_ENV_STR: frozenset[str] = frozenset({"1", "true", "yes", "on"})
+
+
+def _fallback_ssrf_validate(
+    url: str,
+    label: str,
+    *,
+    allow_private: bool,
+    allow_local_override_env: str = "",
+) -> str:
+    """Validate an HTTP(S) base URL; raise OMCompressorError on violations.
+
+    Mirrors the logic of ``graphiti_core.utils.env_utils._validate_base_url``
+    so that the ImportError fallback paths enforce identical SSRF rules.
+
+    Parameters
+    ----------
+    url:            URL to validate.
+    label:          Human-readable name for error messages (e.g. 'LLM chat').
+    allow_private:  If True, loopback/RFC-1918 addresses are accepted.
+    allow_local_override_env:
+        If non-empty and the named env var is truthy, allow private addresses
+        even when ``allow_private`` is False.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise OMCompressorError(
+            f"{label} base URL must be an absolute http(s) URL with a host, got: {url!r}"
+        )
+    if parsed.username or parsed.password:
+        raise OMCompressorError(
+            f"{label} base URL must not include embedded credentials: {url!r}"
+        )
+    if parsed.query:
+        raise OMCompressorError(
+            f"{label} base URL must not include a query string: {url!r}"
+        )
+    if parsed.fragment:
+        raise OMCompressorError(
+            f"{label} base URL must not include a fragment: {url!r}"
+        )
+    host = (urllib.parse.urlparse(f"//{parsed.netloc}").hostname or "").strip()
+    # Always block link-local / cloud-metadata addresses (169.254.x.x, fe80::)
+    try:
+        addr = ipaddress.ip_address(host)
+        if addr.is_link_local:
+            raise OMCompressorError(
+                f"{label} base URL {url!r} targets a link-local/cloud-metadata address. "
+                "This is always blocked."
+            )
+        if not allow_private:
+            env_ok = (
+                os.environ.get(allow_local_override_env, "").strip().lower()
+                in _TRUTHY_ENV_STR
+            ) if allow_local_override_env else False
+            if not env_ok and (addr.is_loopback or addr.is_private):
+                _hint = (
+                    f" Set {allow_local_override_env}=1 to allow local model endpoints (dev only)."
+                    if allow_local_override_env else ""
+                )
+                raise OMCompressorError(
+                    f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
+                )
+    except ValueError:
+        # Hostname (not numeric) — only check well-known loopback aliases
+        if not allow_private and host.lower() in {"localhost", "ip6-localhost", "ip6-loopback"}:
+            env_ok = (
+                os.environ.get(allow_local_override_env, "").strip().lower()
+                in _TRUTHY_ENV_STR
+            ) if allow_local_override_env else False
+            if not env_ok:
+                _hint = (
+                    f" Set {allow_local_override_env}=1 to allow local model endpoints (dev only)."
+                    if allow_local_override_env else ""
+                )
+                raise OMCompressorError(
+                    f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
+                )
+    return url.rstrip("/")
+
+
 class SchemaVersionMissingError(OMCompressorError):
     pass
 
@@ -345,19 +431,26 @@ def tokenize_len(text: str) -> int:
 
 
 def _validated_embedding_base_url() -> str:
-    base = (os.environ.get("EMBEDDER_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or "").strip()
-    if not base:
-        base = "http://localhost:11434/v1"
-
-    parsed = urllib.parse.urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise OMCompressorError("embedding base URL must be absolute http(s) URL")
-    if parsed.username or parsed.password:
-        raise OMCompressorError("embedding base URL must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise OMCompressorError("embedding base URL must not include query/fragment")
-
-    return base.rstrip("/")
+    """Resolve embedding base URL (delegates to shared env_utils)."""
+    try:
+        from graphiti_core.utils.env_utils import (
+            EndpointResolutionError,
+            resolve_embedder_base_url,
+        )
+        try:
+            return resolve_embedder_base_url()
+        except EndpointResolutionError as exc:
+            raise OMCompressorError(str(exc)) from exc
+    except ImportError:
+        # Fallback: standalone resolution for environments where graphiti_core
+        # is not on PYTHONPATH (e.g. minimal Docker base images).
+        # Delegates to _fallback_ssrf_validate to enforce the same SSRF checks
+        # as env_utils._validate_base_url (link-local always blocked; private
+        # allowed for embedder since local Ollama is a production use-case).
+        base = (os.environ.get("EMBEDDER_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or "").strip()
+        if not base:
+            base = "http://localhost:11434/v1"
+        return _fallback_ssrf_validate(base, label="Embedder", allow_private=True)
 
 
 def _embedding_config() -> tuple[str, int]:
@@ -654,57 +747,43 @@ def _is_ssrf_blocked_host(netloc: str) -> bool:
 
 
 def _llm_chat_base_url() -> str:
-    """Resolve the LLM chat completions base URL.
+    """Resolve the LLM chat completions base URL (delegates to shared env_utils).
 
     Priority:
-      1. OM_COMPRESSOR_LLM_BASE_URL — explicit override for the extractor
-      2. OPENAI_BASE_URL — shared OpenAI-compatible base URL
-      3. https://api.openai.com/v1 — default OpenAI endpoint
+      1. OM_COMPRESSOR_LLM_BASE_URL — explicit per-script override
+      2. LLM_BASE_URL — dedicated LLM base URL (preferred over OPENAI_BASE_URL)
+      3. OPENAI_BASE_URL — legacy shared base URL
+      4. https://api.openai.com/v1 — default
 
-    SSRF hardening: loopback / RFC-1918 / link-local addresses are blocked by
-    default because the LLM endpoint should always be an external provider.
-    Set OM_ALLOW_LOCAL_LLM=1 to permit local model endpoints (e.g. Ollama for
-    development) — never set this in production.
+    SSRF hardening is applied inside env_utils. Set OM_ALLOW_LOCAL_LLM=1 for
+    local dev model endpoints (never in production).
     """
-    base = (
-        os.environ.get("OM_COMPRESSOR_LLM_BASE_URL")
-        or os.environ.get("OPENAI_BASE_URL")
-        or "https://api.openai.com/v1"
-    ).strip()
-    parsed = urllib.parse.urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise OMCompressorError("LLM chat base URL must be absolute http(s) URL")
-    if parsed.username or parsed.password:
-        raise OMCompressorError("LLM chat base URL must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise OMCompressorError("LLM chat base URL must not include query/fragment")
-
-    # Safely extract the hostname (IPv6-aware) for SSRF checks.
-    _host_only = (urllib.parse.urlparse(f"//{parsed.netloc}").hostname or "").strip()
-
-    # ALWAYS block link-local / cloud-metadata addresses (e.g. 169.254.169.254, fe80::1)
-    # regardless of OM_ALLOW_LOCAL_LLM.  There is no legitimate reason for the LLM
-    # extractor to reach cloud-metadata endpoints even in local-dev mode.
     try:
-        _addr = ipaddress.ip_address(_host_only)
-        if _addr.is_link_local:
-            raise OMCompressorError(
-                f"LLM chat base URL {base!r} targets a link-local/cloud-metadata address. "
-                "This is always blocked regardless of OM_ALLOW_LOCAL_LLM."
-            )
-    except ValueError:
-        pass  # hostname (not a numeric IP) — link-local check does not apply
-
-    allow_local = os.environ.get("OM_ALLOW_LOCAL_LLM", "").strip().lower() in _TRUTHY_ENV_VALUES
-    if not allow_local and _is_ssrf_blocked_host(parsed.netloc):
-        raise OMCompressorError(
-            f"LLM chat base URL {base!r} targets a loopback or private address. "
-            "The LLM endpoint must be an external provider. "
-            "Set OM_ALLOW_LOCAL_LLM=1 to permit local model endpoints (e.g. Ollama) "
-            "for development use only."
+        from graphiti_core.utils.env_utils import (
+            EndpointResolutionError,
+            resolve_llm_base_url,
         )
-
-    return base.rstrip("/")
+        try:
+            return resolve_llm_base_url(script_override_env="OM_COMPRESSOR_LLM_BASE_URL")
+        except EndpointResolutionError as exc:
+            raise OMCompressorError(str(exc)) from exc
+    except ImportError:
+        # Fallback: standalone resolution for environments without graphiti_core.
+        # Delegates to _fallback_ssrf_validate to enforce the same SSRF checks
+        # as env_utils._validate_base_url (link-local always blocked; private/
+        # loopback blocked unless OM_ALLOW_LOCAL_LLM=1).
+        base = (
+            os.environ.get("OM_COMPRESSOR_LLM_BASE_URL")
+            or os.environ.get("LLM_BASE_URL")
+            or os.environ.get("OPENAI_BASE_URL")
+            or "https://api.openai.com/v1"
+        ).strip()
+        return _fallback_ssrf_validate(
+            base,
+            label="LLM chat",
+            allow_private=False,
+            allow_local_override_env="OM_ALLOW_LOCAL_LLM",
+        )
 
 
 # OM-2: System prompt for LLM-backed OM extraction.
