@@ -244,6 +244,25 @@ PYTHONPATH=. python3 scripts/om_convergence.py --run-gc --gc-dry-run
 
 # Promote a corroborated candidate to CoreMemory
 PYTHONPATH=. python3 truth/promotion_policy_v3.py --candidate-id <id>
+
+# Exact-dedupe OMNodes (dry-run first, then --apply)
+uv run python scripts/om_dedupe.py --dry-run
+uv run python scripts/om_dedupe.py --apply
+
+# Backfill timeline timestamps on pre-Phase-B OMNodes
+uv run python scripts/om_backfill_timestamps.py --dry-run
+uv run python scripts/om_backfill_timestamps.py --apply
+
+# Normalize edge names to SCREAMING_SNAKE_CASE (dry-run first)
+python scripts/normalize_edge_names.py
+python scripts/normalize_edge_names.py --apply
+
+# Run closure semantics pass (RESOLVES/SUPERSEDES auto-invalidation)
+python scripts/apply_closure_semantics.py
+python scripts/apply_closure_semantics.py --apply
+
+# Cross-lane contamination check (exit 0 = clean, 1 = contamination)
+python scripts/contamination_sentinel.py --json
 ```
 
 ### Key Numbers
@@ -258,6 +277,20 @@ PYTHONPATH=. python3 truth/promotion_policy_v3.py --candidate-id <id>
 | Convergence pass limit | 500 nodes |
 | GC TTL (default) | 90 days |
 | GC retention gate | EVIDENCE\_FOR active OMNode OR SUPPORTS\_CORE active CoreMemory |
+
+### Phase B: Dedupe & Timeline Semantics
+
+- **Exact dedupe** (`scripts/om_dedupe.py`): Detects and merges OMNodes sharing the same `node_type + normalize(content)` key across semantic domains. Canonical node = earliest `created_at`; metadata merged (union provenance, max urgency, most-active status). Dry-run default.
+- **Timeline semantics**: OMNodes carry `first_observed_at` and `last_observed_at` derived from source message event time (not wall-clock extraction time). Convergence age-decay and GC eligibility use event time. Pre-existing nodes: `scripts/om_backfill_timestamps.py`.
+
+### Phase C: Graph Maintenance & Guardrails
+
+- **Edge normalization** (`scripts/normalize_edge_names.py`): Universal SCREAMING\_SNAKE\_CASE normalization, preventing case-variant dedup collisions. Also exported as `graphiti_core.utils.maintenance.normalize_relation_type` for inline use.
+- **Closure semantics** (`scripts/apply_closure_semantics.py`): RESOLVES/SUPERSEDES edges auto-invalidate the target entity's active facts. Pure graph pass — no LLM calls. Idempotent, dry-run default.
+- **Endpoint split** (`graphiti_core/utils/env_utils.py`): Separate `LLM_BASE_URL` and `EMBEDDER_BASE_URL` resolution to prevent accidental embedding-to-OpenRouter routing. See `.env.example` for priority chain.
+- **Contamination sentinel** (`scripts/contamination_sentinel.py`): Read-only cross-lane integrity check. `--json` for CI. Exit 0 = clean.
+- **Recall gate** (`--recall-gate 0.75 --recall-baseline ...` on `run_retrieval_benchmark.py`): CI-friendly quality gate.
+- **Scope policy** ([`docs/scope-policy.md`](docs/scope-policy.md)): Frozen as of Phase C. Messages only by default; `toolResult` opt-in via `TOOL_RESULT_ALLOWLIST`.
 
 For the full operations guide including lock ordering, split/isolate failure recovery,
 and convergence state machine details, see [OM Operations Runbook](docs/runbooks/om-operations.md).
@@ -286,6 +319,7 @@ This fork operates on an **Engine/Fuel** split:
 - Python 3.13+
 - Neo4j (default) or FalkorDB (legacy) — graph database backend
 - OpenAI API key (for LLM extraction + embeddings)
+- **Endpoint split (recommended):** set `LLM_BASE_URL` for LLM routing and `EMBEDDER_BASE_URL` for embedding routing separately. This prevents accidental embedding traffic to OpenRouter when LLM routing is redirected. See `.env.example` for the full priority chain.
 
 ### Quick Start
 
@@ -366,11 +400,12 @@ For the full sync and patch application procedure, see the [Upstream Sync Runboo
 - [Custom Ontologies](docs/custom-ontologies.md) — defining per-lane extraction entity types
 - [Retrieval Trust Scoring](docs/retrieval-trust-scoring.md) — how promoted/corroborated facts boost search ranking
 - [Memory Runtime Wiring](docs/MEMORY-RUNTIME-WIRING.md) — Graphiti-primary retrieval + QMD failover contract
+- [Scope Policy](docs/scope-policy.md) — ingestion scope freeze: message-only default, toolResult opt-in allowlist, change process
 - [Runtime Pack Overlay](docs/runbooks/runtime-pack-overlay.md) — how private packs map to agents
 
 ### Operations
-- [OM Operations](docs/runbooks/om-operations.md) — Observational Memory: fast-write, compressor, convergence, GC, promotion
-- [Sessions Ingestion](docs/runbooks/sessions-ingestion.md) — architecture, batch & steady-state config, high-throughput tuning, sub-chunking, post-processing, troubleshooting
+- [OM Operations](docs/runbooks/om-operations.md) — Observational Memory: fast-write, compressor, convergence, GC, promotion, dedupe, timeline semantics
+- [Sessions Ingestion](docs/runbooks/sessions-ingestion.md) — architecture, batch & steady-state config, high-throughput tuning, sub-chunking, retrieval benchmark, recall gate, post-processing, troubleshooting
 - [Adding Data Sources](docs/runbooks/adding-data-sources.md) — onboarding new content: group_id, ontology design, adapter patterns, cron setup
 - [Upstream Sync Runbook](docs/runbooks/upstream-sync-openclaw.md)
 - [State Migration Runbook](docs/runbooks/state-migration.md)

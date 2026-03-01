@@ -693,6 +693,30 @@ The script's *interface* to QMD is deterministic; QMD internals are not under ou
 | `best_mode` | Bicameral search mode (hybrid/semantic/keyword) with highest combined recall |
 | `delta_vs_qmd` | Bicameral best score minus QMD score (positive = Bicameral wins) |
 
+### Recall gate (CI quality gate)
+
+The benchmark script includes a built-in quality gate for CI pipelines via `check_recall_gate()`:
+
+```bash
+# Absolute floor — fail if recall drops below threshold
+python3 scripts/run_retrieval_benchmark.py \
+  --fixture tests/fixtures/retrieval_benchmark_queries.json \
+  --output state/bench.json \
+  --recall-gate 0.75
+
+# Regression check — fail if score regressed vs saved baseline
+python3 scripts/run_retrieval_benchmark.py \
+  --fixture tests/fixtures/retrieval_benchmark_queries.json \
+  --output state/bench.json \
+  --recall-gate 0.75 \
+  --recall-baseline state/bench-baseline.json
+```
+
+Exit code 0 = pass; exit code 1 = failure. Failure conditions:
+- `mean_combined_recall_at_k < threshold` (absolute floor)
+- `mean_combined_recall_at_k < baseline_score` (regression vs baseline)
+- Missing baseline file is a non-fatal warning (absolute floor still enforced)
+
 ### DoD target: Bicameral recall@10 ≥ QMD recall@10
 
 The `bicameral_aggregate.mean_combined_recall_at_k` must be ≥ `qmd_aggregate.mean_combined_recall_at_k` on the fixed fixture.

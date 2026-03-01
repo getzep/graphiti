@@ -119,8 +119,10 @@ the memory isolation contract.  Enforce by:
    ```
    In CI: add to the scheduled nightly workflow.
 
-3. **Edge normalization** ensures dedup doesn't silently merge facts across
-   lanes via case-variant collisions.
+3. **Edge normalization** (`scripts/normalize_edge_names.py`) ensures dedup
+   doesn't silently merge facts across lanes via case-variant collisions.
+   All edge names are canonicalized to SCREAMING\_SNAKE\_CASE. The normalizer
+   also runs inline during extraction via `normalize_relation_type()`.
 
 ---
 
