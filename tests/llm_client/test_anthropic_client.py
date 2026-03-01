@@ -169,8 +169,8 @@ class TestAnthropicClientGenerateResponse:
         assert result['test_field'] == 'extracted_value'
 
     @pytest.mark.asyncio
-    async def test_system_message_uses_cache_control(self, anthropic_client, mock_async_anthropic):
-        """Test that the system message is sent as a content block with cache_control."""
+    async def test_auto_caching_enabled(self, anthropic_client, mock_async_anthropic):
+        """Test that top-level cache_control is passed for auto caching."""
         content_item = MagicMock()
         content_item.type = 'tool_use'
         content_item.input = {'test_field': 'value'}
@@ -184,31 +184,18 @@ class TestAnthropicClientGenerateResponse:
         await anthropic_client.generate_response(messages=messages, response_model=ResponseModel)
 
         call_kwargs = mock_async_anthropic.messages.create.call_args
-        # System should be a list of content blocks, not a plain string
-        system_arg = call_kwargs.kwargs.get('system') or call_kwargs[1].get('system')
-        assert isinstance(system_arg, list)
-        assert len(system_arg) == 1
-        assert system_arg[0]['type'] == 'text'
-        assert system_arg[0]['cache_control'] == {'type': 'ephemeral'}
+        # Top-level cache_control should be passed for auto caching
+        cache_control_arg = call_kwargs.kwargs.get('cache_control')
+        assert cache_control_arg == {'type': 'ephemeral'}
 
-    @pytest.mark.asyncio
-    async def test_tool_has_cache_control(self, anthropic_client, mock_async_anthropic):
-        """Test that the last tool definition includes cache_control."""
-        content_item = MagicMock()
-        content_item.type = 'tool_use'
-        content_item.input = {'test_field': 'value'}
+        # System message should be a plain string (not structured content blocks)
+        system_arg = call_kwargs.kwargs.get('system')
+        assert isinstance(system_arg, str)
+        assert system_arg == 'System message'
 
-        mock_async_anthropic.messages.create.return_value = _make_response([content_item])
-
-        messages = [
-            Message(role='system', content='System message'),
-            Message(role='user', content='User message'),
-        ]
-        await anthropic_client.generate_response(messages=messages, response_model=ResponseModel)
-
-        call_kwargs = mock_async_anthropic.messages.create.call_args
-        tools_arg = call_kwargs.kwargs.get('tools') or call_kwargs[1].get('tools')
-        assert tools_arg[-1]['cache_control'] == {'type': 'ephemeral'}
+        # Tools should NOT have block-level cache_control
+        tools_arg = call_kwargs.kwargs.get('tools')
+        assert 'cache_control' not in tools_arg[-1]
 
     @pytest.mark.asyncio
     async def test_cache_tokens_tracked(self, anthropic_client, mock_async_anthropic):

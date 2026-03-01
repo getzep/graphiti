@@ -303,24 +303,15 @@ class AnthropicClient(LLMClient):
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
 
-            # Add cache_control to the last tool so the entire tool definition set is cached.
-            # Anthropic caches the prefix: tools -> system -> messages, so marking the last
-            # tool caches all tool schemas for subsequent calls with the same tools.
-            if tools:
-                tools[-1]['cache_control'] = {'type': 'ephemeral'}  # type: ignore[typeddict-unknown-key]
-
-            # Use structured system content blocks with cache_control so the system
-            # prompt is included in the cached prefix (after tools).
-            system_content: list[dict[str, typing.Any]] = [
-                {
-                    'type': 'text',
-                    'text': system_message.content,
-                    'cache_control': {'type': 'ephemeral'},
-                }
-            ]
-
+            # Use top-level auto caching. This places a cache breakpoint on the last
+            # cacheable block in the request (typically the last user message), which
+            # means the entire prefix (tools + system + messages) is eligible for
+            # caching. This avoids the issue with explicit block-level cache_control
+            # where tools + system alone may fall below minimum cacheable thresholds
+            # (1024 tokens for Sonnet, 2048 for Sonnet 4.6, 4096 for Haiku).
             result = await self.client.messages.create(
-                system=system_content,  # type: ignore[arg-type]
+                cache_control={'type': 'ephemeral'},
+                system=system_message.content,
                 max_tokens=max_creation_tokens,
                 temperature=self.temperature,
                 messages=user_messages_cast,
