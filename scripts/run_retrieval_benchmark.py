@@ -240,10 +240,15 @@ def run_bicameral_query(
     }
 
 
+_QMD_TIMEOUT_SECONDS = 120  # QMD loads large ML models per invocation; allow generous budget
+
+
 def run_qmd_query(qmd_command: str, query: str) -> dict:
     """Run a QMD query via subprocess.
 
     Raises RuntimeError when QMD fails or returns invalid JSON output.
+    The timeout is set generously (``_QMD_TIMEOUT_SECONDS``) to accommodate
+    QMD's per-invocation model-load overhead (embedding + reranker models).
     """
     cmd_parts = shlex.split(qmd_command) + ['--', query]
     try:
@@ -252,7 +257,7 @@ def run_qmd_query(qmd_command: str, query: str) -> dict:
             shell=False,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=_QMD_TIMEOUT_SECONDS,
             check=True,
         )
     except subprocess.CalledProcessError as exc:
@@ -261,7 +266,9 @@ def run_qmd_query(qmd_command: str, query: str) -> dict:
             f'QMD query failed with exit code {exc.returncode}: {stderr or "<no stderr>"}'
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError('QMD query timed out after 30 seconds') from exc
+        raise RuntimeError(
+            f'QMD query timed out after {_QMD_TIMEOUT_SECONDS} seconds'
+        ) from exc
     except FileNotFoundError as exc:
         raise RuntimeError(f'QMD command not found: {cmd_parts[0]}') from exc
 

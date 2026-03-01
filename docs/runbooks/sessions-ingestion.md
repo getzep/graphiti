@@ -644,7 +644,7 @@ python3 scripts/run_retrieval_benchmark.py \
 
 The `--compare-qmd` mode is **deterministic at the protocol level**:
 - Command is parsed with `shlex.split` (no shell expansion, no injection risk).
-- QMD is invoked as a subprocess with `shell=False` and a fixed 30-second timeout.
+- QMD is invoked as a subprocess with `shell=False` and a generous 120-second timeout (`_QMD_TIMEOUT_SECONDS`), required because QMD loads ML models per invocation.
 - The separator `--` is appended before the query string, preventing argument injection.
 - Output is parsed as JSON; any non-JSON or non-zero exit is a hard error (no silent skip).
 
