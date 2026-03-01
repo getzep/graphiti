@@ -10,6 +10,8 @@ Validates that:
 7. Embedder resolver allows loopback/private (Ollama use-case)
 8. EndpointResolutionError is raised on invalid URLs
 9. All three scripts use the shared utility (import path check)
+10. Fallback paths in om_compressor.py enforce the same SSRF checks as the primary
+    env_utils path (no silent weakening when graphiti_core is not importable)
 """
 
 from __future__ import annotations
@@ -233,3 +235,140 @@ class TestScriptsUseSharedUtility:
     def test_import_transcripts_imports_env_utils(self):
         src = self._read_script('import_transcripts_to_neo4j.py')
         assert 'env_utils' in src or 'resolve_embedder_base_url' in src
+
+
+# ---------------------------------------------------------------------------
+# 6. Fallback path parity — om_compressor.py SSRF enforcement without
+#    graphiti_core on PYTHONPATH
+# ---------------------------------------------------------------------------
+
+class TestFallbackPathSSRFParity:
+    """Verify that the om_compressor.py fallback validation paths enforce the
+    same SSRF rules as the primary env_utils path.
+
+    Strategy: directly exercise _fallback_ssrf_validate — the shared helper
+    that both fallback paths delegate to.  No import-blocking needed; this
+    makes the test suite deterministic and avoids sys.modules side-effects.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _import_helpers(self):
+        """Import the compressor's standalone SSRF helper and error type."""
+        import importlib
+        import sys
+        from pathlib import Path
+
+        mod_name = '_om_compressor_fallback_test'
+        spec = importlib.util.spec_from_file_location(
+            mod_name,
+            Path(__file__).parents[1] / 'scripts' / 'om_compressor.py',
+        )
+        mod = importlib.util.module_from_spec(spec)
+        # Register before exec so @dataclass can resolve cls.__module__
+        sys.modules[mod_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+        finally:
+            sys.modules.pop(mod_name, None)
+        self.validate = mod._fallback_ssrf_validate
+        self.Error = mod.OMCompressorError
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, _import_helpers):
+        keys = ['OM_ALLOW_LOCAL_LLM']
+        with patch.dict(os.environ, {k: '' for k in keys}, clear=False):
+            for k in keys:
+                os.environ.pop(k, None)
+            yield
+
+    # ---- Shared (both paths) ----
+
+    def test_link_local_always_blocked(self):
+        """169.254.x.x must be blocked regardless of allow_private flag."""
+        with pytest.raises(self.Error, match='link-local'):
+            self.validate('http://169.254.169.254/v1', 'Test', allow_private=True)
+
+    def test_ipv6_link_local_blocked(self):
+        """fe80:: addresses must be blocked."""
+        with pytest.raises(self.Error, match='link-local'):
+            self.validate('http://[fe80::1]/v1', 'Test', allow_private=False)
+
+    def test_credentials_rejected(self):
+        with pytest.raises(self.Error, match='credentials'):
+            self.validate('https://user:pass@host.com/v1', 'Test', allow_private=True)
+
+    def test_query_string_rejected(self):
+        with pytest.raises(self.Error, match='query string'):
+            self.validate('https://host.com/v1?key=secret', 'Test', allow_private=True)
+
+    def test_fragment_rejected(self):
+        with pytest.raises(self.Error, match='fragment'):
+            self.validate('https://host.com/v1#section', 'Test', allow_private=True)
+
+    def test_non_http_scheme_rejected(self):
+        with pytest.raises(self.Error):
+            self.validate('ftp://host.com/v1', 'Test', allow_private=True)
+
+    def test_trailing_slash_stripped(self):
+        url = self.validate('https://api.openai.com/v1/', 'Test', allow_private=False)
+        assert not url.endswith('/')
+
+    # ---- Embedder fallback (allow_private=True) ----
+
+    def test_embedder_fallback_allows_localhost(self):
+        """Embedder path must permit localhost (local Ollama use-case)."""
+        url = self.validate('http://localhost:11434/v1', 'Embedder', allow_private=True)
+        assert 'localhost' in url
+
+    def test_embedder_fallback_allows_rfc1918(self):
+        """Embedder path must permit RFC-1918 addresses."""
+        url = self.validate('http://192.168.1.10:11434/v1', 'Embedder', allow_private=True)
+        assert '192.168.1.10' in url
+
+    def test_embedder_fallback_still_blocks_link_local(self):
+        """Even allow_private=True must not permit link-local addresses."""
+        with pytest.raises(self.Error, match='link-local'):
+            self.validate('http://169.254.169.254/v1', 'Embedder', allow_private=True)
+
+    # ---- LLM fallback (allow_private=False) ----
+
+    def test_llm_fallback_blocks_localhost_by_default(self):
+        """LLM path must block localhost unless OM_ALLOW_LOCAL_LLM=1."""
+        with pytest.raises(self.Error, match='private/loopback'):
+            self.validate(
+                'http://localhost:11434/v1', 'LLM chat',
+                allow_private=False, allow_local_override_env='OM_ALLOW_LOCAL_LLM',
+            )
+
+    def test_llm_fallback_allows_localhost_with_env_override(self):
+        """LLM path must allow localhost when OM_ALLOW_LOCAL_LLM=1."""
+        with patch.dict(os.environ, {'OM_ALLOW_LOCAL_LLM': '1'}):
+            url = self.validate(
+                'http://localhost:11434/v1', 'LLM chat',
+                allow_private=False, allow_local_override_env='OM_ALLOW_LOCAL_LLM',
+            )
+        assert 'localhost' in url
+
+    def test_llm_fallback_blocks_private_rfc1918(self):
+        """LLM path must block RFC-1918 addresses by default."""
+        with pytest.raises(self.Error, match='private/loopback'):
+            self.validate(
+                'http://192.168.1.10:8080/v1', 'LLM chat',
+                allow_private=False, allow_local_override_env='OM_ALLOW_LOCAL_LLM',
+            )
+
+    def test_llm_fallback_blocks_link_local_always(self):
+        """Link-local is blocked even with OM_ALLOW_LOCAL_LLM=1."""
+        with patch.dict(os.environ, {'OM_ALLOW_LOCAL_LLM': '1'}):
+            with pytest.raises(self.Error, match='link-local'):
+                self.validate(
+                    'http://169.254.169.254/v1', 'LLM chat',
+                    allow_private=False, allow_local_override_env='OM_ALLOW_LOCAL_LLM',
+                )
+
+    def test_llm_fallback_accepts_public_url(self):
+        """LLM path must accept valid public URLs."""
+        url = self.validate(
+            'https://api.openai.com/v1', 'LLM chat', allow_private=False
+        )
+        assert url == 'https://api.openai.com/v1'
