@@ -677,6 +677,161 @@ fuser state/locks/om_graph_write.lock 2>/dev/null
 
 ---
 
+---
+
+## 10. Exact Dedupe (om_dedupe.py)
+
+`scripts/om_dedupe.py` detects and merges exact-duplicate OMNodes.
+
+### What counts as a duplicate?
+
+Two OMNodes are duplicates when they share the same stable key:
+
+```
+dedupe_key = sha256("dedupekey|{node_type}|{normalize(content).lower()}")
+```
+
+This intentionally excludes `semantic_domain`, so nodes that landed in
+different domains (due to extractor drift, manual writes, or schema changes)
+but carry the same content are detected and merged.  This is strictly stricter
+than node-ID collision: the compressor already merges same-domain/same-content
+nodes via MERGE; `om_dedupe` catches cross-domain duplicates.
+
+### Running the dedupe script
+
+```bash
+# Step 1: always dry-run first (default mode)
+uv run python scripts/om_dedupe.py --dry-run 2>&1 | tee om-dedupe-dry.jsonl
+
+# Review the output — look for OM_DEDUPE_GROUP_FOUND events
+jq 'select(.event == "OM_DEDUPE_GROUP_FOUND")' om-dedupe-dry.jsonl
+
+# Step 2: apply if satisfied with the preview
+uv run python scripts/om_dedupe.py --apply 2>&1 | tee om-dedupe-apply.jsonl
+
+# Verify nothing remains
+uv run python scripts/om_dedupe.py --dry-run 2>&1 | jq 'select(.event == "OM_DEDUPE_DONE")'
+```
+
+### Merge semantics
+
+| Field | Rule |
+|---|---|
+| `source_message_ids` | Union of all duplicate node sets (no loss of provenance) |
+| `urgency_score` | max across duplicates (retain highest urgency) |
+| `status` | Most-active wins: `open > reopened > monitoring > closed > abandoned` |
+| `first_observed_at` | min of all non-null values; fallback to `created_at` |
+| `last_observed_at` | max of all non-null values |
+| Canonical node | Earliest `created_at`; tie-break: smallest `node_id` |
+
+All edges (`EVIDENCE_FOR`, `SUPPORTS_CORE`, `MOTIVATES`, `GENERATES`,
+`SUPERSEDES`, `ADDRESSES`, `RESOLVES`) are redirected from duplicates to the
+canonical node before deletion.  The operation is idempotent: re-running on
+an already-clean graph is a no-op.
+
+### Output events (stdout JSONL)
+
+| Event | When |
+|---|---|
+| `OM_DEDUPE_START` | Script start |
+| `OM_DEDUPE_SCANNED` | After fetching all OMNodes |
+| `OM_DEDUPE_GROUPS_FOUND` | Duplicate group count |
+| `OM_DEDUPE_GROUP_FOUND` | Per group: canonical id, duplicate ids, merged metadata |
+| `OM_DEDUPE_MERGED` | Per deleted duplicate node (apply only) |
+| `OM_DEDUPE_DONE` | Summary: groups, nodes_merged, dry_run flag |
+| `OM_DEDUPE_ERROR` | Unhandled error |
+
+---
+
+## 11. Timeline Semantics (first_observed_at / last_observed_at)
+
+### Background
+
+Prior to Phase B, `OMNode.created_at` (Neo4j node creation wall-clock time)
+was the only available timestamp for event-time reasoning.  This was
+inaccurate because `created_at` reflects when the extractor ran, not when the
+underlying conversation events occurred.
+
+Phase B wires two new fields to every OMNode:
+
+| Field | Semantics |
+|---|---|
+| `first_observed_at` | Timestamp of the **earliest** source message that contributed to this node |
+| `last_observed_at` | Timestamp of the **latest** source message that contributed to this node so far |
+
+Both are updated on every extraction pass.  On CREATE, both fields are set.
+On MATCH (existing node gets new evidence), `first_observed_at` advances only
+if the new evidence is earlier; `last_observed_at` advances if the new evidence
+is later.
+
+### Why this matters
+
+- **Convergence engine**: `last_observed_at` drives the age-decay in the
+  activation energy score.  Using message-event time instead of wall-clock
+  removes spurious "freshness" signals caused by re-extraction of old content.
+- **Timeline queries**: `first_observed_at` lets you answer "when was this
+  first observed?" accurately without relying on extraction scheduling.
+- **GC eligibility**: retention logic can now reference event-time rather than
+  ingestion time.
+
+### Querying timeline fields
+
+```cypher
+-- Nodes with accurate event-time range
+MATCH (n:OMNode)
+WHERE n.first_observed_at IS NOT NULL
+RETURN n.node_id, n.node_type, n.first_observed_at, n.last_observed_at
+ORDER BY n.first_observed_at ASC
+LIMIT 20
+```
+
+### One-time backfill for existing nodes
+
+Nodes extracted before Phase B have `first_observed_at = NULL` and
+`last_observed_at = NULL`.  Run `scripts/om_backfill_timestamps.py` to
+populate them:
+
+```bash
+# Step 1: preview (always run this first)
+uv run python scripts/om_backfill_timestamps.py --dry-run 2>&1 | tee backfill-dry.jsonl
+
+# Check how many nodes need backfilling
+jq 'select(.event == "OM_BACKFILL_TIMESTAMPS_TOTAL")' backfill-dry.jsonl
+
+# Step 2: apply
+uv run python scripts/om_backfill_timestamps.py --apply 2>&1 | tee backfill-apply.jsonl
+
+# Verify completion (should show nodes_to_backfill=0)
+uv run python scripts/om_backfill_timestamps.py --dry-run 2>&1 | jq 'select(.event == "OM_BACKFILL_TIMESTAMPS_TOTAL")'
+```
+
+Backfill logic:
+1. For each OMNode where both timestamp fields are NULL, query its
+   EVIDENCE_FOR-linked Messages.
+2. Set `first_observed_at = min(message.created_at)` and
+   `last_observed_at = max(message.created_at)`.
+3. If no messages are linked: fallback to the node's own `created_at`
+   (emits `OM_BACKFILL_TIMESTAMPS_FALLBACK` warning event).
+4. Nodes with no timestamp at all are skipped (emits
+   `OM_BACKFILL_TIMESTAMPS_SKIP`).
+
+The backfill is idempotent: nodes where both fields are already set are
+excluded from the query.
+
+### Backfill output events
+
+| Event | When |
+|---|---|
+| `OM_BACKFILL_TIMESTAMPS_START` | Script start |
+| `OM_BACKFILL_TIMESTAMPS_TOTAL` | Total nodes needing backfill |
+| `OM_BACKFILL_TIMESTAMPS_BATCH` | Per-batch summary |
+| `OM_BACKFILL_TIMESTAMPS_FALLBACK` | Node had no linked messages; fell back to `created_at` |
+| `OM_BACKFILL_TIMESTAMPS_SKIP` | Node skipped (no timestamp available) |
+| `OM_BACKFILL_TIMESTAMPS_DONE` | Summary: processed, updated, skipped |
+| `OM_BACKFILL_TIMESTAMPS_ERROR` | Unhandled error |
+
+---
+
 ## See Also
 
 - [Custom Ontologies](../custom-ontologies.md) — OM lane ontology config (`s1_observational_memory`)
@@ -685,3 +840,5 @@ fuser state/locks/om_graph_write.lock 2>/dev/null
 - `scripts/om_fast_write.py --help`
 - `scripts/om_compressor.py --help`
 - `scripts/om_convergence.py --help` (run with `PYTHONPATH=.`)
+- `scripts/om_dedupe.py --help`
+- `scripts/om_backfill_timestamps.py --help`
