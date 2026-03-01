@@ -2467,13 +2467,25 @@ def _process_chunk_tx(
                 },
             ).consume()
 
+    # Compute the max message timestamp for this chunk so that
+    # observed-node updates use event-time semantics, not wall-clock.
+    _msg_ts_list = [parse_iso(m.created_at) for m in messages if m.created_at]
+    _msg_ts_list = [dt for dt in _msg_ts_list if dt is not None]
+    _fmt = lambda dt: dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    msg_max_ts: str | None = _fmt(max(_msg_ts_list)) if _msg_ts_list else None
+
     for node_id in observed_node_ids:
         tx.run(
             """
             MATCH (n:OMNode {node_id:$node_id})
-            SET n.last_observed_at = $now_iso
+            SET n.last_observed_at = CASE
+              WHEN $msg_max_ts IS NULL THEN n.last_observed_at
+              WHEN n.last_observed_at IS NULL THEN $msg_max_ts
+              WHEN $msg_max_ts > n.last_observed_at THEN $msg_max_ts
+              ELSE n.last_observed_at
+            END
             """,
-            {"node_id": node_id, "now_iso": now},
+            {"node_id": node_id, "msg_max_ts": msg_max_ts},
         ).consume()
 
     for msg in messages:

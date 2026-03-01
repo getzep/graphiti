@@ -381,36 +381,42 @@ def _apply_merge_group(
             {"dup_id": dup_id, "canonical_id": canonical["node_id"], "now": now},
         ).consume()
 
-        # Redirect SUPPORTS_CORE edges (OMNode → CoreMemory)
+        # Redirect SUPPORTS_CORE edges (OMNode → CoreMemory) — copy properties
         session.run(
             """
             MATCH (dup:OMNode {node_id: $dup_id})-[r:SUPPORTS_CORE]->(c:CoreMemory)
             MATCH (canonical:OMNode {node_id: $canonical_id})
-            MERGE (canonical)-[:SUPPORTS_CORE]->(c)
+            MERGE (canonical)-[nr:SUPPORTS_CORE]->(c)
+            ON CREATE SET nr = properties(r)
+            DELETE r
             """,
             {"dup_id": dup_id, "canonical_id": canonical["node_id"]},
         ).consume()
 
-        # Redirect OM relation-type edges (outgoing from dup)
+        # Redirect OM relation-type edges (outgoing from dup) — copy properties
         for rel in RELATION_TYPES:
             session.run(
                 f"""
                 MATCH (dup:OMNode {{node_id: $dup_id}})-[r:{rel}]->(target:OMNode)
                 WHERE target.node_id <> $canonical_id
                 MATCH (canonical:OMNode {{node_id: $canonical_id}})
-                MERGE (canonical)-[:{rel}]->(target)
+                MERGE (canonical)-[nr:{rel}]->(target)
+                ON CREATE SET nr = properties(r)
+                DELETE r
                 """,
                 {"dup_id": dup_id, "canonical_id": canonical["node_id"]},
             ).consume()
 
-        # Redirect OM relation-type edges (incoming to dup)
+        # Redirect OM relation-type edges (incoming to dup) — copy properties
         for rel in RELATION_TYPES:
             session.run(
                 f"""
                 MATCH (source:OMNode)-[r:{rel}]->(dup:OMNode {{node_id: $dup_id}})
                 WHERE source.node_id <> $canonical_id
                 MATCH (canonical:OMNode {{node_id: $canonical_id}})
-                MERGE (source)-[:{rel}]->(canonical)
+                MERGE (source)-[nr:{rel}]->(canonical)
+                ON CREATE SET nr = properties(r)
+                DELETE r
                 """,
                 {"dup_id": dup_id, "canonical_id": canonical["node_id"]},
             ).consume()

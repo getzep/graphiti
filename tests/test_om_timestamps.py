@@ -16,6 +16,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import inspect
+
 om_compressor = importlib.import_module("scripts.om_compressor")
 om_backfill = importlib.import_module("scripts.om_backfill_timestamps")
 
@@ -217,6 +219,45 @@ class TestBackfillComputeTimestamps:
 # Backfill CLI args
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Compressor last_observed_at — no wall-clock overwrite
+# ---------------------------------------------------------------------------
+
+class TestCompressorObservedNodeUpdate:
+    """Regression: _process_chunk_tx must NOT overwrite last_observed_at with
+    wall-clock time when updating 'observed' (semantically similar) nodes.
+    It should use max(message.created_at) semantics instead.
+
+    Inspects the Cypher emitted in the function source to verify the contract.
+    """
+
+    def test_observed_node_update_does_not_use_now_iso(self):
+        """The observed-node SET block must not unconditionally set last_observed_at = $now_iso."""
+        src = inspect.getsource(om_compressor._process_chunk_tx)
+        # Confirm the wall-clock approach is gone
+        assert "SET n.last_observed_at = $now_iso" not in src, (
+            "_process_chunk_tx still overwrites last_observed_at with wall-clock "
+            "time ($now_iso) for observed nodes.  Use message-timestamp max instead."
+        )
+
+    def test_observed_node_update_uses_msg_max_ts(self):
+        """The observed-node SET block must reference msg_max_ts."""
+        src = inspect.getsource(om_compressor._process_chunk_tx)
+        assert "msg_max_ts" in src, (
+            "_process_chunk_tx does not use msg_max_ts for observed-node "
+            "last_observed_at updates."
+        )
+
+    def test_observed_node_update_uses_max_semantics(self):
+        """The Cypher must use CASE … WHEN $msg_max_ts > n.last_observed_at logic."""
+        src = inspect.getsource(om_compressor._process_chunk_tx)
+        assert "$msg_max_ts > n.last_observed_at" in src, (
+            "Observed-node last_observed_at update is missing max-semantics guard "
+            "('$msg_max_ts > n.last_observed_at').  Wall-clock time may silently "
+            "overwrite a later event-time timestamp."
+        )
+
+
 class TestBackfillParseArgs:
     def test_default_is_dry_run(self):
         args = om_backfill.parse_args([])
@@ -230,3 +271,99 @@ class TestBackfillParseArgs:
     def test_dry_run_and_apply_mutually_exclusive(self):
         with pytest.raises(SystemExit):
             om_backfill.parse_args(["--dry-run", "--apply"])
+
+
+# ---------------------------------------------------------------------------
+# Cursor-based pagination (_fetch_batch_cursor)
+# ---------------------------------------------------------------------------
+
+class TestFetchBatchCursor:
+    """Unit tests for cursor-based pagination in _fetch_batch_cursor.
+
+    These tests confirm the pagination contract without a live Neo4j session
+    by exercising the public function signature and the run() loop logic
+    through a mock session.
+    """
+
+    def _make_row(self, node_id: str, msg_ts: str | None = "2026-01-01T00:00:00Z") -> dict:
+        return {
+            "node_id": node_id,
+            "node_created_at": "2026-01-01T00:00:00Z",
+            "message_timestamps": [msg_ts] if msg_ts else [],
+        }
+
+    def test_run_terminates_when_all_nodes_skipped_apply_mode(self):
+        """Regression: run() must not loop infinitely when every node in a
+        batch is skipped (no timestamp).  With the old SKIP-based approach,
+        the cursor never advanced and the loop ran forever.
+        """
+        from unittest.mock import MagicMock, patch
+
+        skippable_rows = [
+            {"node_id": "n1", "node_created_at": None, "message_timestamps": []},
+            {"node_id": "n2", "node_created_at": None, "message_timestamps": []},
+        ]
+
+        mock_session = MagicMock()
+        # _count_unbackfilled → 2 nodes
+        mock_session.run.return_value.single.return_value = {"total": 2}
+
+        call_count = {"n": 0}
+
+        def fake_fetch_batch_cursor(session, after_id):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return skippable_rows  # first call: two unskippable rows
+            return []  # second call: nothing left (cursor advanced past them)
+
+        with patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch_batch_cursor):
+            with patch.object(om_backfill, "_neo4j_driver") as mock_driver:
+                mock_driver.return_value.__enter__ = lambda s: s
+                mock_driver.return_value.__exit__ = MagicMock(return_value=False)
+                mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
+                mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
+                mock_session.run.return_value.single.return_value = {"total": 2}
+
+                args = om_backfill.parse_args(["--apply"])
+                result = om_backfill.run(args)
+
+        # Must exit cleanly (return 0) and must NOT have looped more than twice
+        assert result == 0
+        assert call_count["n"] == 2, (
+            f"Expected exactly 2 fetch calls (one real batch + one empty sentinel), "
+            f"got {call_count['n']} — possible infinite loop"
+        )
+
+    def test_cursor_advances_past_last_seen_node_id(self):
+        """Cursor is set to the node_id of the last row in every batch."""
+        from unittest.mock import MagicMock, patch
+
+        batch_1 = [
+            {"node_id": "aaa", "node_created_at": "2026-01-01T00:00:00Z", "message_timestamps": ["2026-01-01T00:00:00Z"]},
+            {"node_id": "bbb", "node_created_at": "2026-01-02T00:00:00Z", "message_timestamps": ["2026-01-02T00:00:00Z"]},
+        ]
+
+        cursors_seen: list[str] = []
+
+        def fake_fetch(session, after_id):
+            cursors_seen.append(after_id)
+            if after_id == "":
+                return batch_1
+            return []
+
+        with patch.object(om_backfill, "_fetch_batch_cursor", side_effect=fake_fetch):
+            with patch.object(om_backfill, "_neo4j_driver") as mock_driver:
+                mock_session = MagicMock()
+                mock_driver.return_value.__enter__ = lambda s: s
+                mock_driver.return_value.__exit__ = MagicMock(return_value=False)
+                mock_driver.return_value.session.return_value.__enter__ = lambda s: mock_session
+                mock_driver.return_value.session.return_value.__exit__ = MagicMock(return_value=False)
+                mock_session.run.return_value.single.return_value = {"total": 2}
+
+                args = om_backfill.parse_args(["--dry-run"])
+                om_backfill.run(args)
+
+        # First call: cursor starts at ""
+        assert cursors_seen[0] == ""
+        # Second call: cursor must have advanced to the last node_id in batch_1
+        assert cursors_seen[1] == "bbb"

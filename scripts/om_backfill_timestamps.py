@@ -159,7 +159,12 @@ def _count_unbackfilled(session: Any) -> int:
 
 
 def _fetch_batch(session: Any, skip: int) -> list[dict[str, Any]]:
-    """Fetch one batch of un-backfilled OMNodes with their linked message timestamps."""
+    """Fetch one batch of un-backfilled OMNodes with their linked message timestamps.
+
+    .. deprecated::
+        Use :func:`_fetch_batch_cursor` instead.  This offset-based variant is
+        retained only for callers that explicitly request a skip offset.
+    """
     rows = session.run(
         """
         MATCH (n:OMNode)
@@ -175,6 +180,38 @@ def _fetch_batch(session: Any, skip: int) -> list[dict[str, Any]]:
                collect(m.created_at) AS message_timestamps
         """,
         {"skip": skip, "limit": BATCH_SIZE},
+    ).data()
+    return rows
+
+
+def _fetch_batch_cursor(session: Any, after_id: str) -> list[dict[str, Any]]:
+    """Fetch one batch of un-backfilled OMNodes using cursor-based pagination.
+
+    Uses ``WHERE n.node_id > $after_id`` so the cursor always advances past
+    the last returned row, preventing infinite loops when some nodes have no
+    usable timestamps and are therefore never updated (and would remain in the
+    result set forever under offset-based pagination).
+
+    Args:
+        session:  Active Neo4j session.
+        after_id: node_id of the last row seen in the previous batch.
+                  Pass ``""`` (empty string) to start from the beginning.
+    """
+    rows = session.run(
+        """
+        MATCH (n:OMNode)
+        WHERE n.first_observed_at IS NULL
+          AND n.last_observed_at IS NULL
+          AND n.node_id > $after_id
+        WITH n
+        ORDER BY n.node_id ASC
+        LIMIT $limit
+        OPTIONAL MATCH (m:Message)-[:EVIDENCE_FOR]->(n)
+        RETURN n.node_id AS node_id,
+               n.created_at AS node_created_at,
+               collect(m.created_at) AS message_timestamps
+        """,
+        {"after_id": after_id, "limit": BATCH_SIZE},
     ).data()
     return rows
 
@@ -247,9 +284,15 @@ def run(args: argparse.Namespace) -> int:
         updated = 0
         skipped = 0
 
-        skip = 0
-        while skip < total:
-            rows = _fetch_batch(session, skip)
+        # Cursor-based pagination: advance by node_id so the cursor always
+        # moves forward regardless of whether nodes are updated or skipped.
+        # This prevents an infinite loop when nodes have no usable timestamps
+        # and are therefore never written (they would re-appear at skip=0
+        # on every --apply iteration under the old offset-based approach).
+        cursor = ""  # empty string sorts before any real node_id in Neo4j
+
+        while True:
+            rows = _fetch_batch_cursor(session, cursor)
             if not rows:
                 break
 
@@ -293,15 +336,11 @@ def run(args: argparse.Namespace) -> int:
                 dry_run=dry_run,
             )
 
-            # Re-fetch from skip=0 on each non-dry-run iteration since nodes
-            # no longer match the WHERE clause once updated.  For dry-run,
-            # advance the window manually.
-            if dry_run:
-                skip += len(rows)
-            else:
-                # After applying, the updated nodes are gone from the query set.
-                # Stay at skip=0 and read the next batch of still-unbackfilled nodes.
-                pass
+            # Advance the cursor to the last node_id seen in this batch.
+            # Updated nodes are gone from the result set (timestamps backfilled),
+            # but skipped nodes remain — the cursor guarantees we still move
+            # past them so we never re-process the same rows.
+            cursor = str(rows[-1].get("node_id") or cursor)
 
     emit(
         "OM_BACKFILL_TIMESTAMPS_DONE",

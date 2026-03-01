@@ -276,3 +276,58 @@ class TestParseArgs:
     def test_dry_run_and_apply_are_mutually_exclusive(self):
         with pytest.raises(SystemExit):
             om_dedupe.parse_args(["--dry-run", "--apply"])
+
+
+# ---------------------------------------------------------------------------
+# Relationship metadata preservation (_merge_one_group / redirect Cypher)
+# ---------------------------------------------------------------------------
+
+class TestRelationshipMetadataPreservation:
+    """Verify that the redirect Cypher clauses include ON CREATE SET nr = properties(r)
+    so relationship properties are not silently dropped when edges are redirected.
+
+    These tests operate at the source-code level (string inspection) since we
+    can't spin up a live Neo4j in unit tests.  They are integration-contract
+    tests: they fail if someone removes the property-copy clause from the
+    redirect queries.
+    """
+
+    def _get_dedupe_source(self) -> str:
+        import inspect
+        return inspect.getsource(om_dedupe)
+
+    def test_supports_core_redirect_copies_properties(self):
+        """SUPPORTS_CORE redirect must carry ON CREATE SET nr = properties(r)."""
+        src = self._get_dedupe_source()
+        # The redirect block must match (canonical) to an existing relationship and
+        # copy properties from the original.
+        assert "ON CREATE SET nr = properties(r)" in src, (
+            "SUPPORTS_CORE redirect is missing 'ON CREATE SET nr = properties(r)'; "
+            "relationship properties will be silently dropped on deduplication."
+        )
+
+    def test_outgoing_relation_redirect_copies_properties(self):
+        """Outgoing OM relation-type edge redirect must preserve properties."""
+        src = self._get_dedupe_source()
+        # Presence of the pattern confirms the fix is in place
+        assert "MERGE (canonical)-[nr:" in src, (
+            "Outgoing edge redirect does not use a named relationship variable [nr:]; "
+            "ON CREATE SET nr = properties(r) cannot be applied."
+        )
+
+    def test_incoming_relation_redirect_copies_properties(self):
+        """Incoming OM relation-type edge redirect must preserve properties."""
+        src = self._get_dedupe_source()
+        assert "MERGE (source)-[nr:" in src, (
+            "Incoming edge redirect does not use a named relationship variable [nr:]; "
+            "ON CREATE SET nr = properties(r) cannot be applied."
+        )
+
+    def test_redirect_deletes_old_relationship(self):
+        """Old relationships should be deleted after the redirect to avoid orphan edges."""
+        src = self._get_dedupe_source()
+        # The DELETE r clause must be present in redirect blocks
+        assert "DELETE r" in src, (
+            "Redirect blocks do not DELETE the old relationship r; "
+            "duplicate edges will accumulate in the graph."
+        )
