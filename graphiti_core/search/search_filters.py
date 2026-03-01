@@ -87,6 +87,9 @@ def node_search_filter_query_constructor(
         if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.FALKORDB:
+            parts = [f'n:{label}' for label in filters.node_labels]
+            node_label_filter = '(' + ' OR '.join(parts) + ')'
         else:
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
@@ -130,6 +133,12 @@ def edge_search_filter_query_constructor(
                 'list_has_all(n.labels, $labels) AND list_has_all(m.labels, $labels)'
             )
             filter_params['labels'] = filters.node_labels
+        elif provider == GraphProvider.FALKORDB:
+            n_parts = [f'n:{label}' for label in filters.node_labels]
+            m_parts = [f'm:{label}' for label in filters.node_labels]
+            node_label_filter = (
+                '(' + ' OR '.join(n_parts) + ') AND (' + ' OR '.join(m_parts) + ')'
+            )
         else:
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels + ' AND m:' + node_labels
