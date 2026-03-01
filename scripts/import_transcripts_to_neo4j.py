@@ -369,18 +369,26 @@ def _validated_embedding_base_url() -> str:
         ).strip()
         parsed = urllib.parse.urlparse(base)
         if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-            raise RuntimeError(f'embedding base URL must be an absolute http(s) URL, got: {base!r}')
+            raise RuntimeError(  # noqa: B904 — new validation error, not re-raise
+                f'embedding base URL must be an absolute http(s) URL, got: {base!r}'
+            )
         if parsed.username or parsed.password:
-            raise RuntimeError(f'embedding base URL must not include embedded credentials: {base!r}')
+            raise RuntimeError(  # noqa: B904
+                f'embedding base URL must not include embedded credentials: {base!r}'
+            )
         if parsed.query:
-            raise RuntimeError(f'embedding base URL must not include a query string: {base!r}')
+            raise RuntimeError(  # noqa: B904
+                f'embedding base URL must not include a query string: {base!r}'
+            )
         if parsed.fragment:
-            raise RuntimeError(f'embedding base URL must not include a fragment: {base!r}')
+            raise RuntimeError(  # noqa: B904
+                f'embedding base URL must not include a fragment: {base!r}'
+            )
         host = (urllib.parse.urlparse(f'//{parsed.netloc}').hostname or '').strip()
         try:
             addr = ipaddress.ip_address(host)
             if addr.is_link_local:
-                raise RuntimeError(
+                raise RuntimeError(  # noqa: B904
                     f'embedding base URL {base!r} targets a link-local/cloud-metadata address; '
                     'this is always blocked.'
                 )
