@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.nodes import EntityNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.search.search_utils import hybrid_node_search
@@ -161,3 +162,93 @@ async def test_hybrid_node_search_with_limit_and_duplicates():
         mock_similarity_search.assert_called_with(
             mock_driver, [0.1, 0.2, 0.3], SearchFilters(), ['1'], 4
         )
+
+
+# --- Regression tests for BM25 fulltext query group_ids precedence (Issue #1249) ---
+
+
+class TestFulltextQueryGroupIdsPrecedence:
+    """Regression tests ensuring OR'd group_id filters are wrapped in parentheses.
+
+    Without parentheses, a query like:
+        group_id:"a" OR group_id:"b" AND (search terms)
+    is parsed by Lucene as:
+        group_id:"a" OR (group_id:"b" AND (search terms))
+    which silently matches documents in group "a" regardless of search terms.
+
+    The fix wraps the OR clause: (group_id:"a" OR group_id:"b") AND (search terms)
+    """
+
+    def test_fulltext_query_single_group_id(self):
+        """Single group_id needs no parentheses but should still be correct."""
+        from graphiti_core.search.search_utils import fulltext_query
+
+        mock_driver = AsyncMock()
+        mock_driver.provider = GraphProvider.NEO4J
+        mock_driver.fulltext_syntax = ''
+
+        result = fulltext_query('test query', ['group-a'], mock_driver)
+        assert result.startswith('(group_id:"group-a") AND ')
+        assert '(test~ query~)' in result
+
+    def test_fulltext_query_multiple_group_ids_has_parentheses(self):
+        """Multiple group_ids must be wrapped in parentheses for correct precedence."""
+        from graphiti_core.search.search_utils import fulltext_query
+
+        mock_driver = AsyncMock()
+        mock_driver.provider = GraphProvider.NEO4J
+        mock_driver.fulltext_syntax = ''
+
+        result = fulltext_query('test', ['group-a', 'group-b'], mock_driver)
+        # Must start with (group_id:"group-a" OR group_id:"group-b") AND
+        assert result.startswith('(group_id:"group-a" OR group_id:"group-b") AND ')
+
+    def test_fulltext_query_no_group_ids(self):
+        """No group_ids should produce no filter prefix."""
+        from graphiti_core.search.search_utils import fulltext_query
+
+        mock_driver = AsyncMock()
+        mock_driver.provider = GraphProvider.NEO4J
+        mock_driver.fulltext_syntax = ''
+
+        result = fulltext_query('test', None, mock_driver)
+        assert not result.startswith('(')
+        assert 'group_id' not in result
+
+    def test_fulltext_query_empty_group_ids(self):
+        """Empty group_ids list should produce no filter prefix."""
+        from graphiti_core.search.search_utils import fulltext_query
+
+        mock_driver = AsyncMock()
+        mock_driver.provider = GraphProvider.NEO4J
+        mock_driver.fulltext_syntax = ''
+
+        result = fulltext_query('test', [], mock_driver)
+        assert 'group_id' not in result
+
+    def test_neo4j_build_fulltext_query_multiple_group_ids(self):
+        """_build_neo4j_fulltext_query also wraps multiple group_ids in parentheses."""
+        from graphiti_core.driver.neo4j.operations.search_ops import (
+            _build_neo4j_fulltext_query,
+        )
+
+        result = _build_neo4j_fulltext_query('test', ['g1', 'g2'])
+        assert result.startswith('(group_id:"g1" OR group_id:"g2") AND ')
+
+    def test_neo4j_build_fulltext_query_single_group_id(self):
+        """_build_neo4j_fulltext_query with single group_id."""
+        from graphiti_core.driver.neo4j.operations.search_ops import (
+            _build_neo4j_fulltext_query,
+        )
+
+        result = _build_neo4j_fulltext_query('test', ['g1'])
+        assert result.startswith('(group_id:"g1") AND ')
+
+    def test_neo4j_build_fulltext_query_no_group_ids(self):
+        """_build_neo4j_fulltext_query with no group_ids."""
+        from graphiti_core.driver.neo4j.operations.search_ops import (
+            _build_neo4j_fulltext_query,
+        )
+
+        result = _build_neo4j_fulltext_query('test', None)
+        assert 'group_id' not in result
