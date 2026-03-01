@@ -1085,6 +1085,7 @@ class Graphiti:
         saga_previous_episode_uuid: str | None = None,
         dedupe_mode: Literal['semantic', 'deterministic'] = 'semantic',
         extraction_mode: str = 'permissive',
+        tool_name: str | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -1169,6 +1170,22 @@ class Graphiti:
                 background_tasks.add_task(graphiti.add_episode, **episode_data.dict())
                 return {"message": "Episode processing started"}
         """
+        # --- Scope policy gate (must run before any DB writes) ---
+        # If a tool_name is provided the episode originates from a tool result.
+        # Only allowlisted tools may be ingested; all others fail closed.
+        if tool_name is not None:
+            try:
+                from config.tool_result_allowlist import enforce_tool_result_scope
+                enforce_tool_result_scope(tool_name)
+            except ImportError:
+                # config package not on path — enforce a closed default: reject
+                # any named tool result rather than silently allowing everything.
+                raise ValueError(
+                    f'tool_name={tool_name!r} was supplied but the scope-policy '
+                    'allowlist (config.tool_result_allowlist) is not importable. '
+                    'Refusing to ingest tool result to fail closed.'
+                )
+
         start = time()
         now = utc_now()
 
