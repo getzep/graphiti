@@ -231,8 +231,8 @@ async def edge_fulltext_search(
                 """
                                 UNWIND $ids as id
                                 MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
+                                WHERE e.group_id IN $group_ids
+                                AND id(e)=id
                                 """
                 + filter_query
                 + """
@@ -265,6 +265,34 @@ async def edge_fulltext_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # FalkorDB's queryRelationships returns the actual relationship object,
+        # so use startNode/endNode directly instead of re-matching by uuid (which
+        # causes an O(n) scan of all RELATES_TO edges).
+        query = (
+            get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
+            + """
+            YIELD relationship AS e, score
+            WITH e, score, startNode(e) AS n, endNode(e) AS m
+            """
+            + filter_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            query=fuzzy_query,
+            limit=limit,
+            routing_='r',
+            **filter_params,
+        )
     else:
         query = (
             get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
