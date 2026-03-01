@@ -82,6 +82,10 @@ def calculate_cosine_similarity(vector1: list[float], vector2: list[float]) -> f
 
 
 def fulltext_query(query: str, group_ids: list[str] | None, driver: GraphDriver):
+    # Fail-closed: empty list means no groups are accessible — return no query (=> no results).
+    # None means no group restriction (all records).
+    if group_ids is not None and len(group_ids) == 0:
+        return ''
     if driver.provider == GraphProvider.KUZU:
         # Kuzu only supports simple queries.
         if len(query.split(' ')) > MAX_QUERY_LENGTH:
