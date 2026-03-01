@@ -615,3 +615,84 @@ All ingest adapters must conform to **`INGEST_ADAPTER_CONTRACT_V1`** defined in 
 # Verify contract compliance (exit 0 on success, 1 on violation)
 python3 scripts/ingest_adapter_contract_check.py --strict
 ```
+
+---
+
+## Retrieval Benchmark & QMD Comparison
+
+`scripts/run_retrieval_benchmark.py` measures lane-targeted retrieval quality against a fixed fixture of known-answer query pairs.
+
+### Running the benchmark
+
+```bash
+# Bicameral-only (no QMD comparison) — fastest, no external deps
+python3 scripts/run_retrieval_benchmark.py \
+  --fixture tests/fixtures/retrieval_benchmark_queries.json \
+  --top-k 10 \
+  --output /tmp/retrieval_benchmark_results.json
+
+# With QMD comparison (adds ~30s per query; QMD must be in PATH)
+python3 scripts/run_retrieval_benchmark.py \
+  --fixture tests/fixtures/retrieval_benchmark_queries.json \
+  --compare-qmd \
+  --qmd-command "qmd query --json" \
+  --top-k 10 \
+  --output /tmp/retrieval_benchmark_comparison.json
+```
+
+### --compare-qmd: determinism contract
+
+The `--compare-qmd` mode is **deterministic at the protocol level**:
+- Command is parsed with `shlex.split` (no shell expansion, no injection risk).
+- QMD is invoked as a subprocess with `shell=False` and a fixed 30-second timeout.
+- The separator `--` is appended before the query string, preventing argument injection.
+- Output is parsed as JSON; any non-JSON or non-zero exit is a hard error (no silent skip).
+
+Note: QMD itself uses LLM-backed query expansion, so per-query text may vary run-to-run.
+The script's *interface* to QMD is deterministic; QMD internals are not under our control.
+
+### Output schema
+
+```json
+{
+  "fixture_path": "tests/fixtures/retrieval_benchmark_queries.json",
+  "top_k": 10,
+  "timestamp": "2026-03-01T06:00:00Z",
+  "queries_total": 30,
+  "bicameral_aggregate": {
+    "mean_combined_recall_at_k": 0.7861,
+    "queries_evaluated": 30
+  },
+  "qmd_aggregate": {
+    "mean_combined_recall_at_k": 0.XXXX,
+    "queries_evaluated": 30
+  },
+  "query_results": [
+    {
+      "id": "q001",
+      "query": "...",
+      "bicameral": {
+        "mode_scores": {"hybrid": {...}, "semantic": {...}, "keyword": {...}},
+        "best_mode": "hybrid",
+        "best_score": 0.85
+      },
+      "qmd": {"score": 0.70, "fact_recall_at_k": 0.75, "entity_recall_at_k": 0.65},
+      "delta_vs_qmd": 0.15
+    }
+  ]
+}
+```
+
+### Scoring rubric
+
+| Field | Meaning |
+|-------|---------|
+| `fact_recall_at_k` | Fraction of `expected_facts` found (case-insensitive substring) in top-k results |
+| `entity_recall_at_k` | Fraction of `expected_entities` found in top-k results |
+| `combined_recall_at_k` | Simple average of fact and entity recall |
+| `best_mode` | Bicameral search mode (hybrid/semantic/keyword) with highest combined recall |
+| `delta_vs_qmd` | Bicameral best score minus QMD score (positive = Bicameral wins) |
+
+### DoD target: Bicameral recall@10 ≥ QMD recall@10
+
+The `bicameral_aggregate.mean_combined_recall_at_k` must be ≥ `qmd_aggregate.mean_combined_recall_at_k` on the fixed fixture.  As of the 2026-03-01 run, Bicameral achieved **0.7861** on the solo run.  A full `--compare-qmd` run is required to confirm the delta (see `/tmp/retrieval_benchmark_comparison.json`).

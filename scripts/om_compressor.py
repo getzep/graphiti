@@ -1393,7 +1393,85 @@ def _fetch_pending_messages_for_manifest(session: Any) -> list[MessageRow]:
     return out
 
 
+def _manifest_chunks_smart(
+    messages: list[MessageRow],
+    extractor_version: str,
+) -> list[dict[str, Any]] | None:
+    """Build manifest chunks using Smart Cutter OM lane boundaries (FR-5).
+
+    Uses ``chunk_conversation_semantic`` + ``om_lane_split`` to group messages
+    at semantic drift / session-gap boundaries instead of fixed-size slices.
+
+    Returns ``None`` when Smart Cutter is unavailable (import error) or when
+    messages lack content embeddings required for centroid-drift detection.
+    The caller should fall back to fixed-size ``_manifest_chunks`` in that case.
+    """
+    try:
+        from graphiti_core.utils.content_chunking import (  # noqa: PLC0415
+            chunk_conversation_semantic,
+            om_lane_split,
+        )
+    except ImportError:
+        return None
+
+    msg_dicts = [
+        {
+            "message_id": m.message_id,
+            "content": m.content,
+            "created_at": m.created_at,
+            "content_embedding": m.content_embedding,
+        }
+        for m in messages
+    ]
+
+    # Smart Cutter centroid drift requires embeddings; fall back if any are missing.
+    if any(not d["content_embedding"] for d in msg_dicts):
+        return None
+
+    try:
+        boundaries = chunk_conversation_semantic(msg_dicts)
+        boundaries = om_lane_split(boundaries, msg_dicts)
+    except Exception:
+        return None
+
+    if not boundaries:
+        return None
+
+    msg_map = {m.message_id: m for m in messages}
+    chunks: list[dict[str, Any]] = []
+    for boundary in boundaries:
+        group = [msg_map[mid] for mid in boundary.message_ids if mid in msg_map]
+        if not group:
+            continue
+        chunk_id = _chunk_id(group, extractor_version)
+        entry: dict[str, Any] = {
+            "chunk_id": chunk_id,
+            "chunk_index": len(chunks),
+            "message_ids": [m.message_id for m in group],
+            "message_count": len(group),
+            "time_range_start": group[0].created_at,
+            "time_range_end": group[-1].created_at,
+            "extractor_version": extractor_version,
+            "boundary_reason": boundary.boundary_reason,
+        }
+        chunks.append(entry)
+
+    return chunks or None
+
+
 def _manifest_chunks(messages: list[MessageRow], extractor_version: str) -> list[dict[str, Any]]:
+    """Partition messages into OM extraction chunks.
+
+    Attempts Smart Cutter OM lane boundary detection first (FR-5).
+    Falls back to fixed-size ``MAX_PARENT_CHUNK_SIZE`` slicing when Smart
+    Cutter is unavailable or any message lacks a content embedding.
+    """
+    smart = _manifest_chunks_smart(messages, extractor_version)
+    if smart is not None:
+        emit_event("OM_MANIFEST_CHUNKER", strategy="smart_cutter", chunks=len(smart))
+        return smart
+
+    emit_event("OM_MANIFEST_CHUNKER", strategy="fixed_size", chunk_size=MAX_PARENT_CHUNK_SIZE)
     chunks: list[dict[str, Any]] = []
     for idx in range(0, len(messages), MAX_PARENT_CHUNK_SIZE):
         group = messages[idx : idx + MAX_PARENT_CHUNK_SIZE]
@@ -2816,6 +2894,68 @@ def _run_claim_mode(
     return 1 if had_failures else 0
 
 
+_STEADY_SMART_CUT_WINDOW = 200  # messages to fetch for Smart Cutter context
+
+
+def _select_next_steady_chunk(
+    session: Any,
+    extractor_version: str,
+) -> tuple[list[MessageRow], str]:
+    """Select the next chunk for steady-state processing (FR-5).
+
+    Fetches a context window of pending messages and runs Smart Cutter OM lane
+    boundary detection to pick a semantically coherent chunk.  Falls back to
+    the first ``MAX_PARENT_CHUNK_SIZE`` messages when Smart Cutter is
+    unavailable or any message in the window lacks a content embedding.
+
+    Returns (messages, chunk_id) — messages is empty when the backlog is empty.
+    """
+    window = _fetch_parent_messages(session, _STEADY_SMART_CUT_WINDOW)
+    if not window:
+        return [], ""
+
+    # Try Smart Cutter boundary detection (requires embeddings on all messages).
+    if all(m.content_embedding for m in window):
+        try:
+            from graphiti_core.utils.content_chunking import (  # noqa: PLC0415
+                chunk_conversation_semantic,
+                om_lane_split,
+            )
+
+            msg_dicts = [
+                {
+                    "message_id": m.message_id,
+                    "content": m.content,
+                    "created_at": m.created_at,
+                    "content_embedding": m.content_embedding,
+                }
+                for m in window
+            ]
+            boundaries = chunk_conversation_semantic(msg_dicts)
+            boundaries = om_lane_split(boundaries, msg_dicts)
+            if boundaries:
+                first = boundaries[0]
+                msg_map = {m.message_id: m for m in window}
+                chunk_messages = [msg_map[mid] for mid in first.message_ids if mid in msg_map]
+                if chunk_messages:
+                    chunk_id = _chunk_id(chunk_messages, extractor_version)
+                    emit_event(
+                        "OM_STEADY_CHUNKER",
+                        strategy="smart_cutter",
+                        boundary_reason=first.boundary_reason,
+                        messages=len(chunk_messages),
+                    )
+                    return chunk_messages, chunk_id
+        except Exception:
+            pass  # fall through to fixed-size fallback
+
+    # Fallback: first MAX_PARENT_CHUNK_SIZE messages.
+    chunk_messages = window[:MAX_PARENT_CHUNK_SIZE]
+    chunk_id = _chunk_id(chunk_messages, extractor_version)
+    emit_event("OM_STEADY_CHUNKER", strategy="fixed_size", messages=len(chunk_messages))
+    return chunk_messages, chunk_id
+
+
 def run(args: argparse.Namespace) -> int:
     dry_run = getattr(args, "dry_run", False)
     cfg = _load_extractor_config(_resolve_ontology_config_path(args.config))
@@ -2857,11 +2997,12 @@ def run(args: argparse.Namespace) -> int:
                     )
                 break
 
-            chunk_messages = _fetch_parent_messages(session, MAX_PARENT_CHUNK_SIZE)
+            # FR-5: prefer Smart Cutter OM lane boundaries for steady-state chunk selection.
+            # Fetch a wider window to give the Smart Cutter enough context for centroid
+            # drift detection, then take the first boundary as the next chunk to process.
+            chunk_messages, chunk_id = _select_next_steady_chunk(session, cfg.extractor_version)
             if not chunk_messages:
                 break
-
-            chunk_id = _chunk_id(chunk_messages, cfg.extractor_version)
             if dry_run:
                 oldest_repr = f"{oldest_hours:.1f}h" if oldest_hours is not None else "n/a"
                 print(
