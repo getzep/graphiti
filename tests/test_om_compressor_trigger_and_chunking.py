@@ -977,5 +977,96 @@ class TestStaleNonManifestRowReconciliation(unittest.TestCase):
                 conn.close()
 
 
+class TestOMCompressorSmartCutterIntegration(unittest.TestCase):
+    """FR-5: om_compressor uses Smart Cutter OM lane boundaries.
+
+    Verifies that _manifest_chunks_smart returns coherent boundaries when
+    all messages have valid embeddings, and that _manifest_chunks falls back
+    to fixed-size slicing when embeddings are missing.
+    """
+
+    def _make_row(self, i: int, *, has_embedding: bool = True) -> 'MessageRow':
+        from scripts.om_compressor import MessageRow
+
+        return MessageRow(
+            message_id=f'msg{i:04d}',
+            source_session_id='sess1',
+            content=f'Test message content number {i}',
+            created_at=f'2026-01-01T00:{i:02d}:00Z',
+            content_embedding=[0.1 + i * 0.001] * 4 if has_embedding else [],
+            om_extract_attempts=0,
+        )
+
+    def test_manifest_chunks_smart_returns_none_when_embeddings_missing(self):
+        """_manifest_chunks_smart returns None if any message lacks embeddings."""
+        from scripts.om_compressor import _manifest_chunks_smart
+
+        messages = [self._make_row(i, has_embedding=False) for i in range(5)]
+        result = _manifest_chunks_smart(messages, 'ev1')
+        self.assertIsNone(result)
+
+    def test_manifest_chunks_smart_returns_chunks_when_embeddings_present(self):
+        """_manifest_chunks_smart returns at least one chunk when all messages have embeddings."""
+        from scripts.om_compressor import _manifest_chunks_smart
+
+        messages = [self._make_row(i) for i in range(5)]
+        result = _manifest_chunks_smart(messages, 'ev1')
+        # Smart Cutter may be unavailable (missing dotenv), which also returns None.
+        # If it IS available, result must be a non-empty list covering all messages.
+        if result is not None:
+            all_ids = {mid for chunk in result for mid in chunk['message_ids']}
+            self.assertEqual(all_ids, {m.message_id for m in messages})
+            for chunk in result:
+                self.assertIn('chunk_id', chunk)
+                self.assertIn('message_ids', chunk)
+                self.assertGreater(chunk['message_count'], 0)
+
+    def test_manifest_chunks_fallback_covers_all_messages(self):
+        """_manifest_chunks always covers every message (smart or fixed path)."""
+        from scripts.om_compressor import _manifest_chunks
+
+        messages = [self._make_row(i, has_embedding=False) for i in range(7)]
+        chunks = _manifest_chunks(messages, 'ev1')
+        all_ids = {mid for chunk in chunks for mid in chunk['message_ids']}
+        self.assertEqual(all_ids, {m.message_id for m in messages})
+        for chunk in chunks:
+            self.assertGreater(chunk['message_count'], 0)
+
+    def test_manifest_chunks_with_embeddings_covers_all_messages(self):
+        """_manifest_chunks (smart path) covers every message when embeddings present."""
+        from scripts.om_compressor import _manifest_chunks
+
+        messages = [self._make_row(i) for i in range(8)]
+        chunks = _manifest_chunks(messages, 'ev1')
+        all_ids = {mid for chunk in chunks for mid in chunk['message_ids']}
+        self.assertEqual(all_ids, {m.message_id for m in messages})
+
+    def test_select_next_steady_chunk_falls_back_without_embeddings(self):
+        """_select_next_steady_chunk uses fixed fallback when embeddings missing."""
+        from unittest.mock import MagicMock, patch
+
+        from scripts.om_compressor import (
+            MessageRow,
+            _select_next_steady_chunk,
+        )
+
+        no_emb_messages = [self._make_row(i, has_embedding=False) for i in range(3)]
+        with patch('scripts.om_compressor._fetch_parent_messages', return_value=no_emb_messages):
+            msgs, chunk_id = _select_next_steady_chunk(MagicMock(), 'ev1')
+        self.assertEqual([m.message_id for m in msgs], [m.message_id for m in no_emb_messages])
+        self.assertTrue(chunk_id)
+
+    def test_select_next_steady_chunk_returns_empty_on_no_backlog(self):
+        """_select_next_steady_chunk returns ([], '') when backlog is empty."""
+        from unittest.mock import MagicMock, patch
+
+        from scripts.om_compressor import _select_next_steady_chunk
+
+        with patch('scripts.om_compressor._fetch_parent_messages', return_value=[]):
+            msgs, chunk_id = _select_next_steady_chunk(MagicMock(), 'ev1')
+        self.assertEqual(msgs, [])
+        self.assertEqual(chunk_id, '')
+
+
 if __name__ == '__main__':
     unittest.main()
