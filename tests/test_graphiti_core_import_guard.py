@@ -100,6 +100,12 @@ class TestImportErrorNarrowing:
 
     def test_normal_import_makes_graphiti_available(self):
         """When all deps are present, Graphiti must be importable."""
-        mod = _reload_graphiti_core()
+        # Use patch.dict to isolate sys.modules changes so the reloaded
+        # graphiti_core module (which lacks subpackage attributes) is not left
+        # in sys.modules after this test.  Without isolation, subsequent tests
+        # that call monkeypatch.setattr('graphiti_core.utils...', ...) fail
+        # because getattr(graphiti_core, 'utils') raises AttributeError.
+        with patch.dict(sys.modules):
+            mod = _reload_graphiti_core()
         assert 'Graphiti' in mod.__all__
         assert hasattr(mod, 'Graphiti')

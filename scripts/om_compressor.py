@@ -2271,6 +2271,36 @@ def _rank_extraction_nodes(nodes: list[ExtractionNode]) -> list[ExtractionNode]:
     return ranked
 
 
+def _derive_node_timestamps(
+    node: ExtractionNode,
+    msg_by_id: dict[str, MessageRow],
+) -> tuple[str | None, str | None]:
+    """Derive first/last observed timestamps from a node's source messages.
+
+    Returns (first_observed_at, last_observed_at) as ISO strings or None.
+
+    These fields capture event-time (when the source messages were created),
+    NOT wall-clock time, so they can be used as accurate timeline proxies
+    instead of OMNode.created_at.
+    """
+    src_timestamps: list[datetime] = []
+    for mid in node.source_message_ids:
+        msg = msg_by_id.get(mid)
+        if msg is None:
+            continue
+        dt = parse_iso(msg.created_at)
+        if dt is not None:
+            src_timestamps.append(dt)
+
+    if not src_timestamps:
+        return None, None
+
+    def fmt(dt: datetime) -> str:
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    return fmt(min(src_timestamps)), fmt(max(src_timestamps))
+
+
 def _process_chunk_tx(
     tx: Any,
     *,
@@ -2285,6 +2315,9 @@ def _process_chunk_tx(
     rewrite_embeddings = os.environ.get("OM_REWRITE_EMBEDDINGS") == "1"
     embedding_model, embedding_dim = _embedding_config()
     now = now_iso()
+
+    # Build message lookup for timeline derivation (B: timeline semantics fix)
+    msg_by_id: dict[str, MessageRow] = {m.message_id: m for m in messages}
 
     node_ids: set[str] = set()
 
@@ -2309,6 +2342,9 @@ def _process_chunk_tx(
             embedding_dim=embedding_dim,
         )
 
+        # Derive event-time timestamps from source messages (B: timeline semantics)
+        first_observed_at, last_observed_at = _derive_node_timestamps(node, msg_by_id)
+
         tx.run(
             """
             MERGE (n:OMNode {node_id:$node_id})
@@ -2325,12 +2361,25 @@ def _process_chunk_tx(
               n.source_message_ids = $source_message_ids,
               n.created_at = $created_at,
               n.status_changed_at = $created_at,
-              n.last_observed_at = NULL,
+              n.first_observed_at = $first_observed_at,
+              n.last_observed_at = $last_observed_at,
               n.monitoring_started_at = NULL
             ON MATCH SET
               n.source_message_ids = CASE
                 WHEN n.source_message_ids IS NULL THEN $source_message_ids
                 ELSE n.source_message_ids
+              END,
+              n.first_observed_at = CASE
+                WHEN n.first_observed_at IS NULL THEN $first_observed_at
+                WHEN $first_observed_at IS NOT NULL AND $first_observed_at < n.first_observed_at
+                  THEN $first_observed_at
+                ELSE n.first_observed_at
+              END,
+              n.last_observed_at = CASE
+                WHEN n.last_observed_at IS NULL THEN $last_observed_at
+                WHEN $last_observed_at IS NOT NULL AND $last_observed_at > n.last_observed_at
+                  THEN $last_observed_at
+                ELSE n.last_observed_at
               END
             """,
             {
@@ -2346,6 +2395,8 @@ def _process_chunk_tx(
                 "created_at": now,
                 "embedding_model": embedding_model,
                 "embedding_dim": embedding_dim,
+                "first_observed_at": first_observed_at,
+                "last_observed_at": last_observed_at,
             },
         ).consume()
 
@@ -2418,13 +2469,27 @@ def _process_chunk_tx(
                 },
             ).consume()
 
+    # Compute the max message timestamp for this chunk so that
+    # observed-node updates use event-time semantics, not wall-clock.
+    _msg_ts_list = [parse_iso(m.created_at) for m in messages if m.created_at]
+    _msg_ts_list = [dt for dt in _msg_ts_list if dt is not None]
+    def _fmt(dt: datetime) -> str:
+        return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    msg_max_ts: str | None = _fmt(max(_msg_ts_list)) if _msg_ts_list else None
+
     for node_id in observed_node_ids:
         tx.run(
             """
             MATCH (n:OMNode {node_id:$node_id})
-            SET n.last_observed_at = $now_iso
+            SET n.last_observed_at = CASE
+              WHEN $msg_max_ts IS NULL THEN n.last_observed_at
+              WHEN n.last_observed_at IS NULL THEN $msg_max_ts
+              WHEN $msg_max_ts > n.last_observed_at THEN $msg_max_ts
+              ELSE n.last_observed_at
+            END
             """,
-            {"node_id": node_id, "now_iso": now},
+            {"node_id": node_id, "msg_max_ts": msg_max_ts},
         ).consume()
 
     for msg in messages:
