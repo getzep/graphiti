@@ -695,4 +695,12 @@ The script's *interface* to QMD is deterministic; QMD internals are not under ou
 
 ### DoD target: Bicameral recall@10 ≥ QMD recall@10
 
-The `bicameral_aggregate.mean_combined_recall_at_k` must be ≥ `qmd_aggregate.mean_combined_recall_at_k` on the fixed fixture.  As of the 2026-03-01 run, Bicameral achieved **0.7861** on the solo run.  A full `--compare-qmd` run is required to confirm the delta (see `/tmp/retrieval_benchmark_comparison.json`).
+The `bicameral_aggregate.mean_combined_recall_at_k` must be ≥ `qmd_aggregate.mean_combined_recall_at_k` on the fixed fixture.
+
+**2026-03-01 result: ✅ PASSED**
+- Bicameral: **0.7861**
+- QMD:       **0.6389**
+- Delta:     **+0.1472** (Bicameral outperforms by 14.7pp)
+- Artifact:  `/tmp/retrieval_benchmark_comparison.json` (30/30 queries)
+
+Bicameral wins on 24 of 30 queries; ties on 5; QMD wins on 1 (q006 "tools").  Cross-lane and OM-specific queries show the largest Bicameral advantages.
