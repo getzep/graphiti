@@ -88,8 +88,11 @@ def node_search_filter_query_constructor(
             node_label_filter = 'list_has_all(n.labels, $labels)'
             filter_params['labels'] = filters.node_labels
         else:
-            node_labels = '|'.join(filters.node_labels)
-            node_label_filter = 'n:' + node_labels
+            if len(filters.node_labels) > 1:
+                labels = [f'n:{label}' for label in filters.node_labels]
+                node_label_filter = '(' + ' OR '.join(labels) + ')'
+            else:
+                node_label_filter = 'n:' + filters.node_labels[0]
         filter_queries.append(node_label_filter)
 
     return filter_queries, filter_params
