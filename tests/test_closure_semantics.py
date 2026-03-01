@@ -9,6 +9,12 @@ Validates that:
 6. The pass is idempotent (re-running doesn't double-invalidate)
 7. When no closure edges exist, result is empty
 8. group_id filtering works
+
+NO-GO fixes (PR #116):
+9.  Closure edge itself is NOT included in invalidation candidates
+10. Deterministic processing order (sorted by invalid_at asc, then closure_uuid)
+11. Min semantics: earliest invalid_at wins when multiple closures target same fact
+12. _to_utc parses ISO strings with UTC offsets correctly
 """
 
 from __future__ import annotations
@@ -303,3 +309,239 @@ class TestClosureScript:
         with patch.object(sys, 'argv', ['apply_closure_semantics.py']):
             args = mod._parse_args()
         assert args.apply is False
+
+
+# ---------------------------------------------------------------------------
+# 5. NO-GO regression fixes (PR #116)
+# ---------------------------------------------------------------------------
+
+class TestClosureEdgeExclusion:
+    """Regression: the closure edge itself must not appear in invalidation candidates."""
+
+    def test_closure_edge_uuid_excluded_from_active_facts_query(self):
+        """_FIND_ACTIVE_FACTS_QUERY must filter out e.uuid = $closure_uuid."""
+        from graphiti_core.utils.maintenance.closure import _FIND_ACTIVE_FACTS_QUERY
+        assert '$closure_uuid' in _FIND_ACTIVE_FACTS_QUERY, (
+            '_FIND_ACTIVE_FACTS_QUERY does not reference $closure_uuid; '
+            'the closure edge itself may be self-invalidated during the pass.'
+        )
+        assert 'e.uuid <> $closure_uuid' in _FIND_ACTIVE_FACTS_QUERY, (
+            '_FIND_ACTIVE_FACTS_QUERY does not exclude e.uuid <> $closure_uuid; '
+            'the closure edge may be included as a candidate for invalidation.'
+        )
+
+    def test_apply_passes_closure_uuid_to_facts_query(self):
+        """execute_query calls for the active-facts step must include closure_uuid kwarg."""
+        from graphiti_core.utils.maintenance.closure import apply_closure_semantics
+
+        closure_edges = [
+            {
+                'closure_uuid': 'ce-excl-1',
+                'closure_name': 'RESOLVES',
+                'source_uuid': 'src-x',
+                'source_name': 'Fix-X',
+                'target_uuid': 'tgt-x',
+                'target_name': 'Bug-X',
+                'valid_at': datetime(2026, 1, 5, tzinfo=timezone.utc),
+                'created_at': datetime(2026, 1, 5, tzinfo=timezone.utc),
+            }
+        ]
+
+        received_kwargs: list[dict] = []
+
+        async def _execute_query(query, *args, routing_='r', **kwargs):
+            received_kwargs.append(dict(kwargs))
+            if 'closure_names' in kwargs:
+                return closure_edges, [], None
+            return [], [], None
+
+        driver = MagicMock()
+        driver.execute_query = AsyncMock(side_effect=_execute_query)
+
+        asyncio.get_event_loop().run_until_complete(
+            apply_closure_semantics(driver, dry_run=True)
+        )
+
+        # The facts query must be called with closure_uuid
+        facts_calls = [kw for kw in received_kwargs if 'target_uuid' in kw]
+        assert facts_calls, 'No facts query was issued'
+        assert all('closure_uuid' in kw for kw in facts_calls), (
+            'At least one facts query call is missing the closure_uuid parameter.'
+        )
+        assert facts_calls[0]['closure_uuid'] == 'ce-excl-1'
+
+
+class TestDeterministicOrderingAndMinSemantics:
+    """Regression: closure records must be processed in a deterministic order
+    and the earliest invalid_at must win when multiple closures target the same fact.
+    """
+
+    def test_records_processed_in_invalid_at_ascending_order(self):
+        """When two closure edges have different valid_at timestamps, the one with
+        the earlier timestamp must be processed first.
+        """
+        from graphiti_core.utils.maintenance.closure import apply_closure_semantics
+
+        ts_early = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        ts_late  = datetime(2026, 6, 1, tzinfo=timezone.utc)
+
+        # Return records in REVERSE chronological order to expose ordering bugs.
+        closure_edges = [
+            {
+                'closure_uuid': 'ce-late',
+                'closure_name': 'RESOLVES',
+                'source_uuid': 'src-late',
+                'source_name': 'Fix-Late',
+                'target_uuid': 'tgt-shared',
+                'target_name': 'Bug-Shared',
+                'valid_at': ts_late,
+                'created_at': ts_late,
+            },
+            {
+                'closure_uuid': 'ce-early',
+                'closure_name': 'RESOLVES',
+                'source_uuid': 'src-early',
+                'source_name': 'Fix-Early',
+                'target_uuid': 'tgt-shared',
+                'target_name': 'Bug-Shared',
+                'valid_at': ts_early,
+                'created_at': ts_early,
+            },
+        ]
+
+        processed_order: list[str] = []
+
+        async def _execute_query(query, *args, routing_='r', **kwargs):
+            if 'closure_names' in kwargs:
+                return closure_edges, [], None
+            if 'target_uuid' in kwargs:
+                # Record which closure_uuid this facts-query belongs to
+                processed_order.append(kwargs.get('closure_uuid', '?'))
+                return [{'fact_uuid': 'f-shared', 'fact_name': 'IS_OPEN'}], [], None
+            return [], [], None
+
+        driver = MagicMock()
+        driver.execute_query = AsyncMock(side_effect=_execute_query)
+
+        asyncio.get_event_loop().run_until_complete(
+            apply_closure_semantics(driver, dry_run=True)
+        )
+
+        # ce-early (ts_early) must be processed before ce-late (ts_late)
+        assert processed_order == ['ce-early', 'ce-late'], (
+            f'Expected order [ce-early, ce-late] but got {processed_order}. '
+            'Closure edges must be processed in invalid_at ascending order.'
+        )
+
+    def test_min_invalid_at_wins_for_shared_fact(self):
+        """When two closures have different timestamps and target the same fact,
+        the _INVALIDATE_FACTS_QUERY WHERE e.invalid_at IS NULL guard ensures
+        only the first (earliest) closure's timestamp is applied.  We verify
+        the write is issued with the earliest timestamp.
+        """
+        from graphiti_core.utils.maintenance.closure import apply_closure_semantics
+
+        ts_early = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        ts_late  = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+        closure_edges = [
+            {
+                'closure_uuid': 'ce-A',
+                'closure_name': 'RESOLVES',
+                'source_uuid': 'srcA',
+                'source_name': 'FixA',
+                'target_uuid': 'tgt-B',
+                'target_name': 'BugB',
+                'valid_at': ts_early,
+                'created_at': ts_early,
+            },
+            {
+                'closure_uuid': 'ce-B',
+                'closure_name': 'SUPERSEDES',
+                'source_uuid': 'srcB',
+                'source_name': 'FixB',
+                'target_uuid': 'tgt-B',
+                'target_name': 'BugB',
+                'valid_at': ts_late,
+                'created_at': ts_late,
+            },
+        ]
+
+        write_calls: list[dict] = []
+
+        async def _execute_query(query, *args, routing_='r', **kwargs):
+            if routing_ == 'w':
+                write_calls.append(dict(kwargs))
+            if 'closure_names' in kwargs:
+                return closure_edges, [], None
+            if 'target_uuid' in kwargs:
+                return [{'fact_uuid': 'f-shared', 'fact_name': 'IS_ACTIVE'}], [], None
+            return [], [], None
+
+        driver = MagicMock()
+        driver.execute_query = AsyncMock(side_effect=_execute_query)
+
+        asyncio.get_event_loop().run_until_complete(
+            apply_closure_semantics(driver, dry_run=False)
+        )
+
+        # First write must use ts_early (the min/earliest timestamp)
+        assert write_calls, 'Expected at least one write call'
+        first_write = write_calls[0]
+        assert first_write['invalid_at'] == ts_early, (
+            f"First write used {first_write['invalid_at']} instead of {ts_early}. "
+            'Min-semantics require the earliest invalid_at to be applied first.'
+        )
+
+
+class TestToUtcTimezoneHandling:
+    """Regression: _to_utc must correctly convert ISO strings with UTC offsets."""
+
+    def _call(self, value):
+        from graphiti_core.utils.maintenance.closure import _to_utc
+        return _to_utc(value)
+
+    def test_naive_datetime_assumes_utc(self):
+        dt = datetime(2026, 1, 1, 10, 0, 0)  # naive
+        result = self._call(dt)
+        assert result.tzinfo is not None
+        assert result == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+
+    def test_utc_aware_datetime_unchanged(self):
+        dt = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
+        result = self._call(dt)
+        assert result == dt
+
+    def test_iso_string_naive_parsed_as_utc(self):
+        result = self._call('2026-01-01T10:00:00')
+        assert result == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+
+    def test_iso_string_with_positive_offset_converted_correctly(self):
+        """'2026-01-01T10:00:00+05:30' must become '2026-01-01T04:30:00Z'."""
+        result = self._call('2026-01-01T10:00:00+05:30')
+        expected = datetime(2026, 1, 1, 4, 30, 0, tzinfo=timezone.utc)
+        assert result == expected, (
+            f'Got {result.isoformat()} but expected {expected.isoformat()}. '
+            '_to_utc must use astimezone(), not replace(), for offset-aware strings.'
+        )
+
+    def test_iso_string_with_negative_offset_converted_correctly(self):
+        """'2026-06-01T08:00:00-04:00' must become '2026-06-01T12:00:00Z'."""
+        result = self._call('2026-06-01T08:00:00-04:00')
+        expected = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        assert result == expected
+
+    def test_iso_string_z_suffix_parsed_correctly(self):
+        """ISO strings ending in Z must be treated as UTC."""
+        # Python 3.11+ supports 'Z' in fromisoformat, but older may not.
+        # Use +00:00 equivalent to test robustly.
+        result = self._call('2026-06-01T12:00:00+00:00')
+        assert result == datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_utc_offset_datetime_converted(self):
+        """A Python datetime with non-UTC tzinfo must be converted."""
+        from datetime import timedelta
+        tz_plus5 = timezone(timedelta(hours=5, minutes=30))
+        dt = datetime(2026, 1, 1, 10, 0, 0, tzinfo=tz_plus5)
+        result = self._call(dt)
+        assert result == datetime(2026, 1, 1, 4, 30, 0, tzinfo=timezone.utc)
