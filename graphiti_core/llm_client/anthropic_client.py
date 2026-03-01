@@ -27,7 +27,6 @@ from ..prompts.models import Message
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
-from .token_tracker import TokenUsage
 
 if TYPE_CHECKING:
     import anthropic
@@ -446,7 +445,14 @@ class AnthropicClient(LLMClient):
                     total_cache_creation_tokens += cache_creation_tokens
                     total_cache_read_tokens += cache_read_tokens
 
-                    # Record token usage with cache metrics and model for cost estimation
+                    # If we have a response_model, attempt to validate the response
+                    if response_model is not None:
+                        # Validate the response against the response_model
+                        model_instance = response_model(**response)
+                        response = model_instance.model_dump()
+
+                    # Record token usage once after successful completion
+                    # (including any retry attempts)
                     self.token_tracker.record(
                         prompt_name,
                         total_input_tokens,
@@ -456,14 +462,8 @@ class AnthropicClient(LLMClient):
                         model=resolved_model,
                     )
 
-                    # Log per-call cost details
-                    call_usage = TokenUsage(
-                        input_tokens=total_input_tokens,
-                        output_tokens=total_output_tokens,
-                        cache_creation_input_tokens=total_cache_creation_tokens,
-                        cache_read_input_tokens=total_cache_read_tokens,
-                    )
-                    estimated_cost = call_usage.estimate_cost(resolved_model)
+                    # Log token usage details
+                    retries_note = f' retries={retry_count}' if retry_count > 0 else ''
                     cache_status = (
                         f'cache_write={total_cache_creation_tokens}, '
                         f'cache_read={total_cache_read_tokens}'
@@ -471,18 +471,9 @@ class AnthropicClient(LLMClient):
                     logger.info(
                         f'LLM call [{prompt_name or "unknown"}] model={resolved_model} '
                         f'in={total_input_tokens} out={total_output_tokens} '
-                        f'{cache_status} '
-                        f'cost=${estimated_cost:.6f} '
-                        f'cumulative=${self.token_tracker.get_total_estimated_cost():.6f}'
+                        f'{cache_status}{retries_note}'
                     )
 
-                    # If we have a response_model, attempt to validate the response
-                    if response_model is not None:
-                        # Validate the response against the response_model
-                        model_instance = response_model(**response)
-                        return model_instance.model_dump()
-
-                    # If no validation needed, return the response
                     return response
 
                 except (RateLimitError, RefusalError):

@@ -22,7 +22,6 @@ from graphiti_core.llm_client.token_tracker import (
     PromptTokenUsage,
     TokenUsage,
     TokenUsageTracker,
-    get_anthropic_pricing,
 )
 
 
@@ -48,53 +47,6 @@ class TestTokenUsage:
             cache_read_input_tokens=300,
         )
         assert usage.total_tokens == 650
-
-    def test_estimate_cost_haiku(self):
-        """Test cost estimation for Haiku 4.5."""
-        usage = TokenUsage(
-            input_tokens=1_000_000,
-            output_tokens=1_000_000,
-        )
-        # Haiku 4.5: $1/M input, $5/M output
-        cost = usage.estimate_cost('claude-haiku-4-5-latest')
-        assert cost == pytest.approx(6.0)
-
-    def test_estimate_cost_with_cache(self):
-        """Test cost estimation with cache tokens for Haiku 4.5."""
-        usage = TokenUsage(
-            input_tokens=0,
-            output_tokens=100_000,
-            cache_creation_input_tokens=500_000,
-            cache_read_input_tokens=500_000,
-        )
-        # Haiku 4.5: cache_write=$1.25/M, cache_read=$0.10/M, output=$5/M
-        expected = (500_000 * 1.25 + 500_000 * 0.10 + 100_000 * 5.0) / 1_000_000
-        cost = usage.estimate_cost('claude-haiku-4-5-latest')
-        assert cost == pytest.approx(expected)
-
-    def test_estimate_cost_sonnet(self):
-        """Test cost estimation for Sonnet 4.5."""
-        usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
-        # Sonnet 4.5: $3/M input, $15/M output
-        cost = usage.estimate_cost('claude-sonnet-4-5-latest')
-        assert cost == pytest.approx(18.0)
-
-
-class TestGetAnthropicPricing:
-    def test_known_model(self):
-        """Test pricing lookup for known models."""
-        pricing = get_anthropic_pricing('claude-haiku-4-5-latest')
-        assert pricing == (1.00, 5.00, 1.25, 0.10)
-
-    def test_pinned_model_version(self):
-        """Test pricing lookup for pinned model versions."""
-        pricing = get_anthropic_pricing('claude-sonnet-4-5-20250929')
-        assert pricing == (3.00, 15.00, 3.75, 0.30)
-
-    def test_unknown_model_returns_default(self):
-        """Test that unknown models get default pricing."""
-        pricing = get_anthropic_pricing('some-unknown-model')
-        assert pricing == (1.00, 5.00, 1.25, 0.10)
 
 
 class TestPromptTokenUsage:
@@ -225,20 +177,6 @@ class TestTokenUsageTracker:
         assert usage['extract_nodes'].total_cache_creation_tokens == 500
         assert usage['extract_nodes'].total_cache_read_tokens == 500
 
-    def test_record_with_model_tracks_cost(self):
-        """Test that recording with a model computes estimated cost."""
-        tracker = TokenUsageTracker()
-        tracker.record(
-            'extract_nodes',
-            1_000_000,
-            500_000,
-            model='claude-haiku-4-5-latest',
-        )
-
-        usage = tracker.get_usage()
-        # Haiku 4.5: $1/M input + $5/M output = $1 + $2.50 = $3.50
-        assert usage['extract_nodes'].total_estimated_cost == pytest.approx(3.50)
-
     def test_record_with_model_tracks_models_used(self):
         """Test that models_used is populated."""
         tracker = TokenUsageTracker()
@@ -251,14 +189,6 @@ class TestTokenUsageTracker:
             'claude-haiku-4-5-latest': 2,
             'claude-sonnet-4-5-latest': 1,
         }
-
-    def test_get_total_estimated_cost(self):
-        """Test cumulative cost across prompts."""
-        tracker = TokenUsageTracker()
-        tracker.record('a', 1_000_000, 0, model='claude-haiku-4-5-latest')  # $1
-        tracker.record('b', 1_000_000, 0, model='claude-haiku-4-5-latest')  # $1
-
-        assert tracker.get_total_estimated_cost() == pytest.approx(2.0)
 
     def test_get_usage_returns_copy(self):
         """Test that get_usage returns a copy, not the internal dict."""
