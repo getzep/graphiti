@@ -6,6 +6,8 @@ Validates that:
 3. Normalization is idempotent
 4. A wide range of LLM output variants normalize correctly
 5. The offline normalize_edge_names script is importable and parses args safely
+6. The script's Cypher queries target the real RELATES_TO relationship model
+   (not the no-op Entityedge node label)
 """
 
 from __future__ import annotations
@@ -179,3 +181,109 @@ class TestNormalizeEdgeNamesScript:
         with patch.object(sys, 'argv', ['normalize_edge_names.py', '--apply']):
             args = mod._parse_args()
         assert args.apply is True
+
+
+# ---------------------------------------------------------------------------
+# 5. Cypher query model correctness (the real relationship model)
+# ---------------------------------------------------------------------------
+
+class TestCypherQueryModelCorrectness:
+    """Verify the script queries the actual Neo4j relationship model.
+
+    EntityEdges in Neo4j are stored as RELATES_TO relationships between
+    Entity nodes — NOT as standalone nodes with an 'Entityedge' label.
+    The incorrect label query silently returns 0 rows and is a no-op.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_script(self):
+        import importlib.util
+        from pathlib import Path
+
+        script_path = Path(__file__).parents[1] / 'scripts' / 'normalize_edge_names.py'
+        spec = importlib.util.spec_from_file_location('_normalize_edge_names_cypher', script_path)
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+
+    def test_scan_query_targets_relates_to_relationship(self):
+        """SCAN query must match RELATES_TO relationships, not Entityedge nodes."""
+        query: str = self.mod._SCAN_QUERY
+        assert 'RELATES_TO' in query, (
+            '_SCAN_QUERY must target the RELATES_TO relationship type. '
+            'Found: ' + repr(query[:200])
+        )
+
+    def test_scan_query_does_not_use_entityedge_label(self):
+        """SCAN query must NOT use the no-op Entityedge node label."""
+        query: str = self.mod._SCAN_QUERY
+        assert 'Entityedge' not in query, (
+            '_SCAN_QUERY must not reference the incorrect Entityedge node label. '
+            'EntityEdges are relationships in Neo4j, not nodes.'
+        )
+
+    def test_update_query_targets_relates_to_relationship(self):
+        """UPDATE query must match RELATES_TO relationships, not Entityedge nodes."""
+        query: str = self.mod._UPDATE_QUERY
+        assert 'RELATES_TO' in query, (
+            '_UPDATE_QUERY must target the RELATES_TO relationship type. '
+            'Found: ' + repr(query[:200])
+        )
+
+    def test_update_query_does_not_use_entityedge_label(self):
+        """UPDATE query must NOT use the no-op Entityedge node label."""
+        query: str = self.mod._UPDATE_QUERY
+        assert 'Entityedge' not in query, (
+            '_UPDATE_QUERY must not reference the incorrect Entityedge node label.'
+        )
+
+    def test_scan_query_returns_name_field(self):
+        """SCAN query must return the 'name' column used for normalization."""
+        query: str = self.mod._SCAN_QUERY
+        assert 'name' in query, '_SCAN_QUERY must return e.name AS name'
+
+    def test_update_query_sets_name_field(self):
+        """UPDATE query must set e.name (the field being normalised)."""
+        query: str = self.mod._UPDATE_QUERY
+        assert 'e.name' in query and 'u.new_name' in query, (
+            '_UPDATE_QUERY must SET e.name = u.new_name'
+        )
+
+    def test_run_dry_run_uses_correct_queries_via_mock(self):
+        """run() with mocked Neo4j driver exercises both scan + update paths
+        and returns the number of edges that need normalization."""
+        from unittest.mock import MagicMock, call
+
+        # Simulate two edges: one canonical, one needing normalization
+        fake_edges = [
+            {'uuid': 'uuid-1', 'name': 'RELATES_TO'},   # already canonical
+            {'uuid': 'uuid-2', 'name': 'relates to'},   # needs normalizing
+            {'uuid': 'uuid-3', 'name': 'Authored By'},  # needs normalizing
+        ]
+
+        mock_session = MagicMock()
+        mock_session.run.return_value = [
+            {'uuid': e['uuid'], 'name': e['name']} for e in fake_edges
+        ]
+        mock_driver = MagicMock()
+        mock_driver.session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_driver.session.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(self.mod, 'GraphDatabase') as mock_gdb:
+            mock_gdb.driver.return_value = mock_driver
+
+            changed = self.mod.run(
+                apply=False,  # dry-run
+                group_id=None,
+                neo4j_uri='bolt://localhost:7687',
+                neo4j_user='neo4j',
+                neo4j_password='test',
+            )
+
+        # 2 out of 3 edges need normalization
+        assert changed == 2, f'Expected 2 edges to normalize, got {changed}'
+        # UPDATE must NOT be called in dry-run mode
+        update_calls = [
+            c for c in mock_session.run.call_args_list
+            if 'UPDATE' in str(c) or 'SET' in str(c).upper()
+        ]
+        assert len(update_calls) == 0, 'Dry-run must not write any updates'

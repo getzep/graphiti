@@ -65,16 +65,21 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Cypher helpers
 # ---------------------------------------------------------------------------
+#
+# EntityEdge objects are persisted as Neo4j *relationships* with the type
+# RELATES_TO between two Entity nodes — NOT as standalone ``Entityedge``
+# nodes.  The incorrect label query would silently return 0 rows and be a
+# no-op on every run.
 
 _SCAN_QUERY = """
-MATCH (e:Entityedge)
+MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
 WHERE $group_id IS NULL OR e.group_id = $group_id
 RETURN e.uuid AS uuid, e.name AS name
 """
 
 _UPDATE_QUERY = """
 UNWIND $updates AS u
-MATCH (e:Entityedge {uuid: u.uuid})
+MATCH (n:Entity)-[e:RELATES_TO {uuid: u.uuid}]->(m:Entity)
 SET e.name = u.new_name
 """
 
