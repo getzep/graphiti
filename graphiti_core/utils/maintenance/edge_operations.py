@@ -219,6 +219,17 @@ def _should_filter_constrained_edge(
     return False  # specific off-ontology → allow (limited)
 
 
+# ---------------------------------------------------------------------------
+# Public API alias (no leading underscore) for use by external maintenance
+# scripts and downstream tooling.
+# ---------------------------------------------------------------------------
+
+#: Public alias for :func:`_normalize_relation_type`.
+#: Normalizes a relation type string to canonical SCREAMING_SNAKE_CASE.
+#: Safe to call from offline maintenance scripts and ingestion helpers.
+normalize_relation_type = _normalize_relation_type
+
+
 def build_episodic_edges(
     entity_nodes: list[EntityNode],
     episode_uuid: str,
@@ -353,9 +364,27 @@ async def extract_edges(
         edges_data.append(edge_data)
 
     # -----------------------------------------------------------------------
+    # Universal SCREAMING_SNAKE_CASE normalization (all extraction modes)
+    # -----------------------------------------------------------------------
+    # Regardless of mode, always normalize edge relation_type to canonical
+    # SCREAMING_SNAKE_CASE before storing.  This is a cosmetic-only transform:
+    # it collapses whitespace/hyphens/punctuation into underscores and
+    # uppercases — it never drops an edge or changes its semantic meaning.
+    # Downstream dedup and search benefit from a consistent representation.
+    for edge_data in edges_data:
+        norm = _normalize_relation_type(edge_data.relation_type)
+        if norm != edge_data.relation_type:
+            logger.debug(
+                'edge_norm: normalized relation_type %r → %r',
+                edge_data.relation_type,
+                norm,
+            )
+            edge_data.relation_type = norm
+
+    # -----------------------------------------------------------------------
     # constrained_soft post-extraction enforcement
     # -----------------------------------------------------------------------
-    # After entity-name validation, apply two enforcement passes:
+    # After universal normalization, apply constrained_soft-specific passes:
     #   1. Canonicalize near-miss relation types to ontology names.
     #   2. Filter generic off-ontology noise.
     # This is intentionally done in code (not prompt) to avoid conflicting
