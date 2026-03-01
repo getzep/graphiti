@@ -468,7 +468,7 @@ class AnthropicClient(LLMClient):
                         f'cache_write={total_cache_creation_tokens}, '
                         f'cache_read={total_cache_read_tokens}'
                     )
-                    logger.info(
+                    logger.debug(
                         f'LLM call [{prompt_name or "unknown"}] model={resolved_model} '
                         f'in={total_input_tokens} out={total_output_tokens} '
                         f'{cache_status}{retries_note}'

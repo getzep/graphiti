@@ -69,11 +69,9 @@ class PromptTokenUsage:
     @property
     def cache_hit_rate(self) -> float:
         """Fraction of input tokens served from cache vs total input."""
-        total_input = (
-            self.total_input_tokens
-            + self.total_cache_creation_tokens
-            + self.total_cache_read_tokens
-        )
+        # cache_creation_input_tokens is a subset of input_tokens on cache-write calls,
+        # so only count input_tokens + cache_read_tokens to avoid double-counting.
+        total_input = self.total_input_tokens + self.total_cache_read_tokens
         if total_input == 0:
             return 0.0
         return self.total_cache_read_tokens / total_input
@@ -226,11 +224,7 @@ class TokenUsageTracker:
         total_calls = sum(u.call_count for u in usage.values())
         print('-' * 110)
         if has_cache:
-            total_all_input = (
-                total.input_tokens
-                + total.cache_creation_input_tokens
-                + total.cache_read_input_tokens
-            )
+            total_all_input = total.input_tokens + total.cache_read_input_tokens
             overall_hit_rate = (
                 total.cache_read_input_tokens / total_all_input if total_all_input > 0 else 0
             )
