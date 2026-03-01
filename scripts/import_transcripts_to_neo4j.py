@@ -344,23 +344,29 @@ def _embedding_config() -> tuple[str, int]:
 
 
 def _validated_embedding_base_url() -> str:
-    base = (
-        os.environ.get('EMBEDDER_BASE_URL')
-        or os.environ.get('OPENAI_BASE_URL')
-        or ''
-    ).strip()
-    if not base:
-        base = 'http://localhost:11434/v1'
-
-    parsed = urllib.parse.urlparse(base)
-    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-        raise RuntimeError('embedding base URL must be absolute http(s) URL')
-    if parsed.username or parsed.password:
-        raise RuntimeError('embedding base URL must not include credentials')
-    if parsed.query or parsed.fragment:
-        raise RuntimeError('embedding base URL must not include query/fragment')
-
-    return base.rstrip('/')
+    """Resolve embedding base URL (delegates to shared env_utils)."""
+    try:
+        from graphiti_core.utils.env_utils import (
+            EndpointResolutionError,
+            resolve_embedder_base_url,
+        )
+        return resolve_embedder_base_url()
+    except EndpointResolutionError as exc:
+        raise RuntimeError(str(exc)) from exc
+    except ImportError:
+        # Fallback: standalone resolution if graphiti_core not on PYTHONPATH
+        import urllib.parse as _up
+        base = (
+            os.environ.get('EMBEDDER_BASE_URL')
+            or os.environ.get('OPENAI_BASE_URL')
+            or 'http://localhost:11434/v1'
+        ).strip()
+        parsed = _up.urlparse(base)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise RuntimeError('embedding base URL must be absolute http(s) URL')
+        if parsed.username or parsed.password:
+            raise RuntimeError('embedding base URL must not include credentials')
+        return base.rstrip('/')
 
 
 def embed_text(content: str, *, embedding_model: str, embedding_dim: int) -> list[float]:
