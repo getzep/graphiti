@@ -453,7 +453,10 @@ def check_recall_gate(
     Does NOT raise — callers decide whether to sys.exit(1) based on ``passed``.
     """
     agg = results.get('bicameral_aggregate', {})
-    score: float = agg.get('mean_combined_recall_at_k', 0.0)
+    try:
+        score: float = float(agg.get('mean_combined_recall_at_k', 0.0))
+    except (TypeError, ValueError):
+        score = 0.0
 
     baseline_score: float | None = None
     delta: float | None = None
@@ -464,7 +467,15 @@ def check_recall_gate(
             try:
                 baseline_data = json.loads(bp.read_text(encoding='utf-8'))
                 baseline_agg = baseline_data.get('bicameral_aggregate', {})
-                baseline_score = baseline_agg.get('mean_combined_recall_at_k')
+                raw_baseline = baseline_agg.get('mean_combined_recall_at_k')
+                if raw_baseline is not None:
+                    try:
+                        baseline_score = float(raw_baseline)
+                    except (TypeError, ValueError) as coerce_exc:
+                        print(
+                            f'[recall-gate] WARNING: malformed baseline score '
+                            f'{raw_baseline!r} — ignoring ({coerce_exc})'
+                        )
                 if baseline_score is not None:
                     delta = score - baseline_score
             except Exception as exc:
