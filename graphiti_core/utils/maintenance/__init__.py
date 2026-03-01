@@ -1,3 +1,4 @@
+from .closure import CLOSURE_EDGE_NAMES, ClosureResult, apply_closure_semantics
 from .edge_operations import (
     build_episodic_edges,
     extract_edges,
@@ -14,4 +15,8 @@ __all__ = [
     'retrieve_episodes',
     # Edge name normalization — available for offline maintenance scripts
     'normalize_relation_type',
+    # Closure semantics (RESOLVES / SUPERSEDES auto-invalidation)
+    'apply_closure_semantics',
+    'ClosureResult',
+    'CLOSURE_EDGE_NAMES',
 ]
