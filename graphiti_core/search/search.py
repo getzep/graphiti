@@ -110,8 +110,11 @@ async def search(
     else:
         search_vector = [0.0] * EMBEDDING_DIM
 
-    # if group_ids is empty, set it to None
-    group_ids = group_ids if group_ids and group_ids != [''] else None
+    # Fail-closed: group_ids=[] means no groups are accessible — return empty immediately.
+    # group_ids=None means no group restriction (global/all records).
+    # Do NOT coerce [] -> None; that would silently grant access to all records.
+    if group_ids is not None and len(group_ids) == 0:
+        return SearchResults()
     (
         (edges, edge_reranker_scores),
         (nodes, node_reranker_scores),

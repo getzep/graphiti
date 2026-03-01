@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.run_retrieval_benchmark import (
     FIXTURE_QUOTAS,
+    check_recall_gate,
     compute_recall,
     validate_fixture,
 )
@@ -142,6 +143,91 @@ class TestOutputSchema(unittest.TestCase):
         # Just verify the constants exist
         for field in expected_fields:
             self.assertIsInstance(field, str)
+
+
+class TestCheckRecallGate(unittest.TestCase):
+    """Regression tests for check_recall_gate robustness (PR #118).
+
+    Verifies that string or malformed baseline_score values never raise and
+    that the function degrades gracefully (treats bad baseline as absent).
+    """
+
+    def _results(self, score: float) -> dict:
+        return {'bicameral_aggregate': {'mean_combined_recall_at_k': score}}
+
+    def _baseline_file(self, tmp_path: Path, score) -> Path:
+        p = tmp_path / 'baseline.json'
+        p.write_text(
+            json.dumps({'bicameral_aggregate': {'mean_combined_recall_at_k': score}}),
+            encoding='utf-8',
+        )
+        return p
+
+    def test_numeric_float_baseline_passes_through(self):
+        """Normal float baseline: delta computed correctly, no crash."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bp = self._baseline_file(Path(tmp), 0.70)
+            gate = check_recall_gate(self._results(0.75), 0.60, baseline_path=str(bp))
+        self.assertTrue(gate['passed'])
+        self.assertAlmostEqual(gate['baseline_score'], 0.70, places=4)
+        self.assertAlmostEqual(gate['delta'], 0.05, places=4)
+        self.assertIn('baseline=0.7000', gate['details'])
+
+    def test_string_baseline_score_does_not_raise(self):
+        """String value in baseline JSON must not raise — degrades to no-baseline."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bp = self._baseline_file(Path(tmp), '0.70')  # string, not float
+            gate = check_recall_gate(self._results(0.75), 0.60, baseline_path=str(bp))
+        # Should not raise; baseline treated as absent (coerced to float OK)
+        self.assertIsNotNone(gate)
+        self.assertIn('passed', gate)
+
+    def test_malformed_baseline_score_does_not_raise(self):
+        """Totally malformed baseline score must not raise — degrades gracefully."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bp = self._baseline_file(Path(tmp), 'not-a-number')
+            gate = check_recall_gate(self._results(0.75), 0.60, baseline_path=str(bp))
+        # Must not raise; baseline_score should be None, delta should be None
+        self.assertIsNone(gate['baseline_score'])
+        self.assertIsNone(gate['delta'])
+        # Gate still evaluates against threshold
+        self.assertTrue(gate['passed'])
+
+    def test_none_baseline_score_does_not_raise(self):
+        """None value for baseline score in JSON — degrades gracefully."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bp = self._baseline_file(Path(tmp), None)
+            gate = check_recall_gate(self._results(0.75), 0.60, baseline_path=str(bp))
+        self.assertIsNone(gate['baseline_score'])
+        self.assertIsNone(gate['delta'])
+        self.assertTrue(gate['passed'])
+
+    def test_score_below_threshold_fails_with_no_baseline(self):
+        """Score below threshold fails even without a baseline file."""
+        gate = check_recall_gate(self._results(0.55), 0.70)
+        self.assertFalse(gate['passed'])
+        self.assertIn('FAIL', gate['details'])
+
+    def test_regression_vs_float_baseline_fails_gate(self):
+        """Score that regresses vs float baseline marks gate as failed."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bp = self._baseline_file(Path(tmp), 0.80)
+            gate = check_recall_gate(self._results(0.75), 0.60, baseline_path=str(bp))
+        self.assertFalse(gate['passed'])
+        self.assertLess(gate['delta'], 0)
+
+    def test_malformed_score_field_in_results_does_not_raise(self):
+        """Malformed score in the results dict degrades to 0.0, does not raise."""
+        results = {'bicameral_aggregate': {'mean_combined_recall_at_k': 'bad'}}
+        gate = check_recall_gate(results, 0.60)
+        self.assertIsNotNone(gate)
+        self.assertAlmostEqual(gate['score'], 0.0)
+        self.assertFalse(gate['passed'])
 
 
 if __name__ == '__main__':
