@@ -100,7 +100,9 @@ When a fact changes (e.g., "Yuan is 25" → "Yuan is 26"), Brain 2 records this 
 
 The old fact is not deleted. It's marked as superseded, with a timestamp and a pointer to what replaced it. You can audit the entire history. You can revert if needed.
 
-Brain 1 doesn't handle this. If it tried, the LLM would have to reason about it with context-limited prompts. Brain 2 handles it cleanly.
+Brain 1 now supports a **closure semantics pass** (`scripts/apply_closure_semantics.py`) that handles this at the graph level: when `RESOLVES` or `SUPERSEDES` edges exist, the target entity's active facts are automatically invalidated at the closure event's timestamp — no LLM reasoning required. This is idempotent, runs offline, and can be scheduled as a maintenance job. It doesn't replace Brain 2's governance; it ensures Brain 1's graph state is kept consistent with the semantic edges already present.
+
+Brain 2 handles the *policy* decisions cleanly. The closure pass handles the *graph housekeeping* deterministically.
 
 ---
 

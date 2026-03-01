@@ -68,7 +68,13 @@ export NEO4J_USER="neo4j"
 export NEO4J_PASSWORD="<password>"
 # Optional: NEO4J_DATABASE (defaults to "neo4j")
 
+# LLM endpoint (Phase C endpoint split — see graphiti_core/utils/env_utils.py)
+# Priority: OM_COMPRESSOR_LLM_BASE_URL > LLM_BASE_URL > OPENAI_BASE_URL > https://api.openai.com/v1
+export LLM_BASE_URL="https://api.openai.com/v1"
+# Optional per-script override: OM_COMPRESSOR_LLM_BASE_URL
+
 # Embedding endpoint (defaults to Ollama at localhost:11434/v1)
+# Priority: EMBEDDER_BASE_URL > OPENAI_BASE_URL > http://localhost:11434/v1
 export EMBEDDER_BASE_URL="http://localhost:11434/v1"
 # OM_EMBEDDING_MODEL default: embeddinggemma
 # OM_EMBEDDING_DIM   default: 768
@@ -76,6 +82,12 @@ export EMBEDDER_BASE_URL="http://localhost:11434/v1"
 # Ontology config (default: mcp_server/config/extraction_ontologies.yaml)
 # Override: OM_ONTOLOGY_CONFIG_PATH
 ```
+
+> **Endpoint split (Phase C):** If you route LLM calls through OpenRouter
+> (`OPENAI_BASE_URL=https://openrouter.ai/api/v1`), set `EMBEDDER_BASE_URL`
+> separately to prevent embeddings from routing to OpenRouter too. The env_utils
+> module in `graphiti_core/utils/env_utils.py` centralises this resolution with
+> SSRF hardening. See `.env.example` for the full priority chain.
 
 Dev environments auto-load credentials from `~/.clawdbot/credentials/neo4j.env`.
 In production/staging, set `NEO4J_PASSWORD` directly; the file fallback is disabled unless
@@ -832,13 +844,101 @@ excluded from the query.
 
 ---
 
+## 12. Phase C Graph Maintenance Tools
+
+These scripts shipped as part of Phase C (Slices 1–4). They are standalone
+offline operations — safe to run at any time alongside the main OM pipeline.
+
+### Edge normalization (Slice 1)
+
+Normalises all edge `name` / `relation_type` properties to canonical
+SCREAMING\_SNAKE\_CASE.  Prevents case-variant collisions in dedup and search.
+
+```bash
+# Preview (default — no writes)
+python scripts/normalize_edge_names.py
+
+# Apply for all lanes
+python scripts/normalize_edge_names.py --apply
+
+# Apply for a specific lane
+python scripts/normalize_edge_names.py --apply --group-id s1_sessions_main
+```
+
+The normalizer is also available as a library function for inline use:
+`from graphiti_core.utils.maintenance import normalize_relation_type`.
+
+### Closure semantics pass (Slice 2)
+
+When RESOLVES or SUPERSEDES edges exist in the graph, this pass marks the
+*target* entity's currently-active facts (`invalid_at IS NULL`) as invalid
+at the closure event's timestamp.  No LLM calls.  Idempotent.
+
+```bash
+# Preview (default — no writes)
+python scripts/apply_closure_semantics.py
+
+# Apply for a specific lane
+python scripts/apply_closure_semantics.py --apply --group-id s1_sessions_main
+
+# Apply for all lanes
+python scripts/apply_closure_semantics.py --apply
+```
+
+Module: `graphiti_core.utils.maintenance.closure` — exports
+`apply_closure_semantics()`, `ClosureResult`, `CLOSURE_EDGE_NAMES`.
+
+### Contamination sentinel (Slice 4)
+
+Read-only cross-lane integrity check.  Detects multi-group nodes and
+episodic/edge group mismatches.  Useful as a nightly CI job.
+
+```bash
+# Human-readable output
+python scripts/contamination_sentinel.py
+
+# JSON for CI (exit 0 = clean, 1 = contamination)
+python scripts/contamination_sentinel.py --json
+
+# Check specific lane pair
+python scripts/contamination_sentinel.py \
+  --source-group s1_sessions_main \
+  --expect-clean-in s1_inspiration_short_form
+```
+
+See also [Scope Policy](../scope-policy.md) §4 for contamination prevention
+guidelines.
+
+### Recall gate (Slice 4)
+
+Built into `scripts/run_retrieval_benchmark.py`.  Use `--recall-gate` to set
+an absolute floor and `--recall-baseline` for regression detection:
+
+```bash
+python3 scripts/run_retrieval_benchmark.py \
+  --fixture tests/fixtures/retrieval_benchmark_queries.json \
+  --output state/bench.json \
+  --recall-gate 0.75 \
+  --recall-baseline state/bench-baseline.json
+```
+
+Exit 0 = pass; exit 1 = recall below threshold or regressed vs baseline.
+See the [Sessions Ingestion runbook](sessions-ingestion.md#recall-gate-ci-quality-gate)
+for full details.
+
+---
+
 ## See Also
 
 - [Custom Ontologies](../custom-ontologies.md) — OM lane ontology config (`s1_observational_memory`)
 - [Dual-Brain Architecture](../DUAL-BRAIN-ARCHITECTURE.md) — OM as the Dual Brain synthesis/control layer
+- [Scope Policy](../scope-policy.md) — ingestion scope freeze, toolResult allowlist, contamination rules
 - [Memory Runtime Wiring](../MEMORY-RUNTIME-WIRING.md) — fast-write integration paths
 - `scripts/om_fast_write.py --help`
 - `scripts/om_compressor.py --help`
 - `scripts/om_convergence.py --help` (run with `PYTHONPATH=.`)
 - `scripts/om_dedupe.py --help`
 - `scripts/om_backfill_timestamps.py --help`
+- `scripts/normalize_edge_names.py --help`
+- `scripts/apply_closure_semantics.py --help`
+- `scripts/contamination_sentinel.py --help`

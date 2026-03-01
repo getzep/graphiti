@@ -125,9 +125,10 @@ so messages on only one path are retained until the other path also completes.
 
 | Var | Default | Description |
 |---|---|---|
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | LLM chat-completions endpoint (Phase C endpoint split). Priority: `OM_COMPRESSOR_LLM_BASE_URL` > `LLM_BASE_URL` > `OPENAI_BASE_URL` > default. |
+| `EMBEDDER_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible embedding endpoint. Priority: `EMBEDDER_BASE_URL` > `OPENAI_BASE_URL` > default. |
 | `OM_EMBEDDING_MODEL` | `embeddinggemma` | Embedding model |
 | `OM_EMBEDDING_DIM` | `768` | Expected vector dimension |
-| `EMBEDDER_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible embedding endpoint |
 | `RUNTIME_REPO_ROOT` | (none) | If set, fast-write updates the state file automatically |
 
 ---
