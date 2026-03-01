@@ -452,8 +452,7 @@ async def edge_similarity_search(
             "'RELATES_TO', 'fact_embedding', $over_fetch_limit, vecf32($search_vector))"
             """
             YIELD relationship AS e, score
-            MATCH (n:Entity)-[e]->(m:Entity)
-            WITH DISTINCT e, n, m, score
+            WITH e, score, startNode(e) AS n, endNode(e) AS m
             """
             + post_filter
             + """

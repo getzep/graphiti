@@ -23,7 +23,7 @@ from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
 from graphiti_core.driver.operations.graph_utils import Neighbor, label_propagation
 from graphiti_core.driver.query_executor import QueryExecutor
 from graphiti_core.driver.record_parsers import community_node_from_record, entity_node_from_record
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices, get_vector_indices
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     get_entity_node_return_query,
@@ -63,7 +63,8 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
 
         range_indices = get_range_indices(GraphProvider.FALKORDB)
         fulltext_indices = get_fulltext_indices(GraphProvider.FALKORDB)
-        index_queries = range_indices + fulltext_indices
+        vector_indices = get_vector_indices(GraphProvider.FALKORDB)
+        index_queries = range_indices + fulltext_indices + vector_indices
 
         # FalkorDB executes indices sequentially (catches "already indexed" in execute_query)
         for query in index_queries:
@@ -100,6 +101,19 @@ class FalkorGraphMaintenanceOperations(GraphMaintenanceOperations):
                         drop_tasks.append(
                             executor.execute_query(
                                 f'DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field_name})'
+                            )
+                        )
+                elif 'VECTOR' in index_type:
+                    if entity_type == 'NODE':
+                        drop_tasks.append(
+                            executor.execute_query(
+                                f'DROP VECTOR INDEX FOR (n:{label}) ON (n.{field_name})'
+                            )
+                        )
+                    elif entity_type == 'RELATIONSHIP':
+                        drop_tasks.append(
+                            executor.execute_query(
+                                f'DROP VECTOR INDEX FOR ()-[e:{label}]-() ON (e.{field_name})'
                             )
                         )
 
