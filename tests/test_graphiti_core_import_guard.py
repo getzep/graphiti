@@ -21,10 +21,12 @@ import pytest
 
 def _reload_graphiti_core() -> ModuleType:
     """Reload graphiti_core from scratch (clearing cached module)."""
-    # Remove from cache so the try/except branch re-executes
+    # Remove all graphiti_core modules from cache so package attribute wiring
+    # (e.g., graphiti_core.utils, graphiti_core.search) is rebuilt cleanly.
     for key in list(sys.modules):
-        if key == 'graphiti_core' or key.startswith('graphiti_core.graphiti'):
+        if key == 'graphiti_core' or key.startswith('graphiti_core.'):
             del sys.modules[key]
+    importlib.invalidate_caches()
     return importlib.import_module('graphiti_core')
 
 

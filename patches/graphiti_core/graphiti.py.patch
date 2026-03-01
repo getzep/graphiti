@@ -1,16 +1,123 @@
 diff --git a/graphiti_core/graphiti.py b/graphiti_core/graphiti.py
-index 619607a..dad8007 100644
+index 619607a..afd4f88 100644
 --- a/graphiti_core/graphiti.py
 +++ b/graphiti_core/graphiti.py
-@@ -17,6 +17,7 @@ limitations under the License.
+@@ -14,9 +14,14 @@ See the License for the specific language governing permissions and
+ limitations under the License.
+ """
+ 
++import json
  import logging
- from datetime import datetime
+-from datetime import datetime
++import os
++import re
++from datetime import datetime, timezone
++from pathlib import Path
  from time import time
-+from typing import Literal
++from typing import Any, Literal
  from uuid import uuid4
  
  from dotenv import load_dotenv
-@@ -430,10 +431,18 @@ class Graphiti:
+@@ -108,6 +113,98 @@ logger = logging.getLogger(__name__)
+ load_dotenv()
+ 
+ 
++PHASE3C_FILTER_LANES = {
++    's1_writing_samples',
++    's1_inspiration_short_form',
++    's1_inspiration_long_form',
++}
++
++PHASE3C_ANCHOR_ENTITY_TYPES: dict[str, set[str]] = {
++    's1_writing_samples': {'WritingSample'},
++    's1_inspiration_short_form': {'ShortFormPiece'},
++    's1_inspiration_long_form': {'LongFormPiece'},
++}
++
++PHASE3C_REQUIRED_FIELDS = (
++    'evidence_span',
++    'craft_type',
++    'pattern_template',
++    'when_to_use',
++)
++
++PHASE3C_META_PATTERNS: tuple[re.Pattern[str], ...] = (
++    re.compile(r'\bemploys rhetorical strategies?\b', re.IGNORECASE),
++    re.compile(r'\bengage readers\b', re.IGNORECASE),
++    re.compile(r"\bshows? (the )?author(?:'|’)s voice and style\b", re.IGNORECASE),
++    re.compile(r'\bdemonstrates a mix of formal and casual tones\b', re.IGNORECASE),
++    re.compile(r'\bwriting (sample|piece) (suggests|demonstrates|shows)\b', re.IGNORECASE),
++    re.compile(r'\b(style|tone|voice)\s+(is|appears|seems)\s+\w+$', re.IGNORECASE),
++)
++
++PHASE3C_DROPPED_LOG_DIR = Path(__file__).resolve().parents[1] / 'reports' / 'canonical-truth'
++PHASE3C_DROPPED_LOG_DEFAULT = (
++    PHASE3C_DROPPED_LOG_DIR
++    / f"phase3c-dropped-candidates-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.jsonl"
++)
++
++
++def _phase3c_normalize_text(value: str) -> str:
++    return re.sub(r'\s+', ' ', value or '').strip()
++
++
++def _phase3c_source_chunk_key(source_description: str) -> str:
++    if not source_description:
++        return ''
++    match = re.search(r'session chunk:\s*([^\(]+)', source_description)
++    if match:
++        return match.group(1).strip()
++    return ''
++
++
++def _phase3c_is_meta_or_tautological(text: str) -> bool:
++    normalized = _phase3c_normalize_text(text)
++    if not normalized:
++        return True
++    if len(normalized.split()) < 4:
++        return True
++    return any(pattern.search(normalized) for pattern in PHASE3C_META_PATTERNS)
++
++
++def _phase3c_evidence_supported(evidence_span: str, episode_text: str) -> bool:
++    evidence = _phase3c_normalize_text(evidence_span).strip('"\'`')
++    if len(evidence) < 8:
++        return False
++
++    haystack = (episode_text or '').lower()
++    if not haystack:
++        return False
++
++    if evidence.lower() in haystack:
++        return True
++
++    evidence_tokens = [t for t in re.findall(r'[a-z0-9]+', evidence.lower()) if len(t) >= 3]
++    if not evidence_tokens:
++        return False
++
++    haystack_tokens = set(re.findall(r'[a-z0-9]+', haystack))
++    overlap = sum(1 for token in evidence_tokens if token in haystack_tokens)
++    return overlap / max(1, len(evidence_tokens)) >= 0.6
++
++
++def _phase3c_candidate_text_from_node(node: EntityNode) -> str:
++    parts: list[str] = []
++    if node.name:
++        parts.append(str(node.name))
++    if node.summary:
++        parts.append(str(node.summary))
++    if isinstance(node.attributes, dict):
++        for key in PHASE3C_REQUIRED_FIELDS:
++            value = str(node.attributes.get(key, '')).strip()
++            if value:
++                parts.append(f'{key}: {value}')
++    return ' | '.join(_phase3c_normalize_text(p) for p in parts if _phase3c_normalize_text(p))
++
++
+ class AddEpisodeResults(BaseModel):
+     episode: EpisodicNode
+     episodic_edges: list[EpisodicEdge]
+@@ -430,10 +527,18 @@ class Graphiti:
          previous_episodes: list[EpisodicNode],
          entity_types: dict[str, type[BaseModel]] | None,
          excluded_entity_types: list[str] | None,
@@ -30,7 +137,7 @@ index 619607a..dad8007 100644
          )
  
          nodes, uuid_map, duplicates = await resolve_extracted_nodes(
-@@ -457,16 +466,15 @@ class Graphiti:
+@@ -457,16 +562,15 @@ class Graphiti:
          nodes: list[EntityNode],
          uuid_map: dict[str, str],
          custom_extraction_instructions: str | None = None,
@@ -50,7 +157,7 @@ index 619607a..dad8007 100644
          """
          extracted_edges = await extract_edges(
              self.clients,
-@@ -477,6 +485,7 @@ class Graphiti:
+@@ -477,6 +581,7 @@ class Graphiti:
              group_id,
              edge_types,
              custom_extraction_instructions,
@@ -58,7 +165,7 @@ index 619607a..dad8007 100644
          )
  
          edges = resolve_edge_pointers(extracted_edges, uuid_map)
-@@ -488,6 +497,7 @@ class Graphiti:
+@@ -488,10 +593,185 @@ class Graphiti:
              nodes,
              edge_types or {},
              edge_type_map,
@@ -66,7 +173,185 @@ index 619607a..dad8007 100644
          )
  
          return resolved_edges, invalidated_edges, new_edges
-@@ -803,6 +813,8 @@ class Graphiti:
+ 
++    def _phase3c_drop_log_path(self) -> Path:
++        raw = os.environ.get('GRAPHITI_DROPPED_CANDIDATES_LOG', '').strip()
++        if raw:
++            return Path(raw).expanduser().resolve()
++        return PHASE3C_DROPPED_LOG_DEFAULT
++
++    def _phase3c_log_drop(
++        self,
++        *,
++        lane: str,
++        episode: EpisodicNode,
++        candidate_kind: str,
++        candidate_content: str,
++        reject_reasons: list[str],
++        source_node_uuid: str = '',
++        target_node_uuid: str = '',
++        candidate_meta: dict[str, Any] | None = None,
++    ) -> None:
++        if not reject_reasons:
++            return
++
++        payload: dict[str, Any] = {
++            'timestamp': datetime.now(timezone.utc).isoformat(),
++            'lane': lane,
++            'candidate_kind': candidate_kind,
++            'candidate_content': _phase3c_normalize_text(candidate_content),
++            'reject_reasons': sorted(set(reject_reasons)),
++            'episode_uuid': str(episode.uuid),
++            'episode_name': str(episode.name),
++            'source_description': str(episode.source_description or ''),
++            'chunk_key': _phase3c_source_chunk_key(str(episode.source_description or '')),
++            'source_node_uuid': source_node_uuid,
++            'target_node_uuid': target_node_uuid,
++        }
++        if candidate_meta:
++            payload['candidate_meta'] = candidate_meta
++
++        path = self._phase3c_drop_log_path()
++        try:
++            path.parent.mkdir(parents=True, exist_ok=True)
++            with path.open('a', encoding='utf-8') as handle:
++                handle.write(json.dumps(payload, ensure_ascii=False) + '\n')
++        except Exception as exc:
++            logger.warning('Failed to write Phase 3C dropped-candidate log: %s', exc)
++
++    def _phase3c_filter_extracted_nodes(
++        self,
++        *,
++        group_id: str,
++        episode: EpisodicNode,
++        extracted_nodes: list[EntityNode],
++    ) -> list[EntityNode]:
++        """Drop obvious meta/tautological node candidates pre-resolution."""
++        if group_id not in PHASE3C_FILTER_LANES:
++            return extracted_nodes
++
++        kept: list[EntityNode] = []
++        for node in extracted_nodes:
++            candidate_text = _phase3c_candidate_text_from_node(node)
++            reasons: list[str] = []
++            if _phase3c_is_meta_or_tautological(candidate_text):
++                reasons.append('meta_or_tautological')
++
++            if reasons:
++                self._phase3c_log_drop(
++                    lane=group_id,
++                    episode=episode,
++                    candidate_kind='entity_pre_resolve',
++                    candidate_content=candidate_text,
++                    reject_reasons=reasons,
++                    candidate_meta={
++                        'labels': list(node.labels or []),
++                        'name': str(node.name),
++                    },
++                )
++                continue
++
++            kept.append(node)
++
++        return kept
++
++    def _phase3c_filter_graph_write_candidates(
++        self,
++        *,
++        group_id: str,
++        episode: EpisodicNode,
++        nodes: list[EntityNode],
++        entity_edges: list[EntityEdge],
++        invalidated_edges: list[EntityEdge],
++    ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge]]:
++        """Hard gate craft/evidence quality before graph write (3 lanes only)."""
++        if group_id not in PHASE3C_FILTER_LANES:
++            return nodes, entity_edges, invalidated_edges
++
++        anchor_types = PHASE3C_ANCHOR_ENTITY_TYPES.get(group_id, set())
++        kept_nodes: list[EntityNode] = []
++        dropped_node_ids: set[str] = set()
++
++        for node in nodes:
++            labels = {label for label in (node.labels or []) if label != 'Entity'}
++            primary_label = next(iter(labels), '')
++            candidate_text = _phase3c_candidate_text_from_node(node)
++            reasons: list[str] = []
++
++            if primary_label not in anchor_types:
++                attrs = node.attributes if isinstance(node.attributes, dict) else {}
++                for field_name in PHASE3C_REQUIRED_FIELDS:
++                    if not _phase3c_normalize_text(str(attrs.get(field_name, ''))):
++                        reasons.append(f'missing_{field_name}')
++
++                evidence_span = str(attrs.get('evidence_span', ''))
++                if not _phase3c_evidence_supported(evidence_span, episode.content or ''):
++                    reasons.append('weak_or_unverifiable_evidence_span')
++
++                if _phase3c_is_meta_or_tautological(candidate_text):
++                    reasons.append('meta_or_tautological')
++
++            if reasons:
++                dropped_node_ids.add(str(node.uuid))
++                self._phase3c_log_drop(
++                    lane=group_id,
++                    episode=episode,
++                    candidate_kind='entity',
++                    candidate_content=candidate_text,
++                    reject_reasons=reasons,
++                    source_node_uuid=str(node.uuid),
++                    candidate_meta={
++                        'labels': sorted(labels),
++                        'name': str(node.name),
++                        'summary': str(node.summary),
++                        'attributes': node.attributes if isinstance(node.attributes, dict) else {},
++                    },
++                )
++                continue
++
++            kept_nodes.append(node)
++
++        def _filter_edges(edges: list[EntityEdge], *, candidate_kind: str) -> list[EntityEdge]:
++            kept_edges: list[EntityEdge] = []
++            for edge in edges:
++                fact = _phase3c_normalize_text(str(edge.fact or ''))
++                reasons: list[str] = []
++
++                if str(edge.source_node_uuid) in dropped_node_ids or str(edge.target_node_uuid) in dropped_node_ids:
++                    reasons.append('references_dropped_node')
++                if not fact:
++                    reasons.append('missing_fact')
++                elif _phase3c_is_meta_or_tautological(fact):
++                    reasons.append('meta_or_tautological')
++
++                if reasons:
++                    self._phase3c_log_drop(
++                        lane=group_id,
++                        episode=episode,
++                        candidate_kind=candidate_kind,
++                        candidate_content=fact,
++                        reject_reasons=reasons,
++                        source_node_uuid=str(edge.source_node_uuid),
++                        target_node_uuid=str(edge.target_node_uuid),
++                        candidate_meta={
++                            'edge_name': str(edge.name),
++                        },
++                    )
++                    continue
++
++                kept_edges.append(edge)
++
++            return kept_edges
++
++        kept_entity_edges = _filter_edges(entity_edges, candidate_kind='edge')
++        kept_invalidated_edges = _filter_edges(invalidated_edges, candidate_kind='invalidated_edge')
++
++        return kept_nodes, kept_entity_edges, kept_invalidated_edges
++
+     async def _process_episode_data(
+         self,
+         episode: EpisodicNode,
+@@ -803,6 +1083,8 @@ class Graphiti:
          custom_extraction_instructions: str | None = None,
          saga: str | SagaNode | None = None,
          saga_previous_episode_uuid: str | None = None,
@@ -75,7 +360,7 @@ index 619607a..dad8007 100644
      ) -> AddEpisodeResults:
          """
          Process an episode and update the graph.
-@@ -850,6 +862,21 @@ class Graphiti:
+@@ -850,6 +1132,21 @@ class Graphiti:
              query to find the most recent episode. Useful for efficiently adding multiple episodes
              to the same saga in sequence. The returned AddEpisodeResults.episode.uuid can be passed
              as this parameter for the next episode.
@@ -97,15 +382,20 @@ index 619607a..dad8007 100644
  
          Returns
          -------
-@@ -934,6 +961,7 @@ class Graphiti:
+@@ -934,6 +1231,12 @@ class Graphiti:
                      entity_types,
                      excluded_entity_types,
                      custom_extraction_instructions,
 +                    extraction_mode=extraction_mode,
++                )
++                extracted_nodes = self._phase3c_filter_extracted_nodes(
++                    group_id=group_id,
++                    episode=episode,
++                    extracted_nodes=extracted_nodes,
                  )
  
                  nodes, uuid_map, _ = await resolve_extracted_nodes(
-@@ -959,6 +987,8 @@ class Graphiti:
+@@ -959,6 +1262,8 @@ class Graphiti:
                      nodes,
                      uuid_map,
                      custom_extraction_instructions,
@@ -114,3 +404,56 @@ index 619607a..dad8007 100644
                  )
  
                  entity_edges = resolved_edges + invalidated_edges
+@@ -974,11 +1279,19 @@ class Graphiti:
+                     edges=new_edges,
+                 )
+ 
++                filtered_nodes, filtered_entity_edges, _ = self._phase3c_filter_graph_write_candidates(
++                    group_id=group_id,
++                    episode=episode,
++                    nodes=hydrated_nodes,
++                    entity_edges=entity_edges,
++                    invalidated_edges=[],
++                )
++
+                 # Process and save episode data (including saga association if provided)
+                 episodic_edges, episode = await self._process_episode_data(
+                     episode,
+-                    hydrated_nodes,
+-                    entity_edges,
++                    filtered_nodes,
++                    filtered_entity_edges,
+                     now,
+                     group_id,
+                     saga,
+@@ -992,7 +1305,7 @@ class Graphiti:
+                     communities, community_edges = await semaphore_gather(
+                         *[
+                             update_community(self.driver, self.llm_client, self.embedder, node)
+-                            for node in nodes
++                            for node in filtered_nodes
+                         ],
+                         max_coroutines=self.max_coroutines,
+                     )
+@@ -1006,8 +1319,8 @@ class Graphiti:
+                         'episode.source': source.value,
+                         'episode.reference_time': reference_time.isoformat(),
+                         'group_id': group_id,
+-                        'node.count': len(hydrated_nodes),
+-                        'edge.count': len(entity_edges),
++                        'node.count': len(filtered_nodes),
++                        'edge.count': len(filtered_entity_edges),
+                         'edge.invalidated_count': len(invalidated_edges),
+                         'previous_episodes.count': len(previous_episodes),
+                         'entity_types.count': len(entity_types) if entity_types else 0,
+@@ -1023,8 +1336,8 @@ class Graphiti:
+                 return AddEpisodeResults(
+                     episode=episode,
+                     episodic_edges=episodic_edges,
+-                    nodes=hydrated_nodes,
+-                    edges=entity_edges,
++                    nodes=filtered_nodes,
++                    edges=filtered_entity_edges,
+                     communities=communities,
+                     community_edges=community_edges,
+                 )

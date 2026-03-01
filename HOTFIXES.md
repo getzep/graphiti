@@ -60,6 +60,18 @@ Because the velocity of upstream `getzep/graphiti` is high, we track explicit pa
 - Patches: `patches/graphiti_core/prompts/*.patch`, `patches/graphiti_core/utils/maintenance/*.patch`,
   `patches/graphiti_core/graphiti.py.patch`
 
+### 5) Phase 3C Craft Candidate Filtering + Dropped-Candidate Logging
+- Purpose: Harden the three Phase 3C craft lanes by filtering low-signal/meta extraction candidates before graph write and emitting structured dropped-candidate logs for quality-gate diagnostics.
+- Files:
+  - `graphiti_core/graphiti.py`
+- Behavior:
+  - Scope-limited to `s1_writing_samples`, `s1_inspiration_short_form`, `s1_inspiration_long_form`
+  - Pre-resolution filter removes clearly meta/tautological node candidates
+  - Pre-write filter enforces required craft fields (`evidence_span`, `craft_type`, `pattern_template`, `when_to_use`) for non-anchor entities, evidence support checks against episode text, and drops meta/tautological facts
+  - Writes JSONL drop logs (default under `reports/canonical-truth/`) with reject reasons and source metadata
+- Rationale: Private overlay-only changes cannot persist core extraction behavior because runtime rebuild hard-resets to public `origin/main` before reapplying overlay. This behavior must live in public core to survive deterministic rebuild and unblock 3C extraction quality gates.
+- Notes: Log output path can be overridden with `GRAPHITI_DROPPED_CANDIDATES_LOG`.
+
 ## How to Sync Upstream
 
 To safely absorb upstream updates while keeping these hotfixes:
