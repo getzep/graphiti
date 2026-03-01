@@ -36,7 +36,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,9 +53,19 @@ DEFAULT_SAMPLE_LIMIT: int = 50
 
 # Nodes with *multiple* group_ids set are a red-flag; a node should belong to
 # one lane only (unless explicitly shared, e.g. a cross-lane entity merge).
+#
+# IMPORTANT: Do NOT use ``size(n.group_id) > 1`` here.  In Cypher, size() on a
+# STRING returns its character count, not element count, so any group_id string
+# longer than one character (e.g. "main") would be incorrectly flagged.
+#
+# Strategy: fetch all non-null group_id values (limited by $limit) and let
+# _is_multi_group_value() perform type-safe Python-side filtering.  This covers
+# both storage formats:
+#   • str with comma separator  → "group_a,group_b"
+#   • Neo4j native list property → ["group_a", "group_b"]
 _MULTI_GROUP_NODES_QUERY = """
 MATCH (n:Entity)
-WHERE size(n.group_id) > 1 OR (n.group_id IS NOT NULL AND n.group_id CONTAINS ',')
+WHERE n.group_id IS NOT NULL
 RETURN n.uuid AS uuid, n.name AS name, n.group_id AS group_id
 LIMIT $limit
 """
@@ -95,6 +105,32 @@ RETURN
     tgt.group_id AS tgt_group
 LIMIT $limit
 """
+
+
+# ---------------------------------------------------------------------------
+# Multi-group value detector (type-safe, unit-testable)
+# ---------------------------------------------------------------------------
+
+def _is_multi_group_value(value: Any) -> bool:
+    """Return True iff *value* encodes multiple group_ids.
+
+    Handles the two storage formats used in the graph:
+
+    * **Python list** (Neo4j native list property): multi-group iff ``len > 1``.
+      A single-element list ``["main"]`` is NOT flagged.
+    * **str**: multi-group iff contains a comma separator (e.g. ``"a,b"``).
+      A normal single group_id string such as ``"s1_sessions_main"`` is NOT
+      flagged regardless of its length.
+
+    Any other type (None, int, …) returns False so the caller's filter is
+    conservative — better to miss an exotic edge case than to spam false
+    positives.
+    """
+    if isinstance(value, list):
+        return len(value) > 1
+    if isinstance(value, str):
+        return ',' in value
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +194,16 @@ def run_sentinel(
 
     try:
         with driver.session() as session:
-            # 1. Multi-group nodes
+            # 1. Multi-group nodes — Python-side filter for type-safe detection.
+            #    The Cypher query returns all non-null group_id nodes (up to $limit).
+            #    _is_multi_group_value() distinguishes single normal strings from
+            #    comma-encoded or list-encoded multi-group values without relying on
+            #    size() which returns string character count, not element count.
             recs = session.run(_MULTI_GROUP_NODES_QUERY, limit=sample_limit)
-            result.multi_group_nodes = [dict(r) for r in recs]
+            result.multi_group_nodes = [
+                dict(r) for r in recs
+                if _is_multi_group_value(r.get('group_id'))
+            ]
 
             # 2. Episodic group mismatches
             recs = session.run(

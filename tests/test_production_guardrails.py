@@ -236,3 +236,107 @@ class TestBenchmarkGateCLIFlags:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         assert callable(mod.check_recall_gate)
+
+
+# ---------------------------------------------------------------------------
+# 4. Multi-group detector — _is_multi_group_value unit tests
+#    Verifies the fix for the broken size(n.group_id) > 1 Cypher predicate.
+# ---------------------------------------------------------------------------
+
+class TestIsMultiGroupValue:
+    """Direct unit tests for _is_multi_group_value.
+
+    These tests do NOT require a Neo4j connection; they exercise the
+    Python-side type-safe helper that replaced the broken Cypher size()
+    predicate.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import importlib.util
+        script_path = Path(__file__).parents[1] / 'scripts' / 'contamination_sentinel.py'
+        mod_name = '_contamination_sentinel_v2'
+        spec = importlib.util.spec_from_file_location(mod_name, script_path)
+        self.mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = self.mod
+        spec.loader.exec_module(self.mod)
+        self.fn = self.mod._is_multi_group_value
+
+    # ---- Single normal strings must NOT be flagged ----
+
+    def test_single_string_not_flagged(self):
+        """A plain group_id string must never be flagged as multi-group."""
+        assert self.fn('main') is False
+
+    def test_single_long_string_not_flagged(self):
+        """Long string group_ids (len >> 1) must NOT be flagged."""
+        assert self.fn('s1_sessions_main') is False
+
+    def test_single_letter_not_flagged(self):
+        assert self.fn('a') is False
+
+    def test_empty_string_not_flagged(self):
+        assert self.fn('') is False
+
+    def test_single_element_list_not_flagged(self):
+        """A one-element list encodes a single group, not multi-group."""
+        assert self.fn(['main']) is False
+
+    def test_empty_list_not_flagged(self):
+        assert self.fn([]) is False
+
+    # ---- Multi-group encodings MUST be flagged ----
+
+    def test_comma_string_flagged(self):
+        """Comma-separated string is multi-group."""
+        assert self.fn('group_a,group_b') is True
+
+    def test_comma_string_with_spaces_flagged(self):
+        """Comma with surrounding spaces still counts as multi-group."""
+        assert self.fn('group_a, group_b') is True
+
+    def test_two_element_list_flagged(self):
+        """A list with two elements is multi-group."""
+        assert self.fn(['group_a', 'group_b']) is True
+
+    def test_three_element_list_flagged(self):
+        assert self.fn(['g1', 'g2', 'g3']) is True
+
+    # ---- Edge / exotic types must not crash ----
+
+    def test_none_not_flagged(self):
+        assert self.fn(None) is False
+
+    def test_integer_not_flagged(self):
+        assert self.fn(42) is False
+
+    def test_bool_not_flagged(self):
+        assert self.fn(True) is False
+
+
+# ---------------------------------------------------------------------------
+# 5. _MULTI_GROUP_NODES_QUERY does not use size() on string (regression guard)
+# ---------------------------------------------------------------------------
+
+class TestMultiGroupQueryNoBrokenSizeCheck:
+    """Verify the sentinel Cypher query no longer contains the broken size() predicate."""
+
+    def test_query_does_not_use_size_on_group_id(self):
+        import importlib.util
+        script_path = Path(__file__).parents[1] / 'scripts' / 'contamination_sentinel.py'
+        mod_name = '_contamination_query_check'
+        spec = importlib.util.spec_from_file_location(mod_name, script_path)
+        mod = importlib.util.module_from_spec(spec)
+        # Must be registered BEFORE exec_module so @dataclass resolves cls.__module__
+        sys.modules[mod_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+        finally:
+            sys.modules.pop(mod_name, None)
+        query = mod._MULTI_GROUP_NODES_QUERY
+        # The broken pattern is size(n.group_id) > 1 without type discrimination.
+        # Verify it is absent.
+        assert 'size(n.group_id)' not in query, (
+            "_MULTI_GROUP_NODES_QUERY still uses size(n.group_id) which incorrectly "
+            "treats string length as element count, falsely flagging normal group_id strings."
+        )
