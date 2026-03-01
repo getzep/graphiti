@@ -434,6 +434,63 @@ def run_benchmark(args: argparse.Namespace) -> dict:
     return output
 
 
+def check_recall_gate(
+    results: dict,
+    threshold: float,
+    *,
+    baseline_path: str | None = None,
+) -> dict:
+    """Evaluate the recall non-regression gate.
+
+    Compares the current run's mean combined recall against:
+    1. A fixed ``threshold`` (absolute floor, e.g. 0.70).
+    2. A ``baseline_path`` JSON from a previous run (regression delta check).
+
+    Returns a dict with keys:
+      passed (bool), score (float), threshold (float),
+      baseline_score (float|None), delta (float|None), details (str)
+
+    Does NOT raise — callers decide whether to sys.exit(1) based on ``passed``.
+    """
+    agg = results.get('bicameral_aggregate', {})
+    score: float = agg.get('mean_combined_recall_at_k', 0.0)
+
+    baseline_score: float | None = None
+    delta: float | None = None
+
+    if baseline_path:
+        bp = Path(baseline_path)
+        if bp.exists():
+            try:
+                baseline_data = json.loads(bp.read_text(encoding='utf-8'))
+                baseline_agg = baseline_data.get('bicameral_aggregate', {})
+                baseline_score = baseline_agg.get('mean_combined_recall_at_k')
+                if baseline_score is not None:
+                    delta = score - baseline_score
+            except Exception as exc:
+                print(f'[recall-gate] WARNING: could not read baseline {baseline_path}: {exc}')
+
+    passed = score >= threshold
+    if delta is not None and delta < 0:
+        # Regression: score dropped vs baseline — fail regardless of threshold
+        passed = False
+
+    details_parts = [f'score={score:.4f}', f'threshold={threshold:.4f}']
+    if baseline_score is not None:
+        details_parts.append(f'baseline={baseline_score:.4f}')
+        details_parts.append(f'delta={delta:+.4f}')
+    details_parts.append('PASS' if passed else 'FAIL')
+
+    return {
+        'passed': passed,
+        'score': score,
+        'threshold': threshold,
+        'baseline_score': baseline_score,
+        'delta': delta,
+        'details': ' | '.join(details_parts),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='Retrieval benchmark: Bicameral vs QMD'
@@ -452,6 +509,26 @@ def main():
         default='qmd query --json',
         help='QMD command template (default: qmd query --json)',
     )
+    # ── Recall non-regression gate (Phase C / Slice 4) ──────────────────────
+    ap.add_argument(
+        '--recall-gate',
+        type=float,
+        default=None,
+        metavar='THRESHOLD',
+        help=(
+            'Fail (exit 1) if mean combined recall@k falls below THRESHOLD '
+            '(0.0–1.0). Omit to skip the gate check.'
+        ),
+    )
+    ap.add_argument(
+        '--recall-baseline',
+        default=None,
+        metavar='PATH',
+        help=(
+            'Path to a previous benchmark JSON.  If provided, the gate also '
+            'fails if the current score regresses vs the baseline.'
+        ),
+    )
     args = ap.parse_args()
 
     results = run_benchmark(args)
@@ -469,6 +546,20 @@ def main():
     if 'qmd_aggregate' in results:
         qagg = results['qmd_aggregate']
         print(f'QMD mean recall@{args.top_k}: {qagg["mean_combined_recall_at_k"]}')
+
+    # Recall non-regression gate
+    if args.recall_gate is not None:
+        gate = check_recall_gate(
+            results,
+            threshold=args.recall_gate,
+            baseline_path=args.recall_baseline,
+        )
+        print(f'\n[recall-gate] {gate["details"]}')
+        if not gate['passed']:
+            print('[recall-gate] FAILED — exiting with code 1')
+            import sys
+            sys.exit(1)
+        print('[recall-gate] PASSED')
 
 
 if __name__ == '__main__':
