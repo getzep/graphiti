@@ -65,7 +65,7 @@ AnthropicModel = Literal[
     'claude-2.0',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-sonnet-4-5-latest'
 DEFAULT_SMALL_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 
 # Maximum output tokens for different Anthropic models
@@ -153,11 +153,14 @@ class AnthropicClient(LLMClient):
             self.client = client
 
     def _get_model_for_size(self, model_size: ModelSize) -> str:
-        """Get the appropriate model name based on the requested size."""
+        """Get the appropriate model name based on the requested size.
+
+        small -> self.small_model (default: Haiku)
+        medium -> self.model (default: Sonnet)
+        """
         if model_size == ModelSize.small:
             return self.small_model or DEFAULT_SMALL_MODEL
-        else:
-            return self.model or DEFAULT_MODEL
+        return self.model or DEFAULT_MODEL
 
     def _extract_json_from_text(self, text: str) -> dict[str, typing.Any]:
         """Extract JSON from text content.
