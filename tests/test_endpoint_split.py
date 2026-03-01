@@ -12,6 +12,8 @@ Validates that:
 9. All three scripts use the shared utility (import path check)
 10. Fallback paths in om_compressor.py enforce the same SSRF checks as the primary
     env_utils path (no silent weakening when graphiti_core is not importable)
+11. Fallback paths in om_fast_write.py reject query/fragment URLs (parity regression)
+12. Fallback paths in import_transcripts_to_neo4j.py reject query/fragment URLs (parity)
 """
 
 from __future__ import annotations
@@ -372,3 +374,164 @@ class TestFallbackPathSSRFParity:
             'https://api.openai.com/v1', 'LLM chat', allow_private=False
         )
         assert url == 'https://api.openai.com/v1'
+
+
+# ---------------------------------------------------------------------------
+# 7. Fallback parity — om_fast_write.py query/fragment rejection
+#    Exercises the ImportError fallback in _validated_embedding_base_url()
+#    by blocking graphiti_core in sys.modules for the duration of each call.
+# ---------------------------------------------------------------------------
+
+class TestOmFastWriteFallbackURLParity:
+    """om_fast_write.py fallback validator must reject query/fragment (parity with primary path).
+
+    Strategy: temporarily shadow graphiti_core.utils.env_utils in sys.modules to
+    force the ImportError path, then assert the expected RuntimeError is raised.
+    Private/loopback must still be ALLOWED (local Ollama use-case).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_module(self):
+        import importlib.util
+        import sys as _sys
+        from pathlib import Path
+        mod_name = '_om_fast_write_fallback_test'
+        spec = importlib.util.spec_from_file_location(
+            mod_name,
+            Path(__file__).parents[1] / 'scripts' / 'om_fast_write.py',
+        )
+        mod = importlib.util.module_from_spec(spec)
+        _sys.modules[mod_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+        finally:
+            _sys.modules.pop(mod_name, None)
+        self.mod = mod
+
+    def _call_fallback(self, url: str) -> str:
+        """Force the ImportError path and call _validated_embedding_base_url."""
+        import sys as _sys
+        blocked = {
+            'graphiti_core': None,
+            'graphiti_core.utils': None,
+            'graphiti_core.utils.env_utils': None,
+        }
+        with patch.dict(_sys.modules, blocked):
+            with patch.dict(os.environ, {'EMBEDDER_BASE_URL': url}, clear=False):
+                return self.mod._validated_embedding_base_url()
+
+    def test_query_string_rejected(self):
+        with pytest.raises(RuntimeError, match='query'):
+            self._call_fallback('https://embedder.example.com/v1?key=secret')
+
+    def test_fragment_rejected(self):
+        with pytest.raises(RuntimeError, match='fragment'):
+            self._call_fallback('https://embedder.example.com/v1#anchor')
+
+    def test_query_and_fragment_both_rejected(self):
+        # query is checked first; fragment alone must also fail separately
+        with pytest.raises(RuntimeError, match='query|fragment'):
+            self._call_fallback('https://embedder.example.com/v1?k=v#frag')
+
+    def test_link_local_blocked(self):
+        with pytest.raises(RuntimeError, match='link-local'):
+            self._call_fallback('http://169.254.169.254/v1')
+
+    def test_ipv6_link_local_blocked(self):
+        with pytest.raises(RuntimeError, match='link-local'):
+            self._call_fallback('http://[fe80::1]/v1')
+
+    def test_localhost_allowed(self):
+        """Embedder fallback must permit localhost (local Ollama)."""
+        url = self._call_fallback('http://localhost:11434/v1')
+        assert 'localhost' in url
+
+    def test_private_rfc1918_allowed(self):
+        """Embedder fallback must permit RFC-1918 (LAN Ollama)."""
+        url = self._call_fallback('http://192.168.1.10:11434/v1')
+        assert '192.168.1.10' in url
+
+    def test_credentials_rejected(self):
+        with pytest.raises(RuntimeError, match='credentials'):
+            self._call_fallback('https://user:pass@embedder.example.com/v1')
+
+    def test_valid_public_url_accepted(self):
+        url = self._call_fallback('https://embedder.example.com/v1')
+        assert url == 'https://embedder.example.com/v1'
+
+    def test_trailing_slash_stripped(self):
+        url = self._call_fallback('https://embedder.example.com/v1/')
+        assert not url.endswith('/')
+
+
+# ---------------------------------------------------------------------------
+# 8. Fallback parity — import_transcripts_to_neo4j.py query/fragment rejection
+# ---------------------------------------------------------------------------
+
+class TestImportTranscriptsFallbackURLParity:
+    """import_transcripts_to_neo4j.py fallback validator must reject query/fragment."""
+
+    @pytest.fixture(autouse=True)
+    def _load_module(self):
+        import importlib.util
+        import sys as _sys
+        from pathlib import Path
+        mod_name = '_import_transcripts_fallback_test'
+        spec = importlib.util.spec_from_file_location(
+            mod_name,
+            Path(__file__).parents[1] / 'scripts' / 'import_transcripts_to_neo4j.py',
+        )
+        mod = importlib.util.module_from_spec(spec)
+        _sys.modules[mod_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+        finally:
+            _sys.modules.pop(mod_name, None)
+        self.mod = mod
+
+    def _call_fallback(self, url: str) -> str:
+        import sys as _sys
+        blocked = {
+            'graphiti_core': None,
+            'graphiti_core.utils': None,
+            'graphiti_core.utils.env_utils': None,
+        }
+        with patch.dict(_sys.modules, blocked):
+            with patch.dict(os.environ, {'EMBEDDER_BASE_URL': url}, clear=False):
+                return self.mod._validated_embedding_base_url()
+
+    def test_query_string_rejected(self):
+        with pytest.raises(RuntimeError, match='query'):
+            self._call_fallback('https://embedder.example.com/v1?token=abc')
+
+    def test_fragment_rejected(self):
+        with pytest.raises(RuntimeError, match='fragment'):
+            self._call_fallback('https://embedder.example.com/v1#section')
+
+    def test_link_local_blocked(self):
+        with pytest.raises(RuntimeError, match='link-local'):
+            self._call_fallback('http://169.254.169.254/v1')
+
+    def test_ipv6_link_local_blocked(self):
+        with pytest.raises(RuntimeError, match='link-local'):
+            self._call_fallback('http://[fe80::1]/v1')
+
+    def test_localhost_allowed(self):
+        url = self._call_fallback('http://localhost:11434/v1')
+        assert 'localhost' in url
+
+    def test_private_rfc1918_allowed(self):
+        url = self._call_fallback('http://10.0.0.5:11434/v1')
+        assert '10.0.0.5' in url
+
+    def test_credentials_rejected(self):
+        with pytest.raises(RuntimeError, match='credentials'):
+            self._call_fallback('https://u:p@embedder.example.com/v1')
+
+    def test_valid_public_url_accepted(self):
+        url = self._call_fallback('https://embedder.example.com/v1')
+        assert url == 'https://embedder.example.com/v1'
+
+    def test_trailing_slash_stripped(self):
+        url = self._call_fallback('https://embedder.example.com/v1/')
+        assert not url.endswith('/')

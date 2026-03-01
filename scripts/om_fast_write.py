@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import sys
@@ -144,15 +145,34 @@ def _validated_embedding_base_url() -> str:
         except EndpointResolutionError as exc:
             raise RuntimeError(str(exc)) from exc
     except ImportError:
-        # Fallback: standalone resolution for minimal environments
+        # Fallback: standalone resolution for minimal environments.
+        # Enforces parity with resolve_embedder_base_url() security rules:
+        # - Must be absolute http(s) with a non-empty host.
+        # - No embedded credentials, query strings, or fragments.
+        # - Link-local (169.254.x.x / fe80::) always blocked (cloud-metadata SSRF vector).
+        # - Private/loopback addresses ALLOWED (local Ollama is a primary use-case).
         base = (os.environ.get("EMBEDDER_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or "").strip()
         if not base:
             base = "http://localhost:11434/v1"
         parsed = urllib.parse.urlparse(base)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise RuntimeError("embedding base URL must be absolute http(s) URL")
+            raise RuntimeError(f"embedding base URL must be an absolute http(s) URL, got: {base!r}")
         if parsed.username or parsed.password:
-            raise RuntimeError("embedding base URL must not include credentials")
+            raise RuntimeError(f"embedding base URL must not include embedded credentials: {base!r}")
+        if parsed.query:
+            raise RuntimeError(f"embedding base URL must not include a query string: {base!r}")
+        if parsed.fragment:
+            raise RuntimeError(f"embedding base URL must not include a fragment: {base!r}")
+        host = (urllib.parse.urlparse(f"//{parsed.netloc}").hostname or "").strip()
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_link_local:
+                raise RuntimeError(
+                    f"embedding base URL {base!r} targets a link-local/cloud-metadata address; "
+                    "this is always blocked."
+                )
+        except ValueError:
+            pass  # hostname (not numeric IP) — no link-local check needed
         return base.rstrip("/")
 
 
