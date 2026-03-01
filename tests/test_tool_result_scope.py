@@ -7,6 +7,9 @@ Validates:
 4. is_tool_result_allowed returns False for non-allowlisted tools
 5. Common toolResult types that should be EXCLUDED by default
 6. Scope policy doc exists and mentions key sections
+7. enforce_tool_result_scope raises ToolResultNotAllowedError on disallowed tools
+8. Integration: Graphiti.add_episode rejects disallowed tool_name before any DB write
+9. Integration: Graphiti.add_episode passes allowed tool_name through scope gate
 """
 
 from __future__ import annotations
@@ -118,3 +121,199 @@ class TestEpisodeTypeDefaults:
     def test_message_value_is_message_string(self):
         from graphiti_core.nodes import EpisodeType
         assert EpisodeType.message.value == 'message'
+
+
+# ---------------------------------------------------------------------------
+# 4. enforce_tool_result_scope — fail-closed enforcer
+# ---------------------------------------------------------------------------
+
+class TestEnforceToolResultScope:
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from config.tool_result_allowlist import (
+            ToolResultNotAllowedError,
+            enforce_tool_result_scope,
+        )
+        self.enforce = enforce_tool_result_scope
+        self.Error = ToolResultNotAllowedError
+
+    def test_raises_for_disallowed_tool(self):
+        """bash is a high-risk tool; must be rejected."""
+        with pytest.raises(self.Error):
+            self.enforce('bash')
+
+    def test_raises_for_web_search(self):
+        with pytest.raises(self.Error):
+            self.enforce('web_search')
+
+    def test_raises_for_unknown_tool(self):
+        with pytest.raises(self.Error):
+            self.enforce('some_random_tool')
+
+    def test_raises_for_empty_string(self):
+        with pytest.raises(self.Error):
+            self.enforce('')
+
+    def test_passes_for_calendar_get_event(self):
+        """calendar_get_event is allowlisted; must not raise."""
+        self.enforce('calendar_get_event')  # no exception
+
+    def test_passes_for_contacts_lookup(self):
+        self.enforce('contacts_lookup')  # no exception
+
+    def test_passes_for_restaurant_lookup(self):
+        self.enforce('restaurant_lookup')  # no exception
+
+    def test_error_is_valueerror_subclass(self):
+        """ToolResultNotAllowedError must be catchable as ValueError."""
+        with pytest.raises(ValueError):
+            self.enforce('bash')
+
+    def test_error_message_names_tool(self):
+        """Error message must identify the disallowed tool."""
+        with pytest.raises(self.Error, match='bash'):
+            self.enforce('bash')
+
+
+# ---------------------------------------------------------------------------
+# 5. Integration: add_episode rejects disallowed tool_name before any DB write
+# ---------------------------------------------------------------------------
+
+class TestAddEpisodeScopePolicyGate:
+    """Verify that Graphiti.add_episode enforces scope policy as a pre-DB gate.
+
+    We run the actual add_episode code path against a mock driver that FAILS
+    if any DB method is called, proving the scope check fires before writes.
+    For allowed tools, the scope gate must not raise (later DB mock errors are
+    expected and are caught separately).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _build_graphiti(self):
+        """Construct a minimal Graphiti instance with mocked internals."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from datetime import datetime, timezone
+
+        self.now = datetime(2026, 3, 1, tzinfo=timezone.utc)
+
+        # Patch heavy async machinery so we can call add_episode synchronously
+        with patch('graphiti_core.graphiti.Graphiti.__init__', return_value=None):
+            from graphiti_core.graphiti import Graphiti
+            self.g = object.__new__(Graphiti)
+
+        # Minimal attribute shims needed before scope gate
+        self.g.driver = MagicMock()
+        self.g.driver.provider = MagicMock()
+        self.g.tracer = MagicMock()
+        self.g.clients = MagicMock()
+
+        yield
+
+    def _run(self, coro):
+        import asyncio
+        return asyncio.get_event_loop().run_until_complete(coro)
+
+    def test_disallowed_tool_name_raises_before_db(self):
+        """bash is not allowlisted; add_episode must raise before any DB call."""
+        from unittest.mock import MagicMock
+        from graphiti_core.nodes import EpisodeType
+        from config.tool_result_allowlist import ToolResultNotAllowedError
+
+        # DB driver must NEVER be called — a call would mean the guard is missing
+        self.g.driver.execute_query = MagicMock(
+            side_effect=AssertionError('DB was called before scope gate fired')
+        )
+
+        with pytest.raises(ToolResultNotAllowedError):
+            self._run(
+                self.g.add_episode(
+                    name='test',
+                    episode_body='{"type": "bash_result"}',
+                    source_description='bash result',
+                    reference_time=self.now,
+                    source=EpisodeType.json,
+                    group_id='test-group',
+                    tool_name='bash',
+                )
+            )
+        # Confirm DB was never touched
+        self.g.driver.execute_query.assert_not_called()
+
+    def test_disallowed_web_search_raises(self):
+        """web_search results are high-noise and must be rejected."""
+        from graphiti_core.nodes import EpisodeType
+        from config.tool_result_allowlist import ToolResultNotAllowedError
+
+        with pytest.raises(ToolResultNotAllowedError, match='web_search'):
+            self._run(
+                self.g.add_episode(
+                    name='web results',
+                    episode_body='{"results": []}',
+                    source_description='web search output',
+                    reference_time=self.now,
+                    source=EpisodeType.json,
+                    group_id='test-group',
+                    tool_name='web_search',
+                )
+            )
+
+    def test_no_tool_name_bypasses_scope_gate(self):
+        """Callers without tool_name (message/text episodes) must pass through.
+
+        The scope gate must only activate when tool_name is explicitly provided.
+        This preserves backwards compatibility for all existing callers.
+        Subsequent operations may fail (mocked driver), but the scope gate
+        itself must not raise.
+        """
+        from graphiti_core.nodes import EpisodeType
+        from config.tool_result_allowlist import ToolResultNotAllowedError
+
+        try:
+            self._run(
+                self.g.add_episode(
+                    name='normal message',
+                    episode_body='user: hello',
+                    source_description='chat',
+                    reference_time=self.now,
+                    source=EpisodeType.message,
+                    group_id='test-group',
+                    tool_name=None,  # no tool name → scope gate bypassed
+                )
+            )
+        except ToolResultNotAllowedError:
+            pytest.fail(
+                'add_episode raised ToolResultNotAllowedError for tool_name=None. '
+                'The scope gate must only fire when tool_name is explicitly provided.'
+            )
+        except Exception:
+            # Any other exception from mocked internals is fine —
+            # the scope gate itself did not block this call.
+            pass
+
+    def test_allowed_tool_name_passes_scope_gate(self):
+        """calendar_get_event is allowlisted; the scope gate must not raise.
+
+        The call may fail later (mocked driver) but must pass the scope check.
+        """
+        from graphiti_core.nodes import EpisodeType
+        from config.tool_result_allowlist import ToolResultNotAllowedError
+
+        try:
+            self._run(
+                self.g.add_episode(
+                    name='calendar event',
+                    episode_body='{"title": "Team standup"}',
+                    source_description='calendar',
+                    reference_time=self.now,
+                    source=EpisodeType.json,
+                    group_id='test-group',
+                    tool_name='calendar_get_event',
+                )
+            )
+        except ToolResultNotAllowedError:
+            pytest.fail(
+                'add_episode raised ToolResultNotAllowedError for '
+                "tool_name='calendar_get_event', which is on the allowlist."
+            )
+        except Exception:
+            pass  # Expected: mocked driver will fail later — that's fine
