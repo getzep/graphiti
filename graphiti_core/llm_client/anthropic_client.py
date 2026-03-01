@@ -27,6 +27,7 @@ from ..prompts.models import Message
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
+from .token_tracker import TokenUsage
 
 if TYPE_CHECKING:
     import anthropic
@@ -268,7 +269,7 @@ class AnthropicClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
-    ) -> tuple[dict[str, typing.Any], int, int]:
+    ) -> tuple[dict[str, typing.Any], int, int, int, int]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
 
@@ -276,9 +277,11 @@ class AnthropicClient(LLMClient):
             messages: List of message objects to send to the LLM.
             response_model: Optional Pydantic model to use for structured output.
             max_tokens: Maximum number of tokens to generate.
+            model_size: Size hint for model selection.
 
         Returns:
-            Tuple of (response_dict, input_tokens, output_tokens).
+            Tuple of (response_dict, input_tokens, output_tokens,
+                       cache_creation_input_tokens, cache_read_input_tokens).
 
         Raises:
             RateLimitError: If the rate limit is exceeded.
@@ -299,8 +302,25 @@ class AnthropicClient(LLMClient):
         try:
             # Create the appropriate tool based on whether response_model is provided
             tools, tool_choice = self._create_tool(response_model)
+
+            # Add cache_control to the last tool so the entire tool definition set is cached.
+            # Anthropic caches the prefix: tools -> system -> messages, so marking the last
+            # tool caches all tool schemas for subsequent calls with the same tools.
+            if tools:
+                tools[-1]['cache_control'] = {'type': 'ephemeral'}  # type: ignore[typeddict-unknown-key]
+
+            # Use structured system content blocks with cache_control so the system
+            # prompt is included in the cached prefix (after tools).
+            system_content: list[dict[str, typing.Any]] = [
+                {
+                    'type': 'text',
+                    'text': system_message.content,
+                    'cache_control': {'type': 'ephemeral'},
+                }
+            ]
+
             result = await self.client.messages.create(
-                system=system_message.content,
+                system=system_content,  # type: ignore[arg-type]
                 max_tokens=max_creation_tokens,
                 temperature=self.temperature,
                 messages=user_messages_cast,
@@ -309,12 +329,18 @@ class AnthropicClient(LLMClient):
                 tool_choice=tool_choice,
             )
 
-            # Extract token usage from the response
+            # Extract token usage from the response, including cache metrics
             input_tokens = 0
             output_tokens = 0
+            cache_creation_input_tokens = 0
+            cache_read_input_tokens = 0
             if hasattr(result, 'usage') and result.usage:
                 input_tokens = getattr(result.usage, 'input_tokens', 0) or 0
                 output_tokens = getattr(result.usage, 'output_tokens', 0) or 0
+                cache_creation_input_tokens = (
+                    getattr(result.usage, 'cache_creation_input_tokens', 0) or 0
+                )
+                cache_read_input_tokens = getattr(result.usage, 'cache_read_input_tokens', 0) or 0
 
             # Extract the tool output from the response
             for content_item in result.content:
@@ -323,7 +349,13 @@ class AnthropicClient(LLMClient):
                         tool_args: dict[str, typing.Any] = content_item.input
                     else:
                         tool_args = json.loads(str(content_item.input))
-                    return tool_args, input_tokens, output_tokens
+                    return (
+                        tool_args,
+                        input_tokens,
+                        output_tokens,
+                        cache_creation_input_tokens,
+                        cache_read_input_tokens,
+                    )
 
             # If we didn't get a proper tool_use response, try to extract from text
             for content_item in result.content:
@@ -332,6 +364,8 @@ class AnthropicClient(LLMClient):
                         self._extract_json_from_text(content_item.text),
                         input_tokens,
                         output_tokens,
+                        cache_creation_input_tokens,
+                        cache_read_input_tokens,
                     )
                 else:
                     raise ValueError(
@@ -394,22 +428,62 @@ class AnthropicClient(LLMClient):
                 attributes['prompt.name'] = prompt_name
             span.add_attributes(attributes)
 
+            # Resolve the model that will actually be used (for logging/cost)
+            resolved_model = self._get_model_for_size(model_size)
+
             retry_count = 0
             max_retries = 2
             last_error: Exception | None = None
             total_input_tokens = 0
             total_output_tokens = 0
+            total_cache_creation_tokens = 0
+            total_cache_read_tokens = 0
 
             while retry_count <= max_retries:
                 try:
-                    response, input_tokens, output_tokens = await self._generate_response(
+                    (
+                        response,
+                        input_tokens,
+                        output_tokens,
+                        cache_creation_tokens,
+                        cache_read_tokens,
+                    ) = await self._generate_response(
                         messages, response_model, max_tokens, model_size
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens
+                    total_cache_creation_tokens += cache_creation_tokens
+                    total_cache_read_tokens += cache_read_tokens
 
-                    # Record token usage
-                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
+                    # Record token usage with cache metrics and model for cost estimation
+                    self.token_tracker.record(
+                        prompt_name,
+                        total_input_tokens,
+                        total_output_tokens,
+                        cache_creation_input_tokens=total_cache_creation_tokens,
+                        cache_read_input_tokens=total_cache_read_tokens,
+                        model=resolved_model,
+                    )
+
+                    # Log per-call cost details
+                    call_usage = TokenUsage(
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        cache_creation_input_tokens=total_cache_creation_tokens,
+                        cache_read_input_tokens=total_cache_read_tokens,
+                    )
+                    estimated_cost = call_usage.estimate_cost(resolved_model)
+                    cache_status = (
+                        f'cache_write={total_cache_creation_tokens}, '
+                        f'cache_read={total_cache_read_tokens}'
+                    )
+                    logger.info(
+                        f'LLM call [{prompt_name or "unknown"}] model={resolved_model} '
+                        f'in={total_input_tokens} out={total_output_tokens} '
+                        f'{cache_status} '
+                        f'cost=${estimated_cost:.6f} '
+                        f'cumulative=${self.token_tracker.get_total_estimated_cost():.6f}'
+                    )
 
                     # If we have a response_model, attempt to validate the response
                     if response_model is not None:

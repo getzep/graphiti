@@ -14,8 +14,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Lock
+
+# Anthropic pricing per million tokens (USD)
+# Maps model prefix -> (input, output, cache_write, cache_read)
+ANTHROPIC_PRICING: dict[str, tuple[float, float, float, float]] = {
+    'claude-sonnet-4-5': (3.00, 15.00, 3.75, 0.30),
+    'claude-haiku-4-5': (1.00, 5.00, 1.25, 0.10),
+    'claude-3-7-sonnet': (3.00, 15.00, 3.75, 0.30),
+    'claude-3-5-sonnet': (3.00, 15.00, 3.75, 0.30),
+    'claude-3-5-haiku': (0.80, 4.00, 1.00, 0.08),
+    'claude-3-opus': (15.00, 75.00, 18.75, 1.50),
+    'claude-3-sonnet': (3.00, 15.00, 3.75, 0.30),
+    'claude-3-haiku': (0.25, 1.25, 0.30, 0.03),
+}
+
+# Fallback pricing (uses Haiku 4.5 rates as a sensible default)
+_DEFAULT_PRICING = (1.00, 5.00, 1.25, 0.10)
+
+
+def get_anthropic_pricing(model: str) -> tuple[float, float, float, float]:
+    """Get pricing for an Anthropic model by matching the longest prefix.
+
+    Returns:
+        Tuple of (input, output, cache_write, cache_read) prices per million tokens.
+    """
+    for prefix in sorted(ANTHROPIC_PRICING.keys(), key=len, reverse=True):
+        if model.startswith(prefix):
+            return ANTHROPIC_PRICING[prefix]
+    return _DEFAULT_PRICING
 
 
 @dataclass
@@ -24,10 +52,36 @@ class TokenUsage:
 
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens
+        return (
+            self.input_tokens
+            + self.output_tokens
+            + self.cache_creation_input_tokens
+            + self.cache_read_input_tokens
+        )
+
+    def estimate_cost(self, model: str) -> float:
+        """Estimate USD cost for this usage based on Anthropic pricing.
+
+        Args:
+            model: The Anthropic model name used for this call.
+
+        Returns:
+            Estimated cost in USD.
+        """
+        input_price, output_price, cache_write_price, cache_read_price = get_anthropic_pricing(
+            model
+        )
+        return (
+            self.input_tokens * input_price
+            + self.output_tokens * output_price
+            + self.cache_creation_input_tokens * cache_write_price
+            + self.cache_read_input_tokens * cache_read_price
+        ) / 1_000_000
 
 
 @dataclass
@@ -38,10 +92,19 @@ class PromptTokenUsage:
     call_count: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_cache_creation_tokens: int = 0
+    total_cache_read_tokens: int = 0
+    total_estimated_cost: float = 0.0
+    models_used: dict[str, int] = field(default_factory=dict)
 
     @property
     def total_tokens(self) -> int:
-        return self.total_input_tokens + self.total_output_tokens
+        return (
+            self.total_input_tokens
+            + self.total_output_tokens
+            + self.total_cache_creation_tokens
+            + self.total_cache_read_tokens
+        )
 
     @property
     def avg_input_tokens(self) -> float:
@@ -51,6 +114,18 @@ class PromptTokenUsage:
     def avg_output_tokens(self) -> float:
         return self.total_output_tokens / self.call_count if self.call_count > 0 else 0
 
+    @property
+    def cache_hit_rate(self) -> float:
+        """Fraction of input tokens served from cache vs total input."""
+        total_input = (
+            self.total_input_tokens
+            + self.total_cache_creation_tokens
+            + self.total_cache_read_tokens
+        )
+        if total_input == 0:
+            return 0.0
+        return self.total_cache_read_tokens / total_input
+
 
 class TokenUsageTracker:
     """Thread-safe tracker for LLM token usage by prompt type."""
@@ -59,15 +134,37 @@ class TokenUsageTracker:
         self._usage: dict[str, PromptTokenUsage] = {}
         self._lock = Lock()
 
-    def record(self, prompt_name: str | None, input_tokens: int, output_tokens: int) -> None:
+    def record(
+        self,
+        prompt_name: str | None,
+        input_tokens: int,
+        output_tokens: int,
+        cache_creation_input_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
+        model: str | None = None,
+    ) -> None:
         """Record token usage for a prompt.
 
         Args:
             prompt_name: Name of the prompt (e.g., 'extract_nodes.extract_message')
-            input_tokens: Number of input tokens used
+            input_tokens: Number of input tokens used (non-cached)
             output_tokens: Number of output tokens generated
+            cache_creation_input_tokens: Tokens written to Anthropic prompt cache
+            cache_read_input_tokens: Tokens read from Anthropic prompt cache
+            model: Model name used (for cost estimation)
         """
         key = prompt_name or 'unknown'
+
+        # Compute cost for this call
+        estimated_cost = 0.0
+        if model:
+            usage = TokenUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_creation_input_tokens=cache_creation_input_tokens,
+                cache_read_input_tokens=cache_read_input_tokens,
+            )
+            estimated_cost = usage.estimate_cost(model)
 
         with self._lock:
             if key not in self._usage:
@@ -76,6 +173,11 @@ class TokenUsageTracker:
             self._usage[key].call_count += 1
             self._usage[key].total_input_tokens += input_tokens
             self._usage[key].total_output_tokens += output_tokens
+            self._usage[key].total_cache_creation_tokens += cache_creation_input_tokens
+            self._usage[key].total_cache_read_tokens += cache_read_input_tokens
+            self._usage[key].total_estimated_cost += estimated_cost
+            if model:
+                self._usage[key].models_used[model] = self._usage[key].models_used.get(model, 0) + 1
 
     def get_usage(self) -> dict[str, PromptTokenUsage]:
         """Get a copy of current token usage by prompt type."""
@@ -86,6 +188,10 @@ class TokenUsageTracker:
                     call_count=v.call_count,
                     total_input_tokens=v.total_input_tokens,
                     total_output_tokens=v.total_output_tokens,
+                    total_cache_creation_tokens=v.total_cache_creation_tokens,
+                    total_cache_read_tokens=v.total_cache_read_tokens,
+                    total_estimated_cost=v.total_estimated_cost,
+                    models_used=dict(v.models_used),
                 )
                 for k, v in self._usage.items()
             }
@@ -95,7 +201,19 @@ class TokenUsageTracker:
         with self._lock:
             total_input = sum(u.total_input_tokens for u in self._usage.values())
             total_output = sum(u.total_output_tokens for u in self._usage.values())
-            return TokenUsage(input_tokens=total_input, output_tokens=total_output)
+            total_cache_creation = sum(u.total_cache_creation_tokens for u in self._usage.values())
+            total_cache_read = sum(u.total_cache_read_tokens for u in self._usage.values())
+            return TokenUsage(
+                input_tokens=total_input,
+                output_tokens=total_output,
+                cache_creation_input_tokens=total_cache_creation,
+                cache_read_input_tokens=total_cache_read,
+            )
+
+    def get_total_estimated_cost(self) -> float:
+        """Get total estimated cost across all prompts."""
+        with self._lock:
+            return sum(u.total_estimated_cost for u in self._usage.values())
 
     def reset(self) -> None:
         """Reset all tracked usage."""
@@ -106,7 +224,8 @@ class TokenUsageTracker:
         """Print a formatted summary of token usage.
 
         Args:
-            sort_by: Sort key - 'total_tokens', 'input_tokens', 'output_tokens', 'call_count', or 'prompt_name'
+            sort_by: Sort key - 'total_tokens', 'input_tokens', 'output_tokens',
+                     'call_count', 'prompt_name', or 'cost'
         """
         usage = self.get_usage()
         if not usage:
@@ -120,33 +239,85 @@ class TokenUsageTracker:
             'output_tokens': lambda x: x[1].total_output_tokens,
             'call_count': lambda x: x[1].call_count,
             'prompt_name': lambda x: x[0],
+            'cost': lambda x: x[1].total_estimated_cost,
         }
         sort_fn = sort_keys.get(sort_by, sort_keys['total_tokens'])
         sorted_usage = sorted(usage.items(), key=sort_fn, reverse=(sort_by != 'prompt_name'))
 
-        # Print header
-        print('\n' + '=' * 100)
-        print('TOKEN USAGE SUMMARY')
-        print('=' * 100)
-        print(
-            f'{"Prompt Type":<45} {"Calls":>8} {"Input":>12} {"Output":>12} {"Total":>12} {"Avg In":>10} {"Avg Out":>10}'
+        has_cache = any(
+            u.total_cache_creation_tokens > 0 or u.total_cache_read_tokens > 0
+            for u in usage.values()
         )
-        print('-' * 100)
+
+        # Print header
+        print('\n' + '=' * 120)
+        print('TOKEN USAGE SUMMARY')
+        print('=' * 120)
+        if has_cache:
+            print(
+                f'{"Prompt Type":<40} {"Calls":>6} {"Input":>10} {"Output":>10} '
+                f'{"CacheW":>10} {"CacheR":>10} {"Hit%":>6} {"Cost($)":>10}'
+            )
+        else:
+            print(
+                f'{"Prompt Type":<40} {"Calls":>6} {"Input":>10} {"Output":>10} '
+                f'{"Total":>10} {"Avg In":>8} {"Avg Out":>8} {"Cost($)":>10}'
+            )
+        print('-' * 120)
 
         # Print each prompt's usage
-        for prompt_name, prompt_usage in sorted_usage:
-            print(
-                f'{prompt_name:<45} {prompt_usage.call_count:>8} {prompt_usage.total_input_tokens:>12,} '
-                f'{prompt_usage.total_output_tokens:>12,} {prompt_usage.total_tokens:>12,} '
-                f'{prompt_usage.avg_input_tokens:>10,.1f} {prompt_usage.avg_output_tokens:>10,.1f}'
-            )
+        for _prompt_name, prompt_usage in sorted_usage:
+            if has_cache:
+                print(
+                    f'{_prompt_name:<40} {prompt_usage.call_count:>6} '
+                    f'{prompt_usage.total_input_tokens:>10,} '
+                    f'{prompt_usage.total_output_tokens:>10,} '
+                    f'{prompt_usage.total_cache_creation_tokens:>10,} '
+                    f'{prompt_usage.total_cache_read_tokens:>10,} '
+                    f'{prompt_usage.cache_hit_rate:>5.0%} '
+                    f'{prompt_usage.total_estimated_cost:>10.6f}'
+                )
+            else:
+                print(
+                    f'{_prompt_name:<40} {prompt_usage.call_count:>6} '
+                    f'{prompt_usage.total_input_tokens:>10,} '
+                    f'{prompt_usage.total_output_tokens:>10,} '
+                    f'{prompt_usage.total_tokens:>10,} '
+                    f'{prompt_usage.avg_input_tokens:>8,.1f} '
+                    f'{prompt_usage.avg_output_tokens:>8,.1f} '
+                    f'{prompt_usage.total_estimated_cost:>10.6f}'
+                )
 
         # Print totals
         total = self.get_total_usage()
         total_calls = sum(u.call_count for u in usage.values())
-        print('-' * 100)
-        print(
-            f'{"TOTAL":<45} {total_calls:>8} {total.input_tokens:>12,} '
-            f'{total.output_tokens:>12,} {total.total_tokens:>12,}'
-        )
-        print('=' * 100 + '\n')
+        total_cost = sum(u.total_estimated_cost for u in usage.values())
+        print('-' * 120)
+        if has_cache:
+            total_all_input = (
+                total.input_tokens
+                + total.cache_creation_input_tokens
+                + total.cache_read_input_tokens
+            )
+            overall_hit_rate = (
+                total.cache_read_input_tokens / total_all_input if total_all_input > 0 else 0
+            )
+            print(
+                f'{"TOTAL":<40} {total_calls:>6} '
+                f'{total.input_tokens:>10,} '
+                f'{total.output_tokens:>10,} '
+                f'{total.cache_creation_input_tokens:>10,} '
+                f'{total.cache_read_input_tokens:>10,} '
+                f'{overall_hit_rate:>5.0%} '
+                f'{total_cost:>10.6f}'
+            )
+        else:
+            print(
+                f'{"TOTAL":<40} {total_calls:>6} '
+                f'{total.input_tokens:>10,} '
+                f'{total.output_tokens:>10,} '
+                f'{total.total_tokens:>10,} '
+                f'{"":>8} {"":>8} '
+                f'{total_cost:>10.6f}'
+            )
+        print('=' * 120 + '\n')
