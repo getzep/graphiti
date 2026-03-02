@@ -185,7 +185,7 @@ async def search(
 
 async def edge_search(
     driver: GraphDriver,
-    cross_encoder: CrossEncoderClient,
+    cross_encoder: CrossEncoderClient | None,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
@@ -267,6 +267,8 @@ async def edge_search(
             reranker_min_score,
         )
     elif config.reranker == EdgeReranker.cross_encoder:
+        if cross_encoder is None:
+            raise SearchRerankerError('Cross encoder is required for cross_encoder reranker')
         fact_to_uuid_map = {edge.fact: edge.uuid for edge in list(edge_uuid_map.values())[:limit]}
         reranked_facts = await cross_encoder.rank(query, list(fact_to_uuid_map.keys()))
         reranked_uuids = [
@@ -308,7 +310,7 @@ async def edge_search(
 
 async def node_search(
     driver: GraphDriver,
-    cross_encoder: CrossEncoderClient,
+    cross_encoder: CrossEncoderClient | None,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
@@ -388,6 +390,8 @@ async def node_search(
             reranker_min_score,
         )
     elif config.reranker == NodeReranker.cross_encoder:
+        if cross_encoder is None:
+            raise SearchRerankerError('Cross encoder is required for cross_encoder reranker')
         name_to_uuid_map = {node.name: node.uuid for node in list(node_uuid_map.values())}
 
         reranked_node_names = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
@@ -418,7 +422,7 @@ async def node_search(
 
 async def episode_search(
     driver: GraphDriver,
-    cross_encoder: CrossEncoderClient,
+    cross_encoder: CrossEncoderClient | None,
     query: str,
     _query_vector: list[float],
     group_ids: list[str] | None,
@@ -446,6 +450,8 @@ async def episode_search(
         reranked_uuids, episode_scores = rrf(search_result_uuids, min_score=reranker_min_score)
 
     elif config.reranker == EpisodeReranker.cross_encoder:
+        if cross_encoder is None:
+            raise SearchRerankerError('Cross encoder is required for cross_encoder reranker')
         # use rrf as a preliminary reranker
         rrf_result_uuids, episode_scores = rrf(search_result_uuids, min_score=reranker_min_score)
         rrf_results = [episode_uuid_map[uuid] for uuid in rrf_result_uuids][:limit]
@@ -467,7 +473,7 @@ async def episode_search(
 
 async def community_search(
     driver: GraphDriver,
-    cross_encoder: CrossEncoderClient,
+    cross_encoder: CrossEncoderClient | None,
     query: str,
     query_vector: list[float],
     group_ids: list[str] | None,
@@ -507,6 +513,8 @@ async def community_search(
             query_vector, search_result_uuids_and_vectors, config.mmr_lambda, reranker_min_score
         )
     elif config.reranker == CommunityReranker.cross_encoder:
+        if cross_encoder is None:
+            raise SearchRerankerError('Cross encoder is required for cross_encoder reranker')
         name_to_uuid_map = {node.name: node.uuid for result in search_results for node in result}
         reranked_nodes = await cross_encoder.rank(query, list(name_to_uuid_map.keys()))
         reranked_uuids = [

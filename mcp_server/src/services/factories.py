@@ -4,6 +4,7 @@ from config.schema import (
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
+    RerankerConfig,
 )
 
 # Try to import FalkorDriver if available
@@ -40,6 +41,15 @@ try:
     HAS_VOYAGE_EMBEDDER = True
 except ImportError:
     HAS_VOYAGE_EMBEDDER = False
+
+try:
+    from graphiti_core.cross_encoder.voyage_reranker_client import (
+        VoyageRerankerClient,  # noqa: F401
+    )
+
+    HAS_VOYAGE_RERANKER = True
+except ImportError:
+    HAS_VOYAGE_RERANKER = False
 
 try:
     from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
@@ -433,3 +443,72 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class RerankerFactory:
+    """Factory for creating Reranker (cross-encoder) clients based on configuration."""
+
+    @staticmethod
+    def create(config: RerankerConfig):
+        """Create a Reranker client based on the configured provider.
+
+        Returns None if reranking is disabled.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        if not config.enabled:
+            logger.info('Reranking is disabled')
+            return None
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'none' | 'disabled':
+                logger.info('Reranking explicitly disabled')
+                return None
+
+            case 'voyage':
+                if not HAS_VOYAGE_RERANKER:
+                    raise ValueError('Voyage reranker not available. Install voyageai package.')
+                if not config.providers.voyage:
+                    raise ValueError('Voyage provider configuration not found')
+
+                api_key = config.providers.voyage.api_key
+                _validate_api_key('Voyage Reranker', api_key, logger)
+
+                from graphiti_core.cross_encoder.voyage_reranker_client import (
+                    VoyageRerankerClient,
+                    VoyageRerankerConfig,
+                )
+
+                model = config.model or config.providers.voyage.rerank_model or 'rerank-2'
+                logger.info('Creating Voyage Reranker client')
+                voyage_config = VoyageRerankerConfig(
+                    api_key=api_key,
+                    model=model,
+                )
+                return VoyageRerankerClient(config=voyage_config)
+
+            case 'openai':
+                if not config.providers.openai:
+                    raise ValueError('OpenAI provider configuration not found')
+
+                api_key = config.providers.openai.api_key
+                _validate_api_key('OpenAI Reranker', api_key, logger)
+
+                from graphiti_core.cross_encoder.openai_reranker_client import (
+                    OpenAIRerankerClient,
+                )
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                logger.info('Creating OpenAI Reranker client')
+                llm_config = CoreLLMConfig(
+                    api_key=api_key,
+                    model=config.model or 'gpt-4.1-nano',
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case _:
+                raise ValueError(f'Unsupported Reranker provider: {provider}')
