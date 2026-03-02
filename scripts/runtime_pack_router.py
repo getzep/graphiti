@@ -90,7 +90,8 @@ INDEX_VECTOR_SCHEMA_VERSION = 1
 MATERIALIZE_DEFAULT_MAX_ITEMS = 10
 MATERIALIZE_DEFAULT_TIMEOUT_SEC = 0.8
 MATERIALIZE_MIN_COVERAGE_ITEMS = 2
-MATERIALIZE_MAX_FACT_CHARS = 240
+MATERIALIZE_DEFAULT_MAX_FACT_CHARS = 240
+MATERIALIZE_MAX_FACT_CHARS = 800
 MATERIALIZE_DEFAULT_MAX_BLOCK_TOKENS = 320
 MATERIALIZE_MAX_BLOCK_TOKENS = 700
 GRAPHITI_DEFAULT_BASE_URL = 'http://localhost:8000'
@@ -707,6 +708,14 @@ def _materialize_max_block_tokens(materialization: dict[str, object] | None) -> 
     return MATERIALIZE_DEFAULT_MAX_BLOCK_TOKENS
 
 
+def _materialize_max_fact_chars(materialization: dict[str, object] | None) -> int:
+    if isinstance(materialization, dict):
+        value = materialization.get('max_fact_chars')
+        if isinstance(value, int) and value > 0:
+            return min(value, MATERIALIZE_MAX_FACT_CHARS)
+    return MATERIALIZE_DEFAULT_MAX_FACT_CHARS
+
+
 def _materialize_min_coverage_items(materialization: dict[str, object] | None) -> int:
     if isinstance(materialization, dict):
         value = materialization.get('min_coverage_items')
@@ -715,11 +724,11 @@ def _materialize_min_coverage_items(materialization: dict[str, object] | None) -
     return MATERIALIZE_MIN_COVERAGE_ITEMS
 
 
-def _normalize_fact_text(text: str) -> str:
+def _normalize_fact_text(text: str, *, max_fact_chars: int) -> tuple[str, bool]:
     collapsed = _normalize_whitespace(text)
-    if len(collapsed) <= MATERIALIZE_MAX_FACT_CHARS:
-        return collapsed
-    return collapsed[:MATERIALIZE_MAX_FACT_CHARS].rstrip() + '…'
+    if len(collapsed) <= max_fact_chars:
+        return collapsed, False
+    return collapsed[:max_fact_chars].rstrip() + '…', True
 
 
 def _graphiti_search_facts(
@@ -728,7 +737,8 @@ def _graphiti_search_facts(
     group_ids: list[str],
     max_items: int,
     timeout_seconds: float,
-) -> list[str]:
+    max_fact_chars: int,
+) -> tuple[list[str], dict[str, object]]:
     base_url = os.environ.get('GRAPHITI_BASE_URL', GRAPHITI_DEFAULT_BASE_URL).rstrip('/')
     endpoint = os.environ.get('GRAPHITI_SEARCH_PATH', GRAPHITI_SEARCH_PATH)
     if not endpoint.startswith('/'):
@@ -778,31 +788,49 @@ def _graphiti_search_facts(
 
     normalized: list[str] = []
     seen: set[str] = set()
+    fact_char_truncations = 0
+    duplicates_skipped = 0
+    fact_candidates = 0
+
     for item in facts_raw:
         if not isinstance(item, dict):
             continue
         fact = item.get('fact')
         if not isinstance(fact, str):
             continue
-        cleaned = _normalize_fact_text(fact)
+        fact_candidates += 1
+        cleaned, was_truncated = _normalize_fact_text(fact, max_fact_chars=max_fact_chars)
+        if was_truncated:
+            fact_char_truncations += 1
         if not cleaned:
             continue
         key = cleaned.lower()
         if key in seen:
+            duplicates_skipped += 1
             continue
         seen.add(key)
         normalized.append(cleaned)
         if len(normalized) >= max(1, max_items):
             break
 
-    return normalized
+    stats: dict[str, object] = {
+        'requested_max_items': max(1, max_items),
+        'facts_received': len(facts_raw),
+        'fact_candidates': fact_candidates,
+        'facts_selected': len(normalized),
+        'duplicates_skipped': duplicates_skipped,
+        'fact_char_cap': max_fact_chars,
+        'fact_char_truncations': fact_char_truncations,
+    }
+
+    return normalized, stats
 
 
-def _cap_block_by_token_budget(text: str, max_tokens: int) -> str:
+def _cap_block_by_token_budget(text: str, max_tokens: int) -> tuple[str, bool, int]:
     cap_chars = max(120, max_tokens * 4)
     if len(text) <= cap_chars:
-        return text
-    return text[:cap_chars].rstrip() + '\n…(truncated)…'
+        return text, False, cap_chars
+    return text[:cap_chars].rstrip() + '\n…(truncated)…', True, cap_chars
 
 
 def _materialize_content_pack(
@@ -813,21 +841,36 @@ def _materialize_content_pack(
     mode: str,
     max_items: int,
     materialization: dict[str, object] | None,
-) -> str:
+) -> tuple[str, dict[str, object]]:
     timeout_seconds = _materialize_timeout_seconds(materialization)
     min_coverage = _materialize_min_coverage_items(materialization)
     max_block_tokens = _materialize_max_block_tokens(materialization)
+    max_fact_chars = _materialize_max_fact_chars(materialization)
 
     lane_label = ', '.join(group_ids) if group_ids else 'default lane'
-    facts = _graphiti_search_facts(
+    facts, fact_stats = _graphiti_search_facts(
         query=query,
         group_ids=group_ids,
         max_items=max_items,
         timeout_seconds=timeout_seconds,
+        max_fact_chars=max_fact_chars,
     )
 
+    stats: dict[str, object] = {
+        'source': source,
+        'mode': mode,
+        'lane_count': len(group_ids),
+        'lane_label': lane_label,
+        'min_coverage_items': min_coverage,
+        'max_block_tokens': max_block_tokens,
+        'max_fact_chars': max_fact_chars,
+        **fact_stats,
+    }
+
     if len(facts) < min_coverage:
-        return ''
+        stats['coverage_met'] = False
+        stats['coverage_shortfall'] = int(min_coverage - len(facts))
+        return '', stats
 
     if source == MATERIALIZE_SOURCE_CONTENT_VOICE_STYLE:
         header = f'Live voice-style signals (mode={mode}, lanes={lane_label})'
@@ -836,11 +879,77 @@ def _materialize_content_pack(
     elif source == MATERIALIZE_SOURCE_CONTENT_LONG_FORM_ARTIFACTS:
         header = f'Live long-form artifact signals (mode={mode}, lanes={lane_label})'
     else:
-        return ''
+        stats['coverage_met'] = False
+        stats['error'] = 'unsupported_source'
+        return '', stats
 
     bullets = [f'- {fact}' for fact in facts]
     block = '\n'.join([header, *bullets]).strip()
-    return _cap_block_by_token_budget(block, max_block_tokens)
+    capped_block, block_truncated, block_cap_chars = _cap_block_by_token_budget(block, max_block_tokens)
+
+    stats['coverage_met'] = True
+    stats['block_chars_raw'] = len(block)
+    stats['block_chars_final'] = len(capped_block)
+    stats['block_cap_chars'] = block_cap_chars
+    stats['block_truncated'] = bool(block_truncated)
+
+    return capped_block, stats
+
+
+def materialize_with_stats(
+    source: str,
+    pack_yaml_path: str,
+    *,
+    repo_root: Path,
+    mode: str = 'default',
+    max_items: int = MATERIALIZE_DEFAULT_MAX_ITEMS,
+    query: str = '',
+    group_ids: list[str] | None = None,
+    materialization: dict[str, object] | None = None,
+) -> tuple[str, dict[str, object]]:
+    normalized_source = source.strip().lower()
+    effective_groups = [gid for gid in (group_ids or []) if isinstance(gid, str) and gid.strip()]
+
+    stats: dict[str, object] = {
+        'source': normalized_source,
+        'mode': mode,
+        'requested_max_items': max_items,
+        'requested_group_count': len(effective_groups),
+        'used_dynamic': False,
+        'fallback': 'none',
+    }
+
+    if normalized_source in {
+        MATERIALIZE_SOURCE_CONTENT_VOICE_STYLE,
+        MATERIALIZE_SOURCE_CONTENT_WRITING_SAMPLES,
+        MATERIALIZE_SOURCE_CONTENT_LONG_FORM_ARTIFACTS,
+    }:
+        try:
+            dynamic, dynamic_stats = _materialize_content_pack(
+                source=normalized_source,
+                query=query,
+                group_ids=effective_groups,
+                mode=mode,
+                max_items=max_items,
+                materialization=materialization,
+            )
+            stats['dynamic'] = dynamic_stats
+        except Exception as exc:
+            stats['dynamic_error'] = f'{type(exc).__name__}:{str(exc).strip()}'
+            dynamic = ''
+        if dynamic:
+            stats['used_dynamic'] = True
+            stats['dynamic_chars'] = len(dynamic)
+            return dynamic, stats
+
+    static = _load_yaml_domain_context(repo_root=repo_root, pack_yaml_path=pack_yaml_path)
+    if static:
+        stats['fallback'] = 'domain_context'
+        stats['fallback_chars'] = len(static)
+        return static, stats
+    # Return empty string so callers can gracefully fall back to excerpt/query
+    # handling instead of injecting debug NOTE text into model context.
+    return '', stats
 
 
 def materialize(
@@ -854,34 +963,17 @@ def materialize(
     group_ids: list[str] | None = None,
     materialization: dict[str, object] | None = None,
 ) -> str:
-    normalized_source = source.strip().lower()
-    effective_groups = [gid for gid in (group_ids or []) if isinstance(gid, str) and gid.strip()]
-
-    if normalized_source in {
-        MATERIALIZE_SOURCE_CONTENT_VOICE_STYLE,
-        MATERIALIZE_SOURCE_CONTENT_WRITING_SAMPLES,
-        MATERIALIZE_SOURCE_CONTENT_LONG_FORM_ARTIFACTS,
-    }:
-        try:
-            dynamic = _materialize_content_pack(
-                source=normalized_source,
-                query=query,
-                group_ids=effective_groups,
-                mode=mode,
-                max_items=max_items,
-                materialization=materialization,
-            )
-        except Exception:
-            dynamic = ''
-        if dynamic:
-            return dynamic
-
-    static = _load_yaml_domain_context(repo_root=repo_root, pack_yaml_path=pack_yaml_path)
-    if static:
-        return static
-    # Return empty string so callers can gracefully fall back to excerpt/query
-    # handling instead of injecting debug NOTE text into model context.
-    return ''
+    content, _stats = materialize_with_stats(
+        source,
+        pack_yaml_path,
+        repo_root=repo_root,
+        mode=mode,
+        max_items=max_items,
+        query=query,
+        group_ids=group_ids,
+        materialization=materialization,
+    )
+    return content
 
 
 def _build_selected_pack(
@@ -927,6 +1019,7 @@ def _build_selected_pack(
     materialized_excerpt = ''
     materialized_items = 0
     materialized_sources: list[str] = []
+    materialization_stats: dict[str, object] = {}
     content = ''
 
     materialization = pack_entry.get('materialization') if isinstance(pack_entry.get('materialization'), dict) else None
@@ -941,7 +1034,7 @@ def _build_selected_pack(
             pack_yaml_path = _ensure_non_empty_string(pack_entry.get('path', ''), context=f'pack[{pack_id}].path')
             max_items = _resolve_materialize_max_items(materialization, mode) if materialization else MATERIALIZE_DEFAULT_MAX_ITEMS
             try:
-                content = materialize(
+                content, materialization_stats = materialize_with_stats(
                     mat_source,
                     pack_yaml_path=pack_yaml_path,
                     repo_root=repo_root,
@@ -950,7 +1043,8 @@ def _build_selected_pack(
                     query=task,
                     group_ids=group_ids,
                     materialization=materialization,
-                ).strip()
+                )
+                content = content.strip()
             except Exception as exc:
                 decision_path.append(
                     f'pack:{pack_id}:materialize_failed:{type(exc).__name__}:{str(exc).strip()}'
@@ -960,6 +1054,16 @@ def _build_selected_pack(
                     decision_path.append(f'pack:{pack_id}:materialized_content')
                     if materialized_items == 0:
                         materialized_items = 1
+                if materialization_stats:
+                    dynamic_stats = materialization_stats.get('dynamic')
+                    if isinstance(dynamic_stats, dict):
+                        decision_path.append(
+                            f"pack:{pack_id}:materialize_stats "
+                            f"received={dynamic_stats.get('facts_received', 0)} "
+                            f"selected={dynamic_stats.get('facts_selected', 0)} "
+                            f"fact_trunc={dynamic_stats.get('fact_char_truncations', 0)} "
+                            f"block_trunc={1 if dynamic_stats.get('block_truncated') else 0}"
+                        )
 
         if pack_id == 'engineering_learnings' or mat_source == 'engineering_loops_latest':
             materialized_excerpt, materialized_items, materialized_sources = _materialize_engineering(
@@ -989,6 +1093,7 @@ def _build_selected_pack(
         'materialized_items': materialized_items,
         'materialized_sources': materialized_sources,
         'materialized_excerpt': materialized_excerpt,
+        'materialization_stats': materialization_stats,
     }
     if content:
         selected['content'] = content
