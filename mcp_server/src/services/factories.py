@@ -121,6 +121,7 @@ class LLMClientFactory:
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
