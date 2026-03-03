@@ -29,7 +29,23 @@ from typing import Any
 
 DB_PATH_DEFAULT = Path(__file__).resolve().parents[1] / "state" / "candidates.db"
 
-POLICY_VERSION_DEFAULT = "promotion-v2"
+# ─────────────────────────────────────────────────────────────────────────────
+# Policy version constants (EXEC-UNIFIED-V3-AFTERNOON PRD)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Feature flag: set GRAPHITI_POLICY_V3_ENABLED=0 to keep v2 for existing ops.
+# Defaults to True; flip off only if a rollback is needed.
+POLICY_V3_ENABLED_ENV = "GRAPHITI_POLICY_V3_ENABLED"
+
+# Compat constant: accepted on reads from existing rows; never written for new rows.
+POLICY_VERSION_V2 = "promotion-v2"
+
+# V3 label: written for all new candidates when GRAPHITI_POLICY_V3_ENABLED is truthy.
+POLICY_VERSION_V3 = "promotion-v3"
+
+# Public alias used throughout this module — resolves to v3 when enabled.
+# Existing rows with "promotion-v2" remain valid (backward-compatible read path).
+POLICY_VERSION_DEFAULT = POLICY_VERSION_V3  # v3 is now the default (EXEC-UNIFIED-V3-AFTERNOON)
 
 # Thresholds (PROMOTION-TAXONOMY-v1.md)
 RECOMMEND_THRESHOLD = 0.80
@@ -90,6 +106,36 @@ VERIFICATION_STATUSES = {
     "contradicted",
     "insufficient_evidence",
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# V3 lane policy contract (EXEC-UNIFIED-V3-AFTERNOON PRD, Locked Policy Matrix)
+# Callers (graph_maintenance, import_graphiti_candidates, pack router) should
+# reference these constants rather than hardcoding group-id sets.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Lanes eligible for direct retrieval across all runtime packs.
+LANE_RETRIEVAL_ELIGIBLE_GLOBAL: frozenset[str] = frozenset({
+    "s1_sessions_main",
+    "s1_observational_memory",
+})
+
+# Lanes eligible for retrieval only in VC-scoped packs.
+LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED: frozenset[str] = frozenset({
+    "s1_chatgpt_history",
+})
+
+# Lanes that are corroboration-only by default (not direct retrieval sources).
+LANE_CORROBORATION_ONLY: frozenset[str] = frozenset({
+    "s1_curated_refs",
+    "s1_memory_day1",
+})
+
+# All lanes that may generate candidates (used by import_graphiti_candidates).
+LANE_CANDIDATES_ELIGIBLE: frozenset[str] = (
+    LANE_RETRIEVAL_ELIGIBLE_GLOBAL
+    | LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED
+    | frozenset({"s1_memory_day1"})  # corroboration-only but still candidate-generating
+)
 
 
 class IneligibleAssertionTypeError(ValueError):
@@ -322,6 +368,21 @@ def _env_bool(name: str, default: bool) -> bool:
     if value in {"0", "false", "no", "off"}:
         return False
     return default
+
+
+def policy_v3_enabled() -> bool:
+    """Return True when v3 promotion policy is active (the default).
+
+    Flip GRAPHITI_POLICY_V3_ENABLED=0 for an emergency rollback.
+    New candidate rows will be stamped with POLICY_VERSION_V2 ("promotion-v2")
+    when disabled, preserving compat with downstream readers.
+    """
+    return _env_bool(POLICY_V3_ENABLED_ENV, default=True)
+
+
+def active_policy_version() -> str:
+    """Return the policy version string to stamp on new candidate rows."""
+    return POLICY_VERSION_V3 if policy_v3_enabled() else POLICY_VERSION_V2
 
 
 def owner_speaker_ids_from_env() -> set[str]:
@@ -561,7 +622,7 @@ def compute_policy_trace(candidate: dict[str, Any], evidence_stats: dict[str, An
         status_suggested = "pending"
 
     return {
-        "policy_version": POLICY_VERSION_DEFAULT,
+        "policy_version": active_policy_version(),
         "evaluated_at": _now_iso(),
         "origin": origin,
         "reason": reason,
@@ -794,7 +855,7 @@ def refresh_candidate_policy_state(
         (
             str(trace.get("risk_level") or row_dict.get("risk_level") or "medium"),
             next_status,
-            POLICY_VERSION_DEFAULT,
+            active_policy_version(),
             json_c14n(trace),
             json_c14n(evidence_stats),
             resolved_conflict_with_fact_id,
@@ -924,7 +985,7 @@ def upsert_candidate(
                 source_trust,
                 risk_level,
                 status_suggested,
-                POLICY_VERSION_DEFAULT,
+                active_policy_version(),
                 json_c14n(trace),
                 json_c14n(stats),
                 conflict_with_fact_id,
@@ -1003,7 +1064,7 @@ def upsert_candidate(
             json_c14n(trace),
             risk_level,
             new_status,
-            POLICY_VERSION_DEFAULT,
+            active_policy_version(),
             (evidence_quote[:200] if evidence_quote else None),
             speaker_id,
             float(confidence) if confidence is not None else None,
@@ -1044,7 +1105,8 @@ def _candidate_fact_payload(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def _decision_for_actor(actor_id: str) -> str:
-    if actor_id == "policy:v2":
+    # Both v2 and v3 policy actors produce the same DB decision value.
+    if actor_id in ("policy:v2", "policy:v3"):
         return "auto_promoted"
     return "approved"
 
@@ -1194,10 +1256,11 @@ def auto_promote_if_eligible(
     if row["status"] != "auto_promoted":
         return False
 
+    actor_id = "policy:v3" if policy_v3_enabled() else "policy:v2"
     updated, _ = promote_candidate(
         conn,
         candidate_id,
-        actor_id="policy:v2",
+        actor_id=actor_id,
         reason="auto_promote",
         ledger=ledger,
     )
