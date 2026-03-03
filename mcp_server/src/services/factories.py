@@ -15,8 +15,9 @@ except ImportError:
     HAS_FALKOR = False
 
 # Try to import FalkorDB Lite (embedded, zero-config) if available
+# Package is "falkordblite" but module is "redislite"
 try:
-    from falkordblite import FalkorDB as FalkorDBLite  # noqa: F401
+    from redislite import AsyncFalkorDB as FalkorDBLite  # noqa: F401
 
     HAS_FALKOR_LITE = True
 except ImportError:

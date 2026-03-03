@@ -231,7 +231,8 @@ class GraphitiService:
                     )
                 elif db_provider == 'falkordb_lite':
                     # For FalkorDB Lite (embedded), start an in-process instance
-                    from falkordblite import FalkorDB as FalkorDBLite
+                    # Package is "falkordblite" but module is "redislite"
+                    from redislite import AsyncFalkorDB as FalkorDBLite
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
                     db_path = db_config.get('db_path')
