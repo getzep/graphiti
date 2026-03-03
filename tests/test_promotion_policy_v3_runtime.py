@@ -79,7 +79,10 @@ def _verification(candidate_id: str = "cand-1") -> Any:
 def test_promote_candidate_created_is_deterministic_from_merge_counters(
     nodes_created: int,
     expected_created: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Runtime-only write-path test: disable v3 gate so candidates DB is not required.
+    monkeypatch.setenv("GRAPHITI_POLICY_V3_ENABLED", "0")
     driver = _FakeDriver(nodes_created=nodes_created)
 
     result = promotion_policy_v3.promote_candidate(
@@ -92,6 +95,50 @@ def test_promote_candidate_created_is_deterministic_from_merge_counters(
     assert result["promoted"] is True
     assert result["created"] is expected_created
     assert result["supports_core_edges_attempted"] == 2
+
+
+def test_promote_candidate_omnode_not_found_skips_gracefully(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """promote_candidate must return promoted=False/reason=omnode_not_found (not raise)
+    when the OMNode is absent from Neo4j.  Covers verification-only promotion
+    paths where the verification record exists in candidates.db but the source
+    OMNode has been evicted or was never written to the graph.
+    """
+
+    # Runtime-only write-path test: disable v3 gate so candidates DB is not required.
+    monkeypatch.setenv("GRAPHITI_POLICY_V3_ENABLED", "0")
+
+    class _SessionNoOMNode(_FakeSession):
+        def __init__(self) -> None:
+            super().__init__(nodes_created=0)
+
+        def run(self, query: str, params: dict[str, Any]) -> _FakeResult:
+            self.calls.append((query, params))
+            if "MERGE (c:CoreMemory" in query:
+                # Simulate OMNode absent: MATCH finds no row, single() → None
+                return _FakeResult(None, nodes_created=0)
+            return _FakeResult({"rel_count": 1})
+
+    class _DriverNoOMNode(_FakeDriver):
+        def __init__(self) -> None:
+            super().__init__(nodes_created=0)
+
+        def session(self, database: str | None = None) -> _SessionNoOMNode:
+            self.last_session = _SessionNoOMNode()
+            return self.last_session
+
+    result = promotion_policy_v3.promote_candidate(
+        candidate_id="ghost-cand-1",
+        verification=_verification("ghost-cand-1"),
+        hard_block_check=lambda _: False,
+        neo4j_driver=_DriverNoOMNode(),
+    )
+
+    assert result["promoted"] is False
+    assert result["reason"] == "omnode_not_found"
+    assert result["candidate_id"] == "ghost-cand-1"
+    assert "core_memory_id" in result
 
 
 def test_shared_driver_is_lazy_singleton(monkeypatch: pytest.MonkeyPatch) -> None:

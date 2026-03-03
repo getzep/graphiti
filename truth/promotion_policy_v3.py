@@ -187,10 +187,63 @@ def promote_candidate(
     verification: VerificationRecord,
     hard_block_check: Callable[[str], bool],
     neo4j_driver: Any | None = None,
+    candidates_conn: Any | None = None,
 ) -> dict[str, Any]:
+    """Promote an OM candidate to a CoreMemory node in Neo4j.
+
+    Gate order (all must pass):
+    1. Unified v3 policy gate — when v3 is enabled, ``candidates_conn`` is
+       required and ``candidates_store.policy_allows_promotion()`` must return
+       (True, reason).  Missing ``candidates_conn`` fails closed.  This is the
+       **one decision contract** shared with the graph-lane candidate path.
+       Rollback: set GRAPHITI_POLICY_V3_ENABLED=0 and the gate is bypassed.
+    2. OM verification gate — ``verification.verification_status`` must be
+       "corroborated".  Always applied regardless of v3 flag.
+    3. Fail-closed hard-block gate — ``hard_block_check(candidate_id)`` must
+       return False.  If the interface is unavailable the gate fails closed
+       (blocks promotion).  Always applied regardless of v3 flag.
+    4. Neo4j MERGE write — idempotent CoreMemory + SUPPORTS_CORE upsert.
+    """
     promoted_at = _now_iso()
     core_memory_id = sha256_hex(f"core|{candidate_id}")
 
+    # ── Gate 1: Unified v3 policy decision contract ──────────────────────────
+    # Consult the same decision engine used for lane candidates so OM and
+    # graph-lane paths share one promotion contract.  Skip only when v3 is
+    # disabled (rollback).  Under v3, missing candidates_conn is fail-closed.
+    if candidates_store.policy_v3_enabled():
+        if candidates_conn is None:
+            gate_reason = "candidates_conn_missing"
+            _event(
+                "OM_PROMOTION_V3_POLICY_GATE_BLOCKED",
+                candidate_id=candidate_id,
+                gate_reason=gate_reason,
+            )
+            return {
+                "candidate_id": candidate_id,
+                "core_memory_id": core_memory_id,
+                "promoted": False,
+                "reason": f"v3_policy_gate:{gate_reason}",
+            }
+
+        allowed, gate_reason = candidates_store.policy_allows_promotion(
+            candidate_id,
+            conn=candidates_conn,
+        )
+        if not allowed:
+            _event(
+                "OM_PROMOTION_V3_POLICY_GATE_BLOCKED",
+                candidate_id=candidate_id,
+                gate_reason=gate_reason,
+            )
+            return {
+                "candidate_id": candidate_id,
+                "core_memory_id": core_memory_id,
+                "promoted": False,
+                "reason": f"v3_policy_gate:{gate_reason}",
+            }
+
+    # ── Gate 2: OM-specific verification gate ────────────────────────────────
     if verification.verification_status != "corroborated":
         return {
             "candidate_id": candidate_id,
@@ -199,6 +252,7 @@ def promote_candidate(
             "reason": f"verification_status={verification.verification_status}",
         }
 
+    # ── Gate 3: Fail-closed hard-block gate ──────────────────────────────────
     try:
         blocked = bool(hard_block_check(candidate_id))
     except Exception as exc:
@@ -257,7 +311,22 @@ def promote_candidate(
         row = core_result.single()
         summary = core_result.consume()
         if row is None:
-            raise RuntimeError(f"OMNode not found for candidate_id={candidate_id}")
+            # OMNode absent from Neo4j — emit event and skip gracefully.
+            # Covers verification-only promotion paths (e.g. re-runs after
+            # node eviction) where the verification record exists in
+            # candidates.db but the OMNode was never written to Neo4j or
+            # has since been removed.  Fail-closed: no CoreMemory is created.
+            _event(
+                "OM_PROMOTION_OMNODE_NOT_FOUND",
+                candidate_id=candidate_id,
+                core_memory_id=core_memory_id,
+            )
+            return {
+                "candidate_id": candidate_id,
+                "core_memory_id": core_memory_id,
+                "promoted": False,
+                "reason": "omnode_not_found",
+            }
         created = bool(summary.counters.nodes_created > 0)
 
         for message_id in verification.evidence_source_ids:
@@ -311,6 +380,7 @@ def main() -> int:
             candidate_id=args.candidate_id,
             verification=verification,
             hard_block_check=hard_block_check,
+            candidates_conn=conn,  # wire unified v3 policy gate
         )
         print(json.dumps(result, indent=2, ensure_ascii=True))
         return 0
