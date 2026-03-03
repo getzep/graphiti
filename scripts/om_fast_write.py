@@ -26,6 +26,7 @@ from typing import Any
 
 DEFAULT_EMBEDDING_MODEL = "embeddinggemma"
 DEFAULT_EMBEDDING_DIM = 768
+DEFAULT_OM_GROUP_ID = "s1_observational_memory"
 DEFAULT_STATE_FILE = "state/om_fast_write_state.json"
 NEO4J_ENV_FALLBACK_FILE = Path.home() / ".clawdbot" / "credentials" / "neo4j.env"
 NEO4J_NON_DEV_FALLBACK_OPT_IN_ENV = "OM_NEO4J_ENV_FALLBACK_NON_DEV"
@@ -84,6 +85,15 @@ def _normalize_iso(ts: str | None) -> str:
         return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     except Exception:
         return _now_iso()
+
+
+def _om_group_id(raw: str | None = None) -> str:
+    value = (raw if raw is not None else os.environ.get("OM_GROUP_ID") or DEFAULT_OM_GROUP_ID).strip()
+    if not value:
+        value = DEFAULT_OM_GROUP_ID
+    if not all(ch.isalnum() or ch in {"_", "-", "."} for ch in value):
+        raise RuntimeError(f"invalid OM_GROUP_ID: {value!r}")
+    return value
 
 
 def _append_gitignore_entry(state_dir: Path) -> None:
@@ -291,6 +301,7 @@ class FastWritePayload:
     created_at: str
     message_id: str
     episode_id: str
+    group_id: str
 
 
 
@@ -313,6 +324,8 @@ def _coerce_payload(raw: dict[str, Any]) -> FastWritePayload:
     if not episode_id:
         episode_id = _sha256_hex(f"episode|{session_id}")
 
+    group_id = _om_group_id(str(raw.get("group_id") or "").strip() or None)
+
     return FastWritePayload(
         source_session_id=session_id,
         role=role,
@@ -320,6 +333,7 @@ def _coerce_payload(raw: dict[str, Any]) -> FastWritePayload:
         created_at=created_at,
         message_id=message_id,
         episode_id=episode_id,
+        group_id=group_id,
     )
 
 
@@ -330,16 +344,19 @@ def fast_write(payload: FastWritePayload) -> dict[str, Any]:
     query = """
     MERGE (e:Episode {episode_id:$episode_id})
     ON CREATE SET
+      e.group_id = $group_id,
       e.source_session_id = $source_session_id,
       e.started_at = $created_at,
       e.last_message_at = $created_at
     ON MATCH SET
+      e.group_id = coalesce(e.group_id, $group_id),
       e.last_message_at = CASE
         WHEN e.last_message_at IS NULL OR e.last_message_at < $created_at THEN $created_at
         ELSE e.last_message_at
       END
     MERGE (m:Message {message_id:$message_id})
     ON CREATE SET
+      m.group_id = $group_id,
       m.episode_id = $episode_id,
       m.source_session_id = $source_session_id,
       m.role = $role,
@@ -352,12 +369,17 @@ def fast_write(payload: FastWritePayload) -> dict[str, Any]:
       m.om_extracted = false,
       m.om_extract_attempts = 0,
       m.om_dead_letter = false
-    MERGE (e)-[:HAS_MESSAGE]->(m)
+    ON MATCH SET
+      m.group_id = coalesce(m.group_id, $group_id)
+    MERGE (e)-[hm:HAS_MESSAGE]->(m)
+    ON CREATE SET hm.group_id = $group_id
+    ON MATCH SET hm.group_id = coalesce(hm.group_id, $group_id)
     RETURN m.message_id AS message_id, e.episode_id AS episode_id
     """
 
     params = {
         "episode_id": payload.episode_id,
+        "group_id": payload.group_id,
         "source_session_id": payload.source_session_id,
         "created_at": payload.created_at,
         "message_id": payload.message_id,
@@ -378,6 +400,7 @@ def fast_write(payload: FastWritePayload) -> dict[str, Any]:
     return {
         "message_id": payload.message_id,
         "episode_id": payload.episode_id,
+        "group_id": payload.group_id,
         "embedding_model": embedding_model,
         "embedding_dim": embedding_dim,
     }
@@ -396,6 +419,7 @@ def _load_payload(args: argparse.Namespace) -> dict[str, Any]:
         "created_at": args.created_at,
         "message_id": args.message_id,
         "episode_id": args.episode_id,
+        "group_id": args.group_id,
     }
 
 
@@ -451,6 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
     write.add_argument("--created-at")
     write.add_argument("--message-id")
     write.add_argument("--episode-id")
+    write.add_argument("--group-id", default=DEFAULT_OM_GROUP_ID)
     write.add_argument("--payload-json", help="full JSON payload")
     write.add_argument("--payload-file", help="path to JSON payload")
     write.add_argument("--runtime-repo", help="runtime repo root for state file update")

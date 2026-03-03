@@ -101,6 +101,10 @@ In production/staging, set `NEO4J_PASSWORD` directly; the file fallback is disab
 as `Message` and `Episode` nodes with embeddings. Use this when you need sub-second
 writes without going through the MCP server's full ingestion queue.
 
+As of the lane-tagging fix, fast-write stamps OM primitives with
+`group_id=s1_observational_memory` by default (override via `OM_GROUP_ID` or
+`--group-id`). This keeps OM path records lane-addressable for audits and cross-path joins.
+
 ### Commands
 
 ```bash
@@ -109,7 +113,8 @@ python3 scripts/om_fast_write.py write \
   --session-id <session_id> \
   --role user \
   --content "The Neo4j heap should be capped at 70% of available RAM." \
-  --created-at 2026-02-26T12:00:00Z
+  --created-at 2026-02-26T12:00:00Z \
+  --group-id s1_observational_memory
 
 # Write from a JSON payload file
 python3 scripts/om_fast_write.py write \
@@ -128,6 +133,18 @@ python3 scripts/om_fast_write.py set-state \
   --reason "maintenance"
 ```
 
+### One-time lane backfill for legacy OM records
+
+If you have OM data from before lane tagging was added, run:
+
+```bash
+# Preview counts only
+python3 scripts/om_backfill_group_id.py --group-id s1_observational_memory
+
+# Apply
+python3 scripts/om_backfill_group_id.py --group-id s1_observational_memory --apply
+```
+
 ### State File
 
 State is persisted at `state/om_fast_write_state.json` inside the runtime repo.
@@ -140,6 +157,7 @@ This file is gitignored automatically. The `set-state` command emits
 |---|---|---|
 | `OM_EMBEDDING_MODEL` | `embeddinggemma` | Model name sent to embeddings endpoint |
 | `OM_EMBEDDING_DIM` | `768` | Expected vector dimension (mismatch = error) |
+| `OM_GROUP_ID` | `s1_observational_memory` | Lane tag for OM Message/Episode/OMNode writes |
 | `OM_EMBED_TIMEOUT_SECONDS` | `20` | HTTP timeout for embedding calls |
 | `EMBEDDER_BASE_URL` / `OPENAI_BASE_URL` | `http://localhost:11434/v1` | Base URL for OpenAI-compatible embeddings API |
 

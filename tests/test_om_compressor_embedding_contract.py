@@ -88,6 +88,7 @@ class OMCompressorEmbeddingContractTests(unittest.TestCase):
                     chunk_id='chunk-1',
                     cfg=self.cfg,
                     observed_node_ids=[],
+                    group_id='s1_observational_memory',
                 )
 
         rewrite_queries = [q for q in tx.queries if 'SET n.content = $content' in q]
@@ -107,6 +108,7 @@ class OMCompressorEmbeddingContractTests(unittest.TestCase):
                 chunk_id='chunk-1',
                 cfg=self.cfg,
                 observed_node_ids=[],
+                group_id='s1_observational_memory',
             )
 
         self.assertEqual(result['nodes'], 1)
