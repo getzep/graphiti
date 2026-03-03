@@ -14,7 +14,13 @@ try:
 except ImportError:
     HAS_FALKOR = False
 
-# Kuzu support removed - FalkorDB is now the default
+# Try to import FalkorDB Lite (embedded, zero-config) if available
+try:
+    from falkordblite import FalkorDB as FalkorDBLite  # noqa: F401
+
+    HAS_FALKOR_LITE = True
+except ImportError:
+    HAS_FALKOR_LITE = False
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
@@ -429,6 +435,37 @@ class DatabaseDriverFactory:
                     'port': port,
                     'password': password,
                     'database': falkor_config.database,
+                }
+
+            case 'falkordb_lite':
+                if not HAS_FALKOR:
+                    raise ValueError(
+                        'FalkorDB driver not available in current graphiti-core version. '
+                        'Install with: pip install graphiti-core[falkordb]'
+                    )
+                if not HAS_FALKOR_LITE:
+                    raise ValueError(
+                        'FalkorDB Lite (embedded) not available. '
+                        'Install with: pip install falkordblite'
+                    )
+
+                import os
+
+                from config.schema import FalkorDBLiteProviderConfig
+
+                # Use FalkorDB Lite config if provided, otherwise use defaults
+                if config.providers.falkordb_lite:
+                    lite_config = config.providers.falkordb_lite
+                else:
+                    lite_config = FalkorDBLiteProviderConfig()
+
+                # Allow env var override for db path
+                db_path = os.environ.get('FALKORDB_LITE_PATH', lite_config.db_path)
+
+                return {
+                    'driver': 'falkordb_lite',
+                    'db_path': db_path,
+                    'database': lite_config.database,
                 }
 
             case _:

@@ -191,11 +191,19 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class FalkorDBLiteProviderConfig(BaseModel):
+    """FalkorDB Lite (embedded) provider configuration."""
+
+    db_path: str | None = None
+    database: str = 'default_db'
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    falkordb_lite: FalkorDBLiteProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):

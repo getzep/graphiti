@@ -24,6 +24,9 @@ providers = [
     "voyageai>=0.2.3",
     "sentence-transformers>=2.0.0",
 ]
+lite = [
+    "falkordblite>=14.2.0",
+]
 
 [tool.pyright]
 include = ["src", "tests"]

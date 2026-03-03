@@ -211,7 +211,8 @@ class GraphitiService:
 
             # Initialize Graphiti client with appropriate driver
             try:
-                if self.config.database.provider.lower() == 'falkordb':
+                db_provider = self.config.database.provider.lower()
+                if db_provider == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -220,6 +221,33 @@ class GraphitiService:
                         port=db_config['port'],
                         password=db_config['password'],
                         database=db_config['database'],
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=falkor_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif db_provider == 'falkordb_lite':
+                    # For FalkorDB Lite (embedded), start an in-process instance
+                    from falkordblite import FalkorDB as FalkorDBLite
+                    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+                    db_path = db_config.get('db_path')
+                    if db_path:
+                        lite_instance = FalkorDBLite(db_path)
+                    else:
+                        lite_instance = FalkorDBLite()
+
+                    # Store the lite instance so it doesn't get garbage collected
+                    self._falkordb_lite_instance = lite_instance
+
+                    # Create a FalkorDriver using the embedded FalkorDB's connection
+                    # FalkorDBLite exposes the same graph API as falkordb-py
+                    falkor_driver = FalkorDriver(
+                        falkor_db=lite_instance,
+                        database=db_config.get('database', 'default_db'),
                     )
 
                     self.client = Graphiti(
@@ -243,7 +271,18 @@ class GraphitiService:
                 error_msg = str(db_error).lower()
                 if 'connection refused' in error_msg or 'could not connect' in error_msg:
                     db_provider = self.config.database.provider
-                    if db_provider.lower() == 'falkordb':
+                    if db_provider.lower() == 'falkordb_lite':
+                        raise RuntimeError(
+                            f'\n{"=" * 70}\n'
+                            f'Database Error: FalkorDB Lite failed to start\n'
+                            f'{"=" * 70}\n\n'
+                            f'The embedded FalkorDB Lite instance could not start.\n\n'
+                            f'Ensure falkordblite is installed:\n'
+                            f'  pip install falkordblite\n\n'
+                            f'Check that the db_path is writable if specified.\n\n'
+                            f'{"=" * 70}\n'
+                        ) from db_error
+                    elif db_provider.lower() == 'falkordb':
                         raise RuntimeError(
                             f'\n{"=" * 70}\n'
                             f'Database Connection Error: FalkorDB is not running\n'
@@ -806,8 +845,8 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
-        help='Database provider to use',
+        choices=['neo4j', 'falkordb', 'falkordb_lite'],
+        help='Database provider to use (falkordb_lite requires no external server)',
     )
 
     # LLM configuration arguments
