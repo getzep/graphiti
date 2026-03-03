@@ -102,6 +102,14 @@ export interface PluginConfig {
   capabilityRequireIntent: boolean;
   /** Minimum capability score for inclusion. Default 0 (no floor). */
   capabilityMinScore: number;
+  /** Enable context-map anchor injection scaffold. Default false. */
+  enableContextMapAnchor: boolean;
+  /** Path to the primary context-map file (optional). */
+  contextMapPath?: string;
+  /** Path to companion context-map metadata file (optional). */
+  contextMapMetaPath?: string;
+  /** Optional custom anchor text injected when scaffold gates pass. */
+  contextMapAnchorText?: string;
 }
 
 export const DEFAULT_CONFIG: PluginConfig = {
@@ -128,6 +136,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   capabilityTopN: 8,
   capabilityRequireIntent: false,
   capabilityMinScore: 0,
+  enableContextMapAnchor: false,
 };
 
 const normalizeOptionalString = (value?: string): string | undefined => {
@@ -170,6 +179,9 @@ export const normalizeConfig = (config?: Partial<PluginConfig>): PluginConfig =>
     allowedProviderOverrides:
       config?.allowedProviderOverrides ?? DEFAULT_CONFIG.allowedProviderOverrides,
     allowedModelOverrides: config?.allowedModelOverrides ?? DEFAULT_CONFIG.allowedModelOverrides,
+    contextMapPath: normalizeOptionalString(config?.contextMapPath),
+    contextMapMetaPath: normalizeOptionalString(config?.contextMapMetaPath),
+    contextMapAnchorText: normalizeOptionalString(config?.contextMapAnchorText),
   };
 };
 

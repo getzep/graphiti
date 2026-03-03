@@ -9,6 +9,7 @@ import { createCaptureHook, stripInjectedContext } from '../hooks/capture.ts';
 import { createLegacyBeforeAgentStartHook } from '../hooks/legacy-before-agent-start.ts';
 import { createModelResolveHook } from '../hooks/model-resolve.ts';
 import { createRecallHook } from '../hooks/recall.ts';
+import { createContextMapAnchorHooks } from '../hooks/context-map-anchor.ts';
 import { deriveGroupLane } from '../lane-utils.ts';
 import { detectIntent } from '../intent/detector.ts';
 import type { IntentRuleSet } from '../intent/types.ts';
@@ -1815,4 +1816,260 @@ test('pack router resolves relative script path from packRouterRepoRoot, not pro
   // that spawn received the correct cwd.
   assert.ok(result, 'injector must succeed when relative script path is resolved from repoRoot');
   assert.ok(result.context.includes('relative cwd pack content'));
+});
+
+test('context-map anchor scaffold is disabled by default', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-context-map-disabled-default-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  const metaPath = path.join(tempDir, 'context-map.meta.json');
+  fs.writeFileSync(mapPath, '# map\nnode-a -> node-b\n', 'utf8');
+  fs.writeFileSync(metaPath, '{"version":1}', 'utf8');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      contextMapPath: mapPath,
+      contextMapMetaPath: metaPath,
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'hello' }, ctx);
+
+  assert.deepEqual(result, {});
+});
+
+test('context-map anchor only runs when lifecycle trigger fires', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-context-map-trigger-gating-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  const metaPath = path.join(tempDir, 'context-map.meta.json');
+  fs.writeFileSync(mapPath, '# map\nalpha\n', 'utf8');
+  fs.writeFileSync(metaPath, '{"version":1}', 'utf8');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      contextMapPath: mapPath,
+      contextMapMetaPath: metaPath,
+      contextMapAnchorText: 'Use this context map.',
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+
+  const withoutTrigger = await hooks.before_prompt_build({ prompt: 'first turn' }, ctx);
+  assert.deepEqual(withoutTrigger, {});
+
+  await hooks.session_start({}, ctx);
+  const afterSessionStart = await hooks.before_prompt_build({ prompt: 'first turn' }, ctx);
+  assert.ok(afterSessionStart.prependContext?.includes('<context-map-anchor>'));
+  assert.ok(afterSessionStart.prependContext?.includes('Use this context map.'));
+
+  const immediateSecondCall = await hooks.before_prompt_build({ prompt: 'second turn' }, ctx);
+  assert.deepEqual(immediateSecondCall, {});
+});
+
+test('context-map anchor hash-change gating is handled in hook logic', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-context-map-hash-gating-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  const metaPath = path.join(tempDir, 'context-map.meta.json');
+  fs.writeFileSync(mapPath, '# map\nalpha\n', 'utf8');
+  fs.writeFileSync(metaPath, '{"version":1}', 'utf8');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      contextMapPath: mapPath,
+      contextMapMetaPath: metaPath,
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const first = await hooks.before_prompt_build({ prompt: 'turn 1' }, ctx);
+  assert.ok(first.prependContext?.includes('<context-map-anchor>'));
+
+  await hooks.after_compaction({}, ctx);
+  const unchanged = await hooks.before_prompt_build({ prompt: 'turn 2' }, ctx);
+  assert.deepEqual(unchanged, {});
+
+  fs.writeFileSync(metaPath, '{"version":2}', 'utf8');
+  await hooks.after_compaction({}, ctx);
+  const changed = await hooks.before_prompt_build({ prompt: 'turn 3' }, ctx);
+  assert.ok(changed.prependContext?.includes('<context-map-anchor>'));
+
+  await hooks.before_reset({}, ctx);
+  const afterReset = await hooks.before_prompt_build({ prompt: 'turn 4' }, ctx);
+  assert.deepEqual(afterReset, {});
+});
+
+// ── Context map anchor security tests ────────────────────────────────────
+
+test('context-map anchor rejects contextMapPath that traverses above repo root', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-escape-path-');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: '../../etc/passwd',
+      contextMapMetaPath: 'context-map.meta.json',
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  // Traversal path must silently produce no anchor (resolveAndValidatePath returns undefined).
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  assert.deepEqual(result, {}, 'traversal path must yield no anchor and must not throw');
+});
+
+test('context-map anchor rejects absolute contextMapPath outside repo root', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-abs-escape-');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: '/etc/hosts',
+      contextMapMetaPath: 'context-map.meta.json',
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  assert.deepEqual(result, {}, 'absolute out-of-root path must yield no anchor');
+});
+
+test('context-map anchor silently skips symlink that resolves outside repo root', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-symlink-escape-');
+  const externalDir = makeTempDir(t, 'graphiti-cm-symlink-external-');
+  const externalFile = path.join(externalDir, 'secret.md');
+  fs.writeFileSync(externalFile, '# secret', 'utf8');
+
+  const symlinkedMap = path.join(tempDir, 'context-map.md');
+  fs.symlinkSync(externalFile, symlinkedMap);
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: 'context-map.md',
+      contextMapMetaPath: 'context-map.meta.json',
+      contextMapAnchorText: 'test-anchor',
+      debug: true,
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  assert.deepEqual(result, {}, 'symlink outside root must not produce anchor');
+});
+
+test('context-map anchor sanitizes control characters in anchor text', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-ctrl-char-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  fs.writeFileSync(mapPath, '# map\nalpha', 'utf8');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: 'context-map.md',
+      contextMapMetaPath: 'context-map.meta.json',
+      // Embed null byte and bell character that must be stripped.
+      contextMapAnchorText: 'safe-text\x00\x07-end',
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  const anchor = result.prependContext ?? '';
+  assert.ok(anchor.includes('<context-map-anchor>'), 'anchor block must be present');
+  assert.ok(!anchor.includes('\x00'), 'null byte must be stripped from anchor');
+  assert.ok(!anchor.includes('\x07'), 'bell char must be stripped from anchor');
+  assert.ok(anchor.includes('safe-text'), 'safe text must be preserved');
+  assert.ok(anchor.includes('-end'), 'suffix must be preserved');
+});
+
+test('context-map anchor truncates anchor text exceeding max length', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-truncate-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  fs.writeFileSync(mapPath, '# map\nalpha', 'utf8');
+
+  const longText = 'y'.repeat(1024); // well over 512-char limit
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: 'context-map.md',
+      contextMapMetaPath: 'context-map.meta.json',
+      contextMapAnchorText: longText,
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  const anchor = result.prependContext ?? '';
+  assert.ok(anchor.includes('<context-map-anchor>'), 'anchor block must be present');
+  // Full 1024-char string must not appear verbatim — truncated at 512.
+  assert.ok(!anchor.includes('y'.repeat(513)), 'anchor text must be truncated at 512 chars');
+});
+
+test('context-map anchor handles malformed meta without crashing (falls back to content hash)', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-malformed-meta-');
+  const mapPath = path.join(tempDir, 'context-map.md');
+  const metaPath = path.join(tempDir, 'context-map.meta.json');
+  fs.writeFileSync(mapPath, '# map\nalpha', 'utf8');
+  // Truncated JSON — parse failure
+  fs.writeFileSync(metaPath, '{"version":', 'utf8');
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: 'context-map.md',
+      contextMapMetaPath: 'context-map.meta.json',
+      contextMapAnchorText: 'anchor-text',
+      debug: true,
+    },
+  });
+
+  // Must not throw; map file provides content hash as fallback fingerprint.
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'turn 1' }, ctx);
+  assert.ok(result.prependContext?.includes('<context-map-anchor>'), 'anchor must inject via content hash fallback');
+  // Second call — same fingerprint, no reinjection.
+  const ctx2: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx2);
+  await hooks.before_prompt_build({ prompt: 'turn 1' }, ctx2);
+  const second = await hooks.before_prompt_build({ prompt: 'turn 2' }, ctx2);
+  assert.deepEqual(second, {}, 'must not reinject with same fingerprint');
+});
+
+test('context-map anchor handles completely missing files gracefully', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-cm-missing-files-');
+  // No context-map.md or meta file created.
+
+  const hooks = createContextMapAnchorHooks({
+    config: {
+      enableContextMapAnchor: true,
+      packRouterRepoRoot: tempDir,
+      contextMapPath: 'context-map.md',
+      contextMapMetaPath: 'context-map.meta.json',
+      contextMapAnchorText: 'anchor-text',
+    },
+  });
+
+  const ctx: Record<string, unknown> = {};
+  await hooks.session_start({}, ctx);
+  const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
+  // No files → no fingerprint → no anchor.
+  assert.deepEqual(result, {}, 'missing files must not crash and must yield no anchor');
 });

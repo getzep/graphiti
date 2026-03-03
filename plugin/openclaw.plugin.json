@@ -129,8 +129,15 @@
       },
       "capabilitySelectorCommand": {
         "oneOf": [
-          { "type": "string" },
-          { "type": "array", "items": { "type": "string" } }
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         ],
         "description": "Command to run the capability subset selector."
       },
@@ -157,10 +164,29 @@
       "capabilityMinScore": {
         "type": "number",
         "description": "Minimum capability score threshold for inclusion."
+      },
+      "enableContextMapAnchor": {
+        "type": "boolean",
+        "description": "Enable context-map anchor scaffold injection. Disabled by default."
+      },
+      "contextMapPath": {
+        "type": "string",
+        "description": "Path to context-map file used for fingerprint gating."
+      },
+      "contextMapMetaPath": {
+        "type": "string",
+        "description": "Path to context-map metadata file used for fingerprint gating."
+      },
+      "contextMapAnchorText": {
+        "type": "string",
+        "description": "Anchor text injected when lifecycle + fingerprint gating passes."
       }
     }
   },
   "hooks": [
+    "session_start",
+    "after_compaction",
+    "before_reset",
     "before_model_resolve",
     "before_prompt_build",
     "before_agent_start",

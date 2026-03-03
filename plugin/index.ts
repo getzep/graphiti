@@ -9,6 +9,7 @@ import {
 import { createModelResolveHook } from './hooks/model-resolve.ts';
 import { createPackInjector } from './hooks/pack-injector.ts';
 import { createRecallHook } from './hooks/recall.ts';
+import { createContextMapAnchorHooks } from './hooks/context-map-anchor.ts';
 import {
   loadCompositionRules,
   loadIntentRules,
@@ -93,16 +94,30 @@ export const buildGraphitiHooks = (options?: GraphitiPluginOptions) => {
     packInjector,
     config,
   });
+  const contextMapAnchorHooks = createContextMapAnchorHooks({ config });
 
   const beforePromptBuildHook: ReturnType<typeof createRecallHook> = async (event, ctx) => {
     if (hasPromptBuildExecuted(ctx)) {
       return {};
     }
     markPromptBuildExecuted(ctx);
-    return promptBuildHook(event, ctx);
+
+    const [anchorResult, promptResult] = await Promise.all([
+      contextMapAnchorHooks.before_prompt_build(event, ctx),
+      promptBuildHook(event, ctx),
+    ]);
+
+    const prependContext = [anchorResult.prependContext, promptResult.prependContext]
+      .filter((part): part is string => Boolean(part && part.trim().length > 0))
+      .join('\n\n');
+
+    return prependContext.length > 0 ? { prependContext } : {};
   };
 
   return {
+    session_start: contextMapAnchorHooks.session_start,
+    after_compaction: contextMapAnchorHooks.after_compaction,
+    before_reset: contextMapAnchorHooks.before_reset,
     before_model_resolve: createModelResolveHook({ config }),
     before_prompt_build: beforePromptBuildHook,
     before_agent_start: createLegacyBeforeAgentStartHook(promptBuildHook),
@@ -137,6 +152,9 @@ const bicameralPlugin = {
       config: (api.pluginConfig as Partial<PluginConfig> | undefined) ?? {},
     });
 
+    api.on('session_start', hooks.session_start);
+    api.on('after_compaction', hooks.after_compaction);
+    api.on('before_reset', hooks.before_reset);
     api.on('before_model_resolve', hooks.before_model_resolve);
     api.on('before_prompt_build', hooks.before_prompt_build);
     api.on('before_agent_start', hooks.before_agent_start);
