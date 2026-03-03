@@ -14,85 +14,71 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.driver.kuzu.operations.record_parsers import parse_kuzu_entity_node
-from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
+from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
+from graphiti_core.driver.record_parsers import community_node_from_record
 from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.models.nodes.node_db_queries import (
-    get_entity_node_return_query,
-    get_entity_node_save_query,
+    COMMUNITY_NODE_RETURN,
+    get_community_node_save_query,
 )
-from graphiti_core.nodes import EntityNode
+from graphiti_core.nodes import CommunityNode
 
 logger = logging.getLogger(__name__)
 
 
-class KuzuEntityNodeOperations(EntityNodeOperations):
+class LadybugCommunityNodeOperations(CommunityNodeOperations):
     async def save(
         self,
         executor: QueryExecutor,
-        node: EntityNode,
+        node: CommunityNode,
         tx: Transaction | None = None,
     ) -> None:
-        # Kuzu uses individual SET per property, attributes serialized as JSON
-        attrs_json = json.dumps(node.attributes or {})
+        query = get_community_node_save_query(GraphProvider.LADYBUG)
         params: dict[str, Any] = {
             'uuid': node.uuid,
             'name': node.name,
-            'name_embedding': node.name_embedding,
             'group_id': node.group_id,
             'summary': node.summary,
+            'name_embedding': node.name_embedding,
             'created_at': node.created_at,
-            'labels': list(set(node.labels + ['Entity'])),
-            'attributes': attrs_json,
         }
-
-        query = get_entity_node_save_query(GraphProvider.KUZU, '')
-
         if tx is not None:
             await tx.run(query, **params)
         else:
             await executor.execute_query(query, **params)
 
-        logger.debug(f'Saved Node to Graph: {node.uuid}')
+        logger.debug(f'Saved Community Node to Graph: {node.uuid}')
 
     async def save_bulk(
         self,
         executor: QueryExecutor,
-        nodes: list[EntityNode],
+        nodes: list[CommunityNode],
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
-        # Kuzu doesn't support UNWIND - iterate and save individually
+        # Ladybug doesn't support UNWIND - iterate and save individually
         for node in nodes:
             await self.save(executor, node, tx=tx)
 
     async def delete(
         self,
         executor: QueryExecutor,
-        node: EntityNode,
+        node: CommunityNode,
         tx: Transaction | None = None,
     ) -> None:
-        # Also delete connected RelatesToNode_ intermediates
-        cleanup_query = """
-            MATCH (n:Entity {uuid: $uuid})-[:RELATES_TO]->(r:RelatesToNode_)
-            DETACH DELETE r
-        """
-        delete_query = """
-            MATCH (n:Entity {uuid: $uuid})
+        query = """
+            MATCH (n:Community {uuid: $uuid})
             DETACH DELETE n
         """
         if tx is not None:
-            await tx.run(cleanup_query, uuid=node.uuid)
-            await tx.run(delete_query, uuid=node.uuid)
+            await tx.run(query, uuid=node.uuid)
         else:
-            await executor.execute_query(cleanup_query, uuid=node.uuid)
-            await executor.execute_query(delete_query, uuid=node.uuid)
+            await executor.execute_query(query, uuid=node.uuid)
 
         logger.debug(f'Deleted Node: {node.uuid}')
 
@@ -103,20 +89,14 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
-        # Clean up RelatesToNode_ intermediates first
-        cleanup_query = """
-            MATCH (n:Entity {group_id: $group_id})-[:RELATES_TO]->(r:RelatesToNode_)
-            DETACH DELETE r
-        """
+        # Ladybug doesn't support IN TRANSACTIONS OF - simple delete
         query = """
-            MATCH (n:Entity {group_id: $group_id})
+            MATCH (n:Community {group_id: $group_id})
             DETACH DELETE n
         """
         if tx is not None:
-            await tx.run(cleanup_query, group_id=group_id)
             await tx.run(query, group_id=group_id)
         else:
-            await executor.execute_query(cleanup_query, group_id=group_id)
             await executor.execute_query(query, group_id=group_id)
 
     async def delete_by_uuids(
@@ -126,34 +106,31 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
-        cleanup_query = """
-            MATCH (n:Entity)-[:RELATES_TO]->(r:RelatesToNode_)
-            WHERE n.uuid IN $uuids
-            DETACH DELETE r
-        """
+        # Ladybug doesn't support IN TRANSACTIONS OF - simple delete
         query = """
-            MATCH (n:Entity)
+            MATCH (n:Community)
             WHERE n.uuid IN $uuids
             DETACH DELETE n
         """
         if tx is not None:
-            await tx.run(cleanup_query, uuids=uuids)
             await tx.run(query, uuids=uuids)
         else:
-            await executor.execute_query(cleanup_query, uuids=uuids)
             await executor.execute_query(query, uuids=uuids)
 
     async def get_by_uuid(
         self,
         executor: QueryExecutor,
         uuid: str,
-    ) -> EntityNode:
-        query = """
-            MATCH (n:Entity {uuid: $uuid})
+    ) -> CommunityNode:
+        query = (
+            """
+            MATCH (c:Community {uuid: $uuid})
             RETURN
-            """ + get_entity_node_return_query(GraphProvider.KUZU)
+            """
+            + COMMUNITY_NODE_RETURN
+        )
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        nodes = [parse_kuzu_entity_node(r) for r in records]
+        nodes = [community_node_from_record(r) for r in records]
         if len(nodes) == 0:
             raise NodeNotFoundError(uuid)
         return nodes[0]
@@ -162,14 +139,17 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
         self,
         executor: QueryExecutor,
         uuids: list[str],
-    ) -> list[EntityNode]:
-        query = """
-            MATCH (n:Entity)
-            WHERE n.uuid IN $uuids
+    ) -> list[CommunityNode]:
+        query = (
+            """
+            MATCH (c:Community)
+            WHERE c.uuid IN $uuids
             RETURN
-            """ + get_entity_node_return_query(GraphProvider.KUZU)
+            """
+            + COMMUNITY_NODE_RETURN
+        )
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [parse_kuzu_entity_node(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -177,21 +157,21 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
-    ) -> list[EntityNode]:
-        cursor_clause = 'AND n.uuid < $uuid' if uuid_cursor else ''
+    ) -> list[CommunityNode]:
+        cursor_clause = 'AND c.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
         query = (
             """
-            MATCH (n:Entity)
-            WHERE n.group_id IN $group_ids
+            MATCH (c:Community)
+            WHERE c.group_id IN $group_ids
             """
             + cursor_clause
             + """
             RETURN
             """
-            + get_entity_node_return_query(GraphProvider.KUZU)
+            + COMMUNITY_NODE_RETURN
             + """
-            ORDER BY n.uuid DESC
+            ORDER BY c.uuid DESC
             """
             + limit_clause
         )
@@ -201,36 +181,18 @@ class KuzuEntityNodeOperations(EntityNodeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [parse_kuzu_entity_node(r) for r in records]
+        return [community_node_from_record(r) for r in records]
 
-    async def load_embeddings(
+    async def load_name_embedding(
         self,
         executor: QueryExecutor,
-        node: EntityNode,
+        node: CommunityNode,
     ) -> None:
         query = """
-            MATCH (n:Entity {uuid: $uuid})
-            RETURN n.name_embedding AS name_embedding
+            MATCH (c:Community {uuid: $uuid})
+            RETURN c.name_embedding AS name_embedding
         """
         records, _, _ = await executor.execute_query(query, uuid=node.uuid)
         if len(records) == 0:
             raise NodeNotFoundError(node.uuid)
         node.name_embedding = records[0]['name_embedding']
-
-    async def load_embeddings_bulk(
-        self,
-        executor: QueryExecutor,
-        nodes: list[EntityNode],
-        batch_size: int = 100,
-    ) -> None:
-        uuids = [n.uuid for n in nodes]
-        query = """
-            MATCH (n:Entity)
-            WHERE n.uuid IN $uuids
-            RETURN DISTINCT n.uuid AS uuid, n.name_embedding AS name_embedding
-        """
-        records, _, _ = await executor.execute_query(query, uuids=uuids)
-        embedding_map = {r['uuid']: r['name_embedding'] for r in records}
-        for node in nodes:
-            if node.uuid in embedding_map:
-                node.name_embedding = embedding_map[node.uuid]

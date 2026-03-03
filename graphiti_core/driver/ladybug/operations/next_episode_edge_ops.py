@@ -17,21 +17,21 @@ limitations under the License.
 import logging
 from typing import Any
 
-from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeOperations
+from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
-from graphiti_core.edges import HasEpisodeEdge
+from graphiti_core.edges import NextEpisodeEdge
 from graphiti_core.errors import EdgeNotFoundError
 from graphiti_core.helpers import parse_db_date
 from graphiti_core.models.edges.edge_db_queries import (
-    HAS_EPISODE_EDGE_RETURN,
-    HAS_EPISODE_EDGE_SAVE,
+    NEXT_EPISODE_EDGE_RETURN,
+    NEXT_EPISODE_EDGE_SAVE,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _has_episode_edge_from_record(record: Any) -> HasEpisodeEdge:
-    return HasEpisodeEdge(
+def _next_episode_edge_from_record(record: Any) -> NextEpisodeEdge:
+    return NextEpisodeEdge(
         uuid=record['uuid'],
         group_id=record['group_id'],
         source_node_uuid=record['source_node_uuid'],
@@ -40,31 +40,31 @@ def _has_episode_edge_from_record(record: Any) -> HasEpisodeEdge:
     )
 
 
-class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
+class LadybugNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
     async def save(
         self,
         executor: QueryExecutor,
-        edge: HasEpisodeEdge,
+        edge: NextEpisodeEdge,
         tx: Transaction | None = None,
     ) -> None:
         params: dict[str, Any] = {
-            'saga_uuid': edge.source_node_uuid,
-            'episode_uuid': edge.target_node_uuid,
+            'source_episode_uuid': edge.source_node_uuid,
+            'target_episode_uuid': edge.target_node_uuid,
             'uuid': edge.uuid,
             'group_id': edge.group_id,
             'created_at': edge.created_at,
         }
         if tx is not None:
-            await tx.run(HAS_EPISODE_EDGE_SAVE, **params)
+            await tx.run(NEXT_EPISODE_EDGE_SAVE, **params)
         else:
-            await executor.execute_query(HAS_EPISODE_EDGE_SAVE, **params)
+            await executor.execute_query(NEXT_EPISODE_EDGE_SAVE, **params)
 
         logger.debug(f'Saved Edge to Graph: {edge.uuid}')
 
     async def save_bulk(
         self,
         executor: QueryExecutor,
-        edges: list[HasEpisodeEdge],
+        edges: list[NextEpisodeEdge],
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
@@ -74,11 +74,11 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
     async def delete(
         self,
         executor: QueryExecutor,
-        edge: HasEpisodeEdge,
+        edge: NextEpisodeEdge,
         tx: Transaction | None = None,
     ) -> None:
         query = """
-            MATCH (n:Saga)-[e:HAS_EPISODE {uuid: $uuid}]->(m:Episodic)
+            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
             DELETE e
         """
         if tx is not None:
@@ -95,7 +95,7 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
         tx: Transaction | None = None,
     ) -> None:
         query = """
-            MATCH (n:Saga)-[e:HAS_EPISODE]->(m:Episodic)
+            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
             WHERE e.uuid IN $uuids
             DELETE e
         """
@@ -108,16 +108,16 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
         self,
         executor: QueryExecutor,
         uuid: str,
-    ) -> HasEpisodeEdge:
+    ) -> NextEpisodeEdge:
         query = (
             """
-            MATCH (n:Saga)-[e:HAS_EPISODE {uuid: $uuid}]->(m:Episodic)
+            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
             RETURN
             """
-            + HAS_EPISODE_EDGE_RETURN
+            + NEXT_EPISODE_EDGE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        edges = [_has_episode_edge_from_record(r) for r in records]
+        edges = [_next_episode_edge_from_record(r) for r in records]
         if len(edges) == 0:
             raise EdgeNotFoundError(uuid)
         return edges[0]
@@ -126,17 +126,17 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
         self,
         executor: QueryExecutor,
         uuids: list[str],
-    ) -> list[HasEpisodeEdge]:
+    ) -> list[NextEpisodeEdge]:
         query = (
             """
-            MATCH (n:Saga)-[e:HAS_EPISODE]->(m:Episodic)
+            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
             WHERE e.uuid IN $uuids
             RETURN
             """
-            + HAS_EPISODE_EDGE_RETURN
+            + NEXT_EPISODE_EDGE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [_has_episode_edge_from_record(r) for r in records]
+        return [_next_episode_edge_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -144,19 +144,19 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
-    ) -> list[HasEpisodeEdge]:
+    ) -> list[NextEpisodeEdge]:
         cursor_clause = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
         query = (
             """
-            MATCH (n:Saga)-[e:HAS_EPISODE]->(m:Episodic)
+            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
             WHERE e.group_id IN $group_ids
             """
             + cursor_clause
             + """
             RETURN
             """
-            + HAS_EPISODE_EDGE_RETURN
+            + NEXT_EPISODE_EDGE_RETURN
             + """
             ORDER BY e.uuid DESC
             """
@@ -168,4 +168,4 @@ class KuzuHasEpisodeEdgeOperations(HasEpisodeEdgeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [_has_episode_edge_from_record(r) for r in records]
+        return [_next_episode_edge_from_record(r) for r in records]

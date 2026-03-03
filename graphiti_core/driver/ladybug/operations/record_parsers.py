@@ -22,8 +22,8 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
 
 
-def parse_kuzu_entity_node(record: Any) -> EntityNode:
-    """Parse a Kuzu entity node record, deserializing JSON attributes."""
+def parse_ladybug_entity_node(record: Any) -> EntityNode:
+    """Parse a Ladybug entity node record, deserializing JSON attributes."""
     if isinstance(record.get('attributes'), str):
         try:
             record['attributes'] = json.loads(record['attributes'])
@@ -34,8 +34,8 @@ def parse_kuzu_entity_node(record: Any) -> EntityNode:
     return entity_node_from_record(record)
 
 
-def parse_kuzu_entity_edge(record: Any) -> EntityEdge:
-    """Parse a Kuzu entity edge record, deserializing JSON attributes."""
+def parse_ladybug_entity_edge(record: Any) -> EntityEdge:
+    """Parse a Ladybug entity edge record, deserializing JSON attributes."""
     if isinstance(record.get('attributes'), str):
         try:
             record['attributes'] = json.loads(record['attributes'])

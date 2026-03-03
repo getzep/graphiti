@@ -32,16 +32,15 @@ graphiti = Graphiti(
 )
 ```
 
-## With Kuzu (In-Memory)
+## With Ladybug (In-Memory)
 
 ```python
-from graphiti_core.driver.kuzu_driver import KuzuDriver
+from graphiti_core.driver.ladybug_driver import LadybugDriver
 
-kuzu_driver = KuzuDriver()
-graphiti = Graphiti(graph_driver=kuzu_driver, tracer=tracer)
+ladybug_driver = LadybugDriver()
+graphiti = Graphiti(graph_driver=ladybug_driver, tracer=tracer)
 ```
 
 ## Example
 
 See `examples/opentelemetry/` for a complete working example with stdout tracing
-
