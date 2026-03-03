@@ -17,10 +17,10 @@ services:
       start_period: 10s
 
   graphiti-mcp:
+    # To use the latest graphiti-core, build locally with:
+    #   docker compose -f docker-compose-falkordb.yml build
+    # The Docker Hub image may lag behind the latest release.
     image: zepai/knowledge-graph-mcp:standalone
-    # For specific versions, replace 'standalone' with a version tag:
-    #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
-    # When building locally, the build section below will be used.
     build:
       context: ..
       dockerfile: docker/Dockerfile.standalone
