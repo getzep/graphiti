@@ -562,8 +562,13 @@ class TestSearchRateLimiter(unittest.TestCase):
         import sys
         from pathlib import Path
 
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src'))
-        from utils.rate_limiter import SlidingWindowRateLimiter
+        _mcp_src = str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src')
+        sys.path.insert(0, _mcp_src)
+        try:
+            from utils.rate_limiter import SlidingWindowRateLimiter
+        finally:
+            sys.path.remove(_mcp_src)
+            sys.modules.pop('config', None)
 
         return SlidingWindowRateLimiter(max_requests=max_requests, window_seconds=window_seconds)
 
@@ -607,8 +612,13 @@ class TestSearchRateLimiter(unittest.TestCase):
         import sys
         from pathlib import Path
 
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src'))
-        from utils.rate_limiter import SlidingWindowRateLimiter
+        _mcp_src = str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src')
+        sys.path.insert(0, _mcp_src)
+        try:
+            from utils.rate_limiter import SlidingWindowRateLimiter
+        finally:
+            sys.path.remove(_mcp_src)
+            sys.modules.pop('config', None)
 
         with self.assertRaises(ValueError):
             SlidingWindowRateLimiter(max_requests=0, window_seconds=60)
@@ -775,8 +785,13 @@ class TestSearchRateLimiter(unittest.TestCase):
         import sys
         from pathlib import Path
 
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src'))
-        from utils.rate_limiter import SlidingWindowRateLimiter
+        _mcp_src = str(Path(__file__).resolve().parents[1] / 'mcp_server' / 'src')
+        sys.path.insert(0, _mcp_src)
+        try:
+            from utils.rate_limiter import SlidingWindowRateLimiter
+        finally:
+            sys.path.remove(_mcp_src)
+            sys.modules.pop('config', None)
 
         with self.assertRaises(ValueError):
             SlidingWindowRateLimiter(max_requests=10, window_seconds=60, max_keys=0)

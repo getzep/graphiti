@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. Allowlist module
 # ---------------------------------------------------------------------------
@@ -191,8 +190,8 @@ class TestAddEpisodeScopePolicyGate:
     @pytest.fixture(autouse=True)
     def _build_graphiti(self):
         """Construct a minimal Graphiti instance with mocked internals."""
-        from unittest.mock import AsyncMock, MagicMock, patch
         from datetime import datetime, timezone
+        from unittest.mock import MagicMock, patch
 
         self.now = datetime(2026, 3, 1, tzinfo=timezone.utc)
 
@@ -211,13 +210,16 @@ class TestAddEpisodeScopePolicyGate:
 
     def _run(self, coro):
         import asyncio
-        return asyncio.get_event_loop().run_until_complete(coro)
+        # asyncio.run() creates a fresh event loop each call, avoiding
+        # state pollution from other tests that close/clear the global loop.
+        return asyncio.run(coro)
 
     def test_disallowed_tool_name_raises_before_db(self):
         """bash is not allowlisted; add_episode must raise before any DB call."""
         from unittest.mock import MagicMock
-        from graphiti_core.nodes import EpisodeType
+
         from config.tool_result_allowlist import ToolResultNotAllowedError
+        from graphiti_core.nodes import EpisodeType
 
         # DB driver must NEVER be called — a call would mean the guard is missing
         self.g.driver.execute_query = MagicMock(
@@ -241,8 +243,8 @@ class TestAddEpisodeScopePolicyGate:
 
     def test_disallowed_web_search_raises(self):
         """web_search results are high-noise and must be rejected."""
-        from graphiti_core.nodes import EpisodeType
         from config.tool_result_allowlist import ToolResultNotAllowedError
+        from graphiti_core.nodes import EpisodeType
 
         with pytest.raises(ToolResultNotAllowedError, match='web_search'):
             self._run(
@@ -265,8 +267,8 @@ class TestAddEpisodeScopePolicyGate:
         Subsequent operations may fail (mocked driver), but the scope gate
         itself must not raise.
         """
-        from graphiti_core.nodes import EpisodeType
         from config.tool_result_allowlist import ToolResultNotAllowedError
+        from graphiti_core.nodes import EpisodeType
 
         try:
             self._run(
@@ -295,8 +297,8 @@ class TestAddEpisodeScopePolicyGate:
 
         The call may fail later (mocked driver) but must pass the scope check.
         """
-        from graphiti_core.nodes import EpisodeType
         from config.tool_result_allowlist import ToolResultNotAllowedError
+        from graphiti_core.nodes import EpisodeType
 
         try:
             self._run(

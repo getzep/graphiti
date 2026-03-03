@@ -247,203 +247,335 @@ learning_self_audit:
       description: "New learning → old stale learning"
 
 # ─────────────────────────────────────────────
-# Sessions Memory — Main Lane
+# Sessions Memory — Main + ChatGPT + FR-11 Pilot Lanes
+# Finalized sessions ontology (hardened)
 # ─────────────────────────────────────────────
 s1_sessions_main:
   extraction_mode: constrained_soft
+  intent_guidance: >-
+    Use only this ontology for sessions memory.
+    Allowed entity types: Person, Organization, Location, Event, Artifact, System,
+    Preference, Requirement, Procedure.
+    Allowed edges: PRODUCED, MODIFIED, DEPLOYED_TO, USES, INTEGRATES_WITH,
+    DEPENDS_ON, LOCATED_AT, ATTENDED, PART_OF, PREFERS, REQUIRES.
+    Never emit RELATES_TO, MENTIONS, DISCUSSED, or other generic connector edges.
+    If no grounded edge applies, keep mention-only entities as floating nodes.
+    Guardrails: Preference only stable defaults/likes; Requirement only explicit
+    constraints or gates; Procedure only repeatable ordered workflows; Event only
+    concrete scheduled/past happenings.
+    Type aliases: Agent -> Person; Task/Ticket -> Artifact (kind=task|ticket);
+    Environment -> System (kind=env).
   extraction_emphasis: >-
-    Focus on durable facts about the user: preferences, requirements, procedures,
-    people, places, events, and decisions. Extract concrete operational knowledge
-    that will remain useful across future sessions. Avoid ephemeral conversation
-    scaffolding — prioritize signal over noise.
+    Focus on durable personal/work context and operational facts with strict
+    ontology-conformant edges. Prefer precision over coverage and allow floating
+    entities when relations are not explicitly grounded.
 
   entity_types:
-    - name: Preference
-      description: "A stated or inferred preference (e.g. prefers email summaries in bullet form, dislikes excessive jargon)"
-    - name: Requirement
-      description: "A hard constraint or requirement (e.g. meetings must include Google Meet link, no calls before 10:30am)"
-    - name: Procedure
-      description: "A repeatable process or workflow (e.g. how to update OpenClaw with hotfix carry-forward)"
-    - name: Location
-      description: "A place that matters (e.g. East Village apartment, BCAP office at X address)"
-    - name: Event
-      description: "A scheduled or past event (e.g. crypto conference, quarterly LP meeting)"
+    - name: Person
+      description: "A human actor mentioned in the transcript (user, teammate, operator, participant)."
     - name: Organization
-      description: "A company, fund, or group (e.g. Blockchain Capital, FranklinDAO, Antfarm)"
-    - name: Document
-      description: "A referenced file, doc, or resource (e.g. AGENTS.md, quarterly report draft)"
-    - name: Topic
-      description: "A recurring subject or domain (e.g. crypto VC, content strategy, personal health)"
-    - name: Object
-      description: "A physical or digital artifact (e.g. wine bottle recommendation, code snippet)"
+      description: "A company, fund, DAO, team, or institution."
+    - name: Location
+      description: "A physical or virtual place relevant to work, meetings, or events."
+    - name: Event
+      description: "A concrete meeting, trip, release, incident, or scheduled/past happening."
+    - name: Artifact
+      description: "A tangible deliverable or digital object (doc, code change, PR, task, ticket, file, plan)."
+      attributes_schema:
+        kind: "Optional subtype; use task or ticket when aliasing Task/Ticket, otherwise concise artifact kind."
+    - name: System
+      description: "A software/service/platform/environment (tool, repo, runtime, infra component)."
+      attributes_schema:
+        kind: "Optional subtype; use env when aliasing Environment, otherwise concise system kind."
+    - name: Preference
+      description: "A stable preference or default behavior for a person/system."
+    - name: Requirement
+      description: "A hard requirement, constraint, non-negotiable rule, or acceptance condition."
+    - name: Procedure
+      description: "A repeatable multi-step process or operating workflow."
 
   relationship_types:
-    - name: RELATES_TO
-      description: "General semantic relationship between two entities (catch-all for backwards compatibility)"
-    - name: PREFERS
-      description: "Entity or person → Preference (what is preferred)"
-    - name: REQUIRES
-      description: "Entity or task → Requirement (what is needed)"
-    - name: FOLLOWS
-      description: "Agent or person → Procedure (workflow used)"
+    - name: PRODUCED
+      description: "Person/System/Organization -> Artifact created or authored."
+    - name: MODIFIED
+      description: "Person/System/Organization -> Artifact updated or edited."
+    - name: DEPLOYED_TO
+      description: "Artifact/System -> System/environment where it was deployed/applied."
+    - name: USES
+      description: "Person/Organization/System/Procedure/Artifact -> System/Artifact that is used."
+    - name: INTEGRATES_WITH
+      description: "System/Artifact -> System with explicit integration linkage."
+    - name: DEPENDS_ON
+      description: "Artifact/System/Procedure -> prerequisite System/Artifact/Procedure."
     - name: LOCATED_AT
-      description: "Event or Organization → Location"
+      description: "Event/Organization/System/Person -> Location."
     - name: ATTENDED
-      description: "Person → Event"
+      description: "Person -> Event attended or participated in."
     - name: PART_OF
-      description: "Entity → Organization or group it belongs to"
-    - name: REFERENCES
-      description: "Entity or session → Document or resource"
-    - name: CONCERNS
-      description: "Session or episode → Topic (primary subject)"
+      description: "Entity -> parent Organization/System/Artifact grouping."
+    - name: PREFERS
+      description: "Person/Organization/System -> Preference."
+    - name: REQUIRES
+      description: "Person/Organization/System/Procedure/Artifact/Event -> Requirement."
 
-# ─────────────────────────────────────────────
-# Sessions Memory — Pilot Lane (FR-11, 2026-02-27)
-# ─────────────────────────────────────────────
+s1_chatgpt_history:
+  extraction_mode: constrained_soft
+  intent_guidance: >-
+    ChatGPT history uses the same hardened sessions ontology as s1_sessions_main.
+    Allowed entity types: Person, Organization, Location, Event, Artifact, System,
+    Preference, Requirement, Procedure.
+    Allowed edges: PRODUCED, MODIFIED, DEPLOYED_TO, USES, INTEGRATES_WITH,
+    DEPENDS_ON, LOCATED_AT, ATTENDED, PART_OF, PREFERS, REQUIRES.
+    Never emit RELATES_TO, MENTIONS, DISCUSSED, or other generic connectors.
+    Mention-only entities are valid floating nodes when no grounded edge exists.
+    Guardrails: Preference stable defaults only; Requirement explicit constraints only;
+    Procedure repeatable ordered workflows only; Event concrete happenings only.
+    Type aliases: Agent -> Person; Task/Ticket -> Artifact (kind=task|ticket);
+    Environment -> System (kind=env).
+  extraction_emphasis: >-
+    Mirror s1_sessions_main ontology and guardrails for historical ChatGPT transcripts.
+
+  entity_types:
+    - name: Person
+      description: "A human actor mentioned in the transcript (user, teammate, operator, participant)."
+    - name: Organization
+      description: "A company, fund, DAO, team, or institution."
+    - name: Location
+      description: "A physical or virtual place relevant to work, meetings, or events."
+    - name: Event
+      description: "A concrete meeting, trip, release, incident, or scheduled/past happening."
+    - name: Artifact
+      description: "A tangible deliverable or digital object (doc, code change, PR, task, ticket, file, plan)."
+      attributes_schema:
+        kind: "Optional subtype; use task or ticket when aliasing Task/Ticket, otherwise concise artifact kind."
+    - name: System
+      description: "A software/service/platform/environment (tool, repo, runtime, infra component)."
+      attributes_schema:
+        kind: "Optional subtype; use env when aliasing Environment, otherwise concise system kind."
+    - name: Preference
+      description: "A stable preference or default behavior for a person/system."
+    - name: Requirement
+      description: "A hard requirement, constraint, non-negotiable rule, or acceptance condition."
+    - name: Procedure
+      description: "A repeatable multi-step process or operating workflow."
+
+  relationship_types:
+    - name: PRODUCED
+      description: "Person/System/Organization -> Artifact created or authored."
+    - name: MODIFIED
+      description: "Person/System/Organization -> Artifact updated or edited."
+    - name: DEPLOYED_TO
+      description: "Artifact/System -> System/environment where it was deployed/applied."
+    - name: USES
+      description: "Person/Organization/System/Procedure/Artifact -> System/Artifact that is used."
+    - name: INTEGRATES_WITH
+      description: "System/Artifact -> System with explicit integration linkage."
+    - name: DEPENDS_ON
+      description: "Artifact/System/Procedure -> prerequisite System/Artifact/Procedure."
+    - name: LOCATED_AT
+      description: "Event/Organization/System/Person -> Location."
+    - name: ATTENDED
+      description: "Person -> Event attended or participated in."
+    - name: PART_OF
+      description: "Entity -> parent Organization/System/Artifact grouping."
+    - name: PREFERS
+      description: "Person/Organization/System -> Preference."
+    - name: REQUIRES
+      description: "Person/Organization/System/Procedure/Artifact/Event -> Requirement."
+
 s1_pilot_fr11_20260227:
   extraction_mode: constrained_soft
+  intent_guidance: >-
+    FR-11 sessions pilot lane. Use the exact same hardened sessions ontology as
+    s1_sessions_main. Do not emit generic connector edges (RELATES_TO, MENTIONS,
+    DISCUSSED). Keep mention-only entities as floating nodes when needed.
+    Guardrails for Preference/Requirement/Procedure/Event and type aliases are
+    identical to s1_sessions_main:
+    Agent -> Person; Task/Ticket -> Artifact (kind=task|ticket);
+    Environment -> System (kind=env).
   extraction_emphasis: >-
-    Pilot lane for FR-11 observe-only conformance validation. Mirrors the
-    sessions_main ontology. Focus on the same durable facts — preferences,
-    requirements, procedures, events, and organizations — but scoped to the
-    pilot extraction window. Used for conformance metric calibration only;
-    does not gate any production ingestion.
+    Pilot mirror of s1_sessions_main hardened ontology.
 
   entity_types:
-    - name: Preference
-      description: "A stated or inferred preference"
-    - name: Requirement
-      description: "A hard constraint or requirement"
-    - name: Procedure
-      description: "A repeatable process or workflow"
-    - name: Location
-      description: "A place that matters"
-    - name: Event
-      description: "A scheduled or past event"
+    - name: Person
+      description: "A human actor mentioned in the transcript (user, teammate, operator, participant)."
     - name: Organization
-      description: "A company, fund, or group"
-    - name: Document
-      description: "A referenced file, doc, or resource"
-    - name: Topic
-      description: "A recurring subject or domain"
-    - name: Object
-      description: "A physical or digital artifact"
+      description: "A company, fund, DAO, team, or institution."
+    - name: Location
+      description: "A physical or virtual place relevant to work, meetings, or events."
+    - name: Event
+      description: "A concrete meeting, trip, release, incident, or scheduled/past happening."
+    - name: Artifact
+      description: "A tangible deliverable or digital object (doc, code change, PR, task, ticket, file, plan)."
+      attributes_schema:
+        kind: "Optional subtype; use task or ticket when aliasing Task/Ticket, otherwise concise artifact kind."
+    - name: System
+      description: "A software/service/platform/environment (tool, repo, runtime, infra component)."
+      attributes_schema:
+        kind: "Optional subtype; use env when aliasing Environment, otherwise concise system kind."
+    - name: Preference
+      description: "A stable preference or default behavior for a person/system."
+    - name: Requirement
+      description: "A hard requirement, constraint, non-negotiable rule, or acceptance condition."
+    - name: Procedure
+      description: "A repeatable multi-step process or operating workflow."
 
   relationship_types:
-    - name: RELATES_TO
-      description: "General semantic relationship (catch-all for backwards compatibility)"
-    - name: PREFERS
-      description: "Person or entity → Preference"
-    - name: REQUIRES
-      description: "Entity or task → Requirement"
-    - name: FOLLOWS
-      description: "Agent or person → Procedure"
+    - name: PRODUCED
+      description: "Person/System/Organization -> Artifact created or authored."
+    - name: MODIFIED
+      description: "Person/System/Organization -> Artifact updated or edited."
+    - name: DEPLOYED_TO
+      description: "Artifact/System -> System/environment where it was deployed/applied."
+    - name: USES
+      description: "Person/Organization/System/Procedure/Artifact -> System/Artifact that is used."
+    - name: INTEGRATES_WITH
+      description: "System/Artifact -> System with explicit integration linkage."
+    - name: DEPENDS_ON
+      description: "Artifact/System/Procedure -> prerequisite System/Artifact/Procedure."
     - name: LOCATED_AT
-      description: "Event or Organization → Location"
+      description: "Event/Organization/System/Person -> Location."
     - name: ATTENDED
-      description: "Person → Event"
+      description: "Person -> Event attended or participated in."
     - name: PART_OF
-      description: "Entity → Organization"
-    - name: REFERENCES
-      description: "Entity → Document or resource"
-    - name: CONCERNS
-      description: "Session or episode → Topic"
+      description: "Entity -> parent Organization/System/Artifact grouping."
+    - name: PREFERS
+      description: "Person/Organization/System -> Preference."
+    - name: REQUIRES
+      description: "Person/Organization/System/Procedure/Artifact/Event -> Requirement."
 
-# ─────────────────────────────────────────────
-# Sessions Memory — Pilot Lanes (FR-11, 2026-02-28)
-# Mirrors s1_pilot_fr11_20260227. Added for v1 and v2 pilot rerun evaluations.
-# ─────────────────────────────────────────────
 s1_pilot_fr11_20260228:
   extraction_mode: constrained_soft
+  intent_guidance: >-
+    FR-11 sessions pilot lane (2026-02-28 run). Use the exact same hardened
+    sessions ontology as s1_sessions_main. No RELATES_TO/MENTIONS/DISCUSSED edges.
+    Mention-only entities remain floating nodes when no typed edge is grounded.
+    Guardrails:
+    - Preference: stable defaults/likes only.
+    - Requirement: explicit hard constraints only.
+    - Procedure: repeatable ordered workflows only.
+    - Event: concrete scheduled/past happenings only.
+    Type aliases:
+    - Agent -> Person
+    - Task/Ticket -> Artifact (kind=task|ticket)
+    - Environment -> System (kind=env).
   extraction_emphasis: >-
-    Pilot lane for FR-11 observe-only conformance validation (2026-02-28 run).
-    Same ontology as s1_pilot_fr11_20260227.
+    Pilot mirror of s1_sessions_main hardened ontology.
 
   entity_types:
-    - name: Preference
-      description: "A stated or inferred preference"
-    - name: Requirement
-      description: "A hard constraint or requirement"
-    - name: Procedure
-      description: "A repeatable process or workflow"
-    - name: Location
-      description: "A place that matters"
-    - name: Event
-      description: "A scheduled or past event"
+    - name: Person
+      description: "A human actor mentioned in the transcript (user, teammate, operator, participant)."
     - name: Organization
-      description: "A company, fund, or group"
-    - name: Document
-      description: "A referenced file, doc, or resource"
-    - name: Topic
-      description: "A recurring subject or domain"
-    - name: Object
-      description: "A physical or digital artifact"
+      description: "A company, fund, DAO, team, or institution."
+    - name: Location
+      description: "A physical or virtual place relevant to work, meetings, or events."
+    - name: Event
+      description: "A concrete meeting, trip, release, incident, or scheduled/past happening."
+    - name: Artifact
+      description: "A tangible deliverable or digital object (doc, code change, PR, task, ticket, file, plan)."
+      attributes_schema:
+        kind: "Optional subtype; use task or ticket when aliasing Task/Ticket, otherwise concise artifact kind."
+    - name: System
+      description: "A software/service/platform/environment (tool, repo, runtime, infra component)."
+      attributes_schema:
+        kind: "Optional subtype; use env when aliasing Environment, otherwise concise system kind."
+    - name: Preference
+      description: "A stable preference or default behavior for a person/system."
+    - name: Requirement
+      description: "A hard requirement, constraint, non-negotiable rule, or acceptance condition."
+    - name: Procedure
+      description: "A repeatable multi-step process or operating workflow."
 
   relationship_types:
-    - name: RELATES_TO
-      description: "General semantic relationship (catch-all for backwards compatibility)"
-    - name: PREFERS
-      description: "Person or entity → Preference"
-    - name: REQUIRES
-      description: "Entity or task → Requirement"
-    - name: FOLLOWS
-      description: "Agent or person → Procedure"
+    - name: PRODUCED
+      description: "Person/System/Organization -> Artifact created or authored."
+    - name: MODIFIED
+      description: "Person/System/Organization -> Artifact updated or edited."
+    - name: DEPLOYED_TO
+      description: "Artifact/System -> System/environment where it was deployed/applied."
+    - name: USES
+      description: "Person/Organization/System/Procedure/Artifact -> System/Artifact that is used."
+    - name: INTEGRATES_WITH
+      description: "System/Artifact -> System with explicit integration linkage."
+    - name: DEPENDS_ON
+      description: "Artifact/System/Procedure -> prerequisite System/Artifact/Procedure."
     - name: LOCATED_AT
-      description: "Event or Organization → Location"
+      description: "Event/Organization/System/Person -> Location."
     - name: ATTENDED
-      description: "Person → Event"
+      description: "Person -> Event attended or participated in."
     - name: PART_OF
-      description: "Entity → Organization"
-    - name: REFERENCES
-      description: "Entity → Document or resource"
-    - name: CONCERNS
-      description: "Session or episode → Topic"
+      description: "Entity -> parent Organization/System/Artifact grouping."
+    - name: PREFERS
+      description: "Person/Organization/System -> Preference."
+    - name: REQUIRES
+      description: "Person/Organization/System/Procedure/Artifact/Event -> Requirement."
 
 s1_pilot_fr11_20260228_v2:
   extraction_mode: constrained_soft
+  intent_guidance: >-
+    FR-11 sessions pilot lane (2026-02-28 v2 rerun). Same hardened sessions
+    ontology as s1_sessions_main.
+    Disallow generic edges (RELATES_TO, MENTIONS, DISCUSSED) and keep mention-only
+    entities as floating nodes.
+    Guardrails:
+    - Preference: stable defaults/likes only.
+    - Requirement: explicit hard constraints only.
+    - Procedure: repeatable ordered workflows only.
+    - Event: concrete scheduled/past happenings only.
+    Type aliases:
+    - Agent -> Person
+    - Task/Ticket -> Artifact (kind=task|ticket)
+    - Environment -> System (kind=env).
   extraction_emphasis: >-
-    Pilot lane for FR-11 observe-only conformance validation (2026-02-28 v2 rerun,
-    with EVAL-1/2/3 fixes applied). Same ontology as s1_pilot_fr11_20260227.
+    Pilot mirror of s1_sessions_main hardened ontology.
 
   entity_types:
-    - name: Preference
-      description: "A stated or inferred preference"
-    - name: Requirement
-      description: "A hard constraint or requirement"
-    - name: Procedure
-      description: "A repeatable process or workflow"
-    - name: Location
-      description: "A place that matters"
-    - name: Event
-      description: "A scheduled or past event"
+    - name: Person
+      description: "A human actor mentioned in the transcript (user, teammate, operator, participant)."
     - name: Organization
-      description: "A company, fund, or group"
-    - name: Document
-      description: "A referenced file, doc, or resource"
-    - name: Topic
-      description: "A recurring subject or domain"
-    - name: Object
-      description: "A physical or digital artifact"
+      description: "A company, fund, DAO, team, or institution."
+    - name: Location
+      description: "A physical or virtual place relevant to work, meetings, or events."
+    - name: Event
+      description: "A concrete meeting, trip, release, incident, or scheduled/past happening."
+    - name: Artifact
+      description: "A tangible deliverable or digital object (doc, code change, PR, task, ticket, file, plan)."
+      attributes_schema:
+        kind: "Optional subtype; use task or ticket when aliasing Task/Ticket, otherwise concise artifact kind."
+    - name: System
+      description: "A software/service/platform/environment (tool, repo, runtime, infra component)."
+      attributes_schema:
+        kind: "Optional subtype; use env when aliasing Environment, otherwise concise system kind."
+    - name: Preference
+      description: "A stable preference or default behavior for a person/system."
+    - name: Requirement
+      description: "A hard requirement, constraint, non-negotiable rule, or acceptance condition."
+    - name: Procedure
+      description: "A repeatable multi-step process or operating workflow."
 
   relationship_types:
-    - name: RELATES_TO
-      description: "General semantic relationship (catch-all for backwards compatibility)"
-    - name: PREFERS
-      description: "Person or entity → Preference"
-    - name: REQUIRES
-      description: "Entity or task → Requirement"
-    - name: FOLLOWS
-      description: "Agent or person → Procedure"
+    - name: PRODUCED
+      description: "Person/System/Organization -> Artifact created or authored."
+    - name: MODIFIED
+      description: "Person/System/Organization -> Artifact updated or edited."
+    - name: DEPLOYED_TO
+      description: "Artifact/System -> System/environment where it was deployed/applied."
+    - name: USES
+      description: "Person/Organization/System/Procedure/Artifact -> System/Artifact that is used."
+    - name: INTEGRATES_WITH
+      description: "System/Artifact -> System with explicit integration linkage."
+    - name: DEPENDS_ON
+      description: "Artifact/System/Procedure -> prerequisite System/Artifact/Procedure."
     - name: LOCATED_AT
-      description: "Event or Organization → Location"
+      description: "Event/Organization/System/Person -> Location."
     - name: ATTENDED
-      description: "Person → Event"
+      description: "Person -> Event attended or participated in."
     - name: PART_OF
-      description: "Entity → Organization"
-    - name: REFERENCES
-      description: "Entity → Document or resource"
-    - name: CONCERNS
-      description: "Session or episode → Topic"
+      description: "Entity -> parent Organization/System/Artifact grouping."
+    - name: PREFERS
+      description: "Person/Organization/System -> Preference."
+    - name: REQUIRES
+      description: "Person/Organization/System/Procedure/Artifact/Event -> Requirement."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # OM-path pilot — 2026-02-28 v3

@@ -232,8 +232,8 @@ def test_sessions_lane_extraction_mode_constrained_soft(group_id: str):
 
 
 @pytest.mark.parametrize("group_id", ["s1_sessions_main", "s1_pilot_fr11_20260227"])
-def test_sessions_lane_has_relates_to(group_id: str):
-    """Sessions lanes must include RELATES_TO for backwards compatibility."""
+def test_sessions_lane_disallows_generic_relations(group_id: str):
+    """Sessions lanes must disallow generic connector edges after hardening."""
     import importlib
 
     ontology_registry = importlib.import_module("mcp_server.src.services.ontology_registry")
@@ -244,9 +244,11 @@ def test_sessions_lane_has_relates_to(group_id: str):
 
     profile = registry.get(group_id)
     assert profile is not None
-    assert "RELATES_TO" in profile.edge_types, (
-        f"{group_id} must include RELATES_TO in relationship_types for backwards compatibility"
-    )
+    assert "RELATES_TO" not in profile.edge_types
+    assert "MENTIONS" not in profile.edge_types
+    assert "DISCUSSED" not in profile.edge_types
+    # sanity: hardened operational edge remains present
+    assert "DEPENDS_ON" in profile.edge_types
 
 
 @pytest.mark.parametrize("group_id", ["s1_sessions_main", "s1_pilot_fr11_20260227"])

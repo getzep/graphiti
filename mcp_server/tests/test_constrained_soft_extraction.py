@@ -203,6 +203,7 @@ class TestNoiseFilter:
         names = frozenset({'USES_MOVE', 'OPENS_WITH'})
         assert self._filter('RELATES_TO', names) is True
         assert self._filter('MENTIONS', names) is True
+        assert self._filter('DISCUSSED', names) is True
         assert self._filter('IS_RELATED_TO', names) is True
 
     def test_specific_off_ontology_allowed(self):

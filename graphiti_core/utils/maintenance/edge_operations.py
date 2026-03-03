@@ -63,6 +63,7 @@ _GENERIC_EDGE_NAMES: frozenset[str] = frozenset({
     'IS_RELATED_TO',
     'IS_RELATED',
     'MENTIONS',
+    'DISCUSSED',
     'CONNECTED_TO',
     'ASSOCIATED_WITH',
     'HAS',

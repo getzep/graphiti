@@ -890,7 +890,7 @@ def test_llm_chat_base_url_blocks_localhost_by_default(monkeypatch: pytest.Monke
     """_llm_chat_base_url raises for local LLM URLs when OM_ALLOW_LOCAL_LLM is unset."""
     monkeypatch.setenv("OM_COMPRESSOR_LLM_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.delenv("OM_ALLOW_LOCAL_LLM", raising=False)
-    with pytest.raises(om_compressor.OMCompressorError, match="loopback or private"):
+    with pytest.raises(om_compressor.OMCompressorError, match="private/loopback"):
         om_compressor._llm_chat_base_url()
 
 
@@ -1119,7 +1119,7 @@ def test_llm_chat_base_url_blocks_ipv6_loopback_by_default(
     """IPv6 loopback [::1] is blocked by default (no OM_ALLOW_LOCAL_LLM)."""
     monkeypatch.setenv("OM_COMPRESSOR_LLM_BASE_URL", "http://[::1]:11434/v1")
     monkeypatch.delenv("OM_ALLOW_LOCAL_LLM", raising=False)
-    with pytest.raises(om_compressor.OMCompressorError, match="loopback or private"):
+    with pytest.raises(om_compressor.OMCompressorError, match="private/loopback"):
         om_compressor._llm_chat_base_url()
 
 
