@@ -1,0 +1,50 @@
+# Graphiti MCP Server - Ollama + FalkorDB Lite Configuration
+# Zero-config: no Docker, no API keys, fully local
+
+server:
+  transport: "stdio"
+
+llm:
+  provider: "openai"  # Ollama is OpenAI-compatible
+  model: "llama3.2"
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: "ollama"  # Ollama doesn't require a real key
+      api_url: "http://localhost:11434/v1"
+
+embedder:
+  provider: "openai"  # Ollama is OpenAI-compatible
+  model: "nomic-embed-text"
+  dimensions: 768
+
+  providers:
+    openai:
+      api_key: "ollama"
+      api_url: "http://localhost:11434/v1"
+
+database:
+  provider: "falkordb_lite"
+
+  providers:
+    falkordb_lite:
+      db_path: ""  # Auto-managed (tmpdir)
+      database: "graphiti_memory"
+
+graphiti:
+  group_id: "vroommarket"
+  user_id: "adelinb"
+  entity_types:
+    - name: "Preference"
+      description: "User preferences, choices, opinions, or selections"
+    - name: "Requirement"
+      description: "Specific needs, features, or functionality that must be fulfilled"
+    - name: "Procedure"
+      description: "Standard operating procedures and sequential instructions"
+    - name: "Decision"
+      description: "Architectural or design decisions with rationale"
+    - name: "Pattern"
+      description: "Code patterns, conventions, or recurring solutions"
+    - name: "Bug"
+      description: "Known bugs, issues, or workarounds"

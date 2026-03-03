@@ -71,13 +71,20 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb, falkordb_lite
 
   providers:
     falkordb:
       uri: ${FALKORDB_URI:redis://localhost:6379}
       password: ${FALKORDB_PASSWORD:}
       database: ${FALKORDB_DATABASE:default_db}
+
+    # FalkorDB Lite: embedded, zero-config graph database (no Docker/server needed)
+    # Install with: pip install falkordblite
+    # Set provider to "falkordb_lite" to use
+    falkordb_lite:
+      db_path: ${FALKORDB_LITE_PATH:}  # Optional: path to persist data (default: auto-managed)
+      database: ${FALKORDB_LITE_DATABASE:default_db}
 
     neo4j:
       uri: ${NEO4J_URI:bolt://localhost:7687}

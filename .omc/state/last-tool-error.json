@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd ~/Documents/Projects/tools/graphiti/mcp_server && uv pip install falkordblite 2>&1 && .venv/bin/python -c \\\"from falkordblite import FalkorDB; print('falkordblite OK:', FalkorDB)\\\" 2>&1...",
+  "error": "Exit code 1\nAudited 1 package in 4ms\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from falkordblite import FalkorDB; print('falkordblite OK:', FalkorDB)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFoundError: No module named 'falkordblite'\n\nAudited 1 package in 4ms\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from falkordblite import FalkorDB; print('falkordblite OK:', FalkorDB)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFo...",
+  "timestamp": "2026-03-03T17:43:30.448Z",
+  "retry_count": 3
+}

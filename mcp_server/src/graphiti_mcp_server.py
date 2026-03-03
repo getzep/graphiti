@@ -187,6 +187,31 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create cross_encoder using the same LLM config
+            # (prevents default OpenAIRerankerClient from requiring OPENAI_API_KEY)
+            cross_encoder_client = None
+            try:
+                from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_provider_config = self.config.llm.providers
+                openai_config = llm_provider_config.openai if llm_provider_config else None
+                api_key = openai_config.api_key if openai_config else None
+                base_url = openai_config.api_url if openai_config else None
+                if base_url == 'https://api.openai.com/v1':
+                    base_url = None
+
+                if api_key:
+                    ce_config = CoreLLMConfig(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=self.config.llm.model,
+                        small_model=self.config.llm.model,
+                    )
+                    cross_encoder_client = OpenAIRerankerClient(config=ce_config)
+            except Exception as e:
+                logger.warning(f'Failed to create cross_encoder client: {e}')
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -211,7 +236,8 @@ class GraphitiService:
 
             # Initialize Graphiti client with appropriate driver
             try:
-                if self.config.database.provider.lower() == 'falkordb':
+                db_provider = self.config.database.provider.lower()
+                if db_provider == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -226,6 +252,36 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif db_provider == 'falkordb_lite':
+                    # For FalkorDB Lite (embedded), start an in-process instance
+                    # Package is "falkordblite" but module is "redislite"
+                    from redislite import AsyncFalkorDB as FalkorDBLite
+                    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+                    db_path = db_config.get('db_path')
+                    if db_path:
+                        lite_instance = FalkorDBLite(db_path)
+                    else:
+                        lite_instance = FalkorDBLite()
+
+                    # Store the lite instance so it doesn't get garbage collected
+                    self._falkordb_lite_instance = lite_instance
+
+                    # Create a FalkorDriver using the embedded FalkorDB's connection
+                    # FalkorDBLite exposes the same graph API as falkordb-py
+                    falkor_driver = FalkorDriver(
+                        falkor_db=lite_instance,
+                        database=db_config.get('database', 'default_db'),
+                    )
+
+                    self.client = Graphiti(
+                        graph_driver=falkor_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -236,6 +292,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -243,7 +300,18 @@ class GraphitiService:
                 error_msg = str(db_error).lower()
                 if 'connection refused' in error_msg or 'could not connect' in error_msg:
                     db_provider = self.config.database.provider
-                    if db_provider.lower() == 'falkordb':
+                    if db_provider.lower() == 'falkordb_lite':
+                        raise RuntimeError(
+                            f'\n{"=" * 70}\n'
+                            f'Database Error: FalkorDB Lite failed to start\n'
+                            f'{"=" * 70}\n\n'
+                            f'The embedded FalkorDB Lite instance could not start.\n\n'
+                            f'Ensure falkordblite is installed:\n'
+                            f'  pip install falkordblite\n\n'
+                            f'Check that the db_path is writable if specified.\n\n'
+                            f'{"=" * 70}\n'
+                        ) from db_error
+                    elif db_provider.lower() == 'falkordb':
                         raise RuntimeError(
                             f'\n{"=" * 70}\n'
                             f'Database Connection Error: FalkorDB is not running\n'
@@ -806,8 +874,8 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
-        help='Database provider to use',
+        choices=['neo4j', 'falkordb', 'falkordb_lite'],
+        help='Database provider to use (falkordb_lite requires no external server)',
     )
 
     # LLM configuration arguments
