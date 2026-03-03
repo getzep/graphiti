@@ -1,8 +1,8 @@
-# Bicameral — Dual-Brain Memory Runtime for Agents
+# Bicameral - Dual-Brain Memory Runtime for Agents
 
 This repository is a **production delta layer** on top of [upstream Graphiti](https://github.com/getzep/graphiti). It turns Graphiti from a graph-memory library into a **dual-brain, policy-governed memory runtime** for OpenClaw agents.
 
-The key insight: **A single LLM-powered brain can't be trusted with your memories.** We added a second brain—a strict, append-only Fact Ledger—that acts as a thermostat to keep the semantic engine honest.
+The key insight: **A single LLM-powered brain can't be trusted with your memories.** We added a second brain-a strict, append-only Fact Ledger-that acts as a thermostat to keep the semantic engine honest.
 
 If you're looking for the core Graphiti framework docs:
 - Upstream repo: <https://github.com/getzep/graphiti>
@@ -12,13 +12,13 @@ If you're looking for the core Graphiti framework docs:
 
 ## Why This Exists: The Dual-Brain Philosophy
 
-Plain vector search (RAG) is good at recall ("find documents about X") but terrible at **truth management**. And even Graphiti—a breakthrough temporal knowledge graph—relies 100% on an LLM to decide what's true. We call this "Brain 1 only."
+Plain vector search (RAG) is good at recall ("find documents about X") but terrible at **truth management**. And even Graphiti-a breakthrough temporal knowledge graph-relies 100% on an LLM to decide what's true. We call this "Brain 1 only."
 
 **Brain 1 alone is unreliable for high-stakes decisions.** When your AI manages your calendar, drafts your deals, and handles your relationships, you can't trust an LLM to silently invalidate facts or decide what supersedes what. There's no audit trail. There's no rollback. If the LLM hallucinates over your metadata, you'll never know.
 
 **We built Brain 2: A Fact Ledger.**
 
-Brain 1 (Neo4j) holds all the semantic richness—messy, probabilistic, non-deterministic. Brain 2 (SQLite) holds deterministic truth—append-only, auditable, hash-chained. At retrieval time, a trust multiplier combines them: `final_score = semantic_relevance + (trust_score × trust_weight)`.
+Brain 1 (Neo4j) holds all the semantic richness-messy, probabilistic, non-deterministic. Brain 2 (SQLite) holds deterministic truth-append-only, auditable, hash-chained. At retrieval time, a trust multiplier combines them: `final_score = semantic_relevance + (trust_score × trust_weight)`.
 
 Promoted facts get a `trust_score = 1.0`. Hallucinations don't. You get deterministic truth out of a non-deterministic graph.
 
@@ -40,20 +40,20 @@ This fork solves these problems by adding three layers on top of Graphiti's grap
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  L3 — Workflow Packs                                         │
+│  L3 - Workflow Packs                                         │
 │  Multi-step orchestration (e.g., "Draft VC Memo", "Book      │
 │  Dinner"). Declares which context packs it needs, what       │
 │  tools it can use, and what approvals are required.          │
 ├──────────────────────────────────────────────────────────────┤
-│  L2 — Context Packs                                          │
+│  L2 - Context Packs                                          │
 │  Scoped read-assembly bundles. Each pack queries specific    │
 │  graph lanes, applies retrieval policy, and formats output   │
 │  for the consumer agent. Supports private vs group-safe      │
 │  scoping, token budgets, and provenance tagging.             │
 ├──────────────────────────────────────────────────────────────┤
-│  L1 — Truth Substrate (Graphiti + Fact Ledger)               │
+│  L1 - Truth Substrate (Graphiti + Fact Ledger)               │
 │  Append-only Fact Ledger is the canonical truth.             │
-│  The graph DB (FalkorDB/Neo4j) is a derived query index.    │
+│  The graph DB (Neo4j default, FalkorDB legacy) is a derived  │
 │  Markdown exports are derived audit views.                   │
 │  If canonical and derived disagree, canonical wins.          │
 └──────────────────────────────────────────────────────────────┘
@@ -65,18 +65,21 @@ This fork solves these problems by adding three layers on top of Graphiti's grap
 
 ### The Fact Ledger (Canonical Truth)
 
-The graph database is **not** the source of truth. The **Fact Ledger** is — an append-only, hash-chained log that records every promotion, supersession, and invalidation with full provenance. The graph and markdown exports are both derived and rebuildable from the ledger.
+The graph database is **not** the source of truth. The **Fact Ledger** is - an append-only, hash-chained log that records every promotion, supersession, and invalidation with full provenance. The graph and markdown exports are both derived and rebuildable from the ledger.
 
 Each domain has its own ledger:
-- **Personal truth** (`state/fact_ledger.db`) — preferences, identity, relationships, style
-- **Engineering learnings** (`state/fact_ledger_engineering.db`) — tool behaviors, failure patterns, architecture decisions
-- **Operational learnings** (`state/fact_ledger_learning.db`) — self-audit findings, preference misses
+- **Personal truth** (`state/fact_ledger.db`) - preferences, identity, relationships, style
+- **Engineering learnings** (`state/fact_ledger_engineering.db`) - tool behaviors, failure patterns, architecture decisions
+- **Operational learnings** (`state/fact_ledger_learning.db`) - self-audit findings, preference misses
 
 Facts enter via a quarantine queue (`candidates.db`) and must pass through a **Promotion Policy** before being written to the ledger. This means you can audit every fact back to its source evidence, replay history, or roll back to any prior state.
 
-### Promotion Policy (Truth Firewall)
+### Promotion Policy (Truth Firewall) - v3 Unified
 
-Not everything ingested becomes truth. The Promotion Policy governs how candidate facts move from "observed" to "promoted":
+Not everything ingested becomes truth. The Promotion Policy governs how candidate facts move from "observed" to "promoted".
+
+**v2/v3 convergence state:** Policy v3 is now the **unified default** across both OM-derived candidates and graph-lane candidates (`POLICY_VERSION_DEFAULT = "promotion-v3"` in `truth/candidates.py`). Prior to EXEC-UNIFIED-V3-AFTERNOON, graph-lane candidates used v2 and OM used v3 - that split is resolved. Both code paths now call the same v3 decision evaluator.
+
 
 - **Trust boundary:** Only owner-authored evidence is eligible for auto-promotion. Non-owner content can create entities but facts stay quarantined.
 - **Assertion gating:** Questions, hypotheticals, and quotes are blocked. Only decisions, preferences, and factual assertions can promote.
@@ -86,13 +89,23 @@ Not everything ingested becomes truth. The Promotion Policy governs how candidat
 
 ### Candidate Generation Policy
 
-Not all graph groups generate promotion candidates. Groups are classified by their role in the truth pipeline:
+Not all graph groups generate promotion candidates. Groups are classified by their role in the truth pipeline.
 
-| Role | Groups | Behavior |
-|---|---|---|
-| **Candidate-generating** | Sessions, ChatGPT history, curated refs, bootstrap memory | RELATES_TO edges from anchor entities (owner, agent, org) are imported into `candidates.db` for promotion evaluation |
-| **Corroboration-only** | Content packs (inspiration, writing samples, content strategy) | Provide Lane B evidence for boosting candidate confidence. Never generate their own candidates. Custom ontologies extract craft patterns (RhetoricalMove, HookPattern), not personal facts. |
-| **Separate domain** | Engineering learnings, self-audit | Have their own ledger pipelines with dedicated ingest scripts. Different trust semantics and consumer profiles. |
+**Lane Matrix (v3 - canonical as of EXEC-UNIFIED-V3-AFTERNOON):**
+
+| Lane (`group_id`) | Retrieval | Candidate-Generating | Notes |
+|---|---|---|---|
+| `s1_sessions_main` | ✅ Global | ✅ Yes | Primary conversational memory - retrieval + candidate pipeline |
+| `s1_observational_memory` | ✅ Global | ✅ Yes | OM synthesis nodes - globally retrieval-eligible, feeds promotion evaluator |
+| `s1_chatgpt_history` | ⚡ VC-scoped | ✅ Yes | Retrieval only in VC-scoped packs; still generates candidates |
+| `s1_memory_day1` | ❌ Corroboration-only | ✅ Yes | Not surfaced directly in retrieval; still candidate-generating so its facts participate in promotion evaluator |
+| `s1_curated_refs` | ❌ Corroboration-only | ❌ No | Not retrieval, not candidate-generating; provides Lane B corroboration evidence only |
+| `s1_inspiration_*`, `s1_writing_samples`, `s1_content_strategy` | ❌ Pack injection | ❌ No | Custom ontologies extract craft patterns (RhetoricalMove, HookPattern, VoiceQuality), not personal facts. Injected via content packs, never candidate-generating. |
+| `engineering_learnings`, `learning_self_audit` | ❌ Separate domain | ❌ (own pipeline) | Own ledger pipelines (`fact_ledger_engineering.db`, `fact_ledger_learning.db`). Different trust semantics. |
+
+**Key distinction:** Retrieval eligibility and candidate-generating status are independent controls. `s1_memory_day1` is corroboration-only for retrieval (not surfaced directly) but still candidate-generating so its promoted facts participate in the truth evaluator. `s1_curated_refs` is corroboration-only in both dimensions.
+
+The lane matrix is codified in `truth/candidates.py` (constants: `LANE_RETRIEVAL_ELIGIBLE_GLOBAL`, `LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED`, `LANE_CORROBORATION_ONLY`, `LANE_CANDIDATES_ELIGIBLE`) and mirrored in `config/runtime_pack_registry.json` under `lane_policy`.
 
 ### Trust-Aware Retrieval
 
@@ -100,10 +113,10 @@ Promotion status feeds back into retrieval quality. Entities and relationships i
 
 | Status | `trust_score` | Effect |
 |---|---|---|
-| Promoted core truth (in fact ledger) | 1.0 | Strongest boost — surfaces verified facts when relevance is comparable |
-| Corroborated candidate (multiple independent sources) | 0.6 | Moderate boost — rewards evidence convergence |
-| Standard candidate (single source) | 0.25 | Minimal boost — "we've seen this" signal |
-| Not in candidates pipeline | NULL | **Neutral baseline — no boost, no penalty.** Content packs, engineering entities, and other non-candidate nodes rank purely on relevance. |
+| Promoted core truth (in fact ledger) | 1.0 | Strongest boost - surfaces verified facts when relevance is comparable |
+| Corroborated candidate (multiple independent sources) | 0.6 | Moderate boost - rewards evidence convergence |
+| Standard candidate (single source) | 0.25 | Minimal boost - "we've seen this" signal |
+| Not in candidates pipeline | NULL | **Neutral baseline - no boost, no penalty.** Content packs, engineering entities, and other non-candidate nodes rank purely on relevance. |
 
 The boost is **post-RRF additive**: `final_score = rrf_score + (trust_score × trust_weight)`. Default `trust_weight` is 0.15, configurable via `GRAPHITI_TRUST_WEIGHT` env var. Setting it to 0 disables trust boosting entirely (identical to vanilla RRF).
 
@@ -122,15 +135,15 @@ The lanes never cross: runtime retrieval is never used for promotion decisions, 
 
 Content and workflow packs inject **parallel** to normal retrieval, not through it. The OpenClaw Pack Injector plugin fires on `before_agent_start`, detects intent, resolves which packs to load, and injects assembled context as `<pack-context>` blocks into the agent's prompt. Normal retrieval (agent-initiated MCP search) still runs separately.
 
-Pack retrieval queries the same MCP search endpoints, but since content pack entities have NULL `trust_score`, trust boosting has zero effect on pack results — they rank purely on relevance. This is correct by design: content packs should surface the most relevant craft patterns, not filter by personal truth approval status.
+Pack retrieval queries the same MCP search endpoints, but since content pack entities have NULL `trust_score`, trust boosting has zero effect on pack results - they rank purely on relevance. This is correct by design: content packs should surface the most relevant craft patterns, not filter by personal truth approval status.
 
 ### Graph Lanes & Custom Ontologies
 
-Each domain of knowledge lives in its own isolated graph (identified by `group_id`). Data never leaks between lanes — entities, relationships, and episodes are fully isolated per graph.
+Each domain of knowledge lives in its own isolated graph (identified by `group_id`). Data never leaks between lanes - entities, relationships, and episodes are fully isolated per graph.
 
-Each lane can define its own **extraction ontology** — domain-specific entity types and relationship types that tell the LLM extractor what to look for. A content-inspiration lane extracts `RhetoricalMove`, `HookPattern`, and `VoiceQuality` entities; an engineering lane extracts `FailurePattern`, `ToolApiBehavior`, and `ArchitectureDecision`.
+Each lane can define its own **extraction ontology** - domain-specific entity types and relationship types that tell the LLM extractor what to look for. A content-inspiration lane extracts `RhetoricalMove`, `HookPattern`, and `VoiceQuality` entities; an engineering lane extracts `FailurePattern`, `ToolApiBehavior`, and `ArchitectureDecision`.
 
-Ontologies are defined in YAML config (`config/extraction_ontologies.yaml`). Adding a new lane requires only a YAML block — zero code changes. Unconfigured lanes fall through to Graphiti's generic extraction.
+Ontologies are defined in YAML config (`config/extraction_ontologies.yaml`). Adding a new lane requires only a YAML block - zero code changes. Unconfigured lanes fall through to Graphiti's generic extraction.
 
 For the full schema and examples, see [Custom Ontologies](docs/custom-ontologies.md).
 
@@ -140,7 +153,7 @@ A **Content Pack** (L2) is a bundle that defines:
 - Which graph lanes to query (retrieval matrix by mode: `default`, `short`, `long`, `casual`, `formal`)
 - ChatGPT history inclusion policy (`off`, `scoped`, `global`)
 - Token budget tier (A: 600 tokens/10 items, B: 1200/20 default, C: 2400/40)
-- Scope policy (`private` in DMs, `group_safe` in group chats — auto-selected by channel context)
+- Scope policy (`private` in DMs, `group_safe` in group chats - auto-selected by channel context)
 - Provenance requirements
 
 A **Workflow Pack** (L3) is a multi-step orchestration that:
@@ -286,7 +299,7 @@ python scripts/contamination_sentinel.py --json
 ### Phase C: Graph Maintenance & Guardrails
 
 - **Edge normalization** (`scripts/normalize_edge_names.py`): Universal SCREAMING\_SNAKE\_CASE normalization, preventing case-variant dedup collisions. Also exported as `graphiti_core.utils.maintenance.normalize_relation_type` for inline use.
-- **Closure semantics** (`scripts/apply_closure_semantics.py`): RESOLVES/SUPERSEDES edges auto-invalidate the target entity's active facts. Pure graph pass — no LLM calls. Idempotent, dry-run default.
+- **Closure semantics** (`scripts/apply_closure_semantics.py`): RESOLVES/SUPERSEDES edges auto-invalidate the target entity's active facts. Pure graph pass - no LLM calls. Idempotent, dry-run default.
 - **Endpoint split** (`graphiti_core/utils/env_utils.py`): Separate `LLM_BASE_URL` and `EMBEDDER_BASE_URL` resolution to prevent accidental embedding-to-OpenRouter routing. See `.env.example` for priority chain.
 - **Contamination sentinel** (`scripts/contamination_sentinel.py`): Read-only cross-lane integrity check. `--json` for CI. Exit 0 = clean.
 - **Recall gate** (`--recall-gate 0.75 --recall-baseline ...` on `run_retrieval_benchmark.py`): CI-friendly quality gate.
@@ -317,7 +330,7 @@ This fork operates on an **Engine/Fuel** split:
 
 ### Prerequisites
 - Python 3.13+
-- Neo4j (default) or FalkorDB (legacy) — graph database backend
+- Neo4j (default) or FalkorDB (legacy) - graph database backend
 - OpenAI API key (for LLM extraction + embeddings)
 - **Endpoint split (recommended):** set `LLM_BASE_URL` for LLM routing and `EMBEDDER_BASE_URL` for embedding routing separately. This prevents accidental embedding traffic to OpenRouter when LLM routing is redirected. See `.env.example` for the full priority chain.
 
@@ -346,6 +359,23 @@ python3 scripts/runtime_pack_router.py --verify-only
 python3 mcp_server/main.py
 ```
 
+### Ingest Sanitization (Token-Cost Hygiene)
+
+Before evidence is sent to the LLM extractor, a sanitizer strips known wrapper noise that adds tokens without semantic value:
+
+| What gets stripped | Why |
+|---|---|
+| `<graphiti-context>…</graphiti-context>` blocks | OpenClaw injects memory context back into agent prompts; re-ingesting it creates circular artifacts and inflates token cost by re-processing already-extracted memory |
+| `Conversation info (untrusted metadata): ```json … ``` ` | Telegram/channel metadata injected by OpenClaw for routing - irrelevant to memory extraction |
+| `Sender (untrusted metadata): …` | Same wrapper pattern - routing metadata, not user content |
+| `Replied message (untrusted, for context): …` | Quote context markers - may cause extraction to attribute quotes as primary statements |
+
+Raw human/assistant message body content is **preserved** unchanged. The sanitizer runs at `strip_ingestion_noise()` in `scripts/mcp_ingest_sessions.py`, applied to both the main episode body and sub-chunk bodies.
+
+**Token-cost rationale:** A single session transcript can include multiple graphiti-context injections (each 300-800 tokens) plus per-message channel metadata. Stripping before extraction reduces per-episode LLM input by 20-60% on typical sessions, with zero loss of extractable signal.
+
+---
+
 ### Ingesting Data
 
 Data flows through a 7-stage pipeline: Source Material → Evidence (deterministic chunking) → Ingest Registry (watermarks + dedup) → Graphiti MCP (LLM extraction) → Candidates DB (quarantine) → Promotion Policy (gates) → Fact Ledger (canonical truth).
@@ -357,7 +387,7 @@ python3 scripts/import_transcripts_to_neo4j.py \
 python3 scripts/import_transcripts_to_neo4j.py \
   --sessions-dir path/to/session_transcripts/
 
-# 2. Ingest sessions — Neo4j source mode (default, production path)
+# 2. Ingest sessions - Neo4j source mode (default, production path)
 # NOTE: If Neo4j has no Message nodes (empty graph), a BOOTSTRAP_REQUIRED guard
 # fires and the script exits non-zero. Run step 1 first to populate Neo4j.
 python3 scripts/mcp_ingest_sessions.py \
@@ -365,7 +395,7 @@ python3 scripts/mcp_ingest_sessions.py \
   --source-mode neo4j \
   --mcp-url http://localhost:8000/mcp
 
-# 2b. Rollback — evidence source mode (reads from disk, bypasses Neo4j)
+# 2b. Rollback - evidence source mode (reads from disk, bypasses Neo4j)
 python3 scripts/mcp_ingest_sessions.py \
   --group-id s1_sessions_main \
   --source-mode evidence \
@@ -378,7 +408,7 @@ python3 scripts/registry_status.py
 python3 scripts/ingest_adapter_contract_check.py --strict
 ```
 
-Ingestion is idempotent (content-hash dedup), incremental (delta since last watermark), and supports sub-chunking for large evidence (>10k chars). All adapters must conform to `INGEST_ADAPTER_CONTRACT_V1` — see `ingest/contracts.py` and `docs/runbooks/adding-data-sources.md`.
+Ingestion is idempotent (content-hash dedup), incremental (delta since last watermark), and supports sub-chunking for large evidence (>10k chars). All adapters must conform to `INGEST_ADAPTER_CONTRACT_V1` - see `ingest/contracts.py` and `docs/runbooks/adding-data-sources.md`.
 
 ---
 
@@ -397,11 +427,11 @@ For the full sync and patch application procedure, see the [Upstream Sync Runboo
 ## Documentation Index
 
 ### Architecture & Concepts
-- [Custom Ontologies](docs/custom-ontologies.md) — defining per-lane extraction entity types
-- [Retrieval Trust Scoring](docs/retrieval-trust-scoring.md) — how promoted/corroborated facts boost search ranking
-- [Memory Runtime Wiring](docs/MEMORY-RUNTIME-WIRING.md) — Graphiti-primary retrieval + QMD failover contract
-- [Scope Policy](docs/scope-policy.md) — ingestion scope freeze: message-only default, toolResult opt-in allowlist, change process
-- [Runtime Pack Overlay](docs/runbooks/runtime-pack-overlay.md) — how private packs map to agents
+- [Custom Ontologies](docs/custom-ontologies.md) - defining per-lane extraction entity types
+- [Retrieval Trust Scoring](docs/retrieval-trust-scoring.md) - how promoted/corroborated facts boost search ranking
+- [Memory Runtime Wiring](docs/MEMORY-RUNTIME-WIRING.md) - Graphiti-primary retrieval + QMD failover contract
+- [Scope Policy](docs/scope-policy.md) - ingestion scope freeze: message-only default, toolResult opt-in allowlist, change process
+- [Runtime Pack Overlay](docs/runbooks/runtime-pack-overlay.md) - how private packs map to agents
 
 ### Operations
 - [OM Operations](docs/runbooks/om-operations.md) — Observational Memory: fast-write, compressor, convergence, GC, promotion, dedupe, timeline semantics
@@ -411,6 +441,7 @@ For the full sync and patch application procedure, see the [Upstream Sync Runboo
 - [State Migration Runbook](docs/runbooks/state-migration.md)
 - [Publicization & Backup](docs/runbooks/publicization-backup-cutover.md)
 - [OpenClaw Plugin Troubleshooting](docs/runbooks/openclaw-plugin-troubleshooting.md) — handling strict schema validation crashes and gateway port exhaustion
+- **Operator Rollout Runbook** (private) — merge/rebuild/smoke/pilot/backfill decision flow: `bicameral-private/docs/runbooks/operator-rollout-runbook.md`
 
 ### Technical Contracts
 - [Boundary Contract](docs/public/BOUNDARY-CONTRACT.md)
@@ -418,9 +449,9 @@ For the full sync and patch application procedure, see the [Upstream Sync Runboo
 - [Release Checklist](docs/public/RELEASE-CHECKLIST.md)
 
 ### Delta Tooling
-- `scripts/delta_tool.py` — unified CLI for delta operations
-- `scripts/runtime_pack_router.py` — the pack routing engine
-- `scripts/upstream_sync_doctor.py` — sync safety checks
+- `scripts/delta_tool.py` - unified CLI for delta operations
+- `scripts/runtime_pack_router.py` - the pack routing engine
+- `scripts/upstream_sync_doctor.py` - sync safety checks
 
 ---
 
@@ -430,7 +461,10 @@ For the full sync and patch application procedure, see the [Upstream Sync Runboo
 - Integration gate: **GO** (`reports/publicization/integration-report.md`).
 - Boundary policy: **ALLOW=370 / BLOCK=0 / AMBIGUOUS=0**.
 - **Truth pipeline: operational, with deterministic migration closeout policy.** Fact ledger + trust-aware retrieval are live, and curated-facts migration now uses deterministic disposition-aware validation (rather than ad-hoc/manual overrides) for unresolved legacy mappings. Canonical curated migration closeout is complete.
-- **Flip readiness caveat:** do not treat this status as automatic “Graphiti-primary GO.” First confirm extraction freshness / queue-drain reliability and pass a fresh shadow-compare window; otherwise keep Graphiti in governed shadow mode with QMD failover semantics.
+- **Promotion policy v3 unified:** Policy v3 is now the default for all code paths — both OM-derived candidates and graph-lane candidates. The prior v2/v3 split-brain is resolved (`truth/candidates.py` `POLICY_VERSION_DEFAULT = "promotion-v3"`).
+- **Lane matrix locked (v3):** Retrieval eligibility, corroboration-only classification, and candidate-generating status are codified in `truth/candidates.py` constants and `config/runtime_pack_registry.json` `lane_policy`. See Candidate Generation Policy table above.
+- **Ingest sanitization live:** Session ingest strips `<graphiti-context>` blocks, untrusted metadata wrappers, and tool-call noise before LLM extraction (`scripts/mcp_ingest_sessions.py`). Token savings: ~20–60% per episode on typical sessions.
+- **Flip readiness caveat:** do not treat this status as automatic "Graphiti-primary GO." First confirm extraction freshness / queue-drain reliability, pass a fresh shadow-compare window, and complete a pilot run with per-lane quality report; otherwise keep Graphiti in governed shadow mode with QMD failover semantics. See private repo `docs/runbooks/operator-rollout-runbook.md` for the merge/rebuild/smoke/pilot/backfill decision flow.
 
 ## CI Policy
 
