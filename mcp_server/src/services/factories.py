@@ -126,8 +126,14 @@ class LLMClientFactory:
                 # Use the same model for both main and small model slots
                 small_model = config.model
 
+                # Support custom base_url (e.g., Ollama at http://localhost:11434/v1)
+                base_url = config.providers.openai.api_url
+                if base_url == 'https://api.openai.com/v1':
+                    base_url = None  # Use default for real OpenAI
+
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=base_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,

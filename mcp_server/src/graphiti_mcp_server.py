@@ -187,6 +187,31 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create cross_encoder using the same LLM config
+            # (prevents default OpenAIRerankerClient from requiring OPENAI_API_KEY)
+            cross_encoder_client = None
+            try:
+                from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_provider_config = self.config.llm.providers
+                openai_config = llm_provider_config.openai if llm_provider_config else None
+                api_key = openai_config.api_key if openai_config else None
+                base_url = openai_config.api_url if openai_config else None
+                if base_url == 'https://api.openai.com/v1':
+                    base_url = None
+
+                if api_key:
+                    ce_config = CoreLLMConfig(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=self.config.llm.model,
+                        small_model=self.config.llm.model,
+                    )
+                    cross_encoder_client = OpenAIRerankerClient(config=ce_config)
+            except Exception as e:
+                logger.warning(f'Failed to create cross_encoder client: {e}')
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -227,6 +252,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
                 elif db_provider == 'falkordb_lite':
@@ -255,6 +281,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -265,6 +292,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
