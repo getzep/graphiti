@@ -3,6 +3,8 @@ import pytest
 from scripts.mcp_ingest_sessions import (
     MCPClient,
     _validate_mcp_url,
+    strip_graphiti_context,
+    strip_ingestion_noise,
     strip_untrusted_metadata,
     subchunk_evidence,
 )
@@ -25,6 +27,71 @@ End of message.
     expected = "Hi there!\n\nEnd of message."
     
     assert strip_untrusted_metadata(content) == expected
+
+def test_strip_graphiti_context_wrapper_block():
+    content = """
+<graphiti-context>
+## Graphiti Recall
+- old memory item
+</graphiti-context>
+
+Actual user body.
+"""
+    stripped = strip_graphiti_context(content)
+    assert '<graphiti-context>' not in stripped
+    assert '</graphiti-context>' not in stripped
+    assert 'Actual user body.' in stripped
+
+
+def test_strip_graphiti_context_inline():
+    """Inline form: both tags on the same line must be stripped."""
+    content = '<graphiti-context>old memory item</graphiti-context>\n\nActual user body.'
+    stripped = strip_graphiti_context(content)
+    assert '<graphiti-context>' not in stripped
+    assert '</graphiti-context>' not in stripped
+    assert 'old memory item' not in stripped
+    assert 'Actual user body.' in stripped
+
+
+def test_strip_graphiti_context_inline_prefix_suffix():
+    """Inline form with surrounding text: surrounding text must be preserved."""
+    content = '[timestamp] <graphiti-context>memory</graphiti-context> rest of line\n'
+    stripped = strip_graphiti_context(content)
+    assert '<graphiti-context>' not in stripped
+    assert 'memory' not in stripped
+    assert '[timestamp]' in stripped
+    assert 'rest of line' in stripped
+
+
+def test_strip_graphiti_context_inline_case_insensitive():
+    """Inline wrapper detection is case-insensitive."""
+    content = '<GRAPHITI-CONTEXT>sensitive data</GRAPHITI-CONTEXT>\n\nBody.'
+    stripped = strip_graphiti_context(content)
+    assert 'sensitive data' not in stripped
+    assert 'Body.' in stripped
+
+
+def test_strip_ingestion_noise_removes_wrapper_and_metadata():
+    content = """
+<graphiti-context>
+## Graphiti Recall
+- previous memory snippet
+</graphiti-context>
+
+Sender (untrusted metadata):
+```json
+{"sender_id": "42"}
+```
+
+Conversation info (untrusted metadata):
+```json
+{"session": "abc"}
+```
+
+This is the actual message body.
+"""
+    assert strip_ingestion_noise(content) == "This is the actual message body."
+
 
 def test_strip_metadata_multiple_blocks():
     content = """
@@ -74,6 +141,20 @@ Test message.
     assert len(chunks) == 1
     assert chunks[0][0] == "my_key"
     assert chunks[0][1] == "Test message."
+
+
+def test_subchunk_evidence_strips_graphiti_context_wrapper():
+    content = """
+<graphiti-context>
+## Graphiti Recall
+- noisy summary
+</graphiti-context>
+
+Useful body content.
+"""
+    chunks = subchunk_evidence(content.strip(), "my_key", 100)
+    assert len(chunks) == 1
+    assert chunks[0][1] == "Useful body content."
 
 
 # ---------------------------------------------------------------------------

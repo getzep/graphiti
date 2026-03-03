@@ -61,61 +61,113 @@ DEFAULT_SUBCHUNK_SIZE = 10_000
 # Group IDs that get automatic sub-chunking when evidence exceeds subchunk_size.
 _SUBCHUNK_GROUP_IDS = {'s1_sessions_main'}
 
+# Compiled per-line regex for the inline form:
+#   <graphiti-context>...</graphiti-context>  (both tags on the same line)
+# The pattern is non-greedy and operates per-line so it is naturally bounded
+# to a single line's length — no cross-line backtracking / ReDoS risk.
+_GRAPHITI_INLINE_RE = re.compile(
+    r'<graphiti-context>.*?</graphiti-context>',
+    re.IGNORECASE,
+)
+
+
+def strip_graphiti_context(content: str) -> str:
+    """Remove <graphiti-context> ... </graphiti-context> wrappers.
+
+    Handles two forms:
+    1. Block form  – opening tag alone on one line, closing tag alone on another.
+    2. Inline form – both tags (and content) on the same line.
+
+    Parses line-by-line so we only strip explicit wrapper blocks and avoid fragile,
+    over-greedy regex behavior on large payloads.
+    """
+    lines = content.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+
+    while i < n:
+        if lines[i].strip().lower() == '<graphiti-context>':
+            # Block form: scan for a matching closing wrapper. Cap scan to avoid
+            # pathological behavior on malformed input.
+            k = i + 1
+            found_end = False
+            max_scan = min(n, i + 1 + 5000)
+            while k < max_scan:
+                if lines[k].strip().lower() == '</graphiti-context>':
+                    found_end = True
+                    break
+                k += 1
+            if found_end:
+                i = k + 1
+                continue
+
+        # Inline form: substitute any <graphiti-context>…</graphiti-context>
+        # spans that appear within the current line.
+        cleaned = _GRAPHITI_INLINE_RE.sub('', lines[i])
+        out.append(cleaned)
+        i += 1
+
+    return ''.join(out)
+
 
 def strip_untrusted_metadata(content: str) -> str:
-    """Remove untrusted metadata blocks while preventing ReDoS and early termination.
-    
-    Parses line-by-line to correctly pair backtick fences and avoid early termination
-    if the JSON payload itself contains embedded triple backticks inside strings.
-    Collapses resulting multiple empty lines to maintain paragraph boundaries.
+    """Remove untrusted metadata JSON blocks while preventing ReDoS.
+
+    Parses line-by-line to correctly pair backtick fences and avoid early
+    termination if the JSON payload itself contains embedded triple backticks
+    inside strings. Collapses resulting multiple empty lines to maintain
+    paragraph boundaries.
     """
     prefixes = (
-        "Conversation info:",
-        "Sender (untrusted metadata):",
-        "Replied message (untrusted, for context):",
-        "Conversation info (untrusted metadata):",
+        'Conversation info:',
+        'Sender (untrusted metadata):',
+        'Replied message (untrusted, for context):',
+        'Conversation info (untrusted metadata):',
     )
-    
+
     lines = content.splitlines(keepends=True)
-    out = []
+    out: list[str] = []
     i = 0
     n = len(lines)
     while i < n:
         line = lines[i]
         stripped_line = line.strip()
-        
-        # Fast path prefix check
+
         matched = False
         for p in prefixes:
             if stripped_line == p:
                 matched = True
                 break
-                
-        if matched and i + 1 < n and lines[i+1].strip() == "```json":
-            # We found a header followed by ```json
-            # Find the true closing ``` which is unindented and on its own line.
-            # Real JSON doesn't contain unescaped newlines, so any "```" on its own line is the end.
-            # Cap at 1000 iterations to prevent O(N²) DoS on malicious input.
+
+        if matched and i + 1 < n and lines[i + 1].strip() == '```json':
+            # We found a header followed by ```json. Find the true closing ```
+            # which is on its own line. Cap scan length to avoid O(N²) behavior
+            # on adversarial payloads.
             k = i + 2
             found_end = False
             max_scan = min(n, i + 2 + 1000)
             while k < max_scan:
-                if lines[k].strip() == "```":
+                if lines[k].strip() == '```':
                     found_end = True
                     break
                 k += 1
-                
+
             if found_end:
-                # Skip all lines from i to k
+                # Skip all lines from i to k (inclusive).
                 i = k + 1
                 continue
-                
+
         out.append(line)
         i += 1
-        
-    result = "".join(out)
-    # Collapse 3+ newlines into 2 to prevent empty paragraph chunks
+
+    result = ''.join(out)
     return re.sub(r'\n{3,}', '\n\n', result).strip()
+
+
+def strip_ingestion_noise(content: str) -> str:
+    """Remove known wrapper/metadata noise while preserving user message content."""
+    return strip_untrusted_metadata(strip_graphiti_context(content))
 
 
 def subchunk_evidence(content: str, chunk_key: str, max_chars: int) -> list[tuple[str, str]]:
@@ -125,9 +177,9 @@ def subchunk_evidence(content: str, chunk_key: str, max_chars: int) -> list[tupl
     If content fits in a single chunk, returns [(chunk_key, content)].
 
     Sub-chunk keys use :p0, :p1, ... suffixes for deterministic idempotent keys.
-    Strips enormous untrusted metadata JSON payloads before sub-chunking, then
-    splits on paragraph boundaries (double newline) when possible to keep context
-    coherent. Falls back to hard split at max_chars if no good boundary exists.
+    Strips known ingestion wrappers/noise before sub-chunking, then splits on
+    paragraph boundaries (double newline) when possible to keep context coherent.
+    Falls back to hard split at max_chars if no good boundary exists.
 
     Raises:
         ValueError: If max_chars <= 0 (would cause infinite loop).
@@ -135,8 +187,8 @@ def subchunk_evidence(content: str, chunk_key: str, max_chars: int) -> list[tupl
     if max_chars <= 0:
         raise ValueError(f'max_chars must be positive, got {max_chars}')
 
-    # Strip enormous metadata injections before we count length
-    content = strip_untrusted_metadata(content)
+    # Strip wrappers/metadata noise before we count length
+    content = strip_ingestion_noise(content)
 
     if len(content) <= max_chars:
         return [(chunk_key, content)]
@@ -502,7 +554,7 @@ def _build_episode_body(message_ids: list[str], messages_by_id: dict[str, dict])
             continue
         ts = (msg.get('created_at') or '')[:19]  # trim to second precision
         role = msg.get('role') or 'message'
-        content = strip_untrusted_metadata(msg.get('content') or '')
+        content = strip_ingestion_noise(msg.get('content') or '')
         if ts:
             parts.append(f'[{ts}] {role}: {content}')
         else:
@@ -1480,7 +1532,7 @@ def _run_evidence_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) ->
             if do_subchunk:
                 sub_parts = subchunk_evidence(content, str(chunk_key), subchunk_size)
             else:
-                sub_parts = [(str(chunk_key), content)]
+                sub_parts = [(str(chunk_key), strip_ingestion_noise(content))]
 
             for sub_key, sub_content in sub_parts:
                 total_subchunks += 1
@@ -1528,7 +1580,7 @@ def _run_evidence_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) ->
             if len(sub_parts) > 1:
                 subchunk_count += len(sub_parts)
         else:
-            sub_parts = [(str(chunk_key), content)]
+            sub_parts = [(str(chunk_key), strip_ingestion_noise(content))]
 
         for sub_key, sub_content in sub_parts:
             # Registry content hash (shortened) for dedup.
