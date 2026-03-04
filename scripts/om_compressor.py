@@ -148,7 +148,7 @@ def _fallback_ssrf_validate(
                 raise OMCompressorError(
                     f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
                 )
-    except ValueError:
+    except ValueError as exc:
         # Hostname (not numeric) — only check well-known loopback aliases
         if not allow_private and host.lower() in {"localhost", "ip6-localhost", "ip6-loopback"}:
             env_ok = (
@@ -162,7 +162,7 @@ def _fallback_ssrf_validate(
                 )
                 raise OMCompressorError(
                     f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
-                )
+                ) from exc
     return url.rstrip("/")
 
 
