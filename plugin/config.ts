@@ -120,7 +120,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
   minPromptChars: 6,
   enableSticky: true,
   stickyMaxWords: 20,
-  stickySignals: ['also', 'and', 'continue', 'what about', 'follow up'],
+  stickySignals: ['also', 'continue', 'what about', 'follow up'],
   packRouterTimeoutMs: 2000,
   defaultMinConfidence: 0.3,
   allowModelRoutingOverride: false,

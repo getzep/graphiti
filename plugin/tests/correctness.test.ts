@@ -9,6 +9,7 @@ import { createCaptureHook, stripInjectedContext } from '../hooks/capture.ts';
 import { createLegacyBeforeAgentStartHook } from '../hooks/legacy-before-agent-start.ts';
 import { createModelResolveHook } from '../hooks/model-resolve.ts';
 import { createRecallHook } from '../hooks/recall.ts';
+import { createCapabilityInjector } from '../hooks/capability-injector.ts';
 import { createContextMapAnchorHooks } from '../hooks/context-map-anchor.ts';
 import { deriveGroupLane } from '../lane-utils.ts';
 import { detectIntent } from '../intent/detector.ts';
@@ -112,6 +113,63 @@ test('P4: entity boost increases score', () => {
   });
   assert.ok(boosted.decision.score >= base.decision.score);
 });
+test('sticky intent requires explicit follow-up signal', () => {
+  const { decision } = detectIntent(rules, {
+    prompt: 'ok',
+    previousIntentId: 'summary',
+    enableSticky: true,
+    stickyMaxWords: 20,
+    stickySignals: ['also', 'continue'],
+    defaultMinConfidence: 0.3,
+  });
+
+  assert.equal(decision.matched, false);
+});
+
+test('sticky intent does not false-positive on substring-only matches', () => {
+  const { decision } = detectIntent(rules, {
+    prompt: 'random',
+    previousIntentId: 'summary',
+    enableSticky: true,
+    stickyMaxWords: 20,
+    stickySignals: ['and'],
+    defaultMinConfidence: 0.3,
+  });
+
+  assert.equal(decision.matched, false);
+});
+
+test('sticky intent applies when prompt is short and signal is present', () => {
+  const { decision } = detectIntent(rules, {
+    prompt: 'also',
+    previousIntentId: 'summary',
+    enableSticky: true,
+    stickyMaxWords: 20,
+    stickySignals: ['also', 'continue'],
+    defaultMinConfidence: 0.3,
+  });
+
+  assert.equal(decision.matched, true);
+  assert.equal(decision.intentId, 'summary');
+});
+
+test('sticky detector logs sticky_rejected_no_signal for short non-follow-up prompts', () => {
+  const logs: string[] = [];
+
+  const { decision } = detectIntent(rules, {
+    prompt: 'yes',
+    previousIntentId: 'summary',
+    enableSticky: true,
+    stickyMaxWords: 20,
+    stickySignals: ['also', 'continue'],
+    defaultMinConfidence: 0.3,
+    logger: (message) => logs.push(message),
+  });
+
+  assert.equal(decision.matched, false);
+  assert.ok(logs.includes('sticky_rejected_no_signal'));
+});
+
 
 test('P5: group chat blocks private packs', async () => {
   const injector = createPackInjector({ intentRules: rules, packRegistry: registry });
@@ -1035,10 +1093,277 @@ test('recall hook emits explicit fallback error block when Graphiti fails', asyn
   assert.ok(context.includes('ERROR_CODE: GRAPHITI_QMD_FAILOVER'));
   assert.ok(context.includes('This turn is using QMD fallback'));
 });
+test('recall hook low-information gate skips graphiti search and returns empty context', async () => {
+  let searchCalls = 0;
+  let packCalls = 0;
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+  try {
+    const hook = createRecallHook({
+      client: {
+        search: async () => {
+          searchCalls += 1;
+          return { facts: [{ fact: 'should-not-run' }] };
+        },
+        ingestMessages: async () => undefined,
+      },
+      packInjector: async () => {
+        packCalls += 1;
+        return null;
+      },
+      config: {
+        debug: true,
+        minPromptChars: 1,
+      },
+    });
+
+    const prompts = ['ok', 'ok.', 'thanks!', 'got it!'];
+    for (const prompt of prompts) {
+      const result = await hook({ prompt }, { sessionKey: `session-low-info-${prompt}` });
+      assert.equal(result.prependContext, '');
+    }
+
+    assert.equal(searchCalls, 0);
+    assert.equal(packCalls, 0);
+    assert.ok(logs.some((entry) => entry.includes('skip_low_info')));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('recall hook suppresses graphiti wrapper when recall is empty', async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+  try {
+    const hook = createRecallHook({
+      client: {
+        search: async () => ({ facts: [], entities: [] }),
+        ingestMessages: async () => undefined,
+      },
+      packInjector: async () => null,
+      config: {
+        debug: true,
+        minPromptChars: 1,
+      },
+    });
+
+    const result = await hook({ prompt: 'meaningful prompt' }, { sessionKey: 'session-empty' });
+    const context = result.prependContext ?? '';
+    assert.equal(context, '');
+    assert.ok(!context.includes('<graphiti-context>'));
+    assert.ok(logs.some((entry) => entry.includes('skip_empty_recall')));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('recall hook dedupes duplicate facts within a turn', async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+  try {
+    const hook = createRecallHook({
+      client: {
+        search: async () => ({
+          facts: [
+            { fact: 'Repeated fact' },
+            { fact: 'Repeated fact' },
+            { fact: ' repeated   fact ' },
+            { fact: 'Unique fact' },
+          ],
+        }),
+        ingestMessages: async () => undefined,
+      },
+      packInjector: async () => null,
+      config: {
+        debug: true,
+        minPromptChars: 1,
+      },
+    });
+
+    const result = await hook({ prompt: 'show recall' }, { sessionKey: 'session-dedupe' });
+    const context = result.prependContext ?? '';
+    assert.ok(context.includes('<graphiti-context>'));
+    assert.equal(countOccurrences(context, '- Repeated fact'), 1);
+    assert.equal(countOccurrences(context, '- Unique fact'), 1);
+    assert.ok(logs.some((entry) => entry.includes('deduped_2_facts')));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('recall hook escapes quotes in graphiti facts and entities', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({
+        facts: [{ fact: 'He said "hello" and it\'s done' }],
+        entities: [{ summary: 'User\'s "profile" updated' }],
+      }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { minPromptChars: 1 },
+  });
+
+  const result = await hook({ prompt: 'show escaped content' }, { sessionKey: 'session-xml-escape' });
+  const context = result.prependContext ?? '';
+
+  assert.ok(context.includes('&quot;hello&quot;'));
+  assert.ok(context.includes('it&apos;s done'));
+  assert.ok(context.includes('User&apos;s &quot;profile&quot; updated'));
+});
+
+test('recall hook suppresses recently injected facts with rolling novelty state', async () => {
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.join(' '));
+
+  try {
+    let turn = 0;
+    const hook = createRecallHook({
+      client: {
+        search: async () => {
+          turn += 1;
+          if (turn === 1) {
+            return { facts: [{ fact: 'Fact A' }, { fact: 'Fact B' }] };
+          }
+          if (turn === 2) {
+            return { facts: [{ fact: 'Fact A' }, { fact: 'Fact B' }, { fact: 'Fact C' }] };
+          }
+          return { facts: [{ fact: 'Fact A' }] };
+        },
+        ingestMessages: async () => undefined,
+      },
+      packInjector: async () => null,
+      config: {
+        debug: true,
+        minPromptChars: 1,
+      },
+    });
+
+    const first = await hook({ prompt: 'turn 1' }, { sessionKey: 'session-novelty' });
+    const second = await hook({ prompt: 'turn 2' }, { sessionKey: 'session-novelty' });
+    const third = await hook({ prompt: 'turn 3' }, { sessionKey: 'session-novelty' });
+
+    assert.ok((first.prependContext ?? '').includes('- Fact A'));
+    assert.ok((first.prependContext ?? '').includes('- Fact B'));
+
+    const secondContext = second.prependContext ?? '';
+    assert.ok(secondContext.includes('- Fact C'));
+    assert.ok(!secondContext.includes('- Fact A'));
+    assert.ok(!secondContext.includes('- Fact B'));
+    assert.ok(logs.some((entry) => entry.includes('novelty_suppressed_2')));
+
+    assert.equal(third.prependContext ?? '', '');
+    assert.ok(logs.some((entry) => entry.includes('novelty_suppressed_1')));
+    assert.ok(logs.some((entry) => entry.includes('skip_empty_recall')));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('recall hook novelty suppression expires after three turns', async () => {
+  const turnFacts = [
+    'Fact A',
+    'Fact B',
+    'Fact C',
+    'Fact D',
+    'Fact A',
+  ];
+  let turn = 0;
+  const hook = createRecallHook({
+    client: {
+      search: async () => {
+        const value = turnFacts[turn] ?? 'Fact Z';
+        turn += 1;
+        return { facts: [{ fact: value }] };
+      },
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: {
+      minPromptChars: 1,
+    },
+  });
+
+  const first = await hook({ prompt: 't1' }, { sessionKey: 'session-window' });
+  const second = await hook({ prompt: 't2' }, { sessionKey: 'session-window' });
+  const third = await hook({ prompt: 't3' }, { sessionKey: 'session-window' });
+  const fourth = await hook({ prompt: 't4' }, { sessionKey: 'session-window' });
+  const fifth = await hook({ prompt: 't5' }, { sessionKey: 'session-window' });
+
+  assert.ok((first.prependContext ?? '').includes('- Fact A'));
+  assert.ok((second.prependContext ?? '').includes('- Fact B'));
+  assert.ok((third.prependContext ?? '').includes('- Fact C'));
+  assert.ok((fourth.prependContext ?? '').includes('- Fact D'));
+  assert.ok((fifth.prependContext ?? '').includes('- Fact A'));
+});
+
+test('recall hook does not share novelty state when session/group key is missing', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({ facts: [{ fact: 'Fact A' }] }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: {
+      minPromptChars: 1,
+      singleTenant: true,
+      memoryGroupId: 'test-lane',
+    },
+  });
+
+  const first = await hook({ prompt: 'turn 1' }, {});
+  const second = await hook({ prompt: 'turn 2' }, {});
+
+  assert.ok((first.prependContext ?? '').includes('- Fact A'));
+  assert.ok((second.prependContext ?? '').includes('- Fact A'));
+});
 
 test('normalizeConfig drops empty memoryGroupId values', () => {
   const normalized = normalizeConfig({ memoryGroupId: '   ' });
   assert.equal(normalized.memoryGroupId, undefined);
+});
+
+test('capabilityRequireIntent is backward-compatible by default and can be explicitly enabled', async (t) => {
+  const tempDir = makeTempDir(t, 'graphiti-capability-gate-');
+  const selectorScriptPath = path.join(tempDir, 'selector.js');
+  fs.writeFileSync(
+    selectorScriptPath,
+    'process.stdout.write(JSON.stringify({selected:[{id:"cap-1",name:"Capability One",kind:"tool",description:"Does thing",score:0.9}]}));',
+    'utf8',
+  );
+
+  const defaultConfig = normalizeConfig({
+    enableCapabilityInjection: true,
+    packRouterRepoRoot: tempDir,
+    capabilitySelectorCommand: ['node', selectorScriptPath],
+  });
+  assert.equal(defaultConfig.capabilityRequireIntent, false);
+
+  const defaultInjector = createCapabilityInjector({ config: defaultConfig });
+  const defaultWithoutIntent = await defaultInjector({ prompt: 'select capability' });
+  assert.ok(defaultWithoutIntent?.includes('<capability-context'));
+
+  const strictConfig = normalizeConfig({
+    enableCapabilityInjection: true,
+    capabilityRequireIntent: true,
+    packRouterRepoRoot: tempDir,
+    capabilitySelectorCommand: ['node', selectorScriptPath],
+  });
+
+  const strictInjector = createCapabilityInjector({ config: strictConfig });
+  const strictWithoutIntent = await strictInjector({ prompt: 'select capability' });
+  assert.equal(strictWithoutIntent, null);
+
+  const strictWithIntent = await strictInjector({ prompt: 'select capability', intentId: 'summary' });
+  assert.ok(strictWithIntent?.includes('<capability-context'));
+  assert.ok(strictWithIntent?.includes('intent="summary"'));
 });
 
 test('recall hook prefers provider group over session key when memoryGroupId is unset', async () => {

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { GraphitiClient } from '../client.ts';
 import type { GraphitiSearchResults } from '../client.ts';
 import { normalizeConfig } from '../config.ts';
@@ -33,17 +35,210 @@ export interface RecallHookDeps {
  * <graphiti-context> block or confuse the model parser.
  */
 const escapeXml = (text: string): string =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+const LOW_INFO_SINGLE_TOKENS = new Set([
+  'ok',
+  'yes',
+  'no',
+  'k',
+  'yep',
+  'nope',
+  'sure',
+  'thanks',
+  'ty',
+  'thx',
+  'cool',
+  'nice',
+  'agreed',
+  'done',
+  'noted',
+]);
 
-const formatGraphitiContext = (results: GraphitiSearchResults): string => {
+const LOW_INFO_SHORT_ACKS = new Set([
+  'sounds good',
+  'got it',
+  'makes sense',
+  'lgtm',
+  'go ahead',
+  'do it',
+  'perfect',
+  'great',
+  'good call',
+]);
+
+const NOVELTY_WINDOW_TURNS = 3;
+const MAX_NOVELTY_SESSIONS = 512;
+
+interface PreparedFact {
+  text: string;
+  fingerprint: string;
+}
+
+const normalizeWhitespace = (text: string): string => text.trim().replace(/\s+/g, ' ');
+
+const normalizeFactText = (text: string): string => normalizeWhitespace(text).toLowerCase();
+
+const fingerprint = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+const isEmojiOnly = (prompt: string): boolean => {
+  const compact = prompt.replace(/\s+/g, '');
+  if (!compact) {
+    return false;
+  }
+
+  if (!/[\p{Extended_Pictographic}]/u.test(compact)) {
+    return false;
+  }
+
+  const withoutEmoji = compact.replace(
+    /[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u200D\uFE0F]/gu,
+    '',
+  );
+  return withoutEmoji.length === 0;
+};
+
+const stripTrailingAckPunctuation = (value: string): string =>
+  value.replace(/[.!?]+$/g, '').trim();
+
+const isLowInformationPrompt = (prompt: string): boolean => {
+  const normalizedRaw = normalizeWhitespace(prompt).toLowerCase();
+  if (!normalizedRaw) {
+    return false;
+  }
+
+  if (/^[?.!]+$/.test(normalizedRaw)) {
+    return true;
+  }
+
+  if (isEmojiOnly(normalizedRaw)) {
+    return true;
+  }
+
+  const normalized = stripTrailingAckPunctuation(normalizedRaw);
+  if (!normalized) {
+    return true;
+  }
+
+  if (LOW_INFO_SHORT_ACKS.has(normalized)) {
+    return true;
+  }
+
+  const tokens = normalized.split(' ');
+  return tokens.length === 1 && LOW_INFO_SINGLE_TOKENS.has(tokens[0]);
+};
+
+const dedupeFactsWithinTurn = (facts: Array<{ fact: string }>): {
+  prepared: PreparedFact[];
+  removed: number;
+} => {
+  const seen = new Set<string>();
+  const prepared: PreparedFact[] = [];
+  let removed = 0;
+
+  for (const fact of facts) {
+    const text = normalizeWhitespace(fact.fact ?? '');
+    const normalized = normalizeFactText(text);
+    if (!normalized) {
+      continue;
+    }
+    if (seen.has(normalized)) {
+      removed += 1;
+      continue;
+    }
+
+    seen.add(normalized);
+    prepared.push({
+      text,
+      fingerprint: fingerprint(normalized),
+    });
+  }
+
+  return { prepared, removed };
+};
+
+const collectUsefulEntitySummaries = (
+  entities: GraphitiSearchResults['entities'],
+): string[] => {
+  const seen = new Set<string>();
+  const summaries: string[] = [];
+
+  for (const entity of entities ?? []) {
+    const summary = normalizeWhitespace(entity.summary ?? '');
+    const normalized = normalizeFactText(summary);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    summaries.push(summary);
+  }
+
+  return summaries;
+};
+
+const pushNoveltyTurn = (
+  state: Map<string, string[][]>,
+  sessionStateKey: string | undefined,
+  fingerprintsForTurn: string[],
+): void => {
+  if (!sessionStateKey) {
+    return;
+  }
+
+  const current = state.get(sessionStateKey) ?? [];
+  current.push(fingerprintsForTurn);
+  while (current.length > NOVELTY_WINDOW_TURNS) {
+    current.shift();
+  }
+
+  // Refresh insertion order so we can evict least-recently-updated keys.
+  state.delete(sessionStateKey);
+  state.set(sessionStateKey, current);
+
+  while (state.size > MAX_NOVELTY_SESSIONS) {
+    const oldestKey = state.keys().next().value;
+    if (typeof oldestKey !== 'string') {
+      break;
+    }
+    state.delete(oldestKey);
+  }
+};
+
+const getSeenFingerprints = (
+  state: Map<string, string[][]>,
+  sessionStateKey: string | undefined,
+): Set<string> => {
+  if (!sessionStateKey) {
+    return new Set<string>();
+  }
+
+  const seen = new Set<string>();
+  for (const turn of state.get(sessionStateKey) ?? []) {
+    for (const value of turn) {
+      seen.add(value);
+    }
+  }
+  return seen;
+};
+
+const getSessionStateKey = (ctx: PackInjectorContext): string | undefined =>
+  ctx.sessionKey ?? ctx.messageProvider?.groupId;
+
+const formatGraphitiContext = (facts: string[], entitySummaries: string[]): string => {
   const lines: string[] = [];
   lines.push('<graphiti-context>');
   lines.push('## Graphiti Recall');
-  if (results.facts.length === 0) {
-    lines.push('No relevant facts found.');
-  } else {
-    for (const fact of results.facts) {
-      lines.push(`- ${escapeXml(fact.fact)}`);
+  for (const fact of facts) {
+    lines.push(`- ${escapeXml(fact)}`);
+  }
+  if (entitySummaries.length > 0) {
+    lines.push('## Related Entities');
+    for (const summary of entitySummaries) {
+      lines.push(`- ${escapeXml(summary)}`);
     }
   }
   lines.push('</graphiti-context>');
@@ -122,10 +317,18 @@ export const createRecallHook = (deps: RecallHookDeps): RecallHook => {
   const config = normalizeConfig(deps.config);
   const logger = config.debug ? (message: string) => console.log(message) : () => undefined;
   const capabilityInjector = createCapabilityInjector({ config });
+  const noveltyState = new Map<string, string[][]>();
 
   return async (event, ctx) => {
     const parts: string[] = [];
+    const sessionStateKey = getSessionStateKey(ctx);
     const prompt = event.prompt ?? '';
+    if (isLowInformationPrompt(prompt)) {
+      logger('skip_low_info');
+      pushNoveltyTurn(noveltyState, sessionStateKey, []);
+      return { prependContext: '' };
+    }
+
     let graphitiResults: GraphitiSearchResults | null = null;
 
     if (prompt.trim().length >= config.minPromptChars) {
@@ -141,10 +344,39 @@ export const createRecallHook = (deps: RecallHookDeps): RecallHook => {
         );
         logger('Graphiti recall skipped: missing group scope');
         parts.push(formatFallback());
+        pushNoveltyTurn(noveltyState, sessionStateKey, []);
       } else {
         try {
           graphitiResults = await deps.client.search(prompt, groupIds);
-          parts.push(formatGraphitiContext(graphitiResults));
+          const { prepared, removed } = dedupeFactsWithinTurn(graphitiResults.facts ?? []);
+          if (removed > 0) {
+            logger(`deduped_${removed}_facts`);
+          }
+
+          const previouslySeen = getSeenFingerprints(noveltyState, sessionStateKey);
+          const novelFacts = prepared.filter((fact) => !previouslySeen.has(fact.fingerprint));
+          const suppressed = prepared.length - novelFacts.length;
+          if (suppressed > 0) {
+            logger(`novelty_suppressed_${suppressed}`);
+          }
+
+          const usefulEntities = collectUsefulEntitySummaries(graphitiResults.entities);
+          if (novelFacts.length === 0 && usefulEntities.length === 0) {
+            logger('skip_empty_recall');
+            pushNoveltyTurn(noveltyState, sessionStateKey, []);
+          } else {
+            parts.push(
+              formatGraphitiContext(
+                novelFacts.map((fact) => fact.text),
+                usefulEntities,
+              ),
+            );
+            pushNoveltyTurn(
+              noveltyState,
+              sessionStateKey,
+              novelFacts.map((fact) => fact.fingerprint),
+            );
+          }
         } catch (error) {
           const message = (error as Error).message || 'unknown error';
           const safeReason = sanitizeReason(message);
@@ -156,10 +388,12 @@ export const createRecallHook = (deps: RecallHookDeps): RecallHook => {
           );
           logger(`Graphiti recall failed: ${safeReason}`);
           parts.push(formatFallback());
+          pushNoveltyTurn(noveltyState, sessionStateKey, []);
         }
       }
     } else {
       parts.push('');
+      pushNoveltyTurn(noveltyState, sessionStateKey, []);
     }
 
     let packIntentId: string | undefined;
