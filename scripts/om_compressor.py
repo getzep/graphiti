@@ -55,6 +55,7 @@ DEFAULT_MAX_CHUNKS_PER_RUN = 10
 DEAD_LETTER_ATTEMPTS = 3
 DEFAULT_EMBEDDING_MODEL = "embeddinggemma"
 DEFAULT_EMBEDDING_DIM = 768
+DEFAULT_OM_GROUP_ID = "s1_observational_memory"
 
 CLAIM_STATUS_PENDING = "pending"
 CLAIM_STATUS_CLAIMED = "claimed"
@@ -147,7 +148,7 @@ def _fallback_ssrf_validate(
                 raise OMCompressorError(
                     f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
                 )
-    except ValueError:
+    except ValueError as exc:
         # Hostname (not numeric) — only check well-known loopback aliases
         if not allow_private and host.lower() in {"localhost", "ip6-localhost", "ip6-loopback"}:
             env_ok = (
@@ -161,7 +162,7 @@ def _fallback_ssrf_validate(
                 )
                 raise OMCompressorError(
                     f"{label} base URL {url!r} targets a private/loopback address.{_hint}"
-                )
+                ) from exc
     return url.rstrip("/")
 
 
@@ -280,6 +281,15 @@ def normalize_text(value: str) -> str:
     text = unicodedata.normalize("NFKC", value or "")
     text = text.strip()
     return re.sub(r"\s+", " ", text)
+
+
+def om_group_id(raw: str | None = None) -> str:
+    value = (raw if raw is not None else os.environ.get("OM_GROUP_ID") or DEFAULT_OM_GROUP_ID).strip()
+    if not value:
+        value = DEFAULT_OM_GROUP_ID
+    if not all(ch.isalnum() or ch in {"_", "-", "."} for ch in value):
+        raise OMCompressorError(f"invalid OM_GROUP_ID: {value!r}")
+    return value
 
 
 # OM-1 fix: metadata contamination guard
@@ -1354,9 +1364,11 @@ def _fetch_backlog_stats(session: Any) -> tuple[int, float | None]:
         MATCH (m:Message)
         WHERE coalesce(m.om_extracted, false) = false
           AND coalesce(m.om_dead_letter, false) = false
+          AND coalesce(m.group_id, $group_id) = $group_id
         RETURN count(m) AS backlog_count,
                min(m.created_at) AS oldest_created_at
-        """
+        """,
+        {"group_id": om_group_id()},
     ).single()
     backlog = int(row["backlog_count"] or 0) if row else 0
     oldest = row["oldest_created_at"] if row else None
@@ -1377,6 +1389,7 @@ def _fetch_messages_by_ids(session: Any, message_ids: list[str]) -> list[Message
         """
         MATCH (m:Message)
         WHERE m.message_id IN $message_ids
+          AND coalesce(m.group_id, $group_id) = $group_id
         RETURN m.message_id AS message_id,
                coalesce(m.source_session_id, 'unknown') AS source_session_id,
                coalesce(m.content, '') AS content,
@@ -1385,7 +1398,7 @@ def _fetch_messages_by_ids(session: Any, message_ids: list[str]) -> list[Message
                coalesce(m.om_extract_attempts, 0) AS om_extract_attempts
         ORDER BY m.created_at ASC, m.message_id ASC
         """,
-        {"message_ids": message_ids, "now_iso": now_iso()},
+        {"message_ids": message_ids, "now_iso": now_iso(), "group_id": om_group_id()},
     ).data()
 
     by_id = {
@@ -1412,6 +1425,7 @@ def _fetch_parent_messages(session: Any, limit: int = MAX_PARENT_CHUNK_SIZE) -> 
         MATCH (m:Message)
         WHERE coalesce(m.om_extracted, false) = false
           AND coalesce(m.om_dead_letter, false) = false
+          AND coalesce(m.group_id, $group_id) = $group_id
         RETURN m.message_id AS message_id,
                coalesce(m.source_session_id, 'unknown') AS source_session_id,
                coalesce(m.content, '') AS content,
@@ -1421,7 +1435,7 @@ def _fetch_parent_messages(session: Any, limit: int = MAX_PARENT_CHUNK_SIZE) -> 
         ORDER BY m.created_at ASC, m.message_id ASC
         LIMIT $n
         """,
-        {"n": int(limit), "now_iso": now_iso()},
+        {"n": int(limit), "now_iso": now_iso(), "group_id": om_group_id()},
     ).data()
 
     out: list[MessageRow] = []
@@ -1446,6 +1460,7 @@ def _fetch_pending_messages_for_manifest(session: Any) -> list[MessageRow]:
         MATCH (m:Message)
         WHERE coalesce(m.om_extracted, false) = false
           AND coalesce(m.om_dead_letter, false) = false
+          AND coalesce(m.group_id, $group_id) = $group_id
         RETURN m.message_id AS message_id,
                coalesce(m.source_session_id, 'unknown') AS source_session_id,
                coalesce(m.content, '') AS content,
@@ -1454,7 +1469,7 @@ def _fetch_pending_messages_for_manifest(session: Any) -> list[MessageRow]:
                coalesce(m.om_extract_attempts, 0) AS om_extract_attempts
         ORDER BY m.created_at ASC, m.message_id ASC
         """,
-        {"now_iso": now_iso()},
+        {"now_iso": now_iso(), "group_id": om_group_id()},
     ).data()
 
     out: list[MessageRow] = []
@@ -2387,6 +2402,7 @@ def _process_chunk_tx(
     chunk_id: str,
     cfg: ExtractorConfig,
     observed_node_ids: list[str],
+    group_id: str,
 ) -> dict[str, Any]:
     extracted = _extract_items(messages, cfg)
     ranked_nodes = _rank_extraction_nodes(extracted.nodes)
@@ -2428,6 +2444,7 @@ def _process_chunk_tx(
             """
             MERGE (n:OMNode {node_id:$node_id})
             ON CREATE SET
+              n.group_id = $group_id,
               n.node_type = $node_type,
               n.semantic_domain = $semantic_domain,
               n.content = $content,
@@ -2444,6 +2461,7 @@ def _process_chunk_tx(
               n.last_observed_at = $last_observed_at,
               n.monitoring_started_at = NULL
             ON MATCH SET
+              n.group_id = coalesce(n.group_id, $group_id),
               n.source_message_ids = CASE
                 WHEN n.source_message_ids IS NULL THEN $source_message_ids
                 ELSE n.source_message_ids
@@ -2463,6 +2481,7 @@ def _process_chunk_tx(
             """,
             {
                 "node_id": node.node_id,
+                "group_id": group_id,
                 "node_type": node.node_type,
                 "semantic_domain": node.semantic_domain,
                 "content": incoming_content,
@@ -2517,13 +2536,17 @@ def _process_chunk_tx(
             MATCH (t:OMNode {{node_id:$target_node_id}})
             MERGE (s)-[r:{rel}]->(t)
             ON CREATE SET
+              r.group_id = $group_id,
               r.linked_at = $linked_at,
               r.chunk_id = $chunk_id,
               r.extractor_version = $extractor_version
+            ON MATCH SET
+              r.group_id = coalesce(r.group_id, $group_id)
             """,
             {
                 "source_node_id": edge.source_node_id,
                 "target_node_id": edge.target_node_id,
+                "group_id": group_id,
                 "linked_at": now,
                 "chunk_id": chunk_id,
                 "extractor_version": cfg.extractor_version,
@@ -2537,13 +2560,18 @@ def _process_chunk_tx(
                 MATCH (m:Message {message_id:$message_id})
                 MATCH (n:OMNode {node_id:$node_id})
                 MERGE (m)-[r:EVIDENCE_FOR {chunk_id:$chunk_id, extractor_version:$extractor_version}]->(n)
-                ON CREATE SET r.linked_at = $linked_at
+                ON CREATE SET
+                  r.group_id = $group_id,
+                  r.linked_at = $linked_at
+                ON MATCH SET
+                  r.group_id = coalesce(r.group_id, $group_id)
                 """,
                 {
                     "message_id": message_id,
                     "node_id": node.node_id,
                     "chunk_id": chunk_id,
                     "extractor_version": cfg.extractor_version,
+                    "group_id": group_id,
                     "linked_at": now,
                 },
             ).consume()
@@ -2590,6 +2618,7 @@ def _process_chunk_tx(
             MATCH (n:OMNode {node_id:$node_id})
             MERGE (e:OMExtractionEvent {event_id:$event_id})
             ON CREATE SET
+              e.group_id = $group_id,
               e.emitted_at = $emitted_at,
               e.chunk_id = $chunk_id,
               e.extractor_version = $extractor_version,
@@ -2604,6 +2633,7 @@ def _process_chunk_tx(
             """,
             {
                 "event_id": event_id,
+                "group_id": group_id,
                 "emitted_at": now,
                 "chunk_id": chunk_id,
                 "extractor_version": cfg.extractor_version,
@@ -2636,6 +2666,7 @@ def _process_chunk(
         chunk_id=chunk_id,
         cfg=cfg,
         observed_node_ids=observed_node_ids,
+        group_id=om_group_id(),
     )
 
 
