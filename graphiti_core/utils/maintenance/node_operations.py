@@ -324,6 +324,7 @@ async def _resolve_with_llm(
     llm_response = await llm_client.generate_response(
         prompt_library.dedupe_nodes.nodes(context),
         response_model=NodeResolutions,
+        model_size=ModelSize.small,
         prompt_name='dedupe_nodes.nodes',
     )
 
