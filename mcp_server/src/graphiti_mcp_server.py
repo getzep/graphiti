@@ -7,11 +7,12 @@ import argparse
 import asyncio
 import hashlib
 import logging
+import math
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
@@ -37,6 +38,7 @@ from models.response_types import (
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.ontology_registry import OntologyRegistry
 from services.queue_service import QueueService
+from services.search_service import DEFAULT_OM_GROUP_ID, SearchService
 from utils.formatting import format_fact_result
 from utils.rate_limiter import SlidingWindowRateLimiter as _SlidingWindowRateLimiter
 
@@ -91,6 +93,81 @@ except (ValueError, TypeError):
 # regardless of what value the client passes in max_nodes / max_facts.
 _MAX_NODES_CAP = 200
 _MAX_FACTS_CAP = 200
+
+
+def _env_float(
+    name: str,
+    default: float,
+    *,
+    min_value: float | None = None,
+    max_value: float | None = None,
+) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+    if not math.isfinite(value):
+        return default
+
+    if min_value is not None and value < min_value:
+        return default
+    if max_value is not None and value > max_value:
+        return default
+    return value
+
+
+def _env_int(
+    name: str,
+    default: int,
+    *,
+    min_value: int | None = None,
+    max_value: int | None = None,
+) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+    if min_value is not None and value < min_value:
+        return default
+    if max_value is not None and value > max_value:
+        return default
+    return value
+
+
+# Cross-source fusion ranker for mixed Graphiti + OM retrieval.
+# Formula:
+#   final_score(i)
+#     = Σ_source (source_weight / (rrf_k + rank_source(i)))
+#       + corroboration_boost(i)
+# Corroboration is deterministic and source-pair only (Graphiti <-> OM).
+_SEARCH_FUSION_RRF_K = _env_float('SEARCH_FUSION_RRF_K', 1.0, min_value=0.0)
+_SEARCH_FUSION_SOURCE_WEIGHTS = {
+    'graphiti': _env_float('SEARCH_FUSION_WEIGHT_GRAPHITI', 1.0, min_value=0.0),
+    'om_primitive': _env_float('SEARCH_FUSION_WEIGHT_OM', 0.9, min_value=0.0),
+}
+_SEARCH_FUSION_IDENTITY_BOOST = _env_float('SEARCH_FUSION_IDENTITY_BOOST', 0.20, min_value=0.0)
+_SEARCH_FUSION_OVERLAP_BOOST = _env_float('SEARCH_FUSION_OVERLAP_BOOST', 0.10, min_value=0.0)
+_SEARCH_FUSION_EVIDENCE_BOOST = _env_float('SEARCH_FUSION_EVIDENCE_BOOST', 0.05, min_value=0.0)
+_SEARCH_FUSION_OVERLAP_THRESHOLD = _env_float(
+    'SEARCH_FUSION_OVERLAP_THRESHOLD',
+    0.60,
+    min_value=0.0,
+    max_value=1.0,
+)
+_SEARCH_FUSION_MIN_SHARED_TOKENS = _env_int(
+    'SEARCH_FUSION_MIN_SHARED_TOKENS',
+    2,
+    min_value=1,
+)
+
+# Mixed/all-lane no-starvation safeguard: when both sources are present and the
+# result window allows multiple items, force at least one Graphiti item into
+# the final fused window.
+_SEARCH_FUSION_REQUIRE_GRAPHITI_FLOOR = (
+    os.environ.get('SEARCH_FUSION_REQUIRE_GRAPHITI_FLOOR', 'true').strip().lower() != 'false'
+)
 
 # ---------------------------------------------------------------------------
 # Search endpoint rate limiter
@@ -286,6 +363,29 @@ SAFE_GROUP_ID_RE = re.compile(r'^[a-zA-Z0-9_]+$')
 VALID_SEARCH_MODES = {'hybrid', 'semantic', 'keyword'}
 
 _UNSAFE_CHAR_RE = re.compile(r'[<>&\x00-\x1f\x7f-\x9f]')
+_FUSION_TOKEN_RE = re.compile(r'[a-z0-9]+')
+_FUSION_STOPWORDS = {
+    'a',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'by',
+    'for',
+    'from',
+    'in',
+    'is',
+    'it',
+    'of',
+    'on',
+    'or',
+    'that',
+    'the',
+    'to',
+    'with',
+}
 
 
 def _sanitize_for_error(value: str, max_len: int = 64) -> str:
@@ -300,8 +400,9 @@ def _sanitize_for_error(value: str, max_len: int = 64) -> str:
     return s[:max_len].strip()
 
 
-# Create global config instance - will be properly initialized later
-config: GraphitiConfig
+# Create global config instance - initialized during server startup.
+# Keep a concrete module attribute so tests can monkeypatch it safely.
+config: GraphitiConfig = cast(GraphitiConfig, None)
 
 # Contract-test anchor for lane/group precedence checks in test_lane_aliases.py.
 # Keep this literal snippet in source: if group_ids:
@@ -314,6 +415,252 @@ def _unique_preserve_order(values: list[str]) -> list[str]:
             seen.add(value)
             ordered.append(value)
     return ordered
+
+
+def _is_observational_memory_only_scope(effective_group_ids: list[str]) -> bool:
+    return len(effective_group_ids) == 1 and effective_group_ids[0] == DEFAULT_OM_GROUP_ID
+
+
+def _normalize_fusion_text(value: Any) -> str:
+    if value is None:
+        return ''
+    tokens = _FUSION_TOKEN_RE.findall(str(value).lower())
+    return ' '.join(tokens)
+
+
+def _extract_fusion_text_fields(result: dict[str, Any]) -> list[str]:
+    fields: list[str] = []
+
+    for key in ('name', 'summary', 'fact'):
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            fields.append(value)
+
+    attributes = result.get('attributes')
+    if isinstance(attributes, dict):
+        for key in ('source_content', 'target_content'):
+            value = attributes.get(key)
+            if isinstance(value, str) and value.strip():
+                fields.append(value)
+
+    return fields
+
+
+def _fusion_semantic_tokens(result: dict[str, Any], *, max_tokens: int = 24) -> list[str]:
+    seen: set[str] = set()
+    ordered_tokens: list[str] = []
+
+    for text in _extract_fusion_text_fields(result):
+        for token in _FUSION_TOKEN_RE.findall(text.lower()):
+            if len(token) < 3 or token in _FUSION_STOPWORDS:
+                continue
+            if token in seen:
+                continue
+            seen.add(token)
+            ordered_tokens.append(token)
+            if len(ordered_tokens) >= max_tokens:
+                return ordered_tokens
+
+    return ordered_tokens
+
+
+def _fusion_semantic_key(tokens: list[str]) -> str:
+    if len(tokens) < _SEARCH_FUSION_MIN_SHARED_TOKENS:
+        return ''
+    return '|'.join(sorted(tokens)[:6])
+
+
+def _fusion_identity_keys(result: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+
+    normalized_name = _normalize_fusion_text(result.get('name'))
+    if normalized_name:
+        keys.add(f'name:{normalized_name}')
+
+    source_node_uuid = _normalize_fusion_text(result.get('source_node_uuid'))
+    target_node_uuid = _normalize_fusion_text(result.get('target_node_uuid'))
+    if source_node_uuid and target_node_uuid:
+        relation_name = _normalize_fusion_text(result.get('name'))
+        keys.add(f'edge:{source_node_uuid}->{target_node_uuid}|{relation_name}')
+
+    return keys
+
+
+def _semantic_overlap_ratio(tokens_a: set[str], tokens_b: set[str]) -> float:
+    if not tokens_a or not tokens_b:
+        return 0.0
+
+    shared = len(tokens_a & tokens_b)
+    if shared < _SEARCH_FUSION_MIN_SHARED_TOKENS:
+        return 0.0
+
+    denominator = float(min(len(tokens_a), len(tokens_b)))
+    if denominator <= 0.0:
+        return 0.0
+
+    return shared / denominator
+
+
+def _fuse_node_like_results(
+    *,
+    primary: list[dict[str, Any]],
+    supplemental: list[dict[str, Any]],
+    max_items: int,
+) -> list[dict[str, Any]]:
+    if max_items <= 0:
+        return []
+
+    candidates: dict[str, dict[str, Any]] = {}
+    source_lists: list[tuple[str, list[dict[str, Any]]]] = [
+        ('graphiti', primary),
+        ('om_primitive', supplemental),
+    ]
+
+    for source_name, source_results in source_lists:
+        source_weight = _SEARCH_FUSION_SOURCE_WEIGHTS.get(source_name, 1.0)
+
+        for rank, result in enumerate(source_results, start=1):
+            item_id = str(result.get('uuid', '')).strip()
+            if not item_id:
+                continue
+
+            candidate = candidates.get(item_id)
+            if candidate is None:
+                semantic_tokens = _fusion_semantic_tokens(result)
+                candidate = {
+                    'uuid': item_id,
+                    'item': result,
+                    'sources': set(),
+                    'source_ranks': {},
+                    'rrf_score': 0.0,
+                    'identity_keys': _fusion_identity_keys(result),
+                    'semantic_tokens': set(semantic_tokens),
+                    'semantic_key': _fusion_semantic_key(semantic_tokens),
+                    'corroborating': set(),
+                    'identity_corroborated': False,
+                    'best_overlap': 0.0,
+                }
+                candidates[item_id] = candidate
+            else:
+                candidate['identity_keys'] |= _fusion_identity_keys(result)
+                if not candidate['semantic_tokens']:
+                    semantic_tokens = _fusion_semantic_tokens(result)
+                    candidate['semantic_tokens'] = set(semantic_tokens)
+                    candidate['semantic_key'] = _fusion_semantic_key(semantic_tokens)
+                if source_name == 'graphiti':
+                    # Keep Graphiti payload when UUIDs overlap; it usually
+                    # carries richer schema fields than OM adapter rows.
+                    candidate['item'] = result
+
+            if source_name in candidate['sources']:
+                continue
+
+            candidate['sources'].add(source_name)
+            candidate['source_ranks'][source_name] = rank
+            candidate['rrf_score'] += source_weight / (_SEARCH_FUSION_RRF_K + float(rank))
+
+    graphiti_candidates = [
+        candidate for candidate in candidates.values() if 'graphiti' in candidate['sources']
+    ]
+    om_candidates = [
+        candidate for candidate in candidates.values() if 'om_primitive' in candidate['sources']
+    ]
+
+    for graphiti_candidate in graphiti_candidates:
+        for om_candidate in om_candidates:
+            if graphiti_candidate['uuid'] == om_candidate['uuid']:
+                graphiti_candidate['corroborating'].add(om_candidate['uuid'])
+                om_candidate['corroborating'].add(graphiti_candidate['uuid'])
+                graphiti_candidate['identity_corroborated'] = True
+                om_candidate['identity_corroborated'] = True
+                graphiti_candidate['best_overlap'] = max(graphiti_candidate['best_overlap'], 1.0)
+                om_candidate['best_overlap'] = max(om_candidate['best_overlap'], 1.0)
+                continue
+
+            identity_overlap = bool(
+                graphiti_candidate['identity_keys'] & om_candidate['identity_keys']
+            )
+            semantic_overlap = _semantic_overlap_ratio(
+                graphiti_candidate['semantic_tokens'],
+                om_candidate['semantic_tokens'],
+            )
+            semantic_key_match = bool(graphiti_candidate['semantic_key']) and (
+                graphiti_candidate['semantic_key'] == om_candidate['semantic_key']
+            )
+
+            matched = (
+                identity_overlap
+                or semantic_key_match
+                or semantic_overlap >= _SEARCH_FUSION_OVERLAP_THRESHOLD
+            )
+            if not matched:
+                continue
+
+            overlap_strength = max(semantic_overlap, 1.0 if semantic_key_match else 0.0)
+            graphiti_candidate['corroborating'].add(om_candidate['uuid'])
+            om_candidate['corroborating'].add(graphiti_candidate['uuid'])
+            graphiti_candidate['best_overlap'] = max(
+                graphiti_candidate['best_overlap'], overlap_strength
+            )
+            om_candidate['best_overlap'] = max(om_candidate['best_overlap'], overlap_strength)
+
+            if identity_overlap:
+                graphiti_candidate['identity_corroborated'] = True
+                om_candidate['identity_corroborated'] = True
+
+    ranked_candidates: list[tuple[float, int, int, str, dict[str, Any]]] = []
+    for candidate in candidates.values():
+        support_count = len(candidate['corroborating'])
+        corroboration_boost = 0.0
+        if support_count > 0:
+            corroboration_boost += support_count * _SEARCH_FUSION_EVIDENCE_BOOST
+            corroboration_boost += candidate['best_overlap'] * _SEARCH_FUSION_OVERLAP_BOOST
+            if candidate['identity_corroborated']:
+                corroboration_boost += _SEARCH_FUSION_IDENTITY_BOOST
+
+        final_score = candidate['rrf_score'] + corroboration_boost
+        best_rank = min(candidate['source_ranks'].values()) if candidate['source_ranks'] else 10**9
+        source_priority = 0 if 'graphiti' in candidate['sources'] else 1
+        ranked_candidates.append(
+            (final_score, best_rank, source_priority, candidate['uuid'], candidate)
+        )
+
+    ranked_candidates.sort(key=lambda row: (-row[0], row[1], row[2], row[3]))
+    selected_candidates = [row[4] for row in ranked_candidates[:max_items]]
+
+    if (
+        _SEARCH_FUSION_REQUIRE_GRAPHITI_FLOOR
+        and max_items > 1
+        and graphiti_candidates
+        and om_candidates
+        and not any('graphiti' in candidate['sources'] for candidate in selected_candidates)
+    ):
+        top_graphiti = next(
+            (row[4] for row in ranked_candidates if 'graphiti' in row[4]['sources']),
+            None,
+        )
+        if top_graphiti is not None:
+            if selected_candidates:
+                selected_candidates[-1] = top_graphiti
+            else:
+                selected_candidates = [top_graphiti]
+
+            selected_by_uuid = {candidate['uuid'] for candidate in selected_candidates}
+            selected_candidates = [
+                row[4] for row in ranked_candidates if row[4]['uuid'] in selected_by_uuid
+            ]
+
+            if len(selected_candidates) < max_items:
+                for row in ranked_candidates:
+                    candidate = row[4]
+                    if candidate['uuid'] in selected_by_uuid:
+                        continue
+                    selected_candidates.append(candidate)
+                    selected_by_uuid.add(candidate['uuid'])
+                    if len(selected_candidates) >= max_items:
+                        break
+
+    return [candidate['item'] for candidate in selected_candidates[:max_items]]
 
 
 def _resolve_effective_group_ids(
@@ -492,6 +839,7 @@ mcp = FastMCP(
 # Global services
 graphiti_service: Optional['GraphitiService'] = None
 queue_service: QueueService | None = None
+search_service = SearchService(om_group_id=DEFAULT_OM_GROUP_ID)
 
 # Global client for backward compatibility
 graphiti_client: Graphiti | None = None
@@ -922,6 +1270,44 @@ async def search_nodes(
                 )
                 return ErrorResponse(error='rate limit exceeded; retry later')
 
+        # Apply defense-in-depth cap before building backend search config.
+        effective_max_nodes = min(max_nodes, _MAX_NODES_CAP)
+
+        # OM adapter path: search OM primitives directly without converting
+        # OMNode data into Graphiti Entity nodes.
+        # Gate this path to Neo4j only; non-Neo4j backends (for example
+        # FalkorDB) must continue through the Graphiti client search path even
+        # when OM/all-lanes are in scope.
+        provider_name = str(config.database.provider or '').strip().lower()
+        use_observational_adapter = (
+            provider_name == 'neo4j'
+            and search_service.includes_observational_memory(effective_group_ids)
+        )
+        om_nodes: list[dict[str, Any]] = []
+
+        if use_observational_adapter:
+            try:
+                om_nodes = await search_service.search_observational_nodes(
+                    graphiti_service=graphiti_service,
+                    query=query,
+                    group_ids=effective_group_ids,
+                    max_nodes=effective_max_nodes,
+                    entity_types=entity_types,
+                )
+            except Exception as om_error:
+                logger.error(f'OM lane retrieval failed closed: {om_error}')
+                if _is_observational_memory_only_scope(effective_group_ids):
+                    return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+                om_nodes = []
+
+            if _is_observational_memory_only_scope(effective_group_ids):
+                if not om_nodes:
+                    return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+                return NodeSearchResponse(
+                    message='Nodes retrieved successfully',
+                    nodes=om_nodes[:effective_max_nodes],
+                )
+
         scope_error = _validate_group_scope_support(effective_group_ids)
         if scope_error:
             return ErrorResponse(error=scope_error)
@@ -935,9 +1321,6 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
-        # Apply defense-in-depth cap before building backend search config.
-        effective_max_nodes = min(max_nodes, _MAX_NODES_CAP)
-
         # Build mode-specific search config (trust-aware)
         search_config = _build_node_search_config(normalized_mode, effective_max_nodes)
 
@@ -950,7 +1333,7 @@ async def search_nodes(
 
         nodes = results.nodes[:effective_max_nodes] if results.nodes else []
 
-        if not nodes:
+        if not nodes and not om_nodes:
             return NodeSearchResponse(message='No relevant nodes found', nodes=[])
 
         # Format the results
@@ -973,7 +1356,15 @@ async def search_nodes(
                 )
             )
 
-        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
+        merged_nodes = _fuse_node_like_results(
+            primary=node_results,
+            supplemental=om_nodes,
+            max_items=effective_max_nodes,
+        )
+        if not merged_nodes:
+            return NodeSearchResponse(message='No relevant nodes found', nodes=[])
+
+        return NodeSearchResponse(message='Nodes retrieved successfully', nodes=merged_nodes)
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching nodes: {error_msg}')
@@ -1050,6 +1441,40 @@ async def search_memory_facts(
                 )
                 return ErrorResponse(error='rate limit exceeded; retry later')
 
+        # OM adapter path: search OM ontology edges directly from OM primitives.
+        # Gate this path to Neo4j only; non-Neo4j backends (for example
+        # FalkorDB) must continue through the Graphiti client search path even
+        # when OM/all-lanes are in scope.
+        provider_name = str(config.database.provider or '').strip().lower()
+        use_observational_adapter = (
+            provider_name == 'neo4j'
+            and search_service.includes_observational_memory(effective_group_ids)
+        )
+        om_facts: list[dict[str, Any]] = []
+
+        if use_observational_adapter:
+            try:
+                om_facts = await search_service.search_observational_facts(
+                    graphiti_service=graphiti_service,
+                    query=query,
+                    group_ids=effective_group_ids,
+                    max_facts=max_facts,
+                    center_node_uuid=center_node_uuid,
+                )
+            except Exception as om_error:
+                logger.error(f'OM lane fact retrieval failed closed: {om_error}')
+                if _is_observational_memory_only_scope(effective_group_ids):
+                    return FactSearchResponse(message='No relevant facts found', facts=[])
+                om_facts = []
+
+            if _is_observational_memory_only_scope(effective_group_ids):
+                if not om_facts:
+                    return FactSearchResponse(message='No relevant facts found', facts=[])
+                return FactSearchResponse(
+                    message='Facts retrieved successfully',
+                    facts=om_facts[:max_facts],
+                )
+
         scope_error = _validate_group_scope_support(effective_group_ids)
         if scope_error:
             return ErrorResponse(error=scope_error)
@@ -1074,11 +1499,19 @@ async def search_memory_facts(
 
         relevant_edges = results.edges[:max_facts] if results.edges else []  # already capped above
 
-        if not relevant_edges:
+        if not relevant_edges and not om_facts:
             return FactSearchResponse(message='No relevant facts found', facts=[])
 
         facts = [format_fact_result(edge) for edge in relevant_edges]
-        return FactSearchResponse(message='Facts retrieved successfully', facts=facts)
+        merged_facts = _fuse_node_like_results(
+            primary=facts,
+            supplemental=om_facts,
+            max_items=max_facts,
+        )
+        if not merged_facts:
+            return FactSearchResponse(message='No relevant facts found', facts=[])
+
+        return FactSearchResponse(message='Facts retrieved successfully', facts=merged_facts)
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching facts: {error_msg}')

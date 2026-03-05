@@ -11,19 +11,13 @@ import type {
 const DEFAULT_MIN_CONFIDENCE = 0.3;
 const DEFAULT_KEYWORD_WEIGHT = 1;
 const DEFAULT_STICKY_MAX_WORDS = 20;
-const DEFAULT_STICKY_SIGNALS = ['also', 'continue', 'what about', 'follow up'];
+const DEFAULT_STICKY_SIGNALS = ['also', 'and', 'continue', 'what about', 'follow up'];
 const SCORE_TIE_EPSILON = 1e-6;
 
 interface BoostMatch {
   matched: boolean;
   reason: string;
 }
-interface StickyDecision {
-  shouldApply: boolean;
-  isShortPrompt: boolean;
-  hasSignal: boolean;
-}
-
 
 type SuppressionSet = Set<string>;
 
@@ -37,37 +31,16 @@ const wordCount = (text: string): number => {
   return trimmed.split(/\s+/).length;
 };
 
-const normalizeSignalText = (value: string): string =>
-  toLower(value).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
-
-const hasSignalMatch = (prompt: string, signal: string): boolean => {
-  const normalizedPrompt = normalizeSignalText(prompt);
-  const normalizedSignal = normalizeSignalText(signal);
-
-  if (!normalizedPrompt || !normalizedSignal) {
-    return false;
-  }
-
-  if (!normalizedSignal.includes(' ')) {
-    const tokens = new Set(normalizedPrompt.split(' '));
-    return tokens.has(normalizedSignal);
-  }
-
-  return ` ${normalizedPrompt} `.includes(` ${normalizedSignal} `);
-};
-
 const shouldStick = (
   prompt: string,
   signals: string[],
   maxWords: number,
-): StickyDecision => {
-  const isShortPrompt = wordCount(prompt) <= maxWords;
-  const hasSignal = signals.some((signal) => hasSignalMatch(prompt, signal));
-  return {
-    shouldApply: isShortPrompt && hasSignal,
-    isShortPrompt,
-    hasSignal,
-  };
+): boolean => {
+  const promptLower = toLower(prompt);
+  if (wordCount(prompt) <= maxWords) {
+    return true;
+  }
+  return signals.some((signal) => promptLower.includes(signal));
 };
 
 const safeRegex = (
@@ -183,8 +156,7 @@ export const detectIntent = (
   const stickySignals = input.stickySignals ?? DEFAULT_STICKY_SIGNALS;
 
   if (enableSticky && input.previousIntentId) {
-    const stickyDecision = shouldStick(prompt, stickySignals, stickyMaxWords);
-    if (stickyDecision.shouldApply) {
+    if (shouldStick(prompt, stickySignals, stickyMaxWords)) {
       const stickyRule = ruleset.rules.find((rule) => rule.id === input.previousIntentId);
       if (stickyRule) {
         const decision = buildDecision(stickyRule, defaultMinConfidence, [
@@ -192,8 +164,6 @@ export const detectIntent = (
         ]);
         return { decision, candidates: [decision] };
       }
-    } else if (stickyDecision.isShortPrompt && !stickyDecision.hasSignal) {
-      input.logger?.('sticky_rejected_no_signal');
     }
   }
 

@@ -176,6 +176,63 @@ m.graphiti_extracted_at = NULL
 
 ---
 
+## OM Retrieval Adapter (MCP search lane behavior)
+
+The MCP server now has an OM retrieval adapter for
+`group_id=s1_observational_memory`.
+
+### What changed
+
+- `search_nodes` detects when the effective lane scope includes
+  `s1_observational_memory` and reads directly from OM primitives (`OMNode`)
+  via Neo4j queries.
+- `search_memory_facts` detects the same lane and reads ontology edges between
+  OM primitives (`MOTIVATES`, `GENERATES`, `SUPERSEDES`, `ADDRESSES`,
+  `RESOLVES`) directly from Neo4j.
+- In mixed/all-lane scope, Graphiti results and OM adapter results are fused by
+  a deterministic cross-source ranker (RRF + corroboration boosts), not by
+  source-order concatenation.
+- The adapter does not convert OM nodes into Graphiti `Entity` nodes.
+
+### Scope and safety
+
+- OM results are only returned when lane scope includes
+  `s1_observational_memory`.
+- OM adapter path is gated to Neo4j only.
+- Non-OM lane searches continue through the existing Graphiti search path.
+- OM adapter failures are fail-closed in OM-only scope (returns empty), while
+  mixed/all-lane requests continue to return Graphiti results.
+
+### Fusion behavior (mixed/all-lane)
+
+- Base score is Reciprocal Rank Fusion across source lists:
+
+  `score(i) = Σ_source (weight_source / (k + rank_source(i)))`
+
+- Default source weights:
+  - Graphiti: `SEARCH_FUSION_WEIGHT_GRAPHITI=1.0`
+  - OM adapter: `SEARCH_FUSION_WEIGHT_OM=0.9`
+- Corroboration boost is additive and deterministic when Graphiti+OM candidates
+  corroborate by normalized identity key and/or semantic overlap key.
+- Tie-breakers are deterministic (best source rank, source priority, UUID).
+- No-starvation safeguard: in mixed/all-lane windows with capacity >1, force at
+  least one Graphiti result into the fused window when both sources have hits.
+
+### Operational expectation
+
+- For OM retrieval, run MCP against Neo4j-backed data where OM primitives are
+  stored.
+- In non-Neo4j backends, OM adapter paths return no OM results (fail-closed).
+- Empty/broad OM queries are now guarded to avoid expensive unbounded
+  scan/sort behavior:
+  - `search_nodes` OM adapter: empty/non-selective query short-circuits to no
+    OM rows.
+  - `search_memory_facts` OM adapter: empty query short-circuits unless
+    `center_node_uuid` is provided; with center node, a bounded neighborhood
+    query is used.
+
+---
+
 ## 2. Compressor
 
 `scripts/om_compressor.py` processes the unextracted `Message` backlog into `OMNode`
@@ -624,6 +681,100 @@ INDEX om_extraction_event_emitted_at ON OMExtractionEvent.emitted_at
 INDEX om_extraction_event_semantic_domain ON OMExtractionEvent.semantic_domain
 INDEX om_extraction_event_node_id   ON OMExtractionEvent.node_id
 ```
+
+### Retrieval adapter indexes (required for index-backed lexical queries)
+
+OM lexical retrieval now starts from a Neo4j full-text candidate set that is explicitly
+lane-filtered using `group_id` at query time (`group_id:<lane> AND (...)`). The
+compressor bootstrap (`scripts/om_compressor.py` → `_ensure_neo4j_constraints`) creates
+and maintains the required indexes idempotently. For existing clusters, run these once
+manually before enabling OM/all-lane search in production (or restart the compressor):
+
+```cypher
+-- Full-text candidate index for OM lexical retrieval
+DROP INDEX omnode_content_fulltext IF EXISTS;
+CREATE FULLTEXT INDEX omnode_content_fulltext IF NOT EXISTS
+FOR (n:OMNode)
+ON EACH [n.content, n.group_id];
+
+-- Node lane filters and center-node lookup support
+CREATE INDEX omnode_group_id IF NOT EXISTS
+FOR (n:OMNode)
+ON (n.group_id);
+CREATE INDEX omnode_group_node_id IF NOT EXISTS
+FOR (n:OMNode)
+ON (n.group_id, n.node_id);
+CREATE INDEX omnode_group_uuid IF NOT EXISTS
+FOR (n:OMNode)
+ON (n.group_id, n.uuid);
+
+-- Relationship lane filters for OM ontology edges
+CREATE INDEX om_rel_motivates_group IF NOT EXISTS
+FOR ()-[r:MOTIVATES]-()
+ON (r.group_id);
+CREATE INDEX om_rel_generates_group IF NOT EXISTS
+FOR ()-[r:GENERATES]-()
+ON (r.group_id);
+CREATE INDEX om_rel_supersedes_group IF NOT EXISTS
+FOR ()-[r:SUPERSEDES]-()
+ON (r.group_id);
+CREATE INDEX om_rel_addresses_group IF NOT EXISTS
+FOR ()-[r:ADDRESSES]-()
+ON (r.group_id);
+CREATE INDEX om_rel_resolves_group IF NOT EXISTS
+FOR ()-[r:RESOLVES]-()
+ON (r.group_id);
+```
+
+Verification (optional):
+
+```cypher
+SHOW INDEXES
+WHERE name IN [
+  'omnode_content_fulltext',
+  'omnode_group_id',
+  'omnode_group_node_id',
+  'omnode_group_uuid',
+  'om_rel_motivates_group',
+  'om_rel_generates_group',
+  'om_rel_supersedes_group',
+  'om_rel_addresses_group',
+  'om_rel_resolves_group'
+]
+RETURN name, type, state, entityType, labelsOrTypes, properties
+ORDER BY name;
+```
+
+If `omnode_content_fulltext` is missing, OM lexical retrieval fails closed in OM-only
+scope and mixed/all-lane scope falls back to Graphiti-only results.
+
+### Candidate pool tuning (full-text retrieval)
+
+OM full-text retrieval uses a candidate pool before final filtering/fusion:
+
+- `candidate_limit = clamp(limit * multiplier, min=25, max=500)`
+- Node path default multiplier: `6`
+- Fact path default multiplier: `12`
+
+Current constants live in `mcp_server/src/services/neo4j_service.py`:
+
+- `OM_FULLTEXT_MIN_CANDIDATES`
+- `OM_FULLTEXT_MAX_CANDIDATES`
+- `OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER`
+- `OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER`
+
+Tuning guidance:
+
+- **Too low** ⇒ recall drops after downstream lane filters/fusion.
+- **Too high** ⇒ unnecessary CPU/latency on large OM corpora.
+- Treat multipliers as **performance knobs**, not correctness knobs.
+- Tune only with measured data (P95 latency + retrieval quality checks).
+
+Quick diagnostics:
+
+1. Verify full-text index exists and is online (`SHOW INDEXES ...`).
+2. Compare latency/quality at current multipliers vs one lower/higher step.
+3. Check fused top-K composition to ensure neither source is accidentally starved.
 
 ---
 

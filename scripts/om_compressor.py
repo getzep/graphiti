@@ -1353,6 +1353,16 @@ def _ensure_neo4j_constraints(session: Any) -> None:
         "CREATE INDEX om_extraction_event_emitted_at IF NOT EXISTS FOR (e:OMExtractionEvent) ON (e.emitted_at)",
         "CREATE INDEX om_extraction_event_semantic_domain IF NOT EXISTS FOR (e:OMExtractionEvent) ON (e.semantic_domain)",
         "CREATE INDEX om_extraction_event_node_id IF NOT EXISTS FOR (e:OMExtractionEvent) ON (e.node_id)",
+        "CREATE INDEX omnode_group_id IF NOT EXISTS FOR (n:OMNode) ON (n.group_id)",
+        "CREATE INDEX omnode_group_node_id IF NOT EXISTS FOR (n:OMNode) ON (n.group_id, n.node_id)",
+        "CREATE INDEX omnode_group_uuid IF NOT EXISTS FOR (n:OMNode) ON (n.group_id, n.uuid)",
+        "DROP INDEX omnode_content_fulltext IF EXISTS",
+        "CREATE FULLTEXT INDEX omnode_content_fulltext IF NOT EXISTS FOR (n:OMNode) ON EACH [n.content, n.group_id]",
+        "CREATE INDEX om_rel_motivates_group IF NOT EXISTS FOR ()-[r:MOTIVATES]-() ON (r.group_id)",
+        "CREATE INDEX om_rel_generates_group IF NOT EXISTS FOR ()-[r:GENERATES]-() ON (r.group_id)",
+        "CREATE INDEX om_rel_supersedes_group IF NOT EXISTS FOR ()-[r:SUPERSEDES]-() ON (r.group_id)",
+        "CREATE INDEX om_rel_addresses_group IF NOT EXISTS FOR ()-[r:ADDRESSES]-() ON (r.group_id)",
+        "CREATE INDEX om_rel_resolves_group IF NOT EXISTS FOR ()-[r:RESOLVES]-() ON (r.group_id)",
     ]
     for stmt in stmts:
         session.run(stmt).consume()
