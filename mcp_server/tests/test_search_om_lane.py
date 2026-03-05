@@ -573,6 +573,52 @@ def test_fuse_node_like_results_can_promote_om_with_corroboration_boost():
     assert any(item['uuid'].startswith('graphiti-') for item in fused)
 
 
+def test_fuse_node_like_results_tie_breaks_deterministically_by_uuid(monkeypatch):
+    monkeypatch.setattr(
+        srv,
+        '_SEARCH_FUSION_SOURCE_WEIGHTS',
+        {'graphiti': 1.0, 'om_primitive': 1.0},
+    )
+    monkeypatch.setattr(srv, '_SEARCH_FUSION_REQUIRE_GRAPHITI_FLOOR', False)
+
+    graphiti_results = [
+        {
+            'uuid': 'tie-z',
+            'name': 'Graphiti tie z',
+            'summary': 'shared tie candidate z',
+            'attributes': {'source': 'graphiti'},
+        },
+        {
+            'uuid': 'tie-a',
+            'name': 'Graphiti tie a',
+            'summary': 'shared tie candidate a',
+            'attributes': {'source': 'graphiti'},
+        },
+    ]
+    om_results = [
+        {
+            'uuid': 'tie-a',
+            'name': 'OM tie a',
+            'summary': 'shared tie candidate a',
+            'attributes': {'source': 'om_primitive'},
+        },
+        {
+            'uuid': 'tie-z',
+            'name': 'OM tie z',
+            'summary': 'shared tie candidate z',
+            'attributes': {'source': 'om_primitive'},
+        },
+    ]
+
+    fused = srv._fuse_node_like_results(
+        primary=graphiti_results,
+        supplemental=om_results,
+        max_items=2,
+    )
+
+    assert [item['uuid'] for item in fused] == ['tie-a', 'tie-z']
+
+
 def test_fuse_node_like_results_enforces_graphiti_floor_when_window_allows(monkeypatch):
     monkeypatch.setattr(
         srv,

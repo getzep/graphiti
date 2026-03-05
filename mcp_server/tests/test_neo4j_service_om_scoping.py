@@ -5,10 +5,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.neo4j_service import (
+    OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER,
+    OM_FULLTEXT_MAX_CANDIDATES,
+    OM_FULLTEXT_MIN_CANDIDATES,
+    OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER,
     OM_NODE_CONTENT_FULLTEXT_INDEX,
     OM_QUERY_MAX_CHARS,
     OM_QUERY_MAX_UNIQUE_TOKENS,
     Neo4jService,
+    _fulltext_candidate_limit,
     _tokenize_query,
 )
 
@@ -208,3 +213,111 @@ async def test_search_om_facts_empty_query_with_center_uses_bounded_center_path(
     assert '[rel:MOTIVATES]' in query_text
     assert '[rel:RESOLVES]' in query_text
     assert driver.execute_query.await_args.kwargs['center_node_uuid'] == 'om-node-123'
+
+
+@pytest.mark.parametrize(
+    ('limit', 'multiplier', 'expected'),
+    [
+        (1, OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MIN_CANDIDATES),
+        (4, OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MIN_CANDIDATES),
+        (5, OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER, 30),
+        (83, OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER, 498),
+        (84, OM_FULLTEXT_NODE_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MAX_CANDIDATES),
+        (1, OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MIN_CANDIDATES),
+        (2, OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MIN_CANDIDATES),
+        (3, OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER, 36),
+        (41, OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER, 492),
+        (42, OM_FULLTEXT_FACT_CANDIDATE_MULTIPLIER, OM_FULLTEXT_MAX_CANDIDATES),
+    ],
+)
+def test_fulltext_candidate_limit_clamps_min_and_max(limit: int, multiplier: int, expected: int):
+    assert _fulltext_candidate_limit(limit, multiplier=multiplier) == expected
+
+
+@pytest.mark.asyncio
+async def test_verify_om_fulltext_index_shape_auto_creates_when_missing():
+    driver = AsyncMock()
+    driver.execute_query = AsyncMock(
+        side_effect=[
+            ([], None, None),
+            ([], None, None),
+            (
+                [
+                    {
+                        'name': 'omnode_content_fulltext',
+                        'type': 'FULLTEXT',
+                        'state': 'ONLINE',
+                        'entityType': 'NODE',
+                        'labelsOrTypes': ['OMNode'],
+                        'properties': ['content', 'group_id'],
+                    }
+                ],
+                None,
+                None,
+            ),
+        ]
+    )
+
+    service = Neo4jService()
+    await service.verify_om_fulltext_index_shape(driver)
+
+    assert driver.execute_query.await_count == 3
+    assert driver.execute_query.await_args_list[1].args[0].strip().startswith('CREATE FULLTEXT INDEX')
+
+
+@pytest.mark.asyncio
+async def test_verify_om_fulltext_index_shape_rejects_wrong_shape_without_auto_fix():
+    driver = AsyncMock()
+    driver.execute_query = AsyncMock(
+        return_value=(
+            [
+                {
+                    'name': 'omnode_content_fulltext',
+                    'type': 'FULLTEXT',
+                    'state': 'ONLINE',
+                    'entityType': 'NODE',
+                    'labelsOrTypes': ['OMNode'],
+                    'properties': ['content'],
+                }
+            ],
+            None,
+            None,
+        )
+    )
+
+    service = Neo4jService()
+    with pytest.raises(RuntimeError, match='missing properties') as exc_info:
+        await service.verify_om_fulltext_index_shape(driver)
+
+    message = str(exc_info.value)
+    assert 'group_id' in message
+    assert 'content' in message
+    assert driver.execute_query.await_count == 1
+    assert 'CREATE FULLTEXT INDEX' not in driver.execute_query.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_verify_om_fulltext_index_shape_accepts_required_shape():
+    driver = AsyncMock()
+    driver.execute_query = AsyncMock(
+        return_value=(
+            [
+                {
+                    'name': 'omnode_content_fulltext',
+                    'type': 'FULLTEXT',
+                    'state': 'ONLINE',
+                    'entityType': 'NODE',
+                    'labelsOrTypes': ['OMNode'],
+                    'properties': ['content', 'group_id'],
+                }
+            ],
+            None,
+            None,
+        )
+    )
+
+    service = Neo4jService()
+    await service.verify_om_fulltext_index_shape(driver)
+
+    assert driver.execute_query.await_count == 1
+    assert driver.execute_query.await_args.kwargs['index_name'] == 'omnode_content_fulltext'

@@ -1036,6 +1036,11 @@ class GraphitiService:
                 # Re-raise other errors
                 raise
 
+            if self.config.database.provider.lower() == 'neo4j':
+                await search_service.neo4j_service.verify_om_fulltext_index_shape(
+                    self.client.driver
+                )
+
             # Cache the default group client in FalkorDB mode for reuse.
             if self.config.database.provider.lower() == 'falkordb' and self.config.graphiti.group_id:
                 default_group = self._validate_group_id(self.config.graphiti.group_id)
