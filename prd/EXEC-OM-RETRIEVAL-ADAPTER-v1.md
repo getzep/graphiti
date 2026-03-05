@@ -35,5 +35,21 @@ Enable practical retrieval for `s1_observational_memory` without converting OM n
 ```bash
 cd mcp_server
 uv sync --group dev
-uv run pytest tests/test_search_om_lane.py tests/test_search_lane_isolation.py -q
+uv run pytest tests/test_search_om_lane.py tests/test_search_lane_isolation.py tests/test_neo4j_service_om_scoping.py -q
 ```
+
+## Completion Status
+- Status: ✅ Closed
+- Merged PRs:
+  - `#134` — merge commit `afed4138199354ac61e921642308beca64b472bb`
+  - `#136` — merge commit `8dad4232ec7492ef5d9e20a45ff859e638331484`
+
+## Post-merge operational checklist (outside original v1 DoD)
+- [x] Verify Neo4j full-text index shape in deployed environment (`omnode_content_fulltext` includes `content` + `group_id`).
+- [x] Run runtime MCP smoke tests:
+  - [x] OM-only retrieval path returns OM primitives.
+  - [x] Mixed/all-lane retrieval returns fused Graphiti+OM results (no starvation).
+  - [x] Falkor provider path bypasses OM adapter as expected.
+
+## Follow-up hardening backlog (remaining)
+- [ ] Evaluate and optionally mitigate the low-risk recall/perf edge case for lexical fact expansion on extreme supernodes.
