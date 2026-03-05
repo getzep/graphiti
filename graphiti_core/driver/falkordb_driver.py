@@ -65,7 +65,7 @@ from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeO
 from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices, get_vector_indices
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
 logger = logging.getLogger(__name__)
@@ -292,6 +292,19 @@ class FalkorDriver(GraphDriver):
                                 f'DROP FULLTEXT INDEX FOR ()-[e:{label}]-() ON (e.{field_name})'
                             )
                         )
+                elif 'VECTOR' in index_type:
+                    if entity_type == 'NODE':
+                        drop_tasks.append(
+                            self.execute_query(
+                                f'DROP VECTOR INDEX FOR (n:{label}) ON (n.{field_name})'
+                            )
+                        )
+                    elif entity_type == 'RELATIONSHIP':
+                        drop_tasks.append(
+                            self.execute_query(
+                                f'DROP VECTOR INDEX FOR ()-[e:{label}]-() ON (e.{field_name})'
+                            )
+                        )
 
         if drop_tasks:
             await asyncio.gather(*drop_tasks)
@@ -299,7 +312,11 @@ class FalkorDriver(GraphDriver):
     async def build_indices_and_constraints(self, delete_existing=False):
         if delete_existing:
             await self.delete_all_indexes()
-        index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
+        index_queries = (
+            get_range_indices(self.provider)
+            + get_fulltext_indices(self.provider)
+            + get_vector_indices(self.provider)
+        )
         for query in index_queries:
             await self.execute_query(query)
 

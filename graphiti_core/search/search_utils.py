@@ -231,8 +231,8 @@ async def edge_fulltext_search(
                 """
                                 UNWIND $ids as id
                                 MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
+                                WHERE e.group_id IN $group_ids
+                                AND id(e)=id
                                 """
                 + filter_query
                 + """
@@ -265,6 +265,34 @@ async def edge_fulltext_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # FalkorDB's queryRelationships returns the actual relationship object,
+        # so use startNode/endNode directly instead of re-matching by uuid (which
+        # causes an O(n) scan of all RELATES_TO edges).
+        query = (
+            get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
+            + """
+            YIELD relationship AS e, score
+            WITH e, score, startNode(e) AS n, endNode(e) AS m
+            """
+            + filter_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            query=fuzzy_query,
+            limit=limit,
+            routing_='r',
+            **filter_params,
+        )
     else:
         query = (
             get_relationships_query('edge_name_and_fact', limit=limit, provider=driver.provider)
@@ -410,6 +438,42 @@ async def edge_similarity_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # Use HNSW vector index for O(log n) search instead of brute-force scan.
+        # Over-fetch to compensate for post-filtering on group_id, edge_uuids, etc.
+        over_fetch_limit = limit * 10
+
+        post_filter_parts = list(filter_queries)
+        post_filter_parts.append('score > $min_score')
+        post_filter = ' WHERE ' + ' AND '.join(post_filter_parts)
+
+        query = (
+            'CALL db.idx.vector.queryRelationships('
+            "'RELATES_TO', 'fact_embedding', $over_fetch_limit, vecf32($search_vector))"
+            """
+            YIELD relationship AS e, score
+            WITH e, score, startNode(e) AS n, endNode(e) AS m
+            """
+            + post_filter
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            over_fetch_limit=over_fetch_limit,
+            limit=limit,
+            min_score=min_score,
+            routing_='r',
+            **filter_params,
+        )
     else:
         query = (
             match_query
@@ -750,6 +814,41 @@ async def node_similarity_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # Use HNSW vector index for O(log n) search instead of brute-force scan.
+        over_fetch_limit = limit * 10
+
+        post_filter_parts = list(filter_queries)
+        post_filter_parts.append('score > $min_score')
+        post_filter = ' WHERE ' + ' AND '.join(post_filter_parts)
+
+        query = (
+            'CALL db.idx.vector.queryNodes('
+            "'Entity', 'name_embedding', $over_fetch_limit, vecf32($search_vector))"
+            """
+            YIELD node AS n, score
+            WITH n, score
+            """
+            + post_filter
+            + """
+            RETURN
+            """
+            + get_entity_node_return_query(driver.provider)
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            over_fetch_limit=over_fetch_limit,
+            limit=limit,
+            min_score=min_score,
+            routing_='r',
+            **filter_params,
+        )
     else:
         query = (
             """
@@ -1134,6 +1233,43 @@ async def community_similarity_search(
             )
         else:
             return []
+    elif driver.provider == GraphProvider.FALKORDB:
+        # Use HNSW vector index for O(log n) search instead of brute-force scan.
+        over_fetch_limit = limit * 10
+
+        post_filter_parts: list[str] = []
+        if group_ids is not None:
+            post_filter_parts.append('c.group_id IN $group_ids')
+        post_filter_parts.append('score > $min_score')
+        post_filter = ' WHERE ' + ' AND '.join(post_filter_parts)
+
+        query = (
+            'CALL db.idx.vector.queryNodes('
+            "'Community', 'name_embedding', $over_fetch_limit, vecf32($search_vector))"
+            """
+            YIELD node AS c, score
+            WITH c, score
+            """
+            + post_filter
+            + """
+            RETURN
+            """
+            + COMMUNITY_NODE_RETURN
+            + """
+            ORDER BY score DESC
+            LIMIT $limit
+            """
+        )
+
+        records, _, _ = await driver.execute_query(
+            query,
+            search_vector=search_vector,
+            over_fetch_limit=over_fetch_limit,
+            limit=limit,
+            min_score=min_score,
+            routing_='r',
+            **query_params,
+        )
     else:
         search_vector_var = '$search_vector'
         if driver.provider == GraphProvider.KUZU:
