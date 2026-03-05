@@ -15,6 +15,29 @@ Every new data source needs exactly four things:
 3. **An ingest adapter script** — reads source data, formats episodes, sends to MCP
 4. **A cron entry** — determines how often new data is ingested
 
+### Lane enablement done = two explicit gates (required)
+
+Do **not** mark lane enablement complete until both gates pass:
+
+1. **Policy wired**
+   - Lane is correctly classified in `truth/candidates.py` lane policy sets
+     (`LANE_RETRIEVAL_ELIGIBLE_*`, `LANE_CORROBORATION_ONLY`, and/or
+     `LANE_CANDIDATES_ELIGIBLE`) as intended.
+   - Candidate-generating lanes have importer strategy coverage in
+     `scripts/candidate_importer_strategy.py` (lane kind + query-strategy
+     dispatch).
+
+2. **Flow proven**
+   - Capture one dry-run evidence line from the lane's importer path
+     (or equivalent no-write verification command), for example:
+     ```bash
+     python3 scripts/<candidate_importer>.py --graphs <group_id> --dry-run
+     ```
+   - Record the output line showing behavior, e.g.:
+     - `rows=<N> upserts=0 created=0 ...`
+   - For candidate-generating lanes with source data present, `rows` should be
+     non-zero.
+
 ---
 
 ## Step 1: Choose a `group_id`
