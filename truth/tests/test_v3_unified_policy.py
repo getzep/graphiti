@@ -245,20 +245,27 @@ class TestLanePolicyConstants:
     def test_retrieval_eligible_global_contents(self) -> None:
         assert "s1_sessions_main" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
         assert "s1_observational_memory" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
+        # s1_chatgpt_history and s1_curated_refs promoted to global (PR121).
+        assert "s1_chatgpt_history" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
+        assert "s1_curated_refs" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
 
-    def test_retrieval_eligible_vc_scoped_contents(self) -> None:
-        assert "s1_chatgpt_history" in candidates.LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED
+    def test_vc_scoped_concept_removed(self) -> None:
+        """LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED has been removed; all retrieval-eligible
+        lanes are now either global or corroboration-only.  This test verifies that
+        the attribute no longer exists and that chatgpt_history is in the global set."""
+        assert not hasattr(candidates, "LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED"), (
+            "LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED should be removed; "
+            "use LANE_RETRIEVAL_ELIGIBLE_GLOBAL instead."
+        )
+        assert "s1_chatgpt_history" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
 
     def test_corroboration_only_contents(self) -> None:
-        assert "s1_curated_refs" in candidates.LANE_CORROBORATION_ONLY
+        # s1_curated_refs is now globally retrievable; only s1_memory_day1 remains here.
         assert "s1_memory_day1" in candidates.LANE_CORROBORATION_ONLY
+        assert "s1_curated_refs" not in candidates.LANE_CORROBORATION_ONLY
 
     def test_no_overlap_between_global_retrieval_and_corroboration_only(self) -> None:
         overlap = candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL & candidates.LANE_CORROBORATION_ONLY
-        assert overlap == frozenset(), f"Unexpected overlap: {overlap}"
-
-    def test_no_overlap_between_vc_scoped_and_corroboration_only(self) -> None:
-        overlap = candidates.LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED & candidates.LANE_CORROBORATION_ONLY
         assert overlap == frozenset(), f"Unexpected overlap: {overlap}"
 
     def test_candidates_eligible_includes_sessions_main(self) -> None:
@@ -275,7 +282,8 @@ class TestLanePolicyConstants:
         assert "s1_memory_day1" in candidates.LANE_CANDIDATES_ELIGIBLE
 
     def test_curated_refs_not_in_candidates_eligible(self) -> None:
-        """s1_curated_refs is corroboration-only and not a candidate source by default."""
+        """s1_curated_refs is globally retrievable but NOT a candidate source.
+        Retrieval-eligibility and candidate-generating are independent controls."""
         assert "s1_curated_refs" not in candidates.LANE_CANDIDATES_ELIGIBLE
 
 

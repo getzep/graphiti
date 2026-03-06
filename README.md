@@ -97,15 +97,15 @@ Not all graph groups generate promotion candidates. Groups are classified by the
 |---|---|---|---|
 | `s1_sessions_main` | ✅ Global | ✅ Yes | Primary conversational memory - retrieval + candidate pipeline |
 | `s1_observational_memory` | ✅ Global | ✅ Yes | OM synthesis nodes - globally retrieval-eligible, feeds promotion evaluator |
-| `s1_chatgpt_history` | ⚡ VC-scoped | ✅ Yes | Retrieval only in VC-scoped packs; still generates candidates |
+| `s1_chatgpt_history` | ✅ Global | ✅ Yes | Globally retrievable; still generates candidates |
 | `s1_memory_day1` | ❌ Corroboration-only | ✅ Yes | Not surfaced directly in retrieval; still candidate-generating so its facts participate in promotion evaluator |
-| `s1_curated_refs` | ❌ Corroboration-only | ❌ No | Not retrieval, not candidate-generating; provides Lane B corroboration evidence only |
+| `s1_curated_refs` | ✅ Global | ❌ No | Globally retrievable reference snapshots; not a candidate-generating source |
 | `s1_inspiration_*`, `s1_writing_samples`, `s1_content_strategy` | ❌ Pack injection | ❌ No | Custom ontologies extract craft patterns (RhetoricalMove, HookPattern, VoiceQuality), not personal facts. Injected via content packs, never candidate-generating. |
 | `engineering_learnings`, `learning_self_audit` | ❌ Separate domain | ❌ (own pipeline) | Own ledger pipelines (`fact_ledger_engineering.db`, `fact_ledger_learning.db`). Different trust semantics. |
 
-**Key distinction:** Retrieval eligibility and candidate-generating status are independent controls. `s1_memory_day1` is corroboration-only for retrieval (not surfaced directly) but still candidate-generating so its promoted facts participate in the truth evaluator. `s1_curated_refs` is corroboration-only in both dimensions.
+**Key distinction:** Retrieval eligibility and candidate-generating status are independent controls. `s1_memory_day1` is corroboration-only for retrieval (not surfaced directly) but still candidate-generating so its promoted facts participate in the truth evaluator. `s1_curated_refs` is globally retrievable but excluded from candidate generation.
 
-The lane matrix is codified in `truth/candidates.py` (constants: `LANE_RETRIEVAL_ELIGIBLE_GLOBAL`, `LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED`, `LANE_CORROBORATION_ONLY`, `LANE_CANDIDATES_ELIGIBLE`) and mirrored in `config/runtime_pack_registry.json` under `lane_policy`.
+The lane matrix is codified in `truth/candidates.py` (constants: `LANE_RETRIEVAL_ELIGIBLE_GLOBAL`, `LANE_CORROBORATION_ONLY`, `LANE_CANDIDATES_ELIGIBLE`) and mirrored in `config/runtime_pack_registry.json` under `lane_policy`. Note: `LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED` was removed in PR121 — all retrieval-eligible lanes are now globally retrievable.
 
 ### Trust-Aware Retrieval
 

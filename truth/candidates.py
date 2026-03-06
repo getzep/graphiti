@@ -114,27 +114,34 @@ VERIFICATION_STATUSES = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Lanes eligible for direct retrieval across all runtime packs.
+# s1_chatgpt_history and s1_curated_refs were promoted to global as of
+# EXEC-CHATGPT-HISTORY-GLOBAL-RETRIEVAL (PR121 in bicameral-private).
 LANE_RETRIEVAL_ELIGIBLE_GLOBAL: frozenset[str] = frozenset({
     "s1_sessions_main",
     "s1_observational_memory",
+    "s1_chatgpt_history",
+    "s1_curated_refs",
 })
 
-# Lanes eligible for retrieval only in VC-scoped packs.
-LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED: frozenset[str] = frozenset({
-    "s1_chatgpt_history",
-})
+# REMOVED: LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED.
+# The vc_scoped concept has been eliminated. All retrieval-eligible lanes are
+# now either globally retrievable (LANE_RETRIEVAL_ELIGIBLE_GLOBAL) or
+# corroboration-only (LANE_CORROBORATION_ONLY). Any caller that previously
+# referenced LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED should now use
+# LANE_RETRIEVAL_ELIGIBLE_GLOBAL.
 
 # Lanes that are corroboration-only by default (not direct retrieval sources).
+# s1_curated_refs was removed from this set; it is now globally retrievable.
 LANE_CORROBORATION_ONLY: frozenset[str] = frozenset({
-    "s1_curated_refs",
     "s1_memory_day1",
 })
 
 # All lanes that may generate candidates (used by import_graphiti_candidates).
+# Note: s1_curated_refs is globally retrievable but NOT candidate-generating.
 LANE_CANDIDATES_ELIGIBLE: frozenset[str] = (
     LANE_RETRIEVAL_ELIGIBLE_GLOBAL
-    | LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED
-    | frozenset({"s1_memory_day1"})  # corroboration-only but still candidate-generating
+    - frozenset({"s1_curated_refs"})   # globally retrievable but not a candidate source
+    | frozenset({"s1_memory_day1"})    # corroboration-only but still candidate-generating
 )
 
 

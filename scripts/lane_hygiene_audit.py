@@ -23,13 +23,15 @@ if str(REPO_ROOT) not in sys.path:
 _truth_candidates = importlib.import_module('truth.candidates')
 LANE_CORROBORATION_ONLY = _truth_candidates.LANE_CORROBORATION_ONLY
 LANE_RETRIEVAL_ELIGIBLE_GLOBAL = _truth_candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
-LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED = _truth_candidates.LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED
+# LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED removed (PR121): all retrieval-eligible lanes
+# are now global.  Use LANE_RETRIEVAL_ELIGIBLE_GLOBAL everywhere.
+LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED: frozenset[str] = frozenset()
 
 DECISIONS_BY_LANE: dict[str, str] = {
     's1_sessions_main': 'keep',
     's1_observational_memory': 'keep',
-    's1_chatgpt_history': 'keep-scoped',
-    's1_curated_refs': 'keep-corroboration-only',
+    's1_chatgpt_history': 'keep',           # promoted: global retrieval (was keep-scoped)
+    's1_curated_refs': 'keep',              # promoted: global retrieval (was keep-corroboration-only)
     's1_memory_day1': 'deprecate-after-migration',
 }
 
@@ -75,7 +77,6 @@ def _run_git_grep(repo_root: Path, needle: str) -> list[dict[str, Any]]:
 def build_lane_hygiene_audit(repo_root: Path) -> dict[str, Any]:
     lane_ids = sorted(
         set(LANE_RETRIEVAL_ELIGIBLE_GLOBAL)
-        | set(LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED)
         | set(LANE_CORROBORATION_ONLY)
     )
 
