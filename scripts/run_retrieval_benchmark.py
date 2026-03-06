@@ -46,6 +46,39 @@ FIXTURE_QUOTAS = {
     'cross_lane': 8,
 }
 
+# Canonical fixture lane alias resolution used by benchmark wiring.
+LANE_ALIAS_TO_GROUP_IDS: dict[str, list[str]] = {
+    'sessions_main': ['s1_sessions_main'],
+    'observational_memory': ['s1_observational_memory'],
+    'curated': ['s1_curated_refs'],
+    'chatgpt': ['s1_chatgpt_history'],
+}
+
+# Inverse lookup for optional validation and fixture analytics.
+GROUP_ID_TO_LANE_ALIAS = {
+    group_id: alias for alias, groups in LANE_ALIAS_TO_GROUP_IDS.items()
+    for group_id in groups
+}
+
+# Harness contract: key surface that the benchmark may send to each MCP tool.
+# Contract-check mode validates this surface against live tool schemas from tools/list.
+HARNESS_TOOL_ARGUMENT_KEYS: dict[str, set[str]] = {
+    'search_memory_facts': {
+        'query',
+        'group_ids',
+        'search_mode',
+        'max_facts',
+        'center_node_uuid',
+    },
+    'search_nodes': {
+        'query',
+        'group_ids',
+        'search_mode',
+        'max_nodes',
+        'entity_types',
+    },
+}
+
 
 class BenchmarkMCPClient:
     """Minimal MCP client for benchmark queries."""
@@ -129,6 +162,14 @@ class BenchmarkMCPClient:
             'params': {'name': name, 'arguments': arguments},
         })
 
+    def list_tools(self) -> dict:
+        self.initialize()
+        return self._post({
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'tools/list',
+            'params': {},
+        })
+
 
 def compute_recall(results_text: str, expected: list[str]) -> float:
     """Compute recall of expected items found in results text."""
@@ -155,17 +196,73 @@ def extract_results_text(mcp_response: dict) -> str:
     return '\n'.join(parts)
 
 
+def _normalize_group_ids(raw_group_ids: Any) -> list[str]:
+    """Normalize target_group_ids payloads into an ordered, deduplicated list."""
+    if raw_group_ids is None:
+        return []
+    if not isinstance(raw_group_ids, list):
+        return [str(raw_group_ids)]
+
+    normalized: list[str] = []
+    for gid in raw_group_ids:
+        gid_str = str(gid).strip()
+        if gid_str:
+            normalized.append(gid_str)
+
+    seen = set()
+    deduped: list[str] = []
+    for gid in normalized:
+        if gid in seen:
+            continue
+        deduped.append(gid)
+        seen.add(gid)
+    return deduped
+
+
+def _query_scope_group_ids(query_item: dict[str, Any]) -> list[str]:
+    """Resolve group_ids for a benchmark query using target_group_ids first."""
+    explicit = query_item.get('target_group_ids')
+    if explicit is not None:
+        return _normalize_group_ids(explicit)
+
+    aliases = query_item.get('lane_alias', [])
+    if not isinstance(aliases, list):
+        return []
+
+    group_ids: list[str] = []
+    for alias in aliases:
+        mapped = LANE_ALIAS_TO_GROUP_IDS.get(str(alias).strip(), [])
+        group_ids.extend(mapped)
+    return _normalize_group_ids(group_ids)
+
+
+def _scope_categories(query_item: dict[str, Any]) -> list[str]:
+    """Derive fixture quota categories for validation."""
+    aliases = query_item.get('lane_alias', [])
+    if isinstance(aliases, list):
+        if len(aliases) > 1:
+            return ['cross_lane']
+        if aliases:
+            return [str(aliases[0])] if aliases[0] in FIXTURE_QUOTAS else []
+
+    target_group_ids = query_item.get('target_group_ids', [])
+    if isinstance(target_group_ids, list) and len(target_group_ids) > 1:
+        return ['cross_lane']
+    if target_group_ids:
+        alias = GROUP_ID_TO_LANE_ALIAS.get(str(target_group_ids[0]), '')
+        return [alias] if alias else []
+    return []
+
+
 def run_bicameral_query(
     client: BenchmarkMCPClient,
     query: str,
-    lane_alias: list[str] | None,
+    group_ids: list[str] | None,
     search_mode: str,
     top_k: int,
 ) -> dict:
     """Run a single Bicameral search query and return results."""
-    args: dict[str, Any] = {'query': query, 'max_facts': top_k}
-    if lane_alias:
-        args['lane_alias'] = lane_alias
+    args: dict[str, Any] = {'query': query, 'group_ids': group_ids, 'max_facts': top_k}
     if search_mode != 'hybrid':
         args['search_mode'] = search_mode
 
@@ -198,9 +295,7 @@ def run_bicameral_query(
                     except json.JSONDecodeError:
                         pass
 
-    node_args: dict[str, Any] = {'query': query, 'max_nodes': top_k}
-    if lane_alias:
-        node_args['lane_alias'] = lane_alias
+    node_args: dict[str, Any] = {'query': query, 'group_ids': group_ids, 'max_nodes': top_k}
     if search_mode != 'hybrid':
         node_args['search_mode'] = search_mode
     nodes_resp = client.call_tool('search_nodes', node_args)
@@ -296,14 +391,15 @@ def validate_fixture(queries: list[dict]) -> list[str]:
         'chatgpt': 0,
         'cross_lane': 0,
     }
+
     for q in queries:
-        aliases = q.get('lane_alias', [])
-        if len(aliases) > 1:
-            counts['cross_lane'] += 1
-        elif aliases:
-            alias = aliases[0]
-            if alias in counts:
-                counts[alias] += 1
+        if not isinstance(q, dict):
+            errors.append(f'query row is not an object: {q!r}')
+            continue
+        categories = _scope_categories(q)
+        for category in categories:
+            if category in counts:
+                counts[category] += 1
 
     for category, quota in FIXTURE_QUOTAS.items():
         if counts[category] < quota:
@@ -312,6 +408,152 @@ def validate_fixture(queries: list[dict]) -> list[str]:
             )
 
     return errors
+
+
+def _extract_tool_schemas(tools_list_response: dict) -> dict[str, dict[str, Any]]:
+    """Extract tool input schema map from MCP tools/list response."""
+    result = tools_list_response.get('result', {}) if isinstance(tools_list_response, dict) else {}
+    tools = result.get('tools', []) if isinstance(result, dict) else []
+    schema_by_tool: dict[str, dict[str, Any]] = {}
+
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        name = str(tool.get('name') or '').strip()
+        if not name:
+            continue
+        input_schema = tool.get('inputSchema')
+        if isinstance(input_schema, dict):
+            schema_by_tool[name] = input_schema
+
+    return schema_by_tool
+
+
+def evaluate_mcp_contract(
+    *,
+    tools_list_response: dict,
+    harness_keys: dict[str, set[str]] | None = None,
+) -> dict[str, Any]:
+    """Validate benchmark harness arg surface against live MCP tool schemas."""
+    harness = harness_keys or HARNESS_TOOL_ARGUMENT_KEYS
+    tool_schemas = _extract_tool_schemas(tools_list_response)
+
+    checks: list[dict[str, Any]] = []
+    missing_tools: list[str] = []
+    unsupported_args: dict[str, list[str]] = {}
+    missing_required_args: dict[str, list[str]] = {}
+
+    for tool_name, used_args in sorted(harness.items()):
+        schema = tool_schemas.get(tool_name)
+        if schema is None:
+            missing_tools.append(tool_name)
+            checks.append(
+                {
+                    'tool': tool_name,
+                    'present': False,
+                    'schema_properties': [],
+                    'schema_required': [],
+                    'harness_args': sorted(used_args),
+                    'unsupported_args': sorted(used_args),
+                    'missing_required_args': [],
+                    'ok': False,
+                }
+            )
+            continue
+
+        properties = schema.get('properties', {}) if isinstance(schema, dict) else {}
+        schema_props = (
+            set(properties) if isinstance(properties, dict) else set()
+        )
+
+        schema_required_raw = schema.get('required', []) if isinstance(schema, dict) else []
+        schema_required = (
+            {str(k) for k in schema_required_raw if isinstance(k, str)}
+            if isinstance(schema_required_raw, list)
+            else set()
+        )
+
+        unsupported = sorted(used_args - schema_props)
+        missing_required = sorted(schema_required - used_args)
+
+        if unsupported:
+            unsupported_args[tool_name] = unsupported
+        if missing_required:
+            missing_required_args[tool_name] = missing_required
+
+        checks.append(
+            {
+                'tool': tool_name,
+                'present': True,
+                'schema_properties': sorted(schema_props),
+                'schema_required': sorted(schema_required),
+                'harness_args': sorted(used_args),
+                'unsupported_args': unsupported,
+                'missing_required_args': missing_required,
+                'ok': (not unsupported and not missing_required),
+            }
+        )
+
+    passed = not missing_tools and not unsupported_args and not missing_required_args
+
+    return {
+        'passed': passed,
+        'missing_tools': missing_tools,
+        'unsupported_args': unsupported_args,
+        'missing_required_args': missing_required_args,
+        'checks': checks,
+    }
+
+
+def run_contract_check(args: argparse.Namespace) -> dict[str, Any]:
+    """Run contract-only validation (fail-closed) against live MCP tool schemas."""
+    client = BenchmarkMCPClient(args.mcp_url)
+    tools_resp = client.list_tools()
+
+    if isinstance(tools_resp, dict) and 'error' in tools_resp:
+        return {
+            'mode': 'contract-check-only',
+            'fixture_path': str(Path(args.fixture)),
+            'top_k': args.top_k,
+            'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+            'mcp_url': args.mcp_url,
+            'contract': {
+                'passed': False,
+                'missing_tools': [],
+                'unsupported_args': {},
+                'missing_required_args': {},
+                'checks': [],
+                'error': str(tools_resp['error']),
+            },
+            'passed': False,
+            'error': f'tools/list failed: {tools_resp["error"]}',
+        }
+
+    contract = evaluate_mcp_contract(tools_list_response=tools_resp)
+
+    output: dict[str, Any] = {
+        'mode': 'contract-check-only',
+        'fixture_path': str(Path(args.fixture)),
+        'top_k': args.top_k,
+        'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+        'mcp_url': args.mcp_url,
+        'contract': contract,
+        'passed': bool(contract.get('passed')),
+    }
+
+    if not output['passed']:
+        details: list[str] = []
+        if contract.get('missing_tools'):
+            details.append(f"missing tools={contract['missing_tools']}")
+        if contract.get('unsupported_args'):
+            details.append(f"unsupported args={contract['unsupported_args']}")
+        if contract.get('missing_required_args'):
+            details.append(f"missing required args={contract['missing_required_args']}")
+        output['error'] = 'Contract check failed closed: ' + (
+            '; '.join(details) if details else 'contract mismatch'
+        )
+
+    return output
 
 
 def run_benchmark(args: argparse.Namespace) -> dict:
@@ -343,7 +585,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         query_text = q['query']
         expected_facts = q.get('expected_facts', [])
         expected_entities = q.get('expected_entities', [])
-        lane_alias = q.get('lane_alias')
+        group_ids = _query_scope_group_ids(q)
 
         print(f'[{qi}/{len(queries)}] {qid}: {query_text[:60]}...')
 
@@ -351,7 +593,7 @@ def run_benchmark(args: argparse.Namespace) -> dict:
         for mode in SEARCH_MODES:
             try:
                 result = run_bicameral_query(
-                    client, query_text, lane_alias, mode, top_k
+                    client, query_text, group_ids, mode, top_k
                 )
                 combined_text = result['facts_text'] + '\n' + result['nodes_text']
                 fact_recall = compute_recall(combined_text, expected_facts)
@@ -520,6 +762,14 @@ def main():
         default='qmd query --json',
         help='QMD command template (default: qmd query --json)',
     )
+    ap.add_argument(
+        '--contract-check-only',
+        action='store_true',
+        help=(
+            'Validate harness argument schema against live MCP tool contracts and exit. '
+            'Fail-closed on drift.'
+        ),
+    )
     # ── Recall non-regression gate (Phase C / Slice 4) ──────────────────────
     ap.add_argument(
         '--recall-gate',
@@ -542,7 +792,13 @@ def main():
     )
     args = ap.parse_args()
 
-    results = run_benchmark(args)
+    import sys
+
+    try:
+        results = run_contract_check(args) if args.contract_check_only else run_benchmark(args)
+    except Exception as exc:
+        print(f'ERROR: {exc}')
+        sys.exit(1)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,6 +808,16 @@ def main():
     )
 
     print(f'\nResults written to {output_path}')
+
+    if args.contract_check_only:
+        if results.get('passed'):
+            print('[contract-check] PASSED')
+            return
+        print('[contract-check] FAILED')
+        if results.get('error'):
+            print(f"[contract-check] {results['error']}")
+        sys.exit(1)
+
     agg = results['bicameral_aggregate']
     print(f'Bicameral mean recall@{args.top_k}: {agg["mean_combined_recall_at_k"]}')
     if 'qmd_aggregate' in results:
@@ -568,7 +834,6 @@ def main():
         print(f'\n[recall-gate] {gate["details"]}')
         if not gate['passed']:
             print('[recall-gate] FAILED — exiting with code 1')
-            import sys
             sys.exit(1)
         print('[recall-gate] PASSED')
 

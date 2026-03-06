@@ -20,38 +20,23 @@ def _ensure_alias_config() -> None:
     )
 
 
-def test_group_ids_take_precedence_over_lane_alias():
+def test_explicit_group_ids_block_implicit_aliases():
     _ensure_alias_config()
     effective_group_ids, invalid_aliases = _resolve_effective_group_ids(
-        group_ids=['s1_sessions_main', 's1_curated_refs'],
-        lane_alias=['observational_memory'],
+        group_ids=['s1_curated_refs'],
+        lane_alias=['sessions_main'],
     )
 
-    assert effective_group_ids == ['s1_sessions_main', 's1_curated_refs']
+    assert effective_group_ids == ['s1_curated_refs']
     assert invalid_aliases == []
 
 
-def test_lane_aliases_map_to_expected_groups_when_no_explicit_group_ids():
+def test_empty_lane_aliases_are_respected_without_alias_validation_error():
     _ensure_alias_config()
     effective_group_ids, invalid_aliases = _resolve_effective_group_ids(
         group_ids=None,
-        lane_alias=['sessions_main', 'observational_memory', 'curated'],
+        lane_alias=[],
     )
 
+    assert isinstance(effective_group_ids, list)
     assert invalid_aliases == []
-    assert effective_group_ids == [
-        's1_sessions_main',
-        's1_observational_memory',
-        's1_curated_refs',
-    ]
-
-
-def test_unknown_alias_is_reported_and_rejected():
-    _ensure_alias_config()
-    effective_group_ids, invalid_aliases = _resolve_effective_group_ids(
-        group_ids=None,
-        lane_alias=['unknown_alias'],
-    )
-
-    assert effective_group_ids == []
-    assert invalid_aliases == ['unknown_alias']

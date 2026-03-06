@@ -1111,3 +1111,21 @@ for full details.
 - `scripts/normalize_edge_names.py --help`
 - `scripts/apply_closure_semantics.py --help`
 - `scripts/contamination_sentinel.py --help`
+
+---
+
+## OM Closeout Validation Utilities (PR-A)
+
+For OM full-wiring closeout runs, use these public-repo helpers:
+
+- `python3 scripts/owned_paths_preflight.py --run-id <RUN_ID>`
+- `python3 scripts/run_retrieval_benchmark.py ... --contract-check-only`
+- `python3 scripts/utility_eval_vs_qmd.py --fixture ... --output-json ... --output-md ... --worksheet-md ...`
+- `python3 scripts/lane_hygiene_audit.py --output state/phase4_lane_hygiene_<RUN_ID>.json`
+- `python3 scripts/build_om_closeout_report.py --run-id <RUN_ID> --benchmark ... --utility ... --lane-hygiene ... --out ...`
+
+G2/G3/G4 validation artifacts are expected as `--junitxml` outputs:
+
+- `state/g2_lane_routing_<RUN_ID>.xml`
+- `state/g3_adapter_isolation_<RUN_ID>.xml`
+- `state/g4_candidate_bridge_<RUN_ID>.xml`

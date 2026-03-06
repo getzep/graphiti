@@ -728,3 +728,13 @@ The `bicameral_aggregate.mean_combined_recall_at_k` must be ≥ `qmd_aggregate.m
 - Artifact:  `/tmp/retrieval_benchmark_comparison.json` (30/30 queries)
 
 Bicameral wins on 24 of 30 queries; ties on 5; QMD wins on 1 (q006 "tools").  Cross-lane and OM-specific queries show the largest Bicameral advantages.
+
+---
+
+## Closeout Gate Notes (G2/G3/G4)
+
+When running OM closeout validation, lane routing / adapter isolation / candidate bridge checks should emit junit XML artifacts via pytest:
+
+- `python3 -m pytest tests/test_lane_alias_resolution_to_group_ids_is_explicit.py tests/test_om_only_query_returns_om_evidence.py tests/test_mixed_lane_query_returns_fused_results_with_lane_provenance.py -q --junitxml state/g2_lane_routing_<RUN_ID>.xml`
+- `python3 -m pytest tests/test_falkordb_all_lanes_bypass_om_adapter.py -q --junitxml state/g3_adapter_isolation_<RUN_ID>.xml`
+- `python3 -m pytest tests/test_om_candidate_bridge_emits_candidate_rows.py -q --junitxml state/g4_candidate_bridge_<RUN_ID>.xml`

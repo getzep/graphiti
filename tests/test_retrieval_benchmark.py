@@ -86,13 +86,14 @@ class TestValidateFixture(unittest.TestCase):
             self.assertIn('query', q)
             self.assertIn('expected_facts', q)
             self.assertIn('expected_entities', q)
-            self.assertIn('lane_alias', q)
+            self.assertIn('target_group_ids', q)
             self.assertIsInstance(q['expected_facts'], list)
             self.assertIsInstance(q['expected_entities'], list)
             self.assertIsInstance(q['lane_alias'], list)
+            self.assertIsInstance(q['target_group_ids'], list)
 
     def test_too_few_queries_fails(self):
-        queries = [{'id': f'q{i}', 'lane_alias': ['sessions_main']} for i in range(10)]
+        queries = [{'id': f'q{i}', 'target_group_ids': ['s1_sessions_main']} for i in range(10)]
         errors = validate_fixture(queries)
         self.assertTrue(any('>= 30' in e for e in errors))
 
@@ -116,8 +117,24 @@ class TestValidateFixture(unittest.TestCase):
             aliases = q.get('lane_alias', [])
             if len(aliases) > 1:
                 counts['cross_lane'] += 1
-            elif aliases:
+                continue
+
+            if aliases:
                 alias = aliases[0]
+                if alias in counts:
+                    counts[alias] += 1
+                continue
+
+            target_group_ids = q.get('target_group_ids', []) or []
+            if isinstance(target_group_ids, list) and len(target_group_ids) > 1:
+                counts['cross_lane'] += 1
+            elif target_group_ids:
+                alias = {
+                    's1_sessions_main': 'sessions_main',
+                    's1_observational_memory': 'observational_memory',
+                    's1_curated_refs': 'curated',
+                    's1_chatgpt_history': 'chatgpt',
+                }.get(target_group_ids[0])
                 if alias in counts:
                     counts[alias] += 1
 

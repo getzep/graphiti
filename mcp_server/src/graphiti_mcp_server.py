@@ -37,7 +37,7 @@ from models.response_types import (
 )
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.ontology_registry import OntologyRegistry
-from services.queue_service import QueueService
+from services.queue_service import QueueService, build_om_candidate_rows
 from services.search_service import DEFAULT_OM_GROUP_ID, SearchService
 from utils.formatting import format_fact_result
 from utils.rate_limiter import SlidingWindowRateLimiter as _SlidingWindowRateLimiter
@@ -1456,6 +1456,7 @@ async def search_memory_facts(
             and search_service.includes_observational_memory(effective_group_ids)
         )
         om_facts: list[dict[str, Any]] = []
+        candidate_rows: list[dict[str, Any]] = []
 
         if use_observational_adapter:
             try:
@@ -1472,13 +1473,19 @@ async def search_memory_facts(
                     return FactSearchResponse(message='No relevant facts found', facts=[])
                 om_facts = []
 
+            candidate_rows = build_om_candidate_rows(om_facts)
+
             if _is_observational_memory_only_scope(effective_group_ids):
                 if not om_facts:
                     return FactSearchResponse(message='No relevant facts found', facts=[])
-                return FactSearchResponse(
+                response = FactSearchResponse(
                     message='Facts retrieved successfully',
                     facts=om_facts[:max_facts],
                 )
+                if candidate_rows:
+                    response = dict(response)
+                    response['candidate_rows'] = candidate_rows
+                return response
 
         scope_error = _validate_group_scope_support(effective_group_ids)
         if scope_error:
@@ -1516,7 +1523,12 @@ async def search_memory_facts(
         if not merged_facts:
             return FactSearchResponse(message='No relevant facts found', facts=[])
 
-        return FactSearchResponse(message='Facts retrieved successfully', facts=merged_facts)
+        response = FactSearchResponse(message='Facts retrieved successfully', facts=merged_facts)
+        candidate_rows = build_om_candidate_rows(om_facts)
+        if candidate_rows:
+            response = dict(response)
+            response['candidate_rows'] = candidate_rows
+        return response
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error searching facts: {error_msg}')
