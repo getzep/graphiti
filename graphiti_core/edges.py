@@ -436,6 +436,35 @@ class EntityEdge(Edge):
         return edges
 
     @classmethod
+    async def get_between_nodes_bidirectional(
+        cls, driver: GraphDriver, node_uuid_a: str, node_uuid_b: str
+    ):
+        match_query = """
+            MATCH (n:Entity {uuid: $node_uuid_a})-[e:RELATES_TO]-(m:Entity {uuid: $node_uuid_b})
+        """
+        if driver.provider == GraphProvider.KUZU:
+            match_query = """
+                MATCH (n:Entity {uuid: $node_uuid_a})
+                      -[:RELATES_TO]-(e:RelatesToNode_)
+                      -[:RELATES_TO]-(m:Entity {uuid: $node_uuid_b})
+            """
+
+        records, _, _ = await driver.execute_query(
+            match_query
+            + """
+            RETURN
+            """
+            + get_entity_edge_return_query(driver.provider),
+            node_uuid_a=node_uuid_a,
+            node_uuid_b=node_uuid_b,
+            routing_='r',
+        )
+
+        edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
+
+        return edges
+
+    @classmethod
     async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
             try:
