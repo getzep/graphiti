@@ -6,11 +6,14 @@ This directory contains Docker Compose configurations for running the Graphiti M
 
 ```bash
 # Default configuration (FalkorDB combined image)
-docker-compose up
+docker compose up
 
 # Neo4j (separate containers)
-docker-compose -f docker-compose-neo4j.yml up
+docker compose -f docker-compose-neo4j.yml up
 ```
+
+These local compose files build from the repository root so the MCP server always runs against the
+checked-out `graphiti_core` code instead of a drifting PyPI package version.
 
 ## Environment Variables
 
@@ -33,7 +36,9 @@ SEMAPHORE_LIMIT=10
 
 **File:** `docker-compose.yml` (default)
 
-The default configuration uses a combined Docker image that bundles both FalkorDB and the MCP server together for simplified deployment.
+The default configuration uses a combined Docker image that bundles both FalkorDB and the MCP
+server together for simplified deployment. When you build locally, the image is assembled from this
+monorepo checkout.
 
 #### Configuration
 
@@ -66,9 +71,9 @@ docker run --rm -v mcp_server_falkordb_data:/var/lib/falkordb/data -v $(pwd):/ba
 
 **Clear Data:**
 ```bash
-docker-compose down
+docker compose down
 docker volume rm mcp_server_falkordb_data
-docker-compose up
+docker compose up
 ```
 
 #### Gotchas
@@ -126,9 +131,9 @@ docker run --rm -v docker_neo4j_logs:/logs -v $(pwd):/backup alpine \
 
 **Clear Data:**
 ```bash
-docker-compose -f docker-compose-neo4j.yml down
+docker compose -f docker-compose-neo4j.yml down
 docker volume rm docker_neo4j_data docker_neo4j_logs
-docker-compose -f docker-compose-neo4j.yml up
+docker compose -f docker-compose-neo4j.yml up
 ```
 
 #### Gotchas
@@ -144,16 +149,16 @@ To switch from FalkorDB to Neo4j (or vice versa):
 
 1. **Stop current setup:**
    ```bash
-   docker-compose down  # Stop FalkorDB combined image
+   docker compose down  # Stop FalkorDB combined image
    # or
-   docker-compose -f docker-compose-neo4j.yml down  # Stop Neo4j
+   docker compose -f docker-compose-neo4j.yml down  # Stop Neo4j
    ```
 
 2. **Start new database:**
    ```bash
-   docker-compose up  # Start FalkorDB combined image
+   docker compose up  # Start FalkorDB combined image
    # or
-   docker-compose -f docker-compose-neo4j.yml up  # Start Neo4j
+   docker compose -f docker-compose-neo4j.yml up  # Start Neo4j
    ```
 
 Note: Data is not automatically migrated between different database types. You'll need to export from one and import to another using the MCP API.

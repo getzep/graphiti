@@ -65,7 +65,9 @@ cd graphiti && pwd
 docker compose up
 ```
 
-This starts both FalkorDB and the MCP server in a single container.
+This builds the image from the repository you cloned and starts both FalkorDB and the MCP server
+in a single container. The bundled `graphiti-core` code comes from the local monorepo checkout,
+which prevents Docker from drifting onto a different published core version.
 
 **Alternative**: Run with separate containers using Neo4j:
 ```bash
@@ -97,6 +99,16 @@ uv sync
 # Optional: Install additional LLM providers (anthropic, gemini, groq, voyage, sentence-transformers)
 uv sync --extra providers
 ```
+
+`uv sync` resolves `graphiti-core` from the parent repository checkout, so the MCP server and core
+library stay on the same code version during local development.
+
+### Version Alignment
+
+The supported local-development path is to build and run the MCP server from this monorepo. Docker
+Compose and `uv` both resolve `graphiti-core` from the checked-out repository instead of pulling an
+arbitrary newer or older package from PyPI. That alignment matters because the MCP server may rely
+on newer `graphiti-core` APIs during ingestion and queue processing.
 
 ## Configuration
 

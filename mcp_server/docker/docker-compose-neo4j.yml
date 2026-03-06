@@ -25,8 +25,8 @@ services:
     #   image: zepai/knowledge-graph-mcp:1.0.0-standalone
     # When building locally, the build section below will be used.
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.standalone
+      context: ../..
+      dockerfile: mcp_server/docker/Dockerfile.standalone
     env_file:
       - path: ../.env
         required: false
