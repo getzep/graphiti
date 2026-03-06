@@ -45,6 +45,7 @@ allowlist:
   - "ellipsis.yaml"
   - "conftest.py"
   - ".gitignore"
+  - ".dockerignore"
   - ".env.example"
   - "**/.env.example"
   - "signatures/**"
