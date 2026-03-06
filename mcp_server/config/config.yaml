@@ -95,6 +95,7 @@ graphiti:
     observational_memory: ["s1_observational_memory"]
     curated: ["s1_curated_refs"]
     chatgpt: ["s1_chatgpt_history"]
+    self_audit: ["learning_self_audit"]
     all: []
   entity_types:
     - name: "Preference"

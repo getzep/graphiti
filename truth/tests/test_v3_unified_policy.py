@@ -248,6 +248,8 @@ class TestLanePolicyConstants:
         # s1_chatgpt_history and s1_curated_refs promoted to global (PR121).
         assert "s1_chatgpt_history" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
         assert "s1_curated_refs" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
+        # learning_self_audit promoted to global: meta-observation/system-learning coverage.
+        assert "learning_self_audit" in candidates.LANE_RETRIEVAL_ELIGIBLE_GLOBAL
 
     def test_vc_scoped_concept_removed(self) -> None:
         """LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED has been removed; all retrieval-eligible
@@ -285,6 +287,12 @@ class TestLanePolicyConstants:
         """s1_curated_refs is globally retrievable but NOT a candidate source.
         Retrieval-eligibility and candidate-generating are independent controls."""
         assert "s1_curated_refs" not in candidates.LANE_CANDIDATES_ELIGIBLE
+
+    def test_self_audit_not_in_candidates_eligible(self) -> None:
+        """learning_self_audit is globally retrievable but NOT a candidate source.
+        It has its own ingest pipeline (mcp_ingest_self_audit.py) and fact ledger;
+        it must not feed the shared candidates.db promotions pipeline."""
+        assert "learning_self_audit" not in candidates.LANE_CANDIDATES_ELIGIBLE
 
 
 # ─────────────────────────────────────────────────────────────────────────────

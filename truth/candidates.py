@@ -116,11 +116,14 @@ VERIFICATION_STATUSES = {
 # Lanes eligible for direct retrieval across all runtime packs.
 # s1_chatgpt_history and s1_curated_refs were promoted to global as of
 # EXEC-CHATGPT-HISTORY-GLOBAL-RETRIEVAL (PR121 in bicameral-private).
+# learning_self_audit added to global as of feat/self-audit-global-retrieval:
+# Bicameral was blind to meta-observation/system-learning questions without it.
 LANE_RETRIEVAL_ELIGIBLE_GLOBAL: frozenset[str] = frozenset({
     "s1_sessions_main",
     "s1_observational_memory",
     "s1_chatgpt_history",
     "s1_curated_refs",
+    "learning_self_audit",
 })
 
 # REMOVED: LANE_RETRIEVAL_ELIGIBLE_VC_SCOPED.
@@ -138,9 +141,12 @@ LANE_CORROBORATION_ONLY: frozenset[str] = frozenset({
 
 # All lanes that may generate candidates (used by import_graphiti_candidates).
 # Note: s1_curated_refs is globally retrievable but NOT candidate-generating.
+# Note: learning_self_audit has its own ingest pipeline (mcp_ingest_self_audit.py)
+#       and its own fact ledger; it is globally retrievable but NOT a candidate source
+#       for the shared candidates.db promotions pipeline.
 LANE_CANDIDATES_ELIGIBLE: frozenset[str] = (
     LANE_RETRIEVAL_ELIGIBLE_GLOBAL
-    - frozenset({"s1_curated_refs"})   # globally retrievable but not a candidate source
+    - frozenset({"s1_curated_refs", "learning_self_audit"})  # globally retrievable but not candidate sources
     | frozenset({"s1_memory_day1"})    # corroboration-only but still candidate-generating
 )
 
