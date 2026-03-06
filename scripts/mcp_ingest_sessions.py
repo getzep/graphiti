@@ -439,8 +439,8 @@ def apply_shard(evidences: list[dict], shards: int, shard_index: int) -> list[di
 # Neo4j helpers for FR-4 source mode
 # ---------------------------------------------------------------------------
 
-# Upper bound on unextracted messages fetched per neo4j run.  Prevents runaway
-# queries when the graph contains hundreds of thousands of unprocessed messages.
+# Upper bound on Neo4j-eligible messages fetched per run. Prevents runaway
+# queries when the graph contains hundreds of thousands of rows.
 _NEO4J_FETCH_CEILING = 50_000
 
 # Margin factor: fetch this many messages per requested chunk so Smart Cutter
@@ -482,11 +482,20 @@ def _neo4j_driver_or_raise():
     )
 
 
-def _fetch_neo4j_messages(limit: int) -> list[dict]:
-    """Fetch up to *limit* unextracted Message nodes from Neo4j.
+def _fetch_neo4j_messages(limit: int, target_group_id: str) -> list[dict]:
+    """Fetch up to *limit* Message nodes eligible for *target_group_id* extraction.
+
+    Eligibility rule (group-aware):
+      - include messages never marked (`graphiti_extracted_at IS NULL`), OR
+      - include messages explicitly marked for a *different* group_id via
+        `graphiti_extracted_group_id`.
+
+    Legacy rows that only have global `graphiti_extracted_at` (without
+    `graphiti_extracted_group_id`) are treated as already extracted and remain
+    excluded unless operators intentionally backfill the group-id marker.
 
     Returns dicts with: message_id, content, created_at, content_embedding,
-    source_session_id, role.  Ordered by created_at ASC for chronological
+    source_session_id, role. Ordered by created_at ASC for chronological
     Smart Cutter input.
     """
     p = _neo4j_conn_params()
@@ -498,6 +507,10 @@ def _fetch_neo4j_messages(limit: int) -> list[dict]:
             """
                 MATCH (m:Message)
                 WHERE m.graphiti_extracted_at IS NULL
+                   OR (
+                     m.graphiti_extracted_group_id IS NOT NULL
+                     AND m.graphiti_extracted_group_id <> $target_group_id
+                   )
                 RETURN m.message_id AS message_id,
                        coalesce(m.content, '') AS content,
                        coalesce(m.created_at, '') AS created_at,
@@ -507,7 +520,7 @@ def _fetch_neo4j_messages(limit: int) -> list[dict]:
                 ORDER BY m.created_at ASC, m.message_id ASC
                 LIMIT $n
                 """,
-            {'n': effective_limit},
+            {'n': effective_limit, 'target_group_id': target_group_id},
         ).data()
 
     return [
@@ -523,8 +536,8 @@ def _fetch_neo4j_messages(limit: int) -> list[dict]:
     ]
 
 
-def _mark_neo4j_extracted(message_ids: list[str]) -> None:
-    """Set graphiti_extracted_at = now() on the given Message nodes in Neo4j."""
+def _mark_neo4j_extracted(message_ids: list[str], target_group_id: str) -> None:
+    """Mark Message nodes extracted for *target_group_id* in Neo4j."""
     if not message_ids:
         return
 
@@ -535,8 +548,13 @@ def _mark_neo4j_extracted(message_ids: list[str]) -> None:
     with driver, driver.session(database=p['database']) as session:
         session.run(
             'MATCH (m:Message) WHERE m.message_id IN $ids '
-            'SET m.graphiti_extracted_at = $ts',
-            {'ids': list(message_ids), 'ts': now},
+            'SET m.graphiti_extracted_at = $ts, '
+            '    m.graphiti_extracted_group_id = $target_group_id',
+            {
+                'ids': list(message_ids),
+                'ts': now,
+                'target_group_id': target_group_id,
+            },
         ).consume()
 
 
@@ -997,7 +1015,7 @@ def main():
 
 
 def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> None:
-    """Neo4j source mode: read unextracted Message nodes from the graph DB.
+    """Neo4j source mode: read extraction-eligible Message nodes from Neo4j.
 
     Dispatch order:
     1. --build-manifest  → FR-10 build path: query Neo4j, cut chunks, write JSONL + seed claim DB.
@@ -1026,9 +1044,9 @@ def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> No
         manifest_path = Path(args.build_manifest)
         print(f'Building manifest from Neo4j (group_id={args.group_id}) …')
 
-        fetch_limit = _NEO4J_FETCH_CEILING  # fetch all unextracted messages
-        messages = _fetch_neo4j_messages(fetch_limit)
-        print(f'  Fetched {len(messages)} unextracted message(s) from Neo4j')
+        fetch_limit = _NEO4J_FETCH_CEILING  # fetch all extraction-eligible messages
+        messages = _fetch_neo4j_messages(fetch_limit, args.group_id)
+        print(f'  Fetched {len(messages)} extraction-eligible message(s) from Neo4j')
 
         if not messages:
             print('  Nothing to manifest. Exiting.')
@@ -1205,7 +1223,7 @@ def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> No
 
                 message_ids_retry: list[str] = chunk_data.get('message_ids') or []
                 try:
-                    _mark_neo4j_extracted(message_ids_retry)
+                    _mark_neo4j_extracted(message_ids_retry, args.group_id)
                     _claim_done(conn, chunk_id)
                     ok += 1
                     _logger.info('neo4j-retry ok: chunk %s', chunk_id[:12])
@@ -1299,7 +1317,7 @@ def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> No
 
                 # --- Mark Neo4j messages as extracted ---
                 try:
-                    _mark_neo4j_extracted(message_ids)
+                    _mark_neo4j_extracted(message_ids, args.group_id)
                 except Exception as neo4j_exc:
                     # MCP send succeeded; leave at 'sent_not_marked' so the next
                     # run retries only the Neo4j mark (Phase A), not add_memory.
@@ -1352,12 +1370,12 @@ def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> No
         max(args.limit, 1) * _MESSAGES_PER_CHUNK_ESTIMATE + args.offset * _MESSAGES_PER_CHUNK_ESTIMATE,
         _NEO4J_FETCH_CEILING,
     )
-    print(f'Neo4j source mode: fetching up to {fetch_limit} unextracted message(s) …')
-    messages = _fetch_neo4j_messages(fetch_limit)
+    print(f'Neo4j source mode: fetching up to {fetch_limit} extraction-eligible message(s) …')
+    messages = _fetch_neo4j_messages(fetch_limit, args.group_id)
     print(f'  Fetched {len(messages)} message(s) from Neo4j')
 
     if not messages:
-        print('  No unextracted messages found. Nothing to do.')
+        print('  No extraction-eligible messages found. Nothing to do.')
         return
 
     messages_by_id: dict[str, dict] = {m['message_id']: m for m in messages}
@@ -1415,8 +1433,11 @@ def _run_neo4j_mode(args: argparse.Namespace, ap: argparse.ArgumentParser) -> No
     # Bulk-mark extracted messages in Neo4j.
     if extracted_ids:
         try:
-            _mark_neo4j_extracted(extracted_ids)
-            print(f'Marked {len(extracted_ids)} message(s) as graphiti_extracted_at in Neo4j')
+            _mark_neo4j_extracted(extracted_ids, args.group_id)
+            print(
+                f'Marked {len(extracted_ids)} message(s) as graphiti_extracted_at '
+                f'for group_id={args.group_id} in Neo4j'
+            )
         except Exception as exc:
             print(
                 f'WARNING: Failed to mark {len(extracted_ids)} message(s) in Neo4j: {exc}',
