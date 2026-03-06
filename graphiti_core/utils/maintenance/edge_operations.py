@@ -273,12 +273,28 @@ async def resolve_extracted_edges(
     embedder = clients.embedder
     await create_entity_edge_embeddings(embedder, extracted_edges)
 
-    valid_edges_list: list[list[EntityEdge]] = await semaphore_gather(
+    forward_edges_list: list[list[EntityEdge]] = await semaphore_gather(
         *[
             EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
             for edge in extracted_edges
         ]
     )
+    inverse_edges_list: list[list[EntityEdge]] = await semaphore_gather(
+        *[
+            EntityEdge.get_between_nodes(driver, edge.target_node_uuid, edge.source_node_uuid)
+            for edge in extracted_edges
+        ]
+    )
+
+    valid_edges_list: list[list[EntityEdge]] = []
+    for forward_edges, inverse_edges in zip(forward_edges_list, inverse_edges_list, strict=True):
+        seen_uuids: set[str] = set()
+        combined: list[EntityEdge] = []
+        for edge in [*forward_edges, *inverse_edges]:
+            if edge.uuid not in seen_uuids:
+                seen_uuids.add(edge.uuid)
+                combined.append(edge)
+        valid_edges_list.append(combined)
 
     related_edges_results: list[SearchResults] = await semaphore_gather(
         *[
