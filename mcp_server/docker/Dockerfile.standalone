@@ -24,35 +24,29 @@ ENV UV_COMPILE_BYTECODE=1 \
     MCP_SERVER_HOST="0.0.0.0" \
     PYTHONUNBUFFERED=1
 
-# Set up MCP server directory
+# Set up monorepo workspace
+WORKDIR /app
+
+# Keep version metadata aligned with the checked-out monorepo.
+ARG GRAPHITI_CORE_VERSION=0.27.0
+
+# Copy the monorepo core package plus the MCP server project.
+COPY pyproject.toml README.md ./
+COPY graphiti_core ./graphiti_core
+COPY mcp_server/pyproject.toml mcp_server/uv.lock /app/mcp/
+COPY mcp_server/main.py /app/mcp/main.py
+COPY mcp_server/src /app/mcp/src
+COPY mcp_server/config /app/mcp/config
+
+# Install Python dependencies from the checked-out monorepo.
 WORKDIR /app/mcp
-
-# Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.23.1
-
-# Copy project files for dependency installation
-COPY pyproject.toml uv.lock ./
-
-# Remove the local path override for graphiti-core in Docker builds
-# Install with BOTH neo4j and falkordb extras for maximum flexibility
-# and regenerate lock file to match the PyPI version
-RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
-    echo "Regenerating lock file for PyPI graphiti-core..." && \
-    rm -f uv.lock && \
-    uv lock
 
 # Install Python dependencies (exclude dev dependency group)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    uv sync --locked --no-group dev --python 3.11
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
-
-# Copy MCP server application code
-COPY main.py ./
-COPY src/ ./src/
-COPY config/ ./config/
 
 # Create log directory
 RUN mkdir -p /var/log/graphiti

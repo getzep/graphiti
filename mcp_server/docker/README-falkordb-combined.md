@@ -31,7 +31,7 @@ FALKORDB_PASSWORD=
 
 ```bash
 cd mcp_server
-docker compose -f docker/docker-compose-falkordb-combined.yml up
+docker compose -f docker/docker-compose.yml up
 ```
 
 3. Access the services:
@@ -57,18 +57,21 @@ docker run -d \
 ### Build with Default Version
 
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml build
+docker compose -f docker/docker-compose.yml build
 ```
 
-### Build with Specific Graphiti Version
+This local build uses the checked-out monorepo `graphiti_core` code. It does not rewrite the MCP
+server dependencies to pull an arbitrary `graphiti-core` release from PyPI.
+
+### Build Metadata
 
 ```bash
-GRAPHITI_CORE_VERSION=0.22.0 docker compose -f docker/docker-compose-falkordb-combined.yml build
+docker compose -f docker/docker-compose.yml build
 ```
 
 ### Build Arguments
 
-- `GRAPHITI_CORE_VERSION`: Version of graphiti-core package (default: 0.22.0)
+- `GRAPHITI_CORE_VERSION`: Metadata label for the bundled monorepo `graphiti-core` version
 - `MCP_SERVER_VERSION`: MCP server version tag (default: 1.0.0rc0)
 - `BUILD_DATE`: Build timestamp
 - `VCS_REF`: Git commit hash
@@ -105,17 +108,17 @@ All environment variables from the standard MCP server are supported:
 
 ```bash
 # All logs (both services stdout/stderr)
-docker compose -f docker/docker-compose-falkordb-combined.yml logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # Only container logs
-docker compose -f docker/docker-compose-falkordb-combined.yml logs -f graphiti-falkordb
+docker compose -f docker/docker-compose.yml logs -f graphiti-falkordb
 ```
 
 ### Restart Services
 
 ```bash
 # Restart entire container (both services)
-docker compose -f docker/docker-compose-falkordb-combined.yml restart
+docker compose -f docker/docker-compose.yml restart
 
 # Check FalkorDB status
 docker compose -f docker/docker-compose-falkordb-combined.yml exec graphiti-falkordb redis-cli ping

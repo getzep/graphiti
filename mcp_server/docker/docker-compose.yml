@@ -2,10 +2,10 @@ services:
   graphiti-falkordb:
     image: zepai/knowledge-graph-mcp:latest
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: mcp_server/docker/Dockerfile
       args:
-        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.23.0}
+        GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.27.0}
         MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.0.0}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-}
