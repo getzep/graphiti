@@ -98,14 +98,16 @@ def _build_falkor_fulltext_query(
     group_ids: list[str] | None = None,
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
-    """Build a fulltext query string for FalkorDB using RedisSearch syntax."""
-    if group_ids is None or len(group_ids) == 0:
-        group_filter = ''
-    else:
-        escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-        group_values = '|'.join(escaped_group_ids)
-        group_filter = f'(@group_id:{group_values})'
+    """Build a fulltext query string for FalkorDB using RedisSearch syntax.
 
+    NOTE: group_id filtering is intentionally NOT included in the fulltext
+    query. RediSearch treats hyphens as NOT operators even inside double
+    quotes, which breaks UUID-formatted group_ids (e.g.,
+    "f2c59d63-a7a7-b5e6-8000-000000000000"). This is safe because all
+    callers already apply a Cypher-level ``WHERE n.group_id IN $group_ids``
+    filter that guarantees multi-tenant isolation.
+    See: https://github.com/getzep/graphiti/issues/1269
+    """
     sanitized_query = _sanitize(query)
 
     # Remove stopwords and empty tokens
@@ -113,10 +115,10 @@ def _build_falkor_fulltext_query(
     filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
     sanitized_query = ' | '.join(filtered_words)
 
-    if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+    if len(sanitized_query.split(' ')) >= max_query_length:
         return ''
 
-    full_query = group_filter + ' (' + sanitized_query + ')'
+    full_query = '(' + sanitized_query + ')'
     return full_query
 
 
