@@ -4,6 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { classifyTurn } from '../policy/turn-classifier.ts';
+import type { TurnClassification } from '../policy/turn-classifier.ts';
+
 import { createPackInjector } from '../hooks/pack-injector.ts';
 import { createCaptureHook, stripInjectedContext } from '../hooks/capture.ts';
 import { createLegacyBeforeAgentStartHook } from '../hooks/legacy-before-agent-start.ts';
@@ -2072,4 +2075,547 @@ test('context-map anchor handles completely missing files gracefully', async (t)
   const result = await hooks.before_prompt_build({ prompt: 'test' }, ctx);
   // No files → no fingerprint → no anchor.
   assert.deepEqual(result, {}, 'missing files must not crash and must yield no anchor');
+});
+
+// ── Part A: Policy Instrumentation Tests ──────────────────────────────────
+// These tests validate context orchestration policy behavior:
+// - Low-info suppression reduces IRRELEVANT injection, not just volume
+// - Short-turn carveouts preserve operational commands
+// - Task-update narrowing constrains recall without destroying usefulness
+// - No-memory-found injects nothing (no empty wrapper block)
+
+// ── Turn classifier unit tests ────────────────────────────────────────────
+
+test('turn-classifier: canonical low-info turns are classified as low-info', () => {
+  const lowInfoInputs = [
+    'ok', 'OK', 'Ok', 'okay', 'k', 'kk',
+    '?',
+    'thanks', 'Thank you', 'thx', 'ty',
+    'sounds good', 'Sounds Good',
+    'lol', 'lmao', 'haha',
+    'nice', 'cool', 'great', 'awesome',
+    'got it', 'gotcha', 'noted', 'sure',
+    'right', 'alright', 'fine', 'good', 'perfect',
+    'agreed', 'ack', 'np', 'no worries', 'all good',
+    'makes sense', 'fair enough', 'understood',
+    'copy', 'roger', 'bet', 'word', 'aight',
+  ];
+
+  for (const input of lowInfoInputs) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'low-info',
+      `Expected "${input}" to be low-info, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: bare approval/stop decisions are NOT low-info', () => {
+  const operationalDecisions = [
+    'yes', 'no', 'yep', 'yup', 'yeah', 'nope', 'nah',
+    'approve', 'approved', 'confirm', 'confirmed',
+    'reject', 'rejected', 'stop', 'cancel', 'abort',
+  ];
+  for (const input of operationalDecisions) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'normal',
+      `Expected operational decision "${input}" to be normal, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: emoji-only turns are low-info', () => {
+  const emojiInputs = ['👍', '🎉', '😂', '👍👍', '🔥🔥🔥', '❤️'];
+  for (const input of emojiInputs) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'low-info',
+      `Expected emoji "${input}" to be low-info, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: empty/whitespace turns are low-info', () => {
+  assert.equal(classifyTurn('').classification, 'low-info');
+  assert.equal(classifyTurn('   ').classification, 'low-info');
+  assert.equal(classifyTurn('\n\t').classification, 'low-info');
+});
+
+test('turn-classifier: carveout "11 works" is NOT low-info', () => {
+  const result = classifyTurn('11 works');
+  assert.equal(result.classification, 'normal', `"11 works" must be normal, got ${result.classification}`);
+});
+
+test('turn-classifier: carveout "today?" is NOT low-info', () => {
+  const result = classifyTurn('today?');
+  assert.equal(result.classification, 'normal', `"today?" must be normal, got ${result.classification}`);
+});
+
+test('turn-classifier: carveout "send it" is NOT low-info', () => {
+  const result = classifyTurn('send it');
+  assert.equal(result.classification, 'normal', `"send it" must be normal, got ${result.classification}`);
+});
+
+test('turn-classifier: carveout "do it" is NOT low-info', () => {
+  const result = classifyTurn('do it');
+  assert.equal(result.classification, 'normal', `"do it" must be normal, got ${result.classification}`);
+});
+
+test('turn-classifier: additional carveouts are not low-info', () => {
+  const carveouts = [
+    'ship it', 'run it', 'go ahead', 'approved',
+    'go', 'merge it', 'deploy it', 'book it', 'stop', 'cancel',
+    '3pm works', 'noon works', 'tomorrow?', 'tonight?',
+  ];
+  for (const input of carveouts) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'normal',
+      `Expected carveout "${input}" to be normal, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: task-update requests are classified as task-update', () => {
+  const taskUpdates = [
+    'update me on previous task',
+    'update me on the last task',
+    'update on current task',
+    "what's the status of the previous task",
+    'task status',
+    'status update',
+    "how's the task going",
+    'task progress',
+    'where are we on the task',
+  ];
+  for (const input of taskUpdates) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'task-update',
+      `Expected "${input}" to be task-update, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: normal substantive prompts are classified as normal', () => {
+  const normals = [
+    'What restaurants are good in the East Village?',
+    'Can you research this company for me?',
+    'Write a summary of the meeting notes',
+    'Help me draft an email to the team about the new feature',
+    'What happened at the board meeting yesterday?',
+    'Schedule a call with Alice for next week',
+  ];
+  for (const input of normals) {
+    const result = classifyTurn(input);
+    assert.equal(
+      result.classification,
+      'normal',
+      `Expected "${input}" to be normal, got "${result.classification}" (${result.reason})`,
+    );
+  }
+});
+
+test('turn-classifier: low-info with trailing punctuation still detected', () => {
+  assert.equal(classifyTurn('ok!').classification, 'low-info');
+  assert.equal(classifyTurn('thanks!').classification, 'low-info');
+  assert.equal(classifyTurn('nice.').classification, 'low-info');
+  assert.equal(classifyTurn('cool!').classification, 'low-info');
+});
+
+// ── Recall hook integration: low-info suppression ─────────────────────────
+
+test('recall hook returns empty context for low-info turns (inject: [])', async () => {
+  let searchCalled = false;
+  const hook = createRecallHook({
+    client: {
+      search: async () => {
+        searchCalled = true;
+        return { facts: [{ fact: 'should not appear' }] };
+      },
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'ok' },
+    { sessionKey: 'test-session' },
+  );
+
+  assert.equal(result.prependContext, '', 'low-info turn must yield empty prependContext');
+  assert.equal(searchCalled, false, 'Graphiti search must NOT be called for low-info turns');
+});
+
+test('recall hook processes carveout turns normally despite short length', async () => {
+  let searchCalled = false;
+  const hook = createRecallHook({
+    client: {
+      search: async () => {
+        searchCalled = true;
+        return { facts: [{ fact: 'task confirmed at 11am' }] };
+      },
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: '11 works' },
+    { sessionKey: 'test-session' },
+  );
+
+  assert.ok(searchCalled, 'Graphiti search must be called for carveout turns');
+  assert.ok(
+    (result.prependContext ?? '').includes('task confirmed at 11am'),
+    'carveout turn must receive normal recall injection',
+  );
+});
+
+test('recall hook processes "send it" carveout normally', async () => {
+  let searchCalled = false;
+  const hook = createRecallHook({
+    client: {
+      search: async () => {
+        searchCalled = true;
+        return { facts: [{ fact: 'draft ready for review' }] };
+      },
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'send it' },
+    { sessionKey: 'test-session' },
+  );
+
+  assert.ok(searchCalled, 'Graphiti search must be called for "send it"');
+  assert.ok(
+    (result.prependContext ?? '').includes('draft ready for review'),
+    '"send it" must receive normal recall injection',
+  );
+});
+
+test('recall hook processes bare "no" as an operational decision (not low-info)', async () => {
+  let searchCalled = false;
+  const hook = createRecallHook({
+    client: {
+      search: async () => {
+        searchCalled = true;
+        return { facts: [{ fact: 'Decision pending: deploy rollback approved if needed' }] };
+      },
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true, minPromptChars: 1 },
+  });
+
+  const result = await hook(
+    { prompt: 'no' },
+    { sessionKey: 'test-session' },
+  );
+
+  assert.ok(searchCalled, 'Graphiti search must be called for bare "no"');
+  assert.ok(
+    (result.prependContext ?? '').includes('Decision pending'),
+    'bare "no" must receive normal recall injection',
+  );
+});
+
+// ── Recall hook integration: no-memory-found ──────────────────────────────
+
+test('recall hook injects nothing when Graphiti returns zero facts (no wrapper)', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({ facts: [] }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'tell me about quantum computing' },
+    { sessionKey: 'test-session' },
+  );
+
+  const context = result.prependContext ?? '';
+  assert.ok(
+    !context.includes('<graphiti-context>'),
+    'no-memory-found must NOT inject <graphiti-context> wrapper',
+  );
+  assert.ok(
+    !context.includes('No relevant facts found'),
+    'no-memory-found must NOT inject "No relevant facts found" text',
+  );
+  assert.equal(context, '', 'no-memory-found with no pack/capability should yield empty string');
+});
+
+// ── Recall hook integration: task-update narrowing ────────────────────────
+
+test('recall hook narrows injection for task-update requests', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({
+        facts: [
+          { fact: 'Task: implement API endpoint' },
+          { fact: 'Blocker: waiting on schema approval' },
+          { fact: 'Next step: write integration tests' },
+          { fact: 'Checkpoint: routes defined' },
+          { fact: 'Yuan prefers sushi for dinner' },
+          { fact: 'Meeting scheduled for Tuesday' },
+          { fact: 'Wine preference: natural biodynamic' },
+          { fact: 'Office is near Union Square' },
+        ],
+      }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'update me on previous task' },
+    { sessionKey: 'test-session' },
+  );
+
+  const context = result.prependContext ?? '';
+  assert.ok(
+    context.includes('mode="task-update-narrow"'),
+    'task-update must inject with mode="task-update-narrow"',
+  );
+  assert.ok(
+    context.includes('Task State (narrow recall)'),
+    'task-update must use narrow recall header',
+  );
+  // Narrow mode caps to 4 facts — must not inject all 8
+  assert.ok(
+    !context.includes('Office is near Union Square'),
+    'task-update must not dump unrelated facts (fact 8 should be cut)',
+  );
+  assert.ok(
+    !context.includes('Wine preference'),
+    'task-update must not dump unrelated facts (fact 7 should be cut)',
+  );
+});
+
+test('recall hook task-update narrowing selects relevant task-state facts even when they appear later', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({
+        facts: [
+          { fact: 'Yuan prefers sushi for dinner' },
+          { fact: 'Office is near Union Square' },
+          { fact: 'Task: implement API endpoint' },
+          { fact: 'Meeting scheduled for Tuesday' },
+          { fact: 'Blocker: waiting on schema approval' },
+          { fact: 'Next step: write integration tests' },
+          { fact: 'Decision: hold deploy until QA sign-off' },
+        ],
+      }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'task status' },
+    { sessionKey: 'test-session' },
+  );
+
+  const context = result.prependContext ?? '';
+  assert.ok(context.includes('Task: implement API endpoint'));
+  assert.ok(context.includes('Blocker: waiting on schema approval'));
+  assert.ok(context.includes('Next step: write integration tests'));
+  assert.ok(context.includes('Decision: hold deploy until QA sign-off'));
+  assert.ok(!context.includes('Yuan prefers sushi for dinner'));
+  assert.ok(!context.includes('Office is near Union Square'));
+  assert.ok(!context.includes('Meeting scheduled for Tuesday'));
+});
+
+test('recall hook skips pack injection for task-update turns', async () => {
+  let packCalled = false;
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({
+        facts: [{ fact: 'Task: implement feature X' }],
+      }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => {
+      packCalled = true;
+      return {
+        context: '<pack-context>big workflow context</pack-context>',
+        intentId: 'test',
+        primaryPackId: 'test',
+        scope: 'public',
+      };
+    },
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  await hook(
+    { prompt: 'update me on the current task' },
+    { sessionKey: 'test-session' },
+  );
+
+  assert.equal(packCalled, false, 'pack injection must be skipped for task-update turns');
+});
+
+// ── Instrumentation: quality not quantity ─────────────────────────────────
+// These tests prove that suppression reduces IRRELEVANT injection, not just
+// shorter output. The key insight: a low-info turn with facts available should
+// still yield no injection (proving we suppress irrelevant context, not just
+// that the prompt is too short to have results).
+
+test('instrumentation: low-info suppression blocks injection even when facts exist', async () => {
+  const factsAvailable = [
+    { fact: 'Yuan prefers natural wine' },
+    { fact: 'Meeting at 3pm today' },
+    { fact: 'Task: deploy new API' },
+  ];
+
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({ facts: factsAvailable }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => ({
+      context: '<pack-context>workflow content</pack-context>',
+      intentId: 'test',
+      primaryPackId: 'test',
+      scope: 'public',
+    }),
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  // "thanks" is low-info — even though the memory store HAS facts,
+  // they should NOT be injected because the turn doesn't need them.
+  const lowInfoResult = await hook(
+    { prompt: 'thanks' },
+    { sessionKey: 'test-session' },
+  );
+
+  // Same hook, substantive prompt — facts SHOULD be injected.
+  const normalResult = await hook(
+    { prompt: 'What wine should I bring to dinner tonight?' },
+    { sessionKey: 'test-session' },
+  );
+
+  // INSTRUMENTATION ASSERTION: low-info gets nothing, normal gets facts
+  assert.equal(lowInfoResult.prependContext, '', 'low-info must yield empty despite available facts');
+  assert.ok(
+    (normalResult.prependContext ?? '').includes('Yuan prefers natural wine'),
+    'normal turn must receive relevant facts',
+  );
+});
+
+test('instrumentation: task-update caps facts while normal gets full set', async () => {
+  const allFacts = Array.from({ length: 8 }, (_, i) => ({
+    fact: `Fact ${i + 1}: item ${i + 1}`,
+  }));
+
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({ facts: allFacts }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const taskUpdateResult = await hook(
+    { prompt: 'task status' },
+    { sessionKey: 'test-session' },
+  );
+
+  const normalResult = await hook(
+    { prompt: 'Give me a comprehensive summary of everything' },
+    { sessionKey: 'test-session' },
+  );
+
+  const taskUpdateContext = taskUpdateResult.prependContext ?? '';
+  const normalContext = normalResult.prependContext ?? '';
+
+  // Task-update should have at most 4 facts (TASK_UPDATE_MAX_FACTS)
+  const taskUpdateFactCount = (taskUpdateContext.match(/^- Fact \d+:/gm) || []).length;
+  const normalFactCount = (normalContext.match(/^- Fact \d+:/gm) || []).length;
+
+  assert.ok(taskUpdateFactCount <= 4, `task-update must cap at 4 facts, got ${taskUpdateFactCount}`);
+  assert.ok(normalFactCount === 8, `normal must include all 8 facts, got ${normalFactCount}`);
+  assert.ok(
+    taskUpdateFactCount < normalFactCount,
+    'task-update must inject fewer facts than normal (reduced irrelevant injection)',
+  );
+});
+
+test('instrumentation: carveout turns get same injection quality as normal turns', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({
+        facts: [
+          { fact: 'Draft email prepared and awaiting approval' },
+          { fact: 'Recipient: alice@company.com' },
+        ],
+      }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const carveoutResult = await hook(
+    { prompt: 'send it' },
+    { sessionKey: 'test-session' },
+  );
+
+  const normalResult = await hook(
+    { prompt: 'Please send the draft email to Alice' },
+    { sessionKey: 'test-session' },
+  );
+
+  const carveoutContext = carveoutResult.prependContext ?? '';
+  const normalContext = normalResult.prependContext ?? '';
+
+  // Both should contain the same facts — carveout gets full quality
+  assert.ok(carveoutContext.includes('Draft email prepared'), 'carveout must receive relevant facts');
+  assert.ok(normalContext.includes('Draft email prepared'), 'normal must receive relevant facts');
+  assert.ok(
+    carveoutContext.includes('<graphiti-context>'),
+    'carveout must get standard graphiti-context wrapper',
+  );
+});
+
+test('instrumentation: no-memory-found is truly empty, not just shorter', async () => {
+  const hook = createRecallHook({
+    client: {
+      search: async () => ({ facts: [] }),
+      ingestMessages: async () => undefined,
+    },
+    packInjector: async () => null,
+    config: { memoryGroupId: 's1_sessions_main', singleTenant: true },
+  });
+
+  const result = await hook(
+    { prompt: 'What is the meaning of life?' },
+    { sessionKey: 'test-session' },
+  );
+
+  const context = result.prependContext ?? '';
+
+  // Must be truly empty — not just shorter or without facts
+  assert.equal(context.length, 0, 'no-memory-found context must be exactly zero length');
+  assert.ok(!context.includes('graphiti'), 'no-memory-found must not contain any graphiti markers');
+  assert.ok(!context.includes('Recall'), 'no-memory-found must not contain any Recall headers');
 });
