@@ -86,8 +86,11 @@ class EntityEdgeNamespace:
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityEdge]:
-        return await self._ops.get_by_group_ids(self._driver, group_ids, limit, uuid_cursor)
+        return await self._ops.get_by_group_ids(
+            self._driver, group_ids, limit, uuid_cursor, lightweight=lightweight
+        )
 
     async def get_between_nodes(
         self,

@@ -253,7 +253,7 @@ def get_entity_node_save_bulk_query(
             )
 
 
-def get_entity_node_return_query(provider: GraphProvider) -> str:
+def get_entity_node_return_query(provider: GraphProvider, lightweight: bool = False) -> str:
     # `name_embedding` is not returned by default and must be loaded manually using `load_name_embedding()`.
     if provider == GraphProvider.KUZU:
         return """
@@ -264,6 +264,18 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
             n.created_at AS created_at,
             n.summary AS summary,
             n.attributes AS attributes
+        """
+
+    if lightweight:
+        # Exclude only embedding vectors, preserve all other properties (incl. custom attributes)
+        return """
+            n.uuid AS uuid,
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at,
+            n.summary AS summary,
+            labels(n) AS labels,
+            [k IN keys(n) WHERE NOT k IN ['uuid','name','group_id','created_at','summary','name_embedding','summary_embedding'] | [k, n[k]]] AS attributes
         """
 
     return """
