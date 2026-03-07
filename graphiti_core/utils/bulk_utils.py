@@ -259,11 +259,8 @@ def _merge_node_into_canonical(source: EntityNode, canonical: EntityNode) -> Non
         if key not in canonical.attributes or not canonical.attributes[key]:
             canonical.attributes[key] = value
 
-    # EasyOps: Merge reasoning - prefer non-empty, concatenate if both exist
-    if source.reasoning and canonical.reasoning:
-        if source.reasoning not in canonical.reasoning:
-            canonical.reasoning = f"{canonical.reasoning}\n---\n{source.reasoning}"
-    elif source.reasoning and not canonical.reasoning:
+    # EasyOps: Keep first reasoning for deduplicated nodes (avoid unbounded growth)
+    if not canonical.reasoning and source.reasoning:
         canonical.reasoning = source.reasoning
 
 

@@ -897,12 +897,9 @@ class Graphiti:
                 )
                 perf_logger.info(f'[PERF] resolve_nodes + extract_edges (parallel): {(time() - step_start)*1000:.0f}ms, nodes={len(nodes)}, edges={len(extracted_edges)}')
 
-                # EasyOps: Merge reasoning from duplicate_pairs to canonical nodes
+                # EasyOps: Keep first reasoning for deduplicated nodes (avoid unbounded growth)
                 for source_node, canonical_node in duplicate_pairs:
-                    if source_node.reasoning and canonical_node.reasoning:
-                        if source_node.reasoning not in canonical_node.reasoning:
-                            canonical_node.reasoning = f"{canonical_node.reasoning}\n---\n{source_node.reasoning}"
-                    elif source_node.reasoning and not canonical_node.reasoning:
+                    if not canonical_node.reasoning and source_node.reasoning:
                         canonical_node.reasoning = source_node.reasoning
 
                 # Resolve edge pointers
