@@ -135,7 +135,7 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
+- Neo4j 5.26 / FalkorDB 1.1.2 / LadybugDB 0.15.1 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
   OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
@@ -179,15 +179,15 @@ pip install graphiti-core[falkordb]
 uv add graphiti-core[falkordb]
 ```
 
-### Installing with Kuzu Support
+### Installing with Ladybug Support
 
-If you plan to use Kuzu as your graph database backend, install with the Kuzu extra:
+If you plan to use Ladybug as your graph database backend, install with the Ladybug extra:
 
 ```bash
-pip install graphiti-core[kuzu]
+pip install graphiti-core[ladybug]
 
 # or with uv
-uv add graphiti-core[kuzu]
+uv add graphiti-core[ladybug]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -246,7 +246,7 @@ performance.
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Ladybug database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -349,14 +349,14 @@ driver = FalkorDriver(
 graphiti = Graphiti(graph_driver=driver)
 ```
 
-#### Kuzu
+#### Ladybug
 
 ```python
 from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
+from graphiti_core.driver.ladybug_driver import LadybugDriver
 
-# Create a Kuzu driver
-driver = KuzuDriver(db="/tmp/graphiti.kuzu")
+# Create a Ladybug driver
+driver = LadybugDriver(db="/tmp/graphiti.lbdb")
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
@@ -400,7 +400,7 @@ The driver layer is organized into three tiers:
    defines query execution, session management, index lifecycle, and exposes 11 operations interfaces as `@property`
    accessors.
 
-2. **`GraphProvider` enum** — identifies the backend (`NEO4J`, `FALKORDB`, `KUZU`, `NEPTUNE`). Query builders use this
+2. **`GraphProvider` enum** — identifies the backend (`NEO4J`, `FALKORDB`, `LADYBUG`, `NEPTUNE`). Query builders use this
    enum in `match/case` statements to return dialect-specific query strings.
 
 3. **11 Operations ABCs** (`graphiti_core/driver/operations/`) — abstract interfaces covering all CRUD and search
@@ -437,8 +437,8 @@ graphiti_core/driver/
 ├── neo4j/operations/                # 11 Neo4j implementations
 ├── falkordb_driver.py               # FalkorDriver
 ├── falkordb/operations/             # 11 FalkorDB implementations
-├── kuzu_driver.py                   # KuzuDriver
-├── kuzu/operations/                 # 11 Kuzu implementations + record_parsers.py
+├── ladybug_driver.py                # LadybugDriver
+├── ladybug/operations/              # 11 Ladybug implementations + record_parsers.py
 ├── neptune_driver.py                # NeptuneDriver
 └── neptune/operations/              # 11 Neptune implementations
 ```
@@ -469,7 +469,7 @@ To integrate a new graph database backend, follow these steps:
    class GraphProvider(Enum):
        NEO4J = 'neo4j'
        FALKORDB = 'falkordb'
-       KUZU = 'kuzu'
+       LADYBUG = 'ladybug'
        NEPTUNE = 'neptune'
        MY_BACKEND = 'my_backend'  # New backend
    ```
@@ -502,7 +502,7 @@ To integrate a new graph database backend, follow these steps:
 For reference implementations, look at:
 - **Neo4j** — the most straightforward, full-featured reference
 - **FalkorDB** — a lightweight client-server alternative
-- **Kuzu** — example of an embedded/in-process database with dialect differences
+- **Ladybug** — example of an embedded/in-process database with dialect differences
 - **Neptune** — example of a cloud backend with an external search index (OpenSearch)
 
 ## Using Graphiti with Azure OpenAI
@@ -683,7 +683,7 @@ When you initialize a Graphiti instance, we collect:
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
     - LLM provider type (OpenAI, Azure, Anthropic, etc.)
-    - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
+    - Database backend (Neo4j, FalkorDB, Ladybug, Amazon Neptune Database or Neptune Analytics)
     - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
 ### What We Don't Collect

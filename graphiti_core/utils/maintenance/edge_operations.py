@@ -691,7 +691,7 @@ async def filter_existing_duplicate_of_edges(
             routing_='r',
         )
     else:
-        if driver.provider == GraphProvider.KUZU:
+        if driver.provider == GraphProvider.LADYBUG:
             query = """
                 UNWIND $duplicate_node_uuids AS duplicate
                 MATCH (n:Entity {uuid: duplicate.src})-[:RELATES_TO]->(e:RelatesToNode_ {name: 'IS_DUPLICATE_OF'})-[:RELATES_TO]->(m:Entity {uuid: duplicate.dst})

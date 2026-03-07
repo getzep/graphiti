@@ -31,6 +31,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 load_dotenv()
 
 drivers: list[GraphProvider] = []
+_kuzu_driver_factory = None
 if os.getenv('DISABLE_NEO4J') is None:
     try:
         from graphiti_core.driver.neo4j_driver import Neo4jDriver
@@ -47,13 +48,21 @@ if os.getenv('DISABLE_FALKORDB') is None:
     except ImportError:
         raise
 
-if os.getenv('DISABLE_KUZU') is None:
+if os.getenv('DISABLE_LADYBUG') is None and os.getenv('DISABLE_KUZU') is None:
     try:
-        from graphiti_core.driver.kuzu_driver import KuzuDriver
+        from graphiti_core.driver.ladybug_driver import LadybugDriver
 
+        _kuzu_driver_factory = LadybugDriver
         drivers.append(GraphProvider.KUZU)
     except ImportError:
-        raise
+        if os.getenv('DISABLE_KUZU') is None:
+            try:
+                from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+                _kuzu_driver_factory = KuzuDriver
+                drivers.append(GraphProvider.KUZU)
+            except ImportError:
+                raise
 
 # Disable Neptune for now
 os.environ['DISABLE_NEPTUNE'] = 'True'
@@ -78,7 +87,7 @@ NEPTUNE_HOST = os.getenv('NEPTUNE_HOST', 'localhost')
 NEPTUNE_PORT = os.getenv('NEPTUNE_PORT', 8182)
 AOSS_HOST = os.getenv('AOSS_HOST', None)
 
-KUZU_DB = os.getenv('KUZU_DB', ':memory:')
+LADYBUG_DB = os.getenv('LADYBUG_DB', os.getenv('KUZU_DB', ':memory:'))
 
 group_id = 'graphiti_test_group'
 group_id_2 = 'graphiti_test_group_2'
@@ -99,8 +108,10 @@ def get_driver(provider: GraphProvider) -> GraphDriver:
             password=FALKORDB_PASSWORD,
         )
     elif provider == GraphProvider.KUZU:
-        driver = KuzuDriver(
-            db=KUZU_DB,
+        if _kuzu_driver_factory is None:
+            raise ValueError('Kuzu/Ladybug driver not available')
+        driver = _kuzu_driver_factory(
+            db=LADYBUG_DB,
         )
         return driver
     elif provider == GraphProvider.NEPTUNE:

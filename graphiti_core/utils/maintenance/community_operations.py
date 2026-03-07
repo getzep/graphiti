@@ -56,7 +56,7 @@ async def get_community_clusters(
             match_query = """
                 MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[e:RELATES_TO]-(m: Entity {group_id: $group_id})
             """
-            if driver.provider == GraphProvider.KUZU:
+            if driver.provider == GraphProvider.LADYBUG:
                 match_query = """
                 MATCH (n:Entity {group_id: $group_id, uuid: $uuid})-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(m: Entity {group_id: $group_id})
                 """
@@ -285,7 +285,7 @@ async def determine_entity_community(
     match_query = """
         MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
     """
-    if driver.provider == GraphProvider.KUZU:
+    if driver.provider == GraphProvider.LADYBUG:
         match_query = """
             MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(e:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $entity_uuid})
         """

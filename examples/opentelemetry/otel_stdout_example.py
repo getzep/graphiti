@@ -26,7 +26,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
 from graphiti_core import Graphiti
-from graphiti_core.driver.kuzu_driver import KuzuDriver
+from graphiti_core.driver.ladybug_driver import LadybugDriver
 from graphiti_core.nodes import EpisodeType
 
 logging.basicConfig(
@@ -51,9 +51,9 @@ async def main():
 
     print('OpenTelemetry stdout tracing enabled\n')
 
-    kuzu_driver = KuzuDriver()
+    ladybug_driver = LadybugDriver()
     graphiti = Graphiti(
-        graph_driver=kuzu_driver, tracer=otel_tracer, trace_span_prefix='graphiti.example'
+        graph_driver=ladybug_driver, tracer=otel_tracer, trace_span_prefix='graphiti.example'
     )
 
     try:
