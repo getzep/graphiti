@@ -25,7 +25,7 @@ from typing_extensions import LiteralString
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
-from graphiti_core.decorators import handle_multiple_group_ids
+from graphiti_core.decorators import handle_multiple_group_ids, handle_single_group_id
 from graphiti_core.driver.driver import GraphDriver
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 from graphiti_core.edges import (
@@ -340,7 +340,13 @@ class Graphiti:
         """
         await self.driver.close()
 
-    async def _get_or_create_saga(self, saga_name: str, group_id: str, now: datetime) -> SagaNode:
+    async def _get_or_create_saga(
+        self,
+        saga_name: str,
+        group_id: str,
+        now: datetime,
+        driver: GraphDriver | None = None,
+    ) -> SagaNode:
         """
         Get an existing saga by name or create a new one.
 
@@ -352,14 +358,17 @@ class Graphiti:
             The group id for the saga.
         now : datetime
             The current timestamp for creation.
+        driver : GraphDriver | None
+            Optional. The graph driver to use. If not provided, uses self.clients.driver.
 
         Returns
         -------
         SagaNode
             The existing or newly created saga node.
         """
+        driver = driver or self.clients.driver
         # Query for existing saga with this name in the group
-        records, _, _ = await self.driver.execute_query(
+        records, _, _ = await driver.execute_query(
             """
             MATCH (s:Saga {name: $name, group_id: $group_id})
             RETURN s.uuid AS uuid, s.name AS name, s.group_id AS group_id, s.created_at AS created_at
@@ -387,7 +396,7 @@ class Graphiti:
             group_id=group_id,
             created_at=now,
         )
-        await saga.save(self.driver)
+        await saga.save(driver)
         return saga
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
@@ -457,6 +466,7 @@ class Graphiti:
         nodes: list[EntityNode],
         uuid_map: dict[str, str],
         custom_extraction_instructions: str | None = None,
+        driver: GraphDriver | None = None,
     ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
         """Extract edges from episode and resolve against existing graph.
 
@@ -468,8 +478,14 @@ class Graphiti:
             - invalidated_edges: Edges invalidated by new information
             - new_edges: Only edges that are new to the graph (not duplicates)
         """
+        clients = (
+            self.clients.model_copy(update={'driver': driver})
+            if driver is not None
+            else self.clients
+        )
+
         extracted_edges = await extract_edges(
-            self.clients,
+            clients,
             episode,
             extracted_nodes,
             previous_episodes,
@@ -482,7 +498,7 @@ class Graphiti:
         edges = resolve_edge_pointers(extracted_edges, uuid_map)
 
         resolved_edges, invalidated_edges, new_edges = await resolve_extracted_edges(
-            self.clients,
+            clients,
             edges,
             episode,
             nodes,
@@ -501,6 +517,7 @@ class Graphiti:
         group_id: str,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        driver: GraphDriver | None = None,
     ) -> tuple[list[EpisodicEdge], EpisodicNode]:
         """Process and save episode data to the graph.
 
@@ -524,7 +541,10 @@ class Graphiti:
             Optional. UUID of the previous episode in the saga. If provided, skips
             the database query to find the most recent episode. Useful for efficiently
             adding multiple episodes to the same saga in sequence.
+        driver : GraphDriver | None
+            Optional. The graph driver to use. If not provided, uses self.clients.driver.
         """
+        driver = driver or self.clients.driver
         episodic_edges = build_episodic_edges(nodes, episode.uuid, now)
         episode.entity_edges = [edge.uuid for edge in entity_edges]
 
@@ -532,7 +552,7 @@ class Graphiti:
             episode.content = ''
 
         await add_nodes_and_edges_bulk(
-            self.driver,
+            driver,
             [episode],
             episodic_edges,
             nodes,
@@ -544,7 +564,9 @@ class Graphiti:
         if saga is not None:
             # Get or create saga node based on input type
             if isinstance(saga, str):
-                saga_node = await self._get_or_create_saga(saga, group_id, now)
+                saga_node = await self._get_or_create_saga(
+                    saga, group_id, now, driver=driver
+                )
             else:
                 saga_node = saga
 
@@ -552,7 +574,7 @@ class Graphiti:
             previous_episode_uuid: str | None = saga_previous_episode_uuid
             if previous_episode_uuid is None:
                 # Find the most recent episode in the saga (excluding the current one)
-                previous_episode_records, _, _ = await self.driver.execute_query(
+                previous_episode_records, _, _ = await driver.execute_query(
                     """
                     MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                     WHERE e.uuid <> $current_episode_uuid
@@ -575,7 +597,7 @@ class Graphiti:
                     group_id=group_id,
                     created_at=now,
                 )
-                await next_episode_edge.save(self.driver)
+                await next_episode_edge.save(driver)
 
             # Create HAS_EPISODE edge from saga to the new episode
             has_episode_edge = HasEpisodeEdge(
@@ -584,7 +606,7 @@ class Graphiti:
                 group_id=group_id,
                 created_at=now,
             )
-            await has_episode_edge.save(self.driver)
+            await has_episode_edge.save(driver)
 
         return episodic_edges, episode
 
@@ -596,15 +618,22 @@ class Graphiti:
         entity_types: dict[str, type[BaseModel]] | None,
         excluded_entity_types: list[str] | None,
         custom_extraction_instructions: str | None = None,
+        driver: GraphDriver | None = None,
     ) -> tuple[
         dict[str, list[EntityNode]],
         dict[str, str],
         list[list[EntityEdge]],
     ]:
         """Extract nodes and edges from all episodes and deduplicate."""
+        clients = (
+            self.clients.model_copy(update={'driver': driver})
+            if driver is not None
+            else self.clients
+        )
+
         # Extract all nodes and edges for each episode
         extracted_nodes_bulk, extracted_edges_bulk = await extract_nodes_and_edges_bulk(
-            self.clients,
+            clients,
             episode_context,
             edge_type_map=edge_type_map,
             edge_types=edge_types,
@@ -615,7 +644,7 @@ class Graphiti:
 
         # Dedupe extracted nodes in memory
         nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
-            self.clients, extracted_nodes_bulk, episode_context, entity_types
+            clients, extracted_nodes_bulk, episode_context, entity_types
         )
 
         return nodes_by_episode, uuid_map, extracted_edges_bulk
@@ -629,8 +658,15 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None,
         edge_type_map: dict[tuple[str, str], list[str]],
         episodes: list[EpisodicNode],
+        driver: GraphDriver | None = None,
     ) -> tuple[list[EntityNode], list[EntityEdge], list[EntityEdge], dict[str, str]]:
         """Resolve nodes and edges against the existing graph."""
+        clients = (
+            self.clients.model_copy(update={'driver': driver})
+            if driver is not None
+            else self.clients
+        )
+
         nodes_by_uuid: dict[str, EntityNode] = {
             node.uuid: node for nodes in nodes_by_episode.values() for node in nodes
         }
@@ -650,7 +686,7 @@ class Graphiti:
         node_results = await semaphore_gather(
             *[
                 resolve_extracted_nodes(
-                    self.clients,
+                    clients,
                     nodes_by_episode_unique[episode.uuid],
                     episode,
                     previous_episodes,
@@ -683,7 +719,7 @@ class Graphiti:
         hydrated_nodes_results: list[list[EntityNode]] = await semaphore_gather(
             *[
                 extract_attributes_from_nodes(
-                    self.clients,
+                    clients,
                     nodes_by_episode_unique[episode.uuid],
                     episode,
                     previous_episodes,
@@ -710,7 +746,7 @@ class Graphiti:
         edge_results = await semaphore_gather(
             *[
                 resolve_extracted_edges(
-                    self.clients,
+                    clients,
                     edges_by_episode_unique[episode.uuid],
                     episode,
                     final_hydrated_nodes,
@@ -785,6 +821,7 @@ class Graphiti:
 
         return await retrieve_episodes(driver, reference_time, last_n, group_ids, source, saga)
 
+    @handle_single_group_id
     async def add_episode(
         self,
         name: str,
@@ -803,6 +840,7 @@ class Graphiti:
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
         saga_previous_episode_uuid: str | None = None,
+        driver: GraphDriver | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -874,6 +912,8 @@ class Graphiti:
         """
         start = time()
         now = utc_now()
+        driver = driver or self.clients.driver
+        clients = self.clients.model_copy(update={'driver': driver})
 
         validate_entity_types(entity_types)
         validate_excluded_entity_types(excluded_entity_types, entity_types)
@@ -881,13 +921,9 @@ class Graphiti:
         if group_id is None:
             # if group_id is None, use the default group id by the provider
             # and the preset database name will be used
-            group_id = get_default_group_id(self.driver.provider)
+            group_id = get_default_group_id(driver.provider)
         else:
             validate_group_id(group_id)
-            if group_id != self.driver._database:
-                # if group_id is provided, use it as the database name
-                self.driver = self.driver.clone(database=group_id)
-                self.clients.driver = self.driver
 
         with self.tracer.start_span('add_episode') as span:
             try:
@@ -900,12 +936,12 @@ class Graphiti:
                         source=source,
                     )
                     if previous_episode_uuids is None
-                    else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
+                    else await EpisodicNode.get_by_uuids(driver, previous_episode_uuids)
                 )
 
                 # Get or create episode
                 episode = (
-                    await EpisodicNode.get_by_uuid(self.driver, uuid)
+                    await EpisodicNode.get_by_uuid(driver, uuid)
                     if uuid is not None
                     else EpisodicNode(
                         name=name,
@@ -928,7 +964,7 @@ class Graphiti:
 
                 # Extract and resolve nodes
                 extracted_nodes = await extract_nodes(
-                    self.clients,
+                    clients,
                     episode,
                     previous_episodes,
                     entity_types,
@@ -937,7 +973,7 @@ class Graphiti:
                 )
 
                 nodes, uuid_map, _ = await resolve_extracted_nodes(
-                    self.clients,
+                    clients,
                     extracted_nodes,
                     episode,
                     previous_episodes,
@@ -959,6 +995,7 @@ class Graphiti:
                     nodes,
                     uuid_map,
                     custom_extraction_instructions,
+                    driver=driver,
                 )
 
                 entity_edges = resolved_edges + invalidated_edges
@@ -966,7 +1003,7 @@ class Graphiti:
                 # Extract node attributes - only pass new edges for summary generation
                 # to avoid duplicating facts that already exist in the graph
                 hydrated_nodes = await extract_attributes_from_nodes(
-                    self.clients,
+                    clients,
                     nodes,
                     episode,
                     previous_episodes,
@@ -983,6 +1020,7 @@ class Graphiti:
                     group_id,
                     saga,
                     saga_previous_episode_uuid,
+                    driver=driver,
                 )
 
                 # Update communities if requested
@@ -991,7 +1029,7 @@ class Graphiti:
                 if update_communities:
                     communities, community_edges = await semaphore_gather(
                         *[
-                            update_community(self.driver, self.llm_client, self.embedder, node)
+                            update_community(driver, self.llm_client, self.embedder, node)
                             for node in nodes
                         ],
                         max_coroutines=self.max_coroutines,
@@ -1034,6 +1072,7 @@ class Graphiti:
                 span.record_exception(e)
                 raise e
 
+    @handle_single_group_id
     async def add_episode_bulk(
         self,
         bulk_episodes: list[RawEpisode],
@@ -1044,6 +1083,7 @@ class Graphiti:
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         custom_extraction_instructions: str | None = None,
         saga: str | SagaNode | None = None,
+        driver: GraphDriver | None = None,
     ) -> AddBulkEpisodeResults:
         """
         Process multiple episodes in bulk and update the graph.
@@ -1098,6 +1138,9 @@ class Graphiti:
         If these operations are required, use the `add_episode` method instead for each
         individual episode.
         """
+        driver = driver or self.clients.driver
+        clients = self.clients.model_copy(update={'driver': driver})
+
         with self.tracer.start_span('add_episode_bulk') as bulk_span:
             bulk_span.add_attributes({'episode.count': len(bulk_episodes)})
 
@@ -1107,13 +1150,9 @@ class Graphiti:
 
                 # if group_id is None, use the default group id by the provider
                 if group_id is None:
-                    group_id = get_default_group_id(self.driver.provider)
+                    group_id = get_default_group_id(driver.provider)
                 else:
                     validate_group_id(group_id)
-                    if group_id != self.driver._database:
-                        # if group_id is provided, use it as the database name
-                        self.driver = self.driver.clone(database=group_id)
-                        self.clients.driver = self.driver
 
                 # Create default edge type map
                 edge_type_map_default = (
@@ -1123,7 +1162,7 @@ class Graphiti:
                 )
 
                 episodes = [
-                    await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
+                    await EpisodicNode.get_by_uuid(driver, episode.uuid)
                     if episode.uuid is not None
                     else EpisodicNode(
                         name=episode.name,
@@ -1140,7 +1179,7 @@ class Graphiti:
 
                 # Save all episodes
                 await add_nodes_and_edges_bulk(
-                    driver=self.driver,
+                    driver=driver,
                     episodic_nodes=episodes,
                     episodic_edges=[],
                     entity_nodes=[],
@@ -1149,7 +1188,7 @@ class Graphiti:
                 )
 
                 # Get previous episode context for each episode
-                episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
+                episode_context = await retrieve_previous_episodes_bulk(driver, episodes)
 
                 # Extract and dedupe nodes and edges
                 (
@@ -1163,6 +1202,7 @@ class Graphiti:
                     entity_types,
                     excluded_entity_types,
                     custom_extraction_instructions,
+                    driver=driver,
                 )
 
                 # Create Episodic Edges
@@ -1176,7 +1216,7 @@ class Graphiti:
                 ]
 
                 edges_by_episode = await dedupe_edges_bulk(
-                    self.clients,
+                    clients,
                     extracted_edges_bulk_updated,
                     episode_context,
                     [],
@@ -1198,6 +1238,7 @@ class Graphiti:
                     edge_types,
                     edge_type_map or edge_type_map_default,
                     episodes,
+                    driver=driver,
                 )
 
                 # Resolved pointers for episodic edges
@@ -1205,7 +1246,7 @@ class Graphiti:
 
                 # save data to KG
                 await add_nodes_and_edges_bulk(
-                    self.driver,
+                    driver,
                     episodes,
                     resolved_episodic_edges,
                     final_hydrated_nodes,
@@ -1217,7 +1258,9 @@ class Graphiti:
                 if saga is not None:
                     # Get or create saga node based on input type
                     if isinstance(saga, str):
-                        saga_node = await self._get_or_create_saga(saga, group_id, now)
+                        saga_node = await self._get_or_create_saga(
+                            saga, group_id, now, driver=driver
+                        )
                     else:
                         saga_node = saga
 
@@ -1225,7 +1268,7 @@ class Graphiti:
                     sorted_episodes = sorted(episodes, key=lambda e: e.valid_at)
 
                     # Find the most recent episode already in the saga
-                    previous_episode_records, _, _ = await self.driver.execute_query(
+                    previous_episode_records, _, _ = await driver.execute_query(
                         """
                         MATCH (s:Saga {uuid: $saga_uuid})-[:HAS_EPISODE]->(e:Episodic)
                         RETURN e.uuid AS uuid
@@ -1249,7 +1292,7 @@ class Graphiti:
                                 group_id=group_id,
                                 created_at=now,
                             )
-                            await next_episode_edge.save(self.driver)
+                            await next_episode_edge.save(driver)
 
                         # Create HAS_EPISODE edge from saga to episode
                         has_episode_edge = HasEpisodeEdge(
@@ -1258,7 +1301,7 @@ class Graphiti:
                             group_id=group_id,
                             created_at=now,
                         )
-                        await has_episode_edge.save(self.driver)
+                        await has_episode_edge.save(driver)
 
                         # Update previous_episode_uuid for the next iteration
                         previous_episode_uuid = episode.uuid
