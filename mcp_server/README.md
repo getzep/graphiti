@@ -238,8 +238,30 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `AZURE_OPENAI_API_VERSION`: Optional Azure OpenAI API version
 - `USE_AZURE_AD`: Optional use Azure Managed Identities for authentication
 - `SEMAPHORE_LIMIT`: Episode processing concurrency. See [Concurrency and LLM Provider 429 Rate Limit Errors](#concurrency-and-llm-provider-429-rate-limit-errors)
+- `MCP_ALLOWED_HOSTS`: Comma-separated list of allowed hosts for MCP connections (e.g., `myhost.local:*,192.168.1.100:8000`). By default, only localhost is allowed due to DNS rebinding protection.
+- `MCP_DISABLE_DNS_PROTECTION`: Set to `true` to disable DNS rebinding protection entirely (not recommended for production).
 
 You can set these variables in a `.env` file in the project directory.
+
+#### Network Access Configuration
+
+The MCP server includes DNS rebinding protection that validates incoming Host headers. By default, only localhost connections (`localhost`, `127.0.0.1`, `[::1]`) are permitted.
+
+To allow access from other hosts (e.g., when running in Docker or accessing from another machine on your network), set the `MCP_ALLOWED_HOSTS` environment variable:
+
+```bash
+# Allow access from a specific host
+MCP_ALLOWED_HOSTS=gateway.local:8000
+
+# Allow access from multiple hosts (wildcard port)
+MCP_ALLOWED_HOSTS=gateway.local:*,192.168.1.50:*
+
+# In Docker Compose
+environment:
+  - MCP_ALLOWED_HOSTS=host.docker.internal:*
+```
+
+Host patterns support wildcards for ports using `hostname:*` syntax.
 
 ## Running the Server
 
