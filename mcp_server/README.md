@@ -21,8 +21,9 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
-- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
+- **Multiple LLM Providers**: Support for OpenAI, OpenAI-compatible (Ollama/vLLM), Anthropic, Gemini, Groq, and Azure OpenAI
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
+- **Multiple Reranker Providers**: Support for OpenAI, Gemini, and local BGE reranker
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
@@ -164,7 +165,7 @@ server:
   transport: "http"  # Default. Options: stdio, http
 
 llm:
-  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
+  provider: "openai"  # or "openai_generic", "anthropic", "gemini", "groq", "azure_openai"
   model: "gpt-4.1"  # Default model
 
 database:
@@ -173,21 +174,43 @@ database:
 
 ### Using Ollama for Local LLM
 
-To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint:
+To use Ollama with the MCP server, use the `openai_generic` provider:
 
 ```yaml
 llm:
-  provider: "openai"
+  provider: "openai_generic"
   model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
+  providers:
+    openai:
+      api_key: "not-needed"
+      api_url: "http://localhost:11434/v1"
 
 embedder:
   provider: "sentence_transformers"  # recommended for local setup
   model: "all-MiniLM-L6-v2"
+
+reranker:
+  provider: "bge"  # Local reranker (optional)
 ```
 
+**Note:** The `openai_generic` provider is for OpenAI-compatible endpoints (Ollama, vLLM, LM Studio) and is optimized for local models with higher token limits (16K vs 8K).
+
 Make sure Ollama is running locally with: `ollama serve`
+
+### Choosing Providers
+
+**LLM Providers:**
+- **openai** - Official OpenAI API with support for reasoning models (o1, o3, gpt-5)
+- **openai_generic** - OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, LocalAI)
+- **azure_openai** - Azure OpenAI Service
+- **anthropic** - Anthropic Claude API
+- **gemini** - Google Gemini API
+- **groq** - Groq API
+
+**Reranker Providers:**
+- **openai** - Uses OpenAI's LLM for reranking (default, requires API key)
+- **gemini** - Uses Gemini's LLM for reranking (requires API key)
+- **bge** - Local CPU-based reranker using sentence-transformers (no API key needed, fully local)
 
 ### Entity Types
 

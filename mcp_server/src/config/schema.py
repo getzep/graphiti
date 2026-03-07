@@ -173,6 +173,25 @@ class EmbedderConfig(BaseModel):
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
+class RerankerProvidersConfig(BaseModel):
+    """Reranker providers configuration."""
+
+    openai: OpenAIProviderConfig | None = None
+    gemini: GeminiProviderConfig | None = None
+    # BGE has no config - it's local/CPU-only
+
+
+class RerankerConfig(BaseModel):
+    """Reranker (cross-encoder) configuration."""
+
+    provider: str = Field(default='openai', description='Reranker provider')
+    model: str | None = Field(
+        default=None,
+        description='Model name (used by Gemini reranker, default: gemini-2.5-flash-lite)',
+    )
+    providers: RerankerProvidersConfig = Field(default_factory=RerankerProvidersConfig)
+
+
 class Neo4jProviderConfig(BaseModel):
     """Neo4j provider configuration."""
 
@@ -232,6 +251,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
