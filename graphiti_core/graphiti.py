@@ -564,9 +564,7 @@ class Graphiti:
         if saga is not None:
             # Get or create saga node based on input type
             if isinstance(saga, str):
-                saga_node = await self._get_or_create_saga(
-                    saga, group_id, now, driver=driver
-                )
+                saga_node = await self._get_or_create_saga(saga, group_id, now, driver=driver)
             else:
                 saga_node = saga
 

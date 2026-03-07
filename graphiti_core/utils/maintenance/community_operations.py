@@ -207,9 +207,7 @@ async def build_community(
     )
     community_edges = build_community_edges(community_cluster, community_node, now)
 
-    logger.debug(
-        f'Built community {community_node.uuid} with {len(community_edges)} edges'
-    )
+    logger.debug(f'Built community {community_node.uuid} with {len(community_edges)} edges')
 
     return community_node, community_edges
 
