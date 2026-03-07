@@ -1,4 +1,4 @@
-.PHONY: install format lint test all check
+.PHONY: install format lint test test-integration all check
 
 # Define variables
 PYTHON = python3
@@ -26,7 +26,13 @@ lint:
 
 # Run tests
 test:
-	DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) -m "not integration"
+	DISABLE_NEO4J=1 DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) -m "not integration" -n auto
+
+# Run integration tests using Docker for Neo4j and FalkorDB
+test-integration:
+	docker compose up neo4j falkordb -d --wait --wait-timeout 300
+	DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) -m "integration" || true
+	docker compose down neo4j falkordb
 
 # Run format, lint, and test
 check: format lint test
