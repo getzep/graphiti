@@ -167,7 +167,7 @@ llm:
   provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
   model: "gpt-4.1"  # Default model
   small_model: "gpt-4.1-mini"  # Optional: Override small model for lightweight tasks
-                               # Auto-detected if not set (gpt-4.1-mini or gpt-5-nano)
+                               # Defaults to the same model as `model` if not set
 
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
@@ -200,7 +200,7 @@ embedder:
       api_url: "http://localhost:11434/v1"
 ```
 
-**Important**: The `small_model` parameter is critical for local LLM setups. Graphiti uses a "small model" for lightweight tasks like entity deduplication. Without setting this, it defaults to `gpt-4.1-mini` which doesn't exist on Ollama.
+**Important**: The `small_model` parameter is critical for local LLM setups. Graphiti uses a "small model" for lightweight tasks like entity deduplication. Without setting this, it defaults to the same model as `model` — so for Ollama, simply set both `model` and `small_model` to the same local model name.
 
 Make sure Ollama is running locally with: `ollama serve`
 
