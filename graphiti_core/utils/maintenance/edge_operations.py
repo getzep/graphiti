@@ -62,7 +62,7 @@ def build_episodic_edges(
         for node in entity_nodes
     ]
 
-    logger.debug(f'Built {len(episodic_edges)} episodic edges')
+    logger.debug(f'Built episodic edges: {episodic_edges}')
 
     return episodic_edges
 
@@ -154,22 +154,22 @@ async def extract_edges(
         # Validate LLM-returned names exist in the nodes list
         if source_name not in name_to_node:
             logger.warning(
-                'Source entity not found in nodes for edge relation: %s',
-                edge_data.relation_type,
+                f'Source entity name "{source_name}" not found in nodes '
+                f'for edge {edge_data.relation_type}'
             )
             continue
 
         if target_name not in name_to_node:
             logger.warning(
-                'Target entity not found in nodes for edge relation: %s',
-                edge_data.relation_type,
+                f'Target entity name "{target_name}" not found in nodes '
+                f'for edge {edge_data.relation_type}'
             )
             continue
 
         edges_data.append(edge_data)
 
     end = time()
-    logger.debug(f'Extracted {len(edges_data)} new edges in {(end - start) * 1000:.0f} ms')
+    logger.debug(f'Extracted new edges: {edges_data} in {(end - start) * 1000} ms')
 
     if len(edges_data) == 0:
         return []
@@ -192,7 +192,9 @@ async def extract_edges(
         target_node = name_to_node.get(edge_data.target_entity_name)
 
         if source_node is None or target_node is None:
-            logger.warning('Could not find source or target node for extracted edge')
+            logger.warning(
+                f'Could not find nodes for edge: {edge_data.source_entity_name} -> {edge_data.target_entity_name}'
+            )
             continue
 
         source_node_uuid = source_node.uuid
@@ -226,10 +228,10 @@ async def extract_edges(
         )
         edges.append(edge)
         logger.debug(
-            f'Created new edge {edge.uuid} from {edge.source_node_uuid} to {edge.target_node_uuid}'
+            f'Created new edge: {edge.name} from (UUID: {edge.source_node_uuid}) to (UUID: {edge.target_node_uuid})'
         )
 
-    logger.debug(f'Extracted edges: {[e.uuid for e in edges]}')
+    logger.debug(f'Extracted edges: {[(e.name, e.uuid) for e in edges]}')
 
     return edges
 
@@ -321,7 +323,7 @@ async def resolve_extracted_edges(
         edge_invalidation_candidates.append(deduplicated)
 
     logger.debug(
-        f'Related edges: {[e.uuid for edges_lst in related_edges_lists for e in edges_lst]}'
+        f'Related edges lists: {[(e.name, e.uuid) for edges_lst in related_edges_lists for e in edges_lst]}'
     )
 
     # Build entity hash table
@@ -411,8 +413,8 @@ async def resolve_extracted_edges(
         if resolved_edge.uuid == extracted_edge.uuid:
             new_edges.append(resolved_edge)
 
-    logger.debug(f'Resolved edges: {[e.uuid for e in resolved_edges]}')
-    logger.debug(f'New edges (non-duplicates): {[e.uuid for e in new_edges]}')
+    logger.debug(f'Resolved edges: {[(e.name, e.uuid) for e in resolved_edges]}')
+    logger.debug(f'New edges (non-duplicates): {[(e.name, e.uuid) for e in new_edges]}')
 
     await semaphore_gather(
         create_entity_edge_embeddings(embedder, resolved_edges),
@@ -491,24 +493,6 @@ async def resolve_extracted_edge(
         The resolved edge, any duplicates, and edges to invalidate.
     """
     if len(related_edges) == 0 and len(existing_edges) == 0:
-        # Still extract custom attributes even when no dedup/invalidation is needed
-        edge_model = (
-            edge_type_candidates.get(extracted_edge.name) if edge_type_candidates else None
-        )
-        if edge_model is not None and len(edge_model.model_fields) != 0:
-            edge_attributes_context = {
-                'fact': extracted_edge.fact,
-                'reference_time': episode.valid_at if episode is not None else None,
-                'existing_attributes': extracted_edge.attributes,
-            }
-            edge_attributes_response = await llm_client.generate_response(
-                prompt_library.extract_edges.extract_attributes(edge_attributes_context),
-                response_model=edge_model,  # type: ignore
-                model_size=ModelSize.small,
-                prompt_name='extract_edges.extract_attributes',
-            )
-            extracted_edge.attributes = edge_attributes_response
-
         return extracted_edge, [], []
 
     # Fast path: if the fact text and endpoints already exist verbatim, reuse the matching edge.
@@ -628,7 +612,7 @@ async def resolve_extracted_edge(
 
     end = time()
     logger.debug(
-        f'Resolved Edge: {extracted_edge.uuid} -> {resolved_edge.uuid}, in {(end - start) * 1000} ms'
+        f'Resolved Edge: {extracted_edge.name} is {resolved_edge.name}, in {(end - start) * 1000} ms'
     )
 
     now = utc_now()

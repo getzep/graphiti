@@ -207,9 +207,7 @@ async def build_community(
     )
     community_edges = build_community_edges(community_cluster, community_node, now)
 
-    logger.debug(
-        f'Built community {community_node.uuid} with {len(community_edges)} edges'
-    )
+    logger.debug((community_node, community_edges))
 
     return community_node, community_edges
 
@@ -255,6 +253,12 @@ async def remove_communities(driver: GraphDriver):
         DETACH DELETE c
         """
     )
+
+    if driver.vector_store is not None:
+        try:
+            await driver.vector_store.delete_community_nodes()
+        except Exception:
+            logger.warning('Failed to remove communities from vector store', exc_info=True)
 
 
 async def determine_entity_community(

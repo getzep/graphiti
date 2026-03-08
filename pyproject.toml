@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.28.1"
+version = "0.27.2pre1"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -13,6 +13,7 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "pydantic>=2.11.5",
     "neo4j>=5.26.0",
+    "diskcache>=5.6.3",
     "openai>=1.91.0",
     "tenacity>=9.0.0",
     "numpy>=1.0.0",
@@ -34,6 +35,7 @@ voyageai = ["voyageai>=0.2.3"]
 gliner2 = ["gliner2>=1.2.0; python_version>='3.11'"]
 neo4j-opensearch = ["boto3>=1.39.16", "opensearch-py>=3.0.0"]
 sentence-transformers = ["sentence-transformers>=3.2.1"]
+milvus = ["pymilvus>=2.5.3"]
 neptune = ["langchain-aws>=0.2.29", "opensearch-py>=3.0.0", "boto3>=1.39.16"]
 tracing = ["opentelemetry-api>=1.20.0", "opentelemetry-sdk>=1.20.0"]
 dev = [
@@ -46,8 +48,10 @@ dev = [
     "boto3>=1.39.16",
     "opensearch-py>=3.0.0",
     "langchain-aws>=0.2.29",
+    "pymilvus>=2.5.3",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
+    "diskcache-stubs>=5.6.3.6.20240818",
     "langgraph>=0.2.15",
     "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
