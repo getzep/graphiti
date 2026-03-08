@@ -49,6 +49,9 @@ DEFAULT_SMALL_MODEL = 'gemini-2.5-flash-lite'
 
 # Maximum output tokens for different Gemini models
 GEMINI_MODEL_MAX_TOKENS = {
+    # Gemini 3.1 models
+    'gemini-3.1-pro-preview': 65536,
+    'gemini-3.1-flash-lite-preview': 65536,
     # Gemini 3 (preview) models
     'gemini-3-pro-preview': 65536,
     'gemini-3-flash-preview': 65536,
