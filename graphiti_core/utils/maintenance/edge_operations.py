@@ -275,7 +275,9 @@ async def resolve_extracted_edges(
 
     valid_edges_list: list[list[EntityEdge]] = await semaphore_gather(
         *[
-            EntityEdge.get_between_nodes(driver, edge.source_node_uuid, edge.target_node_uuid)
+            EntityEdge.get_between_nodes_bidirectional(
+                driver, edge.source_node_uuid, edge.target_node_uuid
+            )
             for edge in extracted_edges
         ]
     )
