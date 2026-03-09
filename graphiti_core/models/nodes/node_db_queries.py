@@ -128,6 +128,15 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
 
 def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: bool = False) -> str:
     match provider:
+        case GraphProvider.ARCADEDB:
+            # ArcadeDB: no dynamic labels, no vector property API.
+            # Embeddings are stored as regular list properties.
+            # Labels are stored as a property in entity_data.
+            return """
+                MERGE (n:Entity {uuid: $entity_data.uuid})
+                SET n = $entity_data
+                RETURN n.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
@@ -184,6 +193,13 @@ def get_entity_node_save_bulk_query(
     provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
 ) -> str | Any:
     match provider:
+        case GraphProvider.ARCADEDB:
+            return """
+                UNWIND $nodes AS node
+                MERGE (n:Entity {uuid: node.uuid})
+                SET n = node
+                RETURN n.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             queries = []
             for node in nodes:
@@ -255,6 +271,19 @@ def get_entity_node_save_bulk_query(
 
 def get_entity_node_return_query(provider: GraphProvider) -> str:
     # `name_embedding` is not returned by default and must be loaded manually using `load_name_embedding()`.
+    if provider == GraphProvider.ARCADEDB:
+        # ArcadeDB: labels stored as a property (single type per vertex),
+        # properties() returns all node properties.
+        return """
+            n.uuid AS uuid,
+            n.name AS name,
+            n.group_id AS group_id,
+            n.labels AS labels,
+            n.created_at AS created_at,
+            n.summary AS summary,
+            properties(n) AS attributes
+        """
+
     if provider == GraphProvider.KUZU:
         return """
             n.uuid AS uuid,
@@ -279,6 +308,14 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
 
 def get_community_node_save_query(provider: GraphProvider) -> str:
     match provider:
+        case GraphProvider.ARCADEDB:
+            # ArcadeDB: embeddings stored as regular list properties
+            return """
+                MERGE (n:Community {uuid: $uuid})
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, summary: $summary,
+                         created_at: $created_at, name_embedding: $name_embedding}
+                RETURN n.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             return """
                 MERGE (n:Community {uuid: $uuid})
