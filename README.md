@@ -135,7 +135,7 @@ particularly suitable for applications requiring real-time interaction and preci
 Requirements:
 
 - Python 3.10 or higher
-- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
+- Neo4j 5.26 / FalkorDB 1.1.2 / Kuzu 0.11.2 / ArcadeDB 26.2.1 / Amazon Neptune Database Cluster or Neptune Analytics Graph + Amazon
   OpenSearch Serverless collection (serves as the full text search backend)
 - OpenAI API key (Graphiti defaults to OpenAI for LLM inference and embedding)
 
@@ -188,6 +188,19 @@ pip install graphiti-core[kuzu]
 
 # or with uv
 uv add graphiti-core[kuzu]
+```
+
+### Installing with ArcadeDB Support
+
+If you plan to use ArcadeDB as your graph database backend, install with the ArcadeDB extra.
+ArcadeDB reuses the `neo4j` Python driver (already a core dependency) via the Bolt protocol, so no
+additional packages are needed:
+
+```bash
+pip install graphiti-core[arcadedb]
+
+# or with uv
+uv add graphiti-core[arcadedb]
 ```
 
 ### Installing with Amazon Neptune Support
@@ -246,7 +259,7 @@ performance.
 For a complete working example, see the [Quickstart Example](./examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
 
-1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, or Kuzu database
+1. Connecting to a Neo4j, Amazon Neptune, FalkorDB, Kuzu, or ArcadeDB database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph (both text and structured JSON)
 4. Searching for relationships (edges) using hybrid search
@@ -386,6 +399,25 @@ driver = NeptuneDriver(host=neptune_uri, aoss_host=aoss_host, port=neptune_port)
 graphiti = Graphiti(graph_driver=driver)
 ```
 
+#### ArcadeDB
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.driver.arcadedb_driver import ArcadeDBDriver
+
+# Create an ArcadeDB driver
+# ArcadeDB 26.2.1+ ships the Bolt protocol on port 2480
+driver = ArcadeDBDriver(
+    uri="bolt://localhost:2480",
+    user="root",
+    password="playwithdata",
+    database="graphiti"  # Optional, defaults to 'graphiti'
+)
+
+# Pass the driver to Graphiti
+graphiti = Graphiti(graph_driver=driver)
+```
+
 ## Graph Driver Architecture
 
 Graphiti uses a pluggable driver architecture so the core framework is backend-agnostic. All database-specific logic
@@ -400,7 +432,7 @@ The driver layer is organized into three tiers:
    defines query execution, session management, index lifecycle, and exposes 11 operations interfaces as `@property`
    accessors.
 
-2. **`GraphProvider` enum** — identifies the backend (`NEO4J`, `FALKORDB`, `KUZU`, `NEPTUNE`). Query builders use this
+2. **`GraphProvider` enum** — identifies the backend (`NEO4J`, `FALKORDB`, `KUZU`, `NEPTUNE`, `ARCADEDB`). Query builders use this
    enum in `match/case` statements to return dialect-specific query strings.
 
 3. **11 Operations ABCs** (`graphiti_core/driver/operations/`) — abstract interfaces covering all CRUD and search
@@ -440,7 +472,9 @@ graphiti_core/driver/
 ├── kuzu_driver.py                   # KuzuDriver
 ├── kuzu/operations/                 # 11 Kuzu implementations + record_parsers.py
 ├── neptune_driver.py                # NeptuneDriver
-└── neptune/operations/              # 11 Neptune implementations
+├── neptune/operations/              # 11 Neptune implementations
+├── arcadedb_driver.py               # ArcadeDBDriver
+└── arcadedb/operations/             # 11 ArcadeDB implementations
 ```
 
 Operations are decoupled from the driver itself — each operation method receives an `executor: QueryExecutor` parameter
@@ -504,6 +538,7 @@ For reference implementations, look at:
 - **FalkorDB** — a lightweight client-server alternative
 - **Kuzu** — example of an embedded/in-process database with dialect differences
 - **Neptune** — example of a cloud backend with an external search index (OpenSearch)
+- **ArcadeDB** — uses the Neo4j Bolt wire protocol with ArcadeDB-specific query adaptations
 
 ## Using Graphiti with Azure OpenAI
 
