@@ -91,6 +91,7 @@ def node_search_filter_query_constructor(
     filter_params: dict[str, Any] = {}
 
     if filters.node_labels is not None:
+        # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
         if provider == GraphProvider.KUZU:
             node_label_filter = 'list_has_all(n.labels, $labels)'
@@ -133,6 +134,7 @@ def edge_search_filter_query_constructor(
         filter_params['edge_uuids'] = filters.edge_uuids
 
     if filters.node_labels is not None:
+        # Defense-in-depth for model_construct()/other validation bypasses.
         validate_node_labels(filters.node_labels)
         if provider == GraphProvider.KUZU:
             node_label_filter = (

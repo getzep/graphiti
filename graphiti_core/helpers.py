@@ -28,7 +28,7 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.errors import GroupIdValidationError
+from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
 
 load_dotenv()
 
@@ -181,11 +181,7 @@ def validate_node_labels(node_labels: list[str] | None) -> bool:
         label for label in node_labels if not SAFE_CYPHER_IDENTIFIER_PATTERN.match(label)
     ]
     if invalid_labels:
-        invalid_label_list = ', '.join(f'"{label}"' for label in invalid_labels)
-        raise ValueError(
-            f'node_labels must start with a letter or underscore and contain only '
-            f'alphanumeric characters or underscores: {invalid_label_list}'
-        )
+        raise NodeLabelValidationError(invalid_labels)
 
     return True
 
