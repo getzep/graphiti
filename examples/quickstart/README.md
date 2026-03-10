@@ -2,7 +2,7 @@
 
 This example demonstrates the basic functionality of Graphiti, including:
 
-1. Connecting to a Neo4j or FalkorDB database
+1. Connecting to a Neo4j, FalkorDB, or Ladybug database
 2. Initializing Graphiti indices and constraints
 3. Adding episodes to the graph
 4. Searching the graph with semantic and keyword matching
@@ -18,6 +18,8 @@ This example demonstrates the basic functionality of Graphiti, including:
   - A local DBMS created and started in Neo4j Desktop  
 - **For FalkorDB**:
   - FalkorDB server running (see [FalkorDB documentation](https://docs.falkordb.com) for setup)
+- **For Ladybug**:
+  - Ladybug runs in-process; no external server required
 - **For Amazon Neptune**:
   - Amazon server running (see [Amazon Neptune documentation](https://aws.amazon.com/neptune/developer-resources/) for setup)
 
@@ -44,6 +46,10 @@ export NEO4J_PASSWORD=password
 # Optional FalkorDB connection parameters (defaults shown)
 export FALKORDB_URI=falkor://localhost:6379
 
+# Optional Ladybug connection parameters
+# Use ':memory:' for ephemeral state, or a filesystem path for persistence
+export LADYBUG_DB=graphiti.lbdb
+
 # Optional Amazon Neptune connection parameters
 NEPTUNE_HOST=your_neptune_host
 NEPTUNE_PORT=your_port_or_8182
@@ -65,13 +71,16 @@ python quickstart_neo4j.py
 # For FalkorDB
 python quickstart_falkordb.py
 
+# For Ladybug
+python quickstart_ladybug.py
+
 # For Amazon Neptune
 python quickstart_neptune.py
 ```
 
 ## What This Example Demonstrates
 
-- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j, Amazon Neptune, or FalkorDB
+- **Graph Initialization**: Setting up the Graphiti indices and constraints in Neo4j, Amazon Neptune, FalkorDB, or Ladybug
 - **Adding Episodes**: Adding text content that will be analyzed and converted into knowledge graph nodes and edges
 - **Edge Search Functionality**: Performing hybrid searches that combine semantic similarity and BM25 retrieval to find relationships (edges)
 - **Graph-Aware Search**: Using the source node UUID from the top search result to rerank additional search results based on graph distance

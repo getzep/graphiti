@@ -25,7 +25,7 @@ trace.set_tracer_provider(provider)
 # Get tracer and pass to Graphiti
 tracer = trace.get_tracer(__name__)
 graphiti = Graphiti(
-    graph_driver=kuzu_driver,
+    graph_driver=ladybug_driver,
     tracer=tracer,
     trace_span_prefix='graphiti.example'
 )

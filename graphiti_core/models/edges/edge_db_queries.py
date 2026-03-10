@@ -28,7 +28,7 @@ EPISODIC_EDGE_SAVE = """
 
 
 def get_episodic_edge_save_bulk_query(provider: GraphProvider) -> str:
-    if provider == GraphProvider.KUZU:
+    if provider == GraphProvider.LADYBUG:
         return """
             MATCH (episode:Episodic {uuid: $source_node_uuid})
             MATCH (node:Entity {uuid: $target_node_uuid})
@@ -81,7 +81,7 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                 SET e.episodes = join($edge_data.episodes, ",")
                 RETURN $edge_data.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.LADYBUG:
             return """
                 MATCH (source:Entity {uuid: $source_uuid})
                 MATCH (target:Entity {uuid: $target_uuid})
@@ -145,7 +145,7 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                 SET r.episodes = join(edge.episodes, ",")
                 RETURN edge.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.LADYBUG:
             return """
                 MATCH (source:Entity {uuid: $source_node_uuid})
                 MATCH (target:Entity {uuid: $target_node_uuid})
@@ -217,7 +217,7 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.invalid_at AS invalid_at,
     """ + (
         'e.attributes AS attributes'
-        if provider == GraphProvider.KUZU
+        if provider == GraphProvider.LADYBUG
         else 'properties(e) AS attributes'
     )
 
@@ -243,7 +243,7 @@ def get_community_edge_save_query(provider: GraphProvider) -> str:
                 SET r.created_at= $created_at
                 RETURN r.uuid AS uuid
             """
-        case GraphProvider.KUZU:
+        case GraphProvider.LADYBUG:
             return """
                 MATCH (community:Community {uuid: $community_uuid})
                 MATCH (node:Entity {uuid: $entity_uuid})

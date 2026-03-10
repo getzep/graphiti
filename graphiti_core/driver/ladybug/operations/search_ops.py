@@ -18,9 +18,9 @@ import logging
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.driver.kuzu.operations.record_parsers import (
-    parse_kuzu_entity_edge,
-    parse_kuzu_entity_node,
+from graphiti_core.driver.ladybug.operations.record_parsers import (
+    parse_ladybug_entity_edge,
+    parse_ladybug_entity_node,
 )
 from graphiti_core.driver.operations.search_ops import SearchOperations
 from graphiti_core.driver.query_executor import QueryExecutor
@@ -52,14 +52,14 @@ logger = logging.getLogger(__name__)
 MAX_QUERY_LENGTH = 128
 
 
-def _build_kuzu_fulltext_query(
+def _build_ladybug_fulltext_query(
     query: str,
     group_ids: list[str] | None = None,  # noqa: ARG001
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
-    """Build a fulltext query string for Kuzu.
+    """Build a fulltext query string for Ladybug.
 
-    Kuzu does not use Lucene syntax. The raw query is returned, truncated if it
+    Ladybug does not use Lucene syntax. The raw query is returned, truncated if it
     exceeds *max_query_length* words.
     """
     words = query.split()
@@ -69,7 +69,7 @@ def _build_kuzu_fulltext_query(
     return truncated
 
 
-class KuzuSearchOperations(SearchOperations):
+class LadybugSearchOperations(SearchOperations):
     # --- Node search ---
 
     async def node_fulltext_search(
@@ -80,12 +80,12 @@ class KuzuSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityNode]:
-        fuzzy_query = _build_kuzu_fulltext_query(query, group_ids)
+        fuzzy_query = _build_ladybug_fulltext_query(query, group_ids)
         if fuzzy_query == '':
             return []
 
         filter_queries, filter_params = node_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -98,7 +98,7 @@ class KuzuSearchOperations(SearchOperations):
 
         cypher = (
             get_nodes_query(
-                'node_name_and_summary', '$query', limit=limit, provider=GraphProvider.KUZU
+                'node_name_and_summary', '$query', limit=limit, provider=GraphProvider.LADYBUG
             )
             + ' WITH node AS n, score'
             + filter_query
@@ -108,7 +108,7 @@ class KuzuSearchOperations(SearchOperations):
             LIMIT $limit
             RETURN
             """
-            + get_entity_node_return_query(GraphProvider.KUZU)
+            + get_entity_node_return_query(GraphProvider.LADYBUG)
         )
 
         records, _, _ = await executor.execute_query(
@@ -118,7 +118,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [parse_kuzu_entity_node(r) for r in records]
+        return [parse_ladybug_entity_node(r) for r in records]
 
     async def node_similarity_search(
         self,
@@ -130,7 +130,7 @@ class KuzuSearchOperations(SearchOperations):
         min_score: float = 0.6,
     ) -> list[EntityNode]:
         filter_queries, filter_params = node_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -149,13 +149,13 @@ class KuzuSearchOperations(SearchOperations):
             + """
             WITH n, """
             + get_vector_cosine_func_query(
-                'n.name_embedding', search_vector_var, GraphProvider.KUZU
+                'n.name_embedding', search_vector_var, GraphProvider.LADYBUG
             )
             + """ AS score
             WHERE score > $min_score
             RETURN
             """
-            + get_entity_node_return_query(GraphProvider.KUZU)
+            + get_entity_node_return_query(GraphProvider.LADYBUG)
             + """
             ORDER BY score DESC
             LIMIT $limit
@@ -170,7 +170,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [parse_kuzu_entity_node(r) for r in records]
+        return [parse_ladybug_entity_node(r) for r in records]
 
     async def node_bfs_search(
         self,
@@ -185,7 +185,7 @@ class KuzuSearchOperations(SearchOperations):
             return []
 
         filter_queries, filter_params = node_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -196,7 +196,7 @@ class KuzuSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' AND ' + (' AND '.join(filter_queries))
 
-        # Kuzu uses RelatesToNode_ as an intermediate node for edges, so each
+        # Ladybug uses RelatesToNode_ as an intermediate node for edges, so each
         # logical hop is actually 2 hops in the graph.  We need 3 separate
         # MATCH queries UNIONed together:
         # 1. Episodic -> MENTIONS -> Entity (direct mention)
@@ -216,7 +216,7 @@ class KuzuSearchOperations(SearchOperations):
                 + """
                 RETURN
                 """
-                + get_entity_node_return_query(GraphProvider.KUZU)
+                + get_entity_node_return_query(GraphProvider.LADYBUG)
                 + """
                 LIMIT $limit
                 """
@@ -241,7 +241,7 @@ class KuzuSearchOperations(SearchOperations):
                 + """
                 RETURN
                 """
-                + get_entity_node_return_query(GraphProvider.KUZU)
+                + get_entity_node_return_query(GraphProvider.LADYBUG)
                 + """
                 LIMIT $limit
                 """
@@ -267,7 +267,7 @@ class KuzuSearchOperations(SearchOperations):
                     + """
                     RETURN
                     """
-                    + get_entity_node_return_query(GraphProvider.KUZU)
+                    + get_entity_node_return_query(GraphProvider.LADYBUG)
                     + """
                     LIMIT $limit
                     """
@@ -285,7 +285,7 @@ class KuzuSearchOperations(SearchOperations):
         seen: set[str] = set()
         unique_nodes: list[EntityNode] = []
         for r in all_records:
-            node = parse_kuzu_entity_node(r)
+            node = parse_ladybug_entity_node(r)
             if node.uuid not in seen:
                 seen.add(node.uuid)
                 unique_nodes.append(node)
@@ -304,12 +304,12 @@ class KuzuSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EntityEdge]:
-        fuzzy_query = _build_kuzu_fulltext_query(query, group_ids)
+        fuzzy_query = _build_ladybug_fulltext_query(query, group_ids)
         if fuzzy_query == '':
             return []
 
         filter_queries, filter_params = edge_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -320,10 +320,10 @@ class KuzuSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
-        # Kuzu FTS for edges queries the RelatesToNode_ label, then we match
+        # Ladybug FTS for edges queries the RelatesToNode_ label, then we match
         # the full pattern to get source (n) and target (m) Entity nodes.
         cypher = (
-            get_relationships_query('edge_name_and_fact', limit=limit, provider=GraphProvider.KUZU)
+            get_relationships_query('edge_name_and_fact', limit=limit, provider=GraphProvider.LADYBUG)
             + """
             WITH node AS e, score
             MATCH (n:Entity)-[:RELATES_TO]->(e)-[:RELATES_TO]->(m:Entity)
@@ -333,7 +333,7 @@ class KuzuSearchOperations(SearchOperations):
             WITH e, score, n, m
             RETURN
             """
-            + get_entity_edge_return_query(GraphProvider.KUZU)
+            + get_entity_edge_return_query(GraphProvider.LADYBUG)
             + """
             ORDER BY score DESC
             LIMIT $limit
@@ -347,7 +347,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [parse_kuzu_entity_edge(r) for r in records]
+        return [parse_ladybug_entity_edge(r) for r in records]
 
     async def edge_similarity_search(
         self,
@@ -361,7 +361,7 @@ class KuzuSearchOperations(SearchOperations):
         min_score: float = 0.6,
     ) -> list[EntityEdge]:
         filter_queries, filter_params = edge_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -388,13 +388,13 @@ class KuzuSearchOperations(SearchOperations):
             + """
             WITH DISTINCT e, n, m, """
             + get_vector_cosine_func_query(
-                'e.fact_embedding', search_vector_var, GraphProvider.KUZU
+                'e.fact_embedding', search_vector_var, GraphProvider.LADYBUG
             )
             + """ AS score
             WHERE score > $min_score
             RETURN
             """
-            + get_entity_edge_return_query(GraphProvider.KUZU)
+            + get_entity_edge_return_query(GraphProvider.LADYBUG)
             + """
             ORDER BY score DESC
             LIMIT $limit
@@ -409,7 +409,7 @@ class KuzuSearchOperations(SearchOperations):
             **filter_params,
         )
 
-        return [parse_kuzu_entity_edge(r) for r in records]
+        return [parse_ladybug_entity_edge(r) for r in records]
 
     async def edge_bfs_search(
         self,
@@ -424,7 +424,7 @@ class KuzuSearchOperations(SearchOperations):
             return []
 
         filter_queries, filter_params = edge_search_filter_query_constructor(
-            search_filter, GraphProvider.KUZU
+            search_filter, GraphProvider.LADYBUG
         )
 
         if group_ids is not None:
@@ -451,7 +451,7 @@ class KuzuSearchOperations(SearchOperations):
                 + """
                 RETURN DISTINCT
                 """
-                + get_entity_edge_return_query(GraphProvider.KUZU)
+                + get_entity_edge_return_query(GraphProvider.LADYBUG)
                 + """
                 LIMIT $limit
                 """
@@ -475,7 +475,7 @@ class KuzuSearchOperations(SearchOperations):
                 + """
                 RETURN DISTINCT
                 """
-                + get_entity_edge_return_query(GraphProvider.KUZU)
+                + get_entity_edge_return_query(GraphProvider.LADYBUG)
                 + """
                 LIMIT $limit
                 """
@@ -493,7 +493,7 @@ class KuzuSearchOperations(SearchOperations):
         seen: set[str] = set()
         unique_edges: list[EntityEdge] = []
         for r in all_records:
-            edge = parse_kuzu_entity_edge(r)
+            edge = parse_ladybug_entity_edge(r)
             if edge.uuid not in seen:
                 seen.add(edge.uuid)
                 unique_edges.append(edge)
@@ -512,7 +512,7 @@ class KuzuSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[EpisodicNode]:
-        fuzzy_query = _build_kuzu_fulltext_query(query, group_ids)
+        fuzzy_query = _build_ladybug_fulltext_query(query, group_ids)
         if fuzzy_query == '':
             return []
 
@@ -523,7 +523,7 @@ class KuzuSearchOperations(SearchOperations):
             filter_params['group_ids'] = group_ids
 
         cypher = (
-            get_nodes_query('episode_content', '$query', limit=limit, provider=GraphProvider.KUZU)
+            get_nodes_query('episode_content', '$query', limit=limit, provider=GraphProvider.LADYBUG)
             + """
             WITH node AS episode, score
             MATCH (e:Episodic)
@@ -555,7 +555,7 @@ class KuzuSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         limit: int = 10,
     ) -> list[CommunityNode]:
-        fuzzy_query = _build_kuzu_fulltext_query(query, group_ids)
+        fuzzy_query = _build_ladybug_fulltext_query(query, group_ids)
         if fuzzy_query == '':
             return []
 
@@ -566,7 +566,7 @@ class KuzuSearchOperations(SearchOperations):
             filter_params['group_ids'] = group_ids
 
         cypher = (
-            get_nodes_query('community_name', '$query', limit=limit, provider=GraphProvider.KUZU)
+            get_nodes_query('community_name', '$query', limit=limit, provider=GraphProvider.LADYBUG)
             + """
             WITH node AS c, score
             WITH c, score
@@ -612,7 +612,7 @@ class KuzuSearchOperations(SearchOperations):
             WITH c,
             """
             + get_vector_cosine_func_query(
-                'c.name_embedding', search_vector_var, GraphProvider.KUZU
+                'c.name_embedding', search_vector_var, GraphProvider.LADYBUG
             )
             + """ AS score
             WHERE score > $min_score
@@ -647,7 +647,7 @@ class KuzuSearchOperations(SearchOperations):
         filtered_uuids = [u for u in node_uuids if u != center_node_uuid]
         scores: dict[str, float] = {center_node_uuid: 0.0}
 
-        # Kuzu does not support UNWIND, so query each UUID individually
+        # Ladybug does not support UNWIND, so query each UUID individually
         cypher = """
         MATCH (center:Entity {uuid: $center_uuid})-[:RELATES_TO]->(:RelatesToNode_)-[:RELATES_TO]-(n:Entity {uuid: $node_uuid})
         RETURN 1 AS score, n.uuid AS uuid
@@ -682,11 +682,11 @@ class KuzuSearchOperations(SearchOperations):
             MATCH (n:Entity)
             WHERE n.uuid IN $uuids
             RETURN
-            """ + get_entity_node_return_query(GraphProvider.KUZU)
+            """ + get_entity_node_return_query(GraphProvider.LADYBUG)
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids)
 
-        node_map = {r['uuid']: parse_kuzu_entity_node(r) for r in records}
+        node_map = {r['uuid']: parse_ladybug_entity_node(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     async def episode_mentions_reranker(
@@ -700,7 +700,7 @@ class KuzuSearchOperations(SearchOperations):
 
         scores: dict[str, float] = {}
 
-        # Kuzu does not support UNWIND, so query each UUID individually
+        # Ladybug does not support UNWIND, so query each UUID individually
         cypher = """
             MATCH (episode:Episodic)-[r:MENTIONS]->(n:Entity {uuid: $node_uuid})
             RETURN count(*) AS score, n.uuid AS uuid
@@ -730,24 +730,24 @@ class KuzuSearchOperations(SearchOperations):
             MATCH (n:Entity)
             WHERE n.uuid IN $uuids
             RETURN
-            """ + get_entity_node_return_query(GraphProvider.KUZU)
+            """ + get_entity_node_return_query(GraphProvider.LADYBUG)
 
         records, _, _ = await executor.execute_query(get_query, uuids=reranked_uuids)
 
-        node_map = {r['uuid']: parse_kuzu_entity_node(r) for r in records}
+        node_map = {r['uuid']: parse_ladybug_entity_node(r) for r in records}
         return [node_map[u] for u in reranked_uuids if u in node_map]
 
     # --- Filter builders ---
 
     def build_node_search_filters(self, search_filters: SearchFilters) -> Any:
         filter_queries, filter_params = node_search_filter_query_constructor(
-            search_filters, GraphProvider.KUZU
+            search_filters, GraphProvider.LADYBUG
         )
         return {'filter_queries': filter_queries, 'filter_params': filter_params}
 
     def build_edge_search_filters(self, search_filters: SearchFilters) -> Any:
         filter_queries, filter_params = edge_search_filter_query_constructor(
-            search_filters, GraphProvider.KUZU
+            search_filters, GraphProvider.LADYBUG
         )
         return {'filter_queries': filter_queries, 'filter_params': filter_params}
 
@@ -759,4 +759,4 @@ class KuzuSearchOperations(SearchOperations):
         group_ids: list[str] | None = None,
         max_query_length: int = 8000,
     ) -> str:
-        return _build_kuzu_fulltext_query(query, group_ids, max_query_length)
+        return _build_ladybug_fulltext_query(query, group_ids, max_query_length)

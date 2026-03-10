@@ -45,7 +45,7 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
 
         async def delete_group_ids(tx):
             labels = ['Entity', 'Episodic', 'Community']
-            if driver.provider == GraphProvider.KUZU:
+            if driver.provider == GraphProvider.LADYBUG:
                 labels.append('RelatesToNode_')
 
             for label in labels:

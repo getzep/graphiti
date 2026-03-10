@@ -17,87 +17,104 @@ limitations under the License.
 import logging
 from typing import Any
 
-from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
+from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.query_executor import QueryExecutor, Transaction
-from graphiti_core.edges import NextEpisodeEdge
-from graphiti_core.errors import EdgeNotFoundError
+from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.helpers import parse_db_date
-from graphiti_core.models.edges.edge_db_queries import (
-    NEXT_EPISODE_EDGE_RETURN,
-    NEXT_EPISODE_EDGE_SAVE,
-)
+from graphiti_core.models.nodes.node_db_queries import SAGA_NODE_RETURN, get_saga_node_save_query
+from graphiti_core.nodes import SagaNode
 
 logger = logging.getLogger(__name__)
 
 
-def _next_episode_edge_from_record(record: Any) -> NextEpisodeEdge:
-    return NextEpisodeEdge(
+def _saga_node_from_record(record: Any) -> SagaNode:
+    return SagaNode(
         uuid=record['uuid'],
+        name=record['name'],
         group_id=record['group_id'],
-        source_node_uuid=record['source_node_uuid'],
-        target_node_uuid=record['target_node_uuid'],
         created_at=parse_db_date(record['created_at']),  # type: ignore[arg-type]
     )
 
 
-class KuzuNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
+class LadybugSagaNodeOperations(SagaNodeOperations):
     async def save(
         self,
         executor: QueryExecutor,
-        edge: NextEpisodeEdge,
+        node: SagaNode,
         tx: Transaction | None = None,
     ) -> None:
+        query = get_saga_node_save_query(GraphProvider.LADYBUG)
         params: dict[str, Any] = {
-            'source_episode_uuid': edge.source_node_uuid,
-            'target_episode_uuid': edge.target_node_uuid,
-            'uuid': edge.uuid,
-            'group_id': edge.group_id,
-            'created_at': edge.created_at,
+            'uuid': node.uuid,
+            'name': node.name,
+            'group_id': node.group_id,
+            'created_at': node.created_at,
         }
         if tx is not None:
-            await tx.run(NEXT_EPISODE_EDGE_SAVE, **params)
+            await tx.run(query, **params)
         else:
-            await executor.execute_query(NEXT_EPISODE_EDGE_SAVE, **params)
+            await executor.execute_query(query, **params)
 
-        logger.debug(f'Saved Edge to Graph: {edge.uuid}')
+        logger.debug(f'Saved Saga Node to Graph: {node.uuid}')
 
     async def save_bulk(
         self,
         executor: QueryExecutor,
-        edges: list[NextEpisodeEdge],
+        nodes: list[SagaNode],
         tx: Transaction | None = None,
         batch_size: int = 100,
     ) -> None:
-        for edge in edges:
-            await self.save(executor, edge, tx=tx)
+        # Ladybug doesn't support UNWIND - iterate and save individually
+        for node in nodes:
+            await self.save(executor, node, tx=tx)
 
     async def delete(
         self,
         executor: QueryExecutor,
-        edge: NextEpisodeEdge,
+        node: SagaNode,
         tx: Transaction | None = None,
     ) -> None:
         query = """
-            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
-            DELETE e
+            MATCH (n:Saga {uuid: $uuid})
+            DETACH DELETE n
         """
         if tx is not None:
-            await tx.run(query, uuid=edge.uuid)
+            await tx.run(query, uuid=node.uuid)
         else:
-            await executor.execute_query(query, uuid=edge.uuid)
+            await executor.execute_query(query, uuid=node.uuid)
 
-        logger.debug(f'Deleted Edge: {edge.uuid}')
+        logger.debug(f'Deleted Node: {node.uuid}')
+
+    async def delete_by_group_id(
+        self,
+        executor: QueryExecutor,
+        group_id: str,
+        tx: Transaction | None = None,
+        batch_size: int = 100,
+    ) -> None:
+        # Ladybug doesn't support IN TRANSACTIONS OF - simple delete
+        query = """
+            MATCH (n:Saga {group_id: $group_id})
+            DETACH DELETE n
+        """
+        if tx is not None:
+            await tx.run(query, group_id=group_id)
+        else:
+            await executor.execute_query(query, group_id=group_id)
 
     async def delete_by_uuids(
         self,
         executor: QueryExecutor,
         uuids: list[str],
         tx: Transaction | None = None,
+        batch_size: int = 100,
     ) -> None:
+        # Ladybug doesn't support IN TRANSACTIONS OF - simple delete
         query = """
-            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
-            WHERE e.uuid IN $uuids
-            DELETE e
+            MATCH (n:Saga)
+            WHERE n.uuid IN $uuids
+            DETACH DELETE n
         """
         if tx is not None:
             await tx.run(query, uuids=uuids)
@@ -108,35 +125,35 @@ class KuzuNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
         self,
         executor: QueryExecutor,
         uuid: str,
-    ) -> NextEpisodeEdge:
+    ) -> SagaNode:
         query = (
             """
-            MATCH (n:Episodic)-[e:NEXT_EPISODE {uuid: $uuid}]->(m:Episodic)
+            MATCH (s:Saga {uuid: $uuid})
             RETURN
             """
-            + NEXT_EPISODE_EDGE_RETURN
+            + SAGA_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuid=uuid)
-        edges = [_next_episode_edge_from_record(r) for r in records]
-        if len(edges) == 0:
-            raise EdgeNotFoundError(uuid)
-        return edges[0]
+        nodes = [_saga_node_from_record(r) for r in records]
+        if len(nodes) == 0:
+            raise NodeNotFoundError(uuid)
+        return nodes[0]
 
     async def get_by_uuids(
         self,
         executor: QueryExecutor,
         uuids: list[str],
-    ) -> list[NextEpisodeEdge]:
+    ) -> list[SagaNode]:
         query = (
             """
-            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
-            WHERE e.uuid IN $uuids
+            MATCH (s:Saga)
+            WHERE s.uuid IN $uuids
             RETURN
             """
-            + NEXT_EPISODE_EDGE_RETURN
+            + SAGA_NODE_RETURN
         )
         records, _, _ = await executor.execute_query(query, uuids=uuids)
-        return [_next_episode_edge_from_record(r) for r in records]
+        return [_saga_node_from_record(r) for r in records]
 
     async def get_by_group_ids(
         self,
@@ -144,21 +161,21 @@ class KuzuNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
-    ) -> list[NextEpisodeEdge]:
-        cursor_clause = 'AND e.uuid < $uuid' if uuid_cursor else ''
+    ) -> list[SagaNode]:
+        cursor_clause = 'AND s.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
         query = (
             """
-            MATCH (n:Episodic)-[e:NEXT_EPISODE]->(m:Episodic)
-            WHERE e.group_id IN $group_ids
+            MATCH (s:Saga)
+            WHERE s.group_id IN $group_ids
             """
             + cursor_clause
             + """
             RETURN
             """
-            + NEXT_EPISODE_EDGE_RETURN
+            + SAGA_NODE_RETURN
             + """
-            ORDER BY e.uuid DESC
+            ORDER BY s.uuid DESC
             """
             + limit_clause
         )
@@ -168,4 +185,4 @@ class KuzuNextEpisodeEdgeOperations(NextEpisodeEdgeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [_next_episode_edge_from_record(r) for r in records]
+        return [_saga_node_from_record(r) for r in records]

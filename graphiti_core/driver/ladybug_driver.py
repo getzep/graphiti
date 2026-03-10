@@ -15,24 +15,37 @@ limitations under the License.
 """
 
 import logging
+from contextlib import suppress
 from typing import Any
 
-import kuzu
+try:
+    import real_ladybug as lb
+
+    if not all(hasattr(lb, attr) for attr in ('Database', 'AsyncConnection', 'Connection')):
+        raise ImportError('real_ladybug package does not expose Ladybug-compatible API')
+except ImportError:
+    import ladybug as lb
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
-from graphiti_core.driver.kuzu.operations.community_edge_ops import KuzuCommunityEdgeOperations
-from graphiti_core.driver.kuzu.operations.community_node_ops import KuzuCommunityNodeOperations
-from graphiti_core.driver.kuzu.operations.entity_edge_ops import KuzuEntityEdgeOperations
-from graphiti_core.driver.kuzu.operations.entity_node_ops import KuzuEntityNodeOperations
-from graphiti_core.driver.kuzu.operations.episode_node_ops import KuzuEpisodeNodeOperations
-from graphiti_core.driver.kuzu.operations.episodic_edge_ops import KuzuEpisodicEdgeOperations
-from graphiti_core.driver.kuzu.operations.graph_ops import KuzuGraphMaintenanceOperations
-from graphiti_core.driver.kuzu.operations.has_episode_edge_ops import KuzuHasEpisodeEdgeOperations
-from graphiti_core.driver.kuzu.operations.next_episode_edge_ops import (
-    KuzuNextEpisodeEdgeOperations,
+from graphiti_core.driver.ladybug.operations.community_edge_ops import (
+    LadybugCommunityEdgeOperations,
 )
-from graphiti_core.driver.kuzu.operations.saga_node_ops import KuzuSagaNodeOperations
-from graphiti_core.driver.kuzu.operations.search_ops import KuzuSearchOperations
+from graphiti_core.driver.ladybug.operations.community_node_ops import (
+    LadybugCommunityNodeOperations,
+)
+from graphiti_core.driver.ladybug.operations.entity_edge_ops import LadybugEntityEdgeOperations
+from graphiti_core.driver.ladybug.operations.entity_node_ops import LadybugEntityNodeOperations
+from graphiti_core.driver.ladybug.operations.episode_node_ops import LadybugEpisodeNodeOperations
+from graphiti_core.driver.ladybug.operations.episodic_edge_ops import LadybugEpisodicEdgeOperations
+from graphiti_core.driver.ladybug.operations.graph_ops import LadybugGraphMaintenanceOperations
+from graphiti_core.driver.ladybug.operations.has_episode_edge_ops import (
+    LadybugHasEpisodeEdgeOperations,
+)
+from graphiti_core.driver.ladybug.operations.next_episode_edge_ops import (
+    LadybugNextEpisodeEdgeOperations,
+)
+from graphiti_core.driver.ladybug.operations.saga_node_ops import LadybugSagaNodeOperations
+from graphiti_core.driver.ladybug.operations.search_ops import LadybugSearchOperations
 from graphiti_core.driver.operations.community_edge_ops import CommunityEdgeOperations
 from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
 from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
@@ -44,11 +57,12 @@ from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeO
 from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
+from graphiti_core.graph_queries import get_fulltext_indices
 
 logger = logging.getLogger(__name__)
 
-# Kuzu requires an explicit schema.
-# As Kuzu currently does not support creating full text indexes on edge properties,
+# Ladybug requires an explicit schema.
+# As Ladybug currently does not support creating full text indexes on edge properties,
 # we work around this by representing (n:Entity)-[:RELATES_TO]->(m:Entity) as
 # (n)-[:RELATES_TO]->(e:RelatesToNode_)-[:RELATES_TO]->(m).
 SCHEMA_QUERIES = """
@@ -132,8 +146,8 @@ SCHEMA_QUERIES = """
 """
 
 
-class KuzuDriver(GraphDriver):
-    provider: GraphProvider = GraphProvider.KUZU
+class LadybugDriver(GraphDriver):
+    provider: GraphProvider = GraphProvider.LADYBUG
     aoss_client: None = None
 
     def __init__(
@@ -142,24 +156,24 @@ class KuzuDriver(GraphDriver):
         max_concurrent_queries: int = 1,
     ):
         super().__init__()
-        self.db = kuzu.Database(db)
+        self.db = lb.Database(db)
 
         self.setup_schema()
 
-        self.client = kuzu.AsyncConnection(self.db, max_concurrent_queries=max_concurrent_queries)
+        self.client = lb.AsyncConnection(self.db, max_concurrent_queries=max_concurrent_queries)
 
-        # Instantiate Kuzu operations
-        self._entity_node_ops = KuzuEntityNodeOperations()
-        self._episode_node_ops = KuzuEpisodeNodeOperations()
-        self._community_node_ops = KuzuCommunityNodeOperations()
-        self._saga_node_ops = KuzuSagaNodeOperations()
-        self._entity_edge_ops = KuzuEntityEdgeOperations()
-        self._episodic_edge_ops = KuzuEpisodicEdgeOperations()
-        self._community_edge_ops = KuzuCommunityEdgeOperations()
-        self._has_episode_edge_ops = KuzuHasEpisodeEdgeOperations()
-        self._next_episode_edge_ops = KuzuNextEpisodeEdgeOperations()
-        self._search_ops = KuzuSearchOperations()
-        self._graph_ops = KuzuGraphMaintenanceOperations()
+        # Instantiate Ladybug operations
+        self._entity_node_ops = LadybugEntityNodeOperations()
+        self._episode_node_ops = LadybugEpisodeNodeOperations()
+        self._community_node_ops = LadybugCommunityNodeOperations()
+        self._saga_node_ops = LadybugSagaNodeOperations()
+        self._entity_edge_ops = LadybugEntityEdgeOperations()
+        self._episodic_edge_ops = LadybugEpisodicEdgeOperations()
+        self._community_edge_ops = LadybugCommunityEdgeOperations()
+        self._has_episode_edge_ops = LadybugHasEpisodeEdgeOperations()
+        self._next_episode_edge_ops = LadybugNextEpisodeEdgeOperations()
+        self._search_ops = LadybugSearchOperations()
+        self._graph_ops = LadybugGraphMaintenanceOperations()
 
     # --- Operations properties ---
 
@@ -210,8 +224,10 @@ class KuzuDriver(GraphDriver):
     async def execute_query(
         self, cypher_query_: str, **kwargs: Any
     ) -> tuple[list[dict[str, Any]] | list[list[dict[str, Any]]], None, None]:
-        params = {k: v for k, v in kwargs.items() if v is not None}
-        # Kuzu does not support these parameters.
+        # Keep None-valued params so nullable placeholders (e.g. $invalid_at)
+        # are still bound when executing prepared statements.
+        params = dict(kwargs)
+        # Ladybug does not support these parameters.
         params.pop('database_', None)
         params.pop('routing_', None)
 
@@ -219,7 +235,7 @@ class KuzuDriver(GraphDriver):
             results = await self.client.execute(cypher_query_, parameters=params)
         except Exception as e:
             params = {k: (v[:5] if isinstance(v, list) else v) for k, v in params.items()}
-            logger.error(f'Error executing Kuzu query: {e}\n{cypher_query_}\n{params}')
+            logger.error(f'Error executing Ladybug query: {e}\n{cypher_query_}\n{params}')
             raise
 
         if not results:
@@ -232,7 +248,7 @@ class KuzuDriver(GraphDriver):
         return dict_results, None, None  # type: ignore
 
     def session(self, _database: str | None = None) -> GraphDriverSession:
-        return KuzuDriverSession(self)
+        return LadybugDriverSession(self)
 
     async def close(self):
         # Do not explicitly close the connection, instead rely on GC.
@@ -242,28 +258,36 @@ class KuzuDriver(GraphDriver):
         pass
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
-        # Kuzu doesn't support dynamic index creation like Neo4j or FalkorDB
+        # Ladybug doesn't support dynamic index creation like Neo4j or FalkorDB
         # Schema and indices are created during setup_schema()
-        # This method is required by the abstract base class but is a no-op for Kuzu
+        # This method is required by the abstract base class but is a no-op for Ladybug
         pass
 
     def setup_schema(self):
-        conn = kuzu.Connection(self.db)
+        conn = lb.Connection(self.db)
+        # Required for QUERY_FTS_INDEX used by Ladybug search queries.
+        with suppress(Exception):
+            conn.execute('INSTALL FTS;')
+        conn.execute('LOAD EXTENSION FTS;')
         conn.execute(SCHEMA_QUERIES)
+        # Ensure fulltext indices expected by search queries exist.
+        for query in get_fulltext_indices(GraphProvider.LADYBUG):
+            with suppress(Exception):
+                conn.execute(query)
         conn.close()
 
 
-class KuzuDriverSession(GraphDriverSession):
-    provider = GraphProvider.KUZU
+class LadybugDriverSession(GraphDriverSession):
+    provider = GraphProvider.LADYBUG
 
-    def __init__(self, driver: KuzuDriver):
+    def __init__(self, driver: LadybugDriver):
         self.driver = driver
 
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        # No cleanup needed for Kuzu, but method must exist.
+        # No cleanup needed for Ladybug, but method must exist.
         pass
 
     async def close(self):
