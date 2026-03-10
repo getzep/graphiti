@@ -23,7 +23,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
@@ -32,7 +32,7 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date
+from graphiti_core.helpers import parse_db_date, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
@@ -93,6 +93,14 @@ class Node(BaseModel, ABC):
     group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator('labels')
+    @classmethod
+    def validate_labels(cls, value: list[str]) -> list[str]:
+        validate_node_labels(value)
+        return value
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
