@@ -8,6 +8,7 @@ supporting index creation, fulltext search, and bulk operations.
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.embedder.client import EMBEDDING_DIM
 
 # Mapping from Neo4j fulltext index names to FalkorDB node labels
 NEO4J_TO_FALKORDB_MAPPING = {
@@ -138,6 +139,28 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
         """CREATE FULLTEXT INDEX edge_name_and_fact IF NOT EXISTS
         FOR ()-[e:RELATES_TO]-() ON EACH [e.name, e.fact, e.group_id]""",
     ]
+
+
+def get_vector_indices(provider: GraphProvider) -> list[LiteralString]:
+    """Return HNSW vector index creation queries for the given provider."""
+    if provider == GraphProvider.FALKORDB:
+        # FalkorDB requires dimension at index creation time.
+        # cast() keeps pyright happy with LiteralString expectations.
+        from typing import cast
+
+        return cast(
+            list[LiteralString],
+            [
+                f'CREATE VECTOR INDEX FOR (n:Entity) ON (n.name_embedding)'
+                f" OPTIONS {{dimension: {EMBEDDING_DIM}, similarityFunction: 'cosine'}}",
+                f'CREATE VECTOR INDEX FOR (n:Community) ON (n.name_embedding)'
+                f" OPTIONS {{dimension: {EMBEDDING_DIM}, similarityFunction: 'cosine'}}",
+                f'CREATE VECTOR INDEX FOR ()-[e:RELATES_TO]-() ON (e.fact_embedding)'
+                f" OPTIONS {{dimension: {EMBEDDING_DIM}, similarityFunction: 'cosine'}}",
+            ],
+        )
+
+    return []
 
 
 def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) -> str:
