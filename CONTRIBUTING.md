@@ -185,6 +185,31 @@ All third-party integrations must be optional dependencies to keep the core libr
 - Place database drivers in `graphiti_core/driver/`
 - Follow existing naming conventions (e.g., `your_service_client.py`)
 
+### Adding a Graph Driver
+
+Graphiti's driver layer is backend-agnostic. To add support for a new graph database, mirror the existing drivers in
+`graphiti_core/driver/` and keep the implementation split between the top-level driver and provider-specific
+operations.
+
+1. Add the new provider to `graphiti_core/driver/driver.py` in `GraphProvider`.
+2. Create `graphiti_core/driver/<backend>_driver.py` implementing the `GraphDriver` interface:
+   `execute_query()`, `session()`, `close()`, `build_indices_and_constraints()`, and `delete_all_indexes()`.
+3. Add `graphiti_core/driver/<backend>/operations/` and implement the operations interfaces from
+   `graphiti_core/driver/operations/`:
+   `EntityNodeOperations`, `EpisodeNodeOperations`, `CommunityNodeOperations`, `SagaNodeOperations`,
+   `EntityEdgeOperations`, `EpisodicEdgeOperations`, `CommunityEdgeOperations`, `HasEpisodeEdgeOperations`,
+   `NextEpisodeEdgeOperations`, `SearchOperations`, and `GraphMaintenanceOperations`.
+4. Expose those concrete operations from the driver via the corresponding `@property` accessors on `GraphDriver`.
+5. Add provider-specific query variants to `graphiti_core/models/nodes/node_db_queries.py` and
+   `graphiti_core/models/edges/edge_db_queries.py`.
+6. If the backend needs connection or transaction management, implement a matching `GraphDriverSession`.
+7. Register the backend dependency in `pyproject.toml` under `[project.optional-dependencies]` and add tests under
+   `tests/driver/`.
+
+For reference implementations, start with `graphiti_core/driver/neo4j_driver.py`,
+`graphiti_core/driver/falkordb_driver.py`, `graphiti_core/driver/kuzu_driver.py`, and
+`graphiti_core/driver/neptune_driver.py`.
+
 ### Testing
 
 - Add comprehensive tests in the appropriate `tests/` subdirectory

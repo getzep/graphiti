@@ -383,15 +383,17 @@ from graphiti_core.driver.neptune_driver import NeptuneDriver
 
 # Create a Neptune driver
 driver = NeptuneDriver(
-    host=<NEPTUNE_ENDPOINT>,
-    aoss_host=<Amazon_OpenSearch_Serverless_Host>,
-    port=<PORT>,       # Optional, defaults to 8182
-    aoss_port=<PORT>,  # Optional, defaults to 443
+    host='<NEPTUNE_ENDPOINT>',
+    aoss_host='<AMAZON_OPENSEARCH_SERVERLESS_HOST>',
+    port=8182,      # Optional, defaults to 8182
+    aoss_port=443,  # Optional, defaults to 443
 )
 
 # Pass the driver to Graphiti
 graphiti = Graphiti(graph_driver=driver)
 ```
+
+Contributing a new graph backend? See [Adding a graph driver](CONTRIBUTING.md#adding-a-graph-driver).
 
 ## Using Graphiti with Azure OpenAI
 
