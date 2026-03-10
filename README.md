@@ -646,17 +646,6 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
   functionality
 - The anonymous ID is stored locally and is not tied to any personal information
 
-## Status and Roadmap
-
-Graphiti is under active development. We aim to maintain API stability while working on:
-
-- Supporting custom graph schemas:
-  - Allow developers to provide their own defined node and edge classes when ingesting episodes
-  - Enable more flexible knowledge representation tailored to specific use cases
-- Enhancing retrieval capabilities with more robust and configurable options
-- Graphiti MCP Server
-- Expanding test coverage to ensure reliability and catch edge cases
-
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
