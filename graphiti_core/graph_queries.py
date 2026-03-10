@@ -51,6 +51,30 @@ def get_range_indices(provider: GraphProvider) -> list[LiteralString]:
     if provider == GraphProvider.KUZU:
         return []
 
+    if provider == GraphProvider.MEMGRAPH:
+        return [
+            'CREATE INDEX ON :Entity(uuid);',
+            'CREATE INDEX ON :Entity(group_id);',
+            'CREATE INDEX ON :Entity(name);',
+            'CREATE INDEX ON :Entity(created_at);',
+            'CREATE INDEX ON :Episodic(uuid);',
+            'CREATE INDEX ON :Episodic(group_id);',
+            'CREATE INDEX ON :Episodic(created_at);',
+            'CREATE INDEX ON :Episodic(valid_at);',
+            'CREATE INDEX ON :Community(uuid);',
+            'CREATE INDEX ON :Community(group_id);',
+            'CREATE INDEX ON :RELATES_TO(uuid);',
+            'CREATE INDEX ON :RELATES_TO(group_id);',
+            'CREATE INDEX ON :RELATES_TO(name);',
+            'CREATE INDEX ON :RELATES_TO(created_at);',
+            'CREATE INDEX ON :RELATES_TO(expired_at);',
+            'CREATE INDEX ON :RELATES_TO(valid_at);',
+            'CREATE INDEX ON :RELATES_TO(invalid_at);',
+            'CREATE INDEX ON :MENTIONS(uuid);',
+            'CREATE INDEX ON :MENTIONS(group_id);',
+            'CREATE INDEX ON :HAS_MEMBER(uuid);',
+        ]
+
     return [
         'CREATE INDEX entity_uuid IF NOT EXISTS FOR (n:Entity) ON (n.uuid)',
         'CREATE INDEX episode_uuid IF NOT EXISTS FOR (n:Episodic) ON (n.uuid)',
@@ -128,6 +152,14 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
             "CALL CREATE_FTS_INDEX('RelatesToNode_', 'edge_name_and_fact', ['name', 'fact']);",
         ]
 
+    if provider == GraphProvider.MEMGRAPH:
+        return [
+            """CREATE TEXT INDEX episode_content ON :Episodic(content, source, source_description, group_id);""",
+            """CREATE TEXT INDEX node_name_and_summary ON :Entity(name, summary, group_id);""",
+            """CREATE TEXT INDEX community_name ON :Community(name, group_id);""",
+            """CREATE TEXT EDGE INDEX edge_name_and_fact ON :RELATES_TO(name, fact, group_id);""",
+        ]
+
     return [
         """CREATE FULLTEXT INDEX episode_content IF NOT EXISTS
         FOR (e:Episodic) ON EACH [e.content, e.source, e.source_description, e.group_id]""",
@@ -149,6 +181,9 @@ def get_nodes_query(name: str, query: str, limit: int, provider: GraphProvider) 
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', {query}, TOP := $limit)"
 
+    if provider == GraphProvider.MEMGRAPH:
+        return f'CALL text_search.search_all("{name}", {query}, {limit})'
+
     return f'CALL db.index.fulltext.queryNodes("{name}", {query}, {{limit: $limit}})'
 
 
@@ -159,6 +194,9 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
 
     if provider == GraphProvider.KUZU:
         return f'array_cosine_similarity({vec1}, {vec2})'
+
+    if provider == GraphProvider.MEMGRAPH:
+        return f'vector_search.cosine_similarity({vec1}, {vec2})'
 
     return f'vector.similarity.cosine({vec1}, {vec2})'
 
@@ -171,5 +209,8 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
     if provider == GraphProvider.KUZU:
         label = INDEX_TO_LABEL_KUZU_MAPPING[name]
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
+
+    if provider == GraphProvider.MEMGRAPH:
+        return f'CALL text_search.search_all_edges("{name}", $query, {limit})'
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
