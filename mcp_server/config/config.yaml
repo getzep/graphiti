@@ -11,14 +11,14 @@ server:
   port: 8000
   
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
-  max_tokens: 4096
-  
+  provider: ${LLM_PROVIDER:"openai"}  # Options: openai, openai_generic, azure_openai, anthropic, gemini, groq
+  model: ${LLM_MODEL:"gpt-4o-mini"}
+  max_tokens: ${LLM_MAX_TOKENS:4096}
+
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_url: ${LLM_API_URL:https://api.openai.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -43,15 +43,15 @@ llm:
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
 
 embedder:
-  provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
-  dimensions: 1536
-  
+  provider: ${EMBEDDER_PROVIDER:"openai"}  # Options: openai, azure_openai, gemini, voyage
+  model: ${EMBEDDER_MODEL:"text-embedding-3-small"}
+  dimensions: ${EMBEDDER_DIMENSIONS:1536}
+
   providers:
     openai:
-      api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
-      organization_id: ${OPENAI_ORGANIZATION_ID:}
+      api_key: ${EMBEDDER_API_KEY}
+      api_url: ${EMBEDDER_API_URL:https://api.openai.com/v1}
+      organization_id: ${EMBEDDER_ORGANIZATION_ID:}
       
     azure_openai:
       api_key: ${AZURE_OPENAI_API_KEY}
@@ -69,6 +69,18 @@ embedder:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
+
+reranker:
+  provider: ${RERANKER_PROVIDER:bge}  # Options: openai, gemini, bge
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+
+    # bge provider has no configuration - it's local/CPU-only
 
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
