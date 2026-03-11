@@ -63,6 +63,15 @@ async def clear_data(driver: GraphDriver, group_ids: list[str] | None = None):
         else:
             await session.execute_write(delete_group_ids)
 
+    if driver.vector_store is not None:
+        try:
+            if group_ids is None:
+                await driver.vector_store.clear_all()
+            else:
+                await driver.vector_store.delete_by_group_ids(group_ids)
+        except Exception:
+            logger.warning('Failed to clear vector store data', exc_info=True)
+
 
 async def retrieve_episodes(
     driver: GraphDriver,

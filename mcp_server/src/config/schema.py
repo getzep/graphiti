@@ -205,6 +205,18 @@ class DatabaseConfig(BaseModel):
     providers: DatabaseProvidersConfig = Field(default_factory=DatabaseProvidersConfig)
 
 
+class VectorStoreAppConfig(BaseModel):
+    """Vector store configuration.
+
+    Provider-specific configuration (e.g. Milvus) is added by the
+    respective provider package.
+    """
+
+    provider: str | None = Field(
+        default=None, description='Vector store provider (e.g. milvus). None = disabled.'
+    )
+
+
 class EntityTypeConfig(BaseModel):
     """Entity type configuration."""
 
@@ -233,6 +245,7 @@ class GraphitiConfig(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    vector_store: VectorStoreAppConfig = Field(default_factory=VectorStoreAppConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
     # Additional server options

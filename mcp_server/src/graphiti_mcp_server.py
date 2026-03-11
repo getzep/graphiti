@@ -209,7 +209,19 @@ class GraphitiService:
             # Store entity types for later use
             self.entity_types = custom_types
 
+            # Create vector store client if configured
+            vector_store_client = None
+            if self.config.vector_store.provider:
+                try:
+                    from services.factories import VectorStoreFactory
+
+                    vector_store_client = VectorStoreFactory.create(self.config.vector_store)
+                except Exception as e:
+                    logger.warning(f'Failed to create vector store client: {e}')
+
             # Initialize Graphiti client with appropriate driver
+            # Note: vector_store is attached after creation for PyPI compatibility
+            # (the vector_store param was added in our feature branch, not yet in PyPI)
             try:
                 if self.config.database.provider.lower() == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
@@ -278,10 +290,20 @@ class GraphitiService:
                 # Re-raise other errors
                 raise
 
+            # Attach vector store as search overlay (works with any graph DB)
+            # NOTE: Only set vector_store + search_interface. Do NOT set
+            # graph_operations_interface — that replaces the graph DB entirely.
+            # Dual-write happens via vector_store hooks in bulk_utils,
+            # nodes.py, edges.py, etc.
+            if vector_store_client is not None:
+                self.client.driver.vector_store = vector_store_client
+
             # Build indices
             await self.client.build_indices_and_constraints()
 
             logger.info('Successfully initialized Graphiti client')
+            if vector_store_client is not None:
+                logger.info(f'Vector store attached: {type(vector_store_client).__name__}')
 
             # Log configuration details
             if llm_client:
