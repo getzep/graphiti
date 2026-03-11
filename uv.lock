@@ -966,7 +966,7 @@ wheels = [
 
 [[package]]
 name = "graphiti-core"
-version = "0.28.1"
+version = "0.28.2"
 source = { editable = "." }
 dependencies = [
     { name = "neo4j" },
