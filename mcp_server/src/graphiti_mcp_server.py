@@ -18,6 +18,7 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -108,6 +109,25 @@ def configure_uvicorn_logging():
 
 
 logger = logging.getLogger(__name__)
+
+
+def build_transport_security(server_config: ServerConfig) -> TransportSecuritySettings | None:
+    """Build TransportSecuritySettings from server configuration.
+
+    Returns None if no custom settings are needed (uses SDK defaults).
+    """
+    # If no custom hosts/origins configured, return None to use SDK defaults
+    if server_config.allowed_hosts is None and server_config.allowed_origins is None:
+        return None
+
+    # TransportSecuritySettings requires lists, not None values
+    # Use empty list as default when not specified
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=server_config.enable_dns_rebinding_protection,
+        allowed_hosts=server_config.allowed_hosts or [],
+        allowed_origins=server_config.allowed_origins or [],
+    )
+
 
 # Create global config instance - will be properly initialized later
 config: GraphitiConfig
@@ -900,6 +920,25 @@ async def initialize_server() -> ServerConfig:
         mcp.settings.host = config.server.host
     if config.server.port:
         mcp.settings.port = config.server.port
+
+    # Configure transport security if custom hosts/origins are specified
+    transport_security = build_transport_security(config.server)
+    if transport_security:
+        mcp.settings.transport_security = transport_security
+        logger.info('Transport security configured:')
+        if config.server.allowed_hosts:
+            logger.info(f'  - Allowed hosts: {", ".join(config.server.allowed_hosts)}')
+        if config.server.allowed_origins:
+            logger.info(f'  - Allowed origins: {", ".join(config.server.allowed_origins)}')
+        logger.info(
+            f'  - DNS rebinding protection: {config.server.enable_dns_rebinding_protection}'
+        )
+    else:
+        # Log default security settings
+        logger.info(
+            f'Transport security: using SDK defaults '
+            f'(allowed_hosts: {mcp.settings.transport_security.allowed_hosts})'
+        )
 
     # Return MCP configuration for transport
     return config.server
