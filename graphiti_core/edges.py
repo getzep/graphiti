@@ -89,6 +89,14 @@ class Edge(BaseModel, ABC):
 
         logger.debug(f'Deleted Edge: {self.uuid}')
 
+        if driver.vector_store is not None:
+            try:
+                await driver.vector_store.delete_entity_edges([self.uuid])
+            except Exception:
+                logger.warning(
+                    f'Failed to delete edge {self.uuid} from vector store', exc_info=True
+                )
+
     @classmethod
     async def delete_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
         if driver.graph_operations_interface:
@@ -127,6 +135,12 @@ class Edge(BaseModel, ABC):
             )
 
         logger.debug(f'Deleted Edges: {uuids}')
+
+        if driver.vector_store is not None and uuids:
+            try:
+                await driver.vector_store.delete_entity_edges(uuids)
+            except Exception:
+                logger.warning('Failed to delete edges from vector store', exc_info=True)
 
     def __hash__(self):
         return hash(self.uuid)
@@ -288,7 +302,7 @@ class EntityEdge(Edge):
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
-        logger.debug(f'embedded edge {self.uuid} fact ({len(text)} chars) in {(end - start) * 1000} ms')
+        logger.debug(f'embedded {text} in {end - start} ms')
 
         return self.fact_embedding
 
@@ -363,6 +377,12 @@ class EntityEdge(Edge):
             )
 
         logger.debug(f'Saved edge to Graph: {self.uuid}')
+
+        if driver.vector_store is not None:
+            try:
+                await driver.vector_store.save_entity_edges([self])
+            except Exception:
+                logger.warning(f'Failed to sync edge {self.uuid} to vector store', exc_info=True)
 
         return result
 

@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import Any
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -47,7 +48,6 @@ from graphiti_core.helpers import (
     validate_group_id,
 )
 from graphiti_core.llm_client import LLMClient, OpenAIClient
-from graphiti_core.namespaces import EdgeNamespace, NodeNamespace
 from graphiti_core.nodes import (
     CommunityNode,
     EntityNode,
@@ -145,6 +145,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        vector_store: Any = None,
     ):
         """
         Initialize a Graphiti instance.
@@ -208,6 +209,29 @@ class Graphiti:
                 raise ValueError('uri must be provided when graph_driver is None')
             self.driver = Neo4jDriver(uri, user, password)
 
+        # Attach vector store to driver for dual-write and search
+        # NOTE: Only set vector_store + search_interface. Do NOT set
+        # graph_operations_interface — that replaces the graph DB entirely.
+        # Dual-write to Milvus happens via vector_store hooks in bulk_utils,
+        # nodes.py, edges.py, etc.
+        if vector_store is not None:
+            self.driver.vector_store = vector_store
+            # Auto-attach MilvusSearchInterface if not already set
+            try:
+                from graphiti_core.vector_store.milvus_client import MilvusVectorStoreClient
+
+                if (
+                    isinstance(vector_store, MilvusVectorStoreClient)
+                    and self.driver.search_interface is None
+                ):
+                    from graphiti_core.vector_store.milvus_search_interface import (
+                        MilvusSearchInterface,
+                    )
+
+                    self.driver.search_interface = MilvusSearchInterface(vs_client=vector_store)
+            except ImportError:
+                pass
+
         self.store_raw_episode_content = store_raw_episode_content
         self.max_coroutines = max_coroutines
         if llm_client:
@@ -236,10 +260,6 @@ class Graphiti:
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
         )
-
-        # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
-        self.nodes = NodeNamespace(self.driver, self.embedder)
-        self.edges = EdgeNamespace(self.driver, self.embedder)
 
         # Capture telemetry event
         self._capture_initialization_telemetry()
@@ -339,6 +359,8 @@ class Graphiti:
                 graphiti.close()
         """
         await self.driver.close()
+        if self.driver.vector_store is not None:
+            await self.driver.vector_store.close()
 
     async def _get_or_create_saga(self, saga_name: str, group_id: str, now: datetime) -> SagaNode:
         """
@@ -423,6 +445,9 @@ class Graphiti:
         and could impact database performance during execution.
         """
         await self.driver.build_indices_and_constraints(delete_existing)
+        # Initialize vector store collections if attached
+        if self.driver.vector_store is not None:
+            await self.driver.vector_store.ensure_ready()
 
     async def _extract_and_resolve_nodes(
         self,
