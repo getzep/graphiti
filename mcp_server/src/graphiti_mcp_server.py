@@ -18,6 +18,7 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -143,10 +144,57 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
+# Transport security configuration
+# MCP_ALLOWED_HOSTS: comma-separated list of allowed hosts (e.g., "myhost.local:*,192.168.1.100:8000")
+# MCP_DISABLE_DNS_PROTECTION: set to "true" to disable DNS rebinding protection (development only)
+def _get_transport_security() -> TransportSecuritySettings:
+    """Configure transport security for MCP server.
+
+    The MCP SDK includes DNS rebinding protection that validates Host headers.
+    By default, only localhost connections are allowed. Use MCP_ALLOWED_HOSTS
+    to permit access from other hosts (e.g., when running in Docker or accessing
+    from a different machine on the network).
+
+    Environment variables:
+        MCP_ALLOWED_HOSTS: Comma-separated list of allowed host patterns.
+            Patterns can include wildcards for ports (e.g., "myhost:*").
+            Example: "gateway.local:*,192.168.1.100:8000"
+        MCP_DISABLE_DNS_PROTECTION: Set to "true" to disable protection entirely.
+            Only recommended for development environments.
+    """
+    disable_protection = os.getenv('MCP_DISABLE_DNS_PROTECTION', '').lower() == 'true'
+
+    if disable_protection:
+        logging.getLogger(__name__).warning(
+            'DNS rebinding protection is disabled. This is not recommended for production.'
+        )
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+    # Default allowed hosts (localhost variants)
+    allowed_hosts = [
+        'localhost:*',
+        '127.0.0.1:*',
+        '[::1]:*',
+    ]
+
+    # Add custom hosts from environment variable
+    custom_hosts = os.getenv('MCP_ALLOWED_HOSTS', '')
+    if custom_hosts:
+        additional_hosts = [h.strip() for h in custom_hosts.split(',') if h.strip()]
+        allowed_hosts.extend(additional_hosts)
+        logging.getLogger(__name__).info(f'Added custom allowed hosts: {additional_hosts}')
+
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+    )
+
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    transport_security=_get_transport_security(),
 )
 
 # Global services
