@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import typing
 from typing import Any, ClassVar
@@ -25,6 +24,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
+from ..utils.json_utils import safe_json_loads
 from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
@@ -128,7 +128,7 @@ class OpenAIGenericClient(LLMClient):
                 response_format=response_format,  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
-            return json.loads(result)
+            return safe_json_loads(result)
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
