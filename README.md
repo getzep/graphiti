@@ -27,6 +27,10 @@ Graphiti
 
 </div>
 
+> [!NOTE]
+> **We're Hiring!** Build context graphs that power reliable, personalized, fast production AI agents.
+> Come build with us — we're hiring Engineers and Developer Relations folks. [View open roles](https://www.getzep.com/careers/).
+
 ⭐ *Help us reach more developers and grow the Graphiti community. Star this repo!*
 
 &nbsp;
