@@ -23,7 +23,7 @@ import pytest
 from pydantic import BaseModel
 
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
-from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
 from graphiti_core.llm_client.errors import RateLimitError, RefusalError
 from graphiti_core.prompts.models import Message
 
@@ -81,7 +81,7 @@ class TestAnthropicClientInitialization:
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
 
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-sonnet-4-5-latest'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
     def test_init_without_config(self):
@@ -89,7 +89,7 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-sonnet-4-5-latest'
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom AsyncAnthropic client."""
@@ -97,6 +97,49 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(client=mock_client)
 
         assert client.client == mock_client
+
+
+class TestAnthropicClientModelSizeRouting:
+    """Tests for model size routing."""
+
+    def test_get_model_for_size_small(self):
+        """Test that small size returns the small model."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.small)
+        assert result == 'claude-haiku-4-5-latest'
+
+    def test_get_model_for_size_medium(self):
+        """Test that medium size returns the default (larger) model."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.medium)
+        assert result == 'claude-sonnet-4-5-latest'
+
+    def test_small_model_default_on_init(self):
+        """Test that small_model is correctly defaulted during initialization."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        assert client.small_model == 'claude-haiku-4-5-latest'
+
+    def test_custom_small_model(self):
+        """Test that a custom small_model is respected."""
+        config = LLMConfig(api_key='test_api_key', small_model='claude-3-haiku-20240307')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.small)
+        assert result == 'claude-3-haiku-20240307'
+
+    def test_custom_model_for_medium(self):
+        """Test that a custom model is used for medium size."""
+        config = LLMConfig(api_key='test_api_key', model='claude-3-5-sonnet-latest')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.medium)
+        assert result == 'claude-3-5-sonnet-latest'
 
 
 class TestAnthropicClientGenerateResponse:
