@@ -57,6 +57,11 @@ logger = logging.getLogger(__name__)
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
 
+# Maximum number of existing-node candidates passed to the resolution LLM context.
+# Prevents token overflow when many nodes match (e.g. 15 extracted × 10 candidates = 150 nodes
+# with verbose attributes each, pushing the prompt past max_tokens).
+MAX_RESOLVE_CANDIDATES = 50
+
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 
@@ -298,13 +303,12 @@ async def _resolve_with_llm(
 
     existing_nodes_context = [
         {
-            **{
-                'name': candidate.name,
-                'entity_types': candidate.labels,
-            },
-            **candidate.attributes,
+            'name': candidate.name,
+            'entity_types': candidate.labels,
+            # candidate.attributes omitted: summaries and descriptions are too verbose and
+            # can push the resolution prompt past max_tokens when many candidates are present.
         }
-        for candidate in indexes.existing_nodes
+        for candidate in indexes.existing_nodes[:MAX_RESOLVE_CANDIDATES]
     ]
 
     # Build name -> node mapping for resolving duplicates by name
