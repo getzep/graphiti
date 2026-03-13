@@ -42,6 +42,9 @@ class QueueService:
 
         # Start a worker for this queue if one isn't already running
         if not self._queue_workers.get(group_id, False):
+            # Mark as running before scheduling to avoid race conditions
+            # where concurrent enqueues start multiple workers.
+            self._queue_workers[group_id] = True
             asyncio.create_task(self._process_episode_queue(group_id))
 
         return self._episode_queues[group_id].qsize()
@@ -53,7 +56,6 @@ class QueueService:
         from the queue one at a time.
         """
         logger.info(f'Starting episode queue worker for group_id: {group_id}')
-        self._queue_workers[group_id] = True
 
         try:
             while True:

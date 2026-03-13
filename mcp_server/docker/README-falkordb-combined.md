@@ -31,11 +31,11 @@ FALKORDB_PASSWORD=
 
 ```bash
 cd mcp_server
-docker compose -f docker/docker-compose-falkordb-combined.yml up
+docker compose -f docker/docker-compose.yml up
 ```
 
 3. Access the services:
-   - MCP Server: http://localhost:8000/mcp/
+   - MCP Server: http://localhost:8000/mcp
    - FalkorDB Web UI: http://localhost:3000
    - FalkorDB (Redis): localhost:6379
 
@@ -57,19 +57,20 @@ docker run -d \
 ### Build with Default Version
 
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml build
+docker compose -f docker/docker-compose.yml build
 ```
 
 ### Build with Specific Graphiti Version
 
 ```bash
-GRAPHITI_CORE_VERSION=0.22.0 docker compose -f docker/docker-compose-falkordb-combined.yml build
+GRAPHITI_CORE_VERSION=0.28.1 docker compose -f docker/docker-compose.yml build
 ```
 
 ### Build Arguments
 
-- `GRAPHITI_CORE_VERSION`: Version of graphiti-core package (default: 0.22.0)
-- `MCP_SERVER_VERSION`: MCP server version tag (default: 1.0.0rc0)
+- `GRAPHITI_CORE_VERSION`: Version of graphiti-core package (default: 0.28.1)
+- `MCP_PROVIDER_EXTRA`: Python extra installed with `uv sync` (default: `gemini`; set to `providers` for full provider bundle)
+- `MCP_SERVER_VERSION`: MCP server version tag (default: 1.0.1)
 - `BUILD_DATE`: Build timestamp
 - `VCS_REF`: Git commit hash
 
@@ -105,20 +106,20 @@ All environment variables from the standard MCP server are supported:
 
 ```bash
 # All logs (both services stdout/stderr)
-docker compose -f docker/docker-compose-falkordb-combined.yml logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # Only container logs
-docker compose -f docker/docker-compose-falkordb-combined.yml logs -f graphiti-falkordb
+docker compose -f docker/docker-compose.yml logs -f graphiti-falkordb
 ```
 
 ### Restart Services
 
 ```bash
 # Restart entire container (both services)
-docker compose -f docker/docker-compose-falkordb-combined.yml restart
+docker compose -f docker/docker-compose.yml restart
 
 # Check FalkorDB status
-docker compose -f docker/docker-compose-falkordb-combined.yml exec graphiti-falkordb redis-cli ping
+docker compose -f docker/docker-compose.yml exec graphiti-falkordb redis-cli ping
 
 # Check MCP server status
 curl http://localhost:8000/health
@@ -153,7 +154,7 @@ The container includes a health check that verifies:
 
 Check health status:
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 ## Architecture
@@ -170,7 +171,7 @@ The startup script launches FalkorDB as a background daemon, waits for it to be 
 
 ### Directory Structure
 ```
-/app/mcp/                    # MCP server application
+/app/mcp                    # MCP server application
 ├── main.py
 ├── src/
 ├── config/
@@ -197,14 +198,14 @@ The startup script launches FalkorDB as a background daemon, waits for it to be 
 
 Check container logs:
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml logs graphiti-falkordb
+docker compose -f docker/docker-compose.yml logs graphiti-falkordb
 ```
 
 ### MCP Server Connection Issues
 
 1. Verify FalkorDB is running:
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml exec graphiti-falkordb redis-cli ping
+docker compose -f docker/docker-compose.yml exec graphiti-falkordb redis-cli ping
 ```
 
 2. Check MCP server health:
@@ -214,12 +215,12 @@ curl http://localhost:8000/health
 
 3. View all container logs:
 ```bash
-docker compose -f docker/docker-compose-falkordb-combined.yml logs -f
+docker compose -f docker/docker-compose.yml logs -f
 ```
 
 ### Port Conflicts
 
-If ports 6379, 3000, or 8000 are already in use, modify the port mappings in `docker-compose-falkordb-combined.yml`:
+If ports 6379, 3000, or 8000 are already in use, modify the port mappings in `docker-compose.yml`:
 
 ```yaml
 ports:

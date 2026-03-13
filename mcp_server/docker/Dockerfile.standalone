@@ -37,14 +37,15 @@ COPY pyproject.toml uv.lock ./
 # Install with BOTH neo4j and falkordb extras for maximum flexibility
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
-    sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[neo4j,falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
     uv lock
 
 # Install Python dependencies (exclude dev dependency group)
+# Include provider extras so Gemini/Anthropic/Groq/Voyage clients are available in container builds.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    uv sync --no-group dev --extra providers
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version

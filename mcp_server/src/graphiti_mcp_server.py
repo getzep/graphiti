@@ -31,7 +31,12 @@ from models.response_types import (
     StatusResponse,
     SuccessResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    CrossEncoderFactory,
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+)
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
@@ -174,18 +179,34 @@ class GraphitiService:
             # Create clients using factories
             llm_client = None
             embedder_client = None
+            cross_encoder_client = None
 
             # Create LLM client based on configured provider
             try:
                 llm_client = LLMClientFactory.create(self.config.llm)
             except Exception as e:
+                if self.config.llm.provider.lower() != 'openai':
+                    raise RuntimeError(
+                        f'Failed to create configured LLM provider {self.config.llm.provider}: {e}'
+                    ) from e
                 logger.warning(f'Failed to create LLM client: {e}')
 
             # Create embedder client based on configured provider
             try:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
+                if self.config.embedder.provider.lower() != 'openai':
+                    raise RuntimeError(
+                        f'Failed to create configured embedder provider '
+                        f'{self.config.embedder.provider}: {e}'
+                    ) from e
                 logger.warning(f'Failed to create embedder client: {e}')
+
+            # Create cross-encoder client based on configured LLM provider
+            try:
+                cross_encoder_client = CrossEncoderFactory.create(self.config.llm)
+            except Exception as e:
+                logger.warning(f'Failed to create cross-encoder client: {e}')
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -226,6 +247,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -236,6 +258,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder_client,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -261,9 +284,9 @@ class GraphitiService:
                             f'{"=" * 70}\n\n'
                             f'Neo4j at {db_config.get("uri", "unknown")} is not accessible.\n\n'
                             f'To start Neo4j:\n'
-                            f'  - Using Docker Compose: cd mcp_server && docker compose -f docker/docker-compose-neo4j.yml up\n'
+                            f'  - Start a Neo4j container: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n'
                             f'  - Or install Neo4j Desktop from: https://neo4j.com/download/\n'
-                            f'  - Or run Neo4j manually: docker run -p 7474:7474 -p 7687:7687 neo4j:latest\n\n'
+                            f'  - Or run your own Neo4j service and set NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD\n\n'
                             f'{"=" * 70}\n'
                         ) from db_error
                     else:
@@ -277,6 +300,20 @@ class GraphitiService:
                         ) from db_error
                 # Re-raise other errors
                 raise
+
+            # For FalkorDB, align the active database with the configured default group_id.
+            # This prevents a startup mismatch where reads happen against one database
+            # (e.g. default_db) until the first write switches to another (e.g. main).
+            if self.config.database.provider.lower() == 'falkordb' and self.config.graphiti.group_id:
+                configured_group_id = self.config.graphiti.group_id
+                active_database = getattr(self.client.driver, '_database', None)
+                if configured_group_id != active_database:
+                    logger.info(
+                        'Aligning FalkorDB database with group_id: '
+                        f'{active_database} -> {configured_group_id}'
+                    )
+                    self.client.driver = self.client.driver.clone(database=configured_group_id)
+                    self.client.clients.driver = self.client.driver
 
             # Build indices
             await self.client.build_indices_and_constraints()
@@ -296,6 +333,11 @@ class GraphitiService:
             else:
                 logger.info('No Embedder client configured - search will be limited')
 
+            if cross_encoder_client:
+                logger.info(f'Using Cross-encoder strategy for LLM provider: {self.config.llm.provider}')
+            else:
+                logger.info('No Cross-encoder client configured')
+
             if self.entity_types:
                 entity_type_names = list(self.entity_types.keys())
                 logger.info(f'Using custom entity types: {", ".join(entity_type_names)}')
@@ -304,6 +346,7 @@ class GraphitiService:
 
             logger.info(f'Using database: {self.config.database.provider}')
             logger.info(f'Using group_id: {self.config.graphiti.group_id}')
+            logger.info(f'Using active graph database: {getattr(self.client.driver, "_database", "n/a")}')
 
         except Exception as e:
             logger.error(f'Failed to initialize Graphiti client: {e}')
@@ -373,6 +416,10 @@ async def add_memory(
     try:
         # Use the provided group_id or fall back to the default from config
         effective_group_id = group_id or config.graphiti.group_id
+        if not effective_group_id:
+            return ErrorResponse(
+                error='No group_id provided and no default GRAPHITI_GROUP_ID configured'
+            )
 
         # Try to parse the source as an EpisodeType enum, with fallback to text
         episode_type = EpisodeType.text  # Default
@@ -385,7 +432,7 @@ async def add_memory(
                 episode_type = EpisodeType.text
 
         # Submit to queue service for async processing
-        await queue_service.add_episode(
+        queue_position = await queue_service.add_episode(
             group_id=effective_group_id,
             name=name,
             content=episode_body,
@@ -396,7 +443,10 @@ async def add_memory(
         )
 
         return SuccessResponse(
-            message=f"Episode '{name}' queued for processing in group '{effective_group_id}'"
+            message=(
+                f"Episode '{name}' queued for processing in group '{effective_group_id}' "
+                f"(queue_position={queue_position})"
+            )
         )
     except Exception as e:
         error_msg = str(e)
@@ -425,6 +475,10 @@ async def search_nodes(
         return ErrorResponse(error='Graphiti service not initialized')
 
     try:
+        # Validate max_nodes parameter
+        if max_nodes <= 0:
+            return ErrorResponse(error='max_nodes must be a positive integer')
+
         client = await graphiti_service.get_client()
 
         # Use the provided group_ids or fall back to the default from config if none provided
@@ -444,9 +498,10 @@ async def search_nodes(
         # Use the search_ method with node search config
         from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
+        search_config = NODE_HYBRID_SEARCH_RRF.model_copy(update={'limit': max_nodes})
         results = await client.search_(
             query=query,
-            config=NODE_HYBRID_SEARCH_RRF,
+            config=search_config,
             group_ids=effective_group_ids,
             search_filter=search_filters,
         )

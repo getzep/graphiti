@@ -15,6 +15,8 @@ except ImportError:
     HAS_FALKOR = False
 
 # Kuzu support removed - FalkorDB is now the default
+from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
@@ -69,6 +71,13 @@ try:
 except ImportError:
     HAS_GROQ = False
 
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     """Validate API key is present.
@@ -121,6 +130,7 @@ class LLMClientFactory:
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
@@ -356,6 +366,90 @@ class EmbedderFactory:
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')
+
+
+class NoOpCrossEncoderClient(CrossEncoderClient):
+    """Fallback cross-encoder that preserves input order without provider calls."""
+
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        del query
+        return [(passage, 1.0) for passage in passages]
+
+
+class CrossEncoderFactory:
+    """Factory for creating CrossEncoder clients based on LLM configuration."""
+
+    @staticmethod
+    def create(config: LLMConfig) -> CrossEncoderClient:
+        """Create a cross-encoder client for the configured LLM provider."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        provider = config.provider.lower()
+
+        match provider:
+            case 'openai':
+                llm_config = GraphitiLLMConfig(
+                    api_key=config.providers.openai.api_key if config.providers.openai else None,
+                    model=config.model,
+                    base_url=config.providers.openai.api_url if config.providers.openai else None,
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'azure_openai':
+                if not config.providers.azure_openai:
+                    logger.warning(
+                        'Azure OpenAI provider config not found for cross-encoder, using no-op'
+                    )
+                    return NoOpCrossEncoderClient()
+
+                azure_config = config.providers.azure_openai
+                if not azure_config.api_url:
+                    logger.warning('Azure OpenAI api_url missing for cross-encoder, using no-op')
+                    return NoOpCrossEncoderClient()
+
+                base_url = azure_config.api_url
+                if not base_url.endswith('/'):
+                    base_url += '/'
+                if not base_url.endswith('openai/v1/'):
+                    base_url += 'openai/v1/'
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=azure_config.api_key,
+                    model=config.model,
+                    base_url=base_url,
+                )
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    logger.warning(
+                        'Gemini reranker not available, using no-op cross-encoder. '
+                        'Install providers extras to enable Gemini reranking.'
+                    )
+                    return NoOpCrossEncoderClient()
+
+                if not config.providers.gemini:
+                    logger.warning('Gemini provider config not found for cross-encoder, using no-op')
+                    return NoOpCrossEncoderClient()
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=config.providers.gemini.api_key,
+                    model=config.model,
+                )
+                return GeminiRerankerClient(config=llm_config)
+
+            case 'anthropic' | 'groq':
+                logger.info(
+                    f'No dedicated cross-encoder for provider {provider}; using no-op cross-encoder'
+                )
+                return NoOpCrossEncoderClient()
+
+            case _:
+                logger.info(
+                    f'Unsupported cross-encoder provider {provider}; using no-op cross-encoder'
+                )
+                return NoOpCrossEncoderClient()
 
 
 class DatabaseDriverFactory:

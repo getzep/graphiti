@@ -1,11 +1,13 @@
 services:
   graphiti-falkordb:
-    image: zepai/knowledge-graph-mcp:latest
+    image: graphiti-falkordb-local:latest
+    pull_policy: never
     build:
       context: ..
       dockerfile: docker/Dockerfile
       args:
         GRAPHITI_CORE_VERSION: ${GRAPHITI_CORE_VERSION:-0.28.1}
+        MCP_PROVIDER_EXTRA: ${MCP_PROVIDER_EXTRA:-gemini}
         MCP_SERVER_VERSION: ${MCP_SERVER_VERSION:-1.0.0}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-}
@@ -20,7 +22,6 @@ services:
       - FALKORDB_URI=redis://localhost:6379
       - FALKORDB_DATABASE=${FALKORDB_DATABASE:-default_db}
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
-      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
       - PATH=/root/.local/bin:${PATH}
     volumes:

@@ -34,6 +34,7 @@ WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
 ARG GRAPHITI_CORE_VERSION=0.28.1
+ARG MCP_PROVIDER_EXTRA=gemini
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./
@@ -42,15 +43,16 @@ COPY pyproject.toml uv.lock ./
 # and regenerate lock file to match the PyPI version
 RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     if [ -n "${GRAPHITI_CORE_VERSION}" ]; then \
-      sed -i "s/graphiti-core\[falkordb\][>=]\+[0-9]\+\.[0-9]\+\.[0-9]\+/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
+      sed -i "s/graphiti-core\[falkordb\]>=[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[falkordb]==${GRAPHITI_CORE_VERSION}/" pyproject.toml; \
     fi && \
     echo "Regenerating lock file for PyPI graphiti-core..." && \
     rm -f uv.lock && \
     uv lock
 
-# Install Python dependencies (exclude dev dependency group)
+# Install Python dependencies (exclude dev dependency group).
+# Default to Gemini-only provider deps; override MCP_PROVIDER_EXTRA=providers for full provider bundle.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    uv sync --no-group dev --extra ${MCP_PROVIDER_EXTRA}
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
@@ -109,7 +111,7 @@ cd /app/mcp
 exec /root/.local/bin/uv run --no-sync main.py
 EOF
 
-RUN chmod +x /start-services.sh
+RUN sed -i 's/\r$//' /start-services.sh && chmod +x /start-services.sh
 
 # Add Docker labels with version information
 ARG MCP_SERVER_VERSION=1.0.1

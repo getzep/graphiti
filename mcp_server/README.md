@@ -22,9 +22,9 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Graph Maintenance**: Clear the graph and rebuild indices
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
-- **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
+- **Multiple Embedding Providers**: Support for OpenAI, Voyage, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
-- **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
+- **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
 
 ## Quick Start
@@ -67,12 +67,12 @@ docker compose up
 
 This starts both FalkorDB and the MCP server in a single container.
 
-**Alternative**: Run with separate containers using Neo4j:
+**Alternative**: Run standalone MCP and connect to your own Neo4j/FalkorDB instance:
 ```bash
-docker compose -f docker/docker-compose-neo4j.yml up
+uv run main.py --config config/config.yaml
 ```
 
-4. Point your MCP client to `http://localhost:8000/mcp/`
+4. Point your MCP client to `http://localhost:8000/mcp`
 
 ## Installation
 
@@ -105,9 +105,9 @@ The server can be configured using a `config.yaml` file, environment variables, 
 ### Default Configuration
 
 The MCP server comes with sensible defaults:
-- **Transport**: HTTP (accessible at `http://localhost:8000/mcp/`)
+- **Transport**: HTTP (accessible at `http://localhost:8000/mcp`)
 - **Database**: FalkorDB (combined in single container with MCP server)
-- **LLM**: OpenAI with model gpt-5-mini
+- **LLM**: OpenAI with model gpt-4o-mini
 - **Embedder**: OpenAI text-embedding-3-small
 
 ### Database Configuration
@@ -179,12 +179,17 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 llm:
   provider: "openai"
   model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
+  providers:
+    openai:
+      api_url: "http://localhost:11434/v1"
+      api_key: "ollama"  # dummy key required
 
 embedder:
-  provider: "sentence_transformers"  # recommended for local setup
-  model: "all-MiniLM-L6-v2"
+  provider: "gemini"
+  model: "gemini-embedding-001"
+  providers:
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
 ```
 
 Make sure Ollama is running locally with: `ollama serve`
@@ -252,10 +257,10 @@ docker compose up
 ```
 
 This starts a single container with:
-- HTTP transport on `http://localhost:8000/mcp/`
+- HTTP transport on `http://localhost:8000/mcp`
 - FalkorDB graph database on `localhost:6379`
 - FalkorDB web UI on `http://localhost:3000`
-- OpenAI LLM with gpt-5-mini model
+- OpenAI LLM with gpt-4o-mini model
 
 ### Running with Neo4j
 
@@ -282,10 +287,10 @@ export NEO4J_PASSWORD="your_password"
 uv run main.py --database-provider neo4j
 ```
 
-Or use the Neo4j configuration file:
+Use the default configuration file:
 
 ```bash
-uv run main.py --config config/config-docker-neo4j.yaml
+uv run main.py --config config/config.yaml
 ```
 
 ### Running with FalkorDB
@@ -308,10 +313,10 @@ export FALKORDB_PASSWORD=""  # If password protected
 uv run main.py --database-provider falkordb
 ```
 
-Or use the FalkorDB configuration file:
+For the combined container defaults, use:
 
 ```bash
-uv run main.py --config config/config-docker-falkordb.yaml
+uv run main.py --config config/config-docker-falkordb-combined.yaml
 ```
 
 ### Available Command-Line Arguments
@@ -422,7 +427,7 @@ docker compose up
 Separate containers with Neo4j and MCP server:
 
 ```bash
-docker compose -f docker/docker-compose-neo4j.yml up
+uv run main.py --database-provider neo4j
 ```
 
 Default Neo4j credentials:
@@ -436,7 +441,7 @@ Default Neo4j credentials:
 Alternative setup with separate FalkorDB and MCP server containers:
 
 ```bash
-docker compose -f docker/docker-compose-falkordb.yml up
+docker compose -f docker/docker-compose.yml up
 ```
 
 FalkorDB configuration:
@@ -447,7 +452,7 @@ FalkorDB configuration:
 #### Accessing the MCP Server
 
 Once running, the MCP server is available at:
-- **HTTP endpoint**: `http://localhost:8000/mcp/`
+- **HTTP endpoint**: `http://localhost:8000/mcp`
 - **Health check**: `http://localhost:8000/health`
 
 #### Running Docker Compose from a Different Directory
@@ -476,7 +481,7 @@ VS Code with GitHub Copilot Chat extension supports MCP servers. Add to your VS 
 {
   "mcpServers": {
     "graphiti": {
-      "uri": "http://localhost:8000/mcp/",
+      "uri": "http://localhost:8000/mcp",
       "transport": {
         "type": "http"
       }
@@ -516,7 +521,7 @@ To use the Graphiti MCP server with other MCP-compatible clients, configure it t
         "NEO4J_USER": "neo4j",
         "NEO4J_PASSWORD": "password",
         "OPENAI_API_KEY": "sk-XXXXXXXX",
-        "MODEL_NAME": "gpt-4.1-mini"
+        "LLM__MODEL": "gpt-4.1-mini"
       }
     }
   }
@@ -530,7 +535,7 @@ For HTTP transport (default), you can use this configuration:
   "mcpServers": {
     "graphiti-memory": {
       "transport": "http",
-      "url": "http://localhost:8000/mcp/"
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -548,7 +553,7 @@ The Graphiti MCP server exposes the following tools:
 - `get_entity_edge`: Get an entity edge by its UUID
 - `get_episodes`: Get the most recent episodes for a specific group
 - `clear_graph`: Clear all data from the knowledge graph and rebuild indices
-- `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
+- `get_status`: Get the status of the Graphiti MCP server and database connection
 
 ## Working with JSON Data
 
@@ -590,7 +595,7 @@ docker compose up
 {
   "mcpServers": {
     "graphiti-memory": {
-      "url": "http://localhost:8000/mcp/"
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -605,7 +610,7 @@ capabilities.
 
 ## Integrating with Claude Desktop (Docker MCP Server)
 
-The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote`.
+The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp`). Claude Desktop does not natively support HTTP transport, so you'll need to use a gateway like `mcp-remote`.
 
 1.  **Run the Graphiti MCP server**:
 
@@ -633,7 +638,7 @@ The Graphiti MCP Server uses HTTP transport (at endpoint `/mcp/`). Claude Deskto
           "command": "npx", // Or the full path to mcp-remote if npx is not in your PATH
           "args": [
             "mcp-remote",
-            "http://localhost:8000/mcp/" // The Graphiti server's HTTP endpoint
+            "http://localhost:8000/mcp" // The Graphiti server's HTTP endpoint
           ]
         }
       }
