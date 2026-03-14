@@ -173,7 +173,7 @@ Requirements:
 
 Optional:
 
-- Google Gemini, Anthropic, or Groq API key (for alternative LLM providers)
+- Google Gemini, Anthropic, Groq, or MiniMax API key (for alternative LLM providers)
 
 > [!TIP]
 > The simplest way to install Neo4j is via [Neo4j Desktop](https://neo4j.com/download/). It provides a user-friendly
@@ -265,8 +265,8 @@ performance.
 > [!IMPORTANT]
 > Graphiti defaults to using OpenAI for LLM inference and embedding. Ensure that an `OPENAI_API_KEY` is set in your
 > environment.
-> Support for Anthropic and Groq LLM inferences is available, too. Other LLM providers may be supported via OpenAI
-> compatible APIs.
+> Support for Anthropic, Groq, and MiniMax LLM inferences is available, too. Other LLM providers may be supported
+> via OpenAI compatible APIs.
 
 For a complete working example, see the [Quickstart Example](examples/quickstart/README.md) in the examples directory.
 The quickstart demonstrates:
@@ -573,6 +573,43 @@ graphiti = Graphiti(
 
 Ensure Ollama is running (`ollama serve`) and that you have pulled the models you want to use.
 
+## Using Graphiti with MiniMax
+
+Graphiti supports [MiniMax](https://www.minimaxi.com/) models for LLM inference via MiniMax's OpenAI-compatible API.
+MiniMax offers the MiniMax-M2.5 model with a 204K context window, suitable for knowledge graph tasks.
+
+Since MiniMax uses an OpenAI-compatible API, no additional dependencies are required beyond the base `graphiti-core`
+installation.
+
+```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.minimax_client import MiniMaxClient
+from graphiti_core.llm_client.config import LLMConfig
+
+# Initialize Graphiti with MiniMax
+graphiti = Graphiti(
+    "bolt://localhost:7687",
+    "neo4j",
+    "password",
+    llm_client=MiniMaxClient(
+        config=LLMConfig(
+            api_key="<your-minimax-api-key>",
+            model="MiniMax-M2.5",
+            small_model="MiniMax-M2.5-highspeed",
+        )
+    ),
+)
+
+# Now you can use Graphiti with MiniMax models
+```
+
+**Key Points:**
+
+- Set the `MINIMAX_API_KEY` environment variable or pass it directly via `LLMConfig`
+- Available models: `MiniMax-M2.5` (full capability) and `MiniMax-M2.5-highspeed` (optimized for speed)
+- MiniMax requires temperature in the range (0.0, 1.0]; a temperature of 0 is automatically adjusted
+- The MiniMax-M2.5 model supports structured output (JSON mode), making it compatible with Graphiti's entity extraction
+
 ## Documentation
 
 - [Guides and API documentation](https://help.getzep.com/graphiti).
@@ -592,7 +629,7 @@ When you initialize a Graphiti instance, we collect:
 - **System information**: Operating system, Python version, and system architecture
 - **Graphiti version**: The version you're using
 - **Configuration choices**:
-  - LLM provider type (OpenAI, Azure, Anthropic, etc.)
+  - LLM provider type (OpenAI, Azure, Anthropic, MiniMax, etc.)
   - Database backend (Neo4j, FalkorDB, Kuzu, Amazon Neptune Database or Neptune Analytics)
   - Embedder provider (OpenAI, Azure, Voyage, etc.)
 
