@@ -362,6 +362,112 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(True) is True
 
 
+class TestFalkorDriverClone:
+    """Tests for FalkorDriver.clone() and ensure_database_initialized()."""
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def setup_method(self):
+        with patch('graphiti_core.driver.falkordb_driver.FalkorDB'):
+            self.driver = FalkorDriver(database='default_db')
+        self.driver.client = MagicMock()
+        # Mark default_db as already initialized so it's a known baseline
+        self.driver._initialized_databases = {'default_db'}
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_same_database_returns_self(self):
+        result = self.driver.clone(database='default_db')
+        assert result is self.driver
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_different_database_returns_new_driver(self):
+        cloned = self.driver.clone(database='tenant_db')
+        assert cloned is not self.driver
+        assert cloned._database == 'tenant_db'
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_preserves_original_database(self):
+        self.driver.clone(database='tenant_db')
+        assert self.driver._database == 'default_db'
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_shares_initialized_databases_set(self):
+        """Clones share the same _initialized_databases set by reference."""
+        cloned = self.driver.clone(database='tenant_db')
+        assert cloned._initialized_databases is self.driver._initialized_databases
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_clone_shares_client(self):
+        """Clones reuse the same underlying connection."""
+        cloned = self.driver.clone(database='tenant_db')
+        assert cloned.client is self.driver.client
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_ensure_database_initialized_calls_build_on_first_call(self):
+        """First call for a new database triggers build_indices_and_constraints."""
+        cloned = self.driver.clone(database='new_db')
+        with patch.object(
+            cloned, 'build_indices_and_constraints', new_callable=AsyncMock
+        ) as mock_build:
+            await cloned.ensure_database_initialized()
+            mock_build.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_ensure_database_initialized_skips_on_subsequent_calls(self):
+        """Subsequent calls for the same database are no-ops."""
+        cloned = self.driver.clone(database='new_db')
+        with patch.object(
+            cloned, 'build_indices_and_constraints', new_callable=AsyncMock
+        ) as mock_build:
+            await cloned.ensure_database_initialized()
+            await cloned.ensure_database_initialized()
+            await cloned.ensure_database_initialized()
+            mock_build.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_ensure_database_initialized_marks_database_as_initialized(self):
+        """After init, the database is recorded in _initialized_databases."""
+        cloned = self.driver.clone(database='new_db')
+        with patch.object(cloned, 'build_indices_and_constraints', new_callable=AsyncMock):
+            assert 'new_db' not in cloned._initialized_databases
+            await cloned.ensure_database_initialized()
+            assert 'new_db' in cloned._initialized_databases
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_ensure_database_initialized_shared_across_clones(self):
+        """Init via one clone is visible to sibling clones sharing the same set."""
+        clone_a = self.driver.clone(database='shared_db')
+        clone_b = self.driver.clone(database='shared_db')
+        assert clone_a._initialized_databases is clone_b._initialized_databases
+
+        with (
+            patch.object(
+                clone_a, 'build_indices_and_constraints', new_callable=AsyncMock
+            ) as mock_a,
+            patch.object(
+                clone_b, 'build_indices_and_constraints', new_callable=AsyncMock
+            ) as mock_b,
+        ):
+            await clone_a.ensure_database_initialized()
+            # clone_b should see shared_db already initialized and skip build
+            await clone_b.ensure_database_initialized()
+            mock_a.assert_awaited_once()
+            mock_b.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_ensure_database_initialized_skips_if_already_in_set(self):
+        """Databases pre-populated in _initialized_databases are not re-initialized."""
+        with patch.object(
+            self.driver, 'build_indices_and_constraints', new_callable=AsyncMock
+        ) as mock_build:
+            await self.driver.ensure_database_initialized()
+            mock_build.assert_not_awaited()
+
+
 # Simple integration test
 class TestFalkorDriverIntegration:
     """Simple integration test for FalkorDB driver."""
@@ -385,6 +491,38 @@ class TestFalkorDriverIntegration:
             result_set, header, summary = result
             assert header == ['test']
             assert result_set == [{'test': 1}]
+
+            await driver.close()
+
+        except Exception as e:
+            pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_clone_and_ensure_database_initialized_int(self):
+        """Integration: cloned driver initialises a fresh graph exactly once."""
+        pytest.importorskip('falkordb')
+
+        falkor_host = os.getenv('FALKORDB_HOST', 'localhost')
+        falkor_port = os.getenv('FALKORDB_PORT', '6379')
+
+        try:
+            driver = FalkorDriver(host=falkor_host, port=falkor_port, database='default_db')
+
+            test_db = 'test_clone_init_db'
+            cloned = driver.clone(database=test_db)
+
+            assert cloned is not driver
+            assert cloned._database == test_db
+            assert cloned._initialized_databases is driver._initialized_databases
+            assert test_db not in cloned._initialized_databases
+
+            # First call should build indices
+            await cloned.ensure_database_initialized()
+            assert test_db in cloned._initialized_databases
+
+            # Second call should be a no-op (no error raised)
+            await cloned.ensure_database_initialized()
 
             await driver.close()
 
