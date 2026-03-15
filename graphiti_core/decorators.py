@@ -50,7 +50,7 @@ def handle_multiple_group_ids(func: F) -> F:
             and hasattr(self.clients, 'driver')
             and self.clients.driver.provider == GraphProvider.FALKORDB
             and group_ids
-            and len(group_ids) > 1
+            and len(group_ids) >= 1
         ):
             # Execute for each group_id concurrently
             driver = self.clients.driver
