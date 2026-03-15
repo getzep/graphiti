@@ -36,13 +36,14 @@ from services.queue_service import QueueService
 from utils.formatting import format_fact_result
 
 # Load .env file from mcp_server directory
+# Use override=True to ensure .env takes precedence over shell env vars
 mcp_server_dir = Path(__file__).parent.parent
 env_file = mcp_server_dir / '.env'
 if env_file.exists():
-    load_dotenv(env_file)
+    load_dotenv(env_file, override=True)
 else:
     # Try current working directory as fallback
-    load_dotenv()
+    load_dotenv(override=True)
 
 
 # Semaphore limit for concurrent Graphiti operations.
