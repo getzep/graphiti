@@ -230,6 +230,27 @@ class EpisodicEdge(Edge):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_edges: list[EpisodicEdge] = []
+                for gid in group_ids:
+                    try:
+                        partial = await cls.get_by_group_ids(
+                            driver.clone(database=gid), [gid], limit, uuid_cursor
+                        )
+                        all_edges.extend(partial)
+                    except GroupsEdgesNotFoundError:
+                        pass
+                if len(all_edges) == 0:
+                    raise GroupsEdgesNotFoundError(group_ids)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
+
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
@@ -486,6 +507,31 @@ class EntityEdge(Edge):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_edges: list[EntityEdge] = []
+                for gid in group_ids:
+                    try:
+                        partial = await cls.get_by_group_ids(
+                            driver.clone(database=gid),
+                            [gid],
+                            limit,
+                            uuid_cursor,
+                            with_embeddings,
+                        )
+                        all_edges.extend(partial)
+                    except GroupsEdgesNotFoundError:
+                        pass
+                if len(all_edges) == 0:
+                    raise GroupsEdgesNotFoundError(group_ids)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
+
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
         with_embeddings_query: LiteralString = (
@@ -650,6 +696,22 @@ class CommunityEdge(Edge):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_edges: list[CommunityEdge] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_edges.extend(partial)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
+
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
@@ -782,6 +844,22 @@ class HasEpisodeEdge(Edge):
                 )
             except NotImplementedError:
                 pass
+
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_edges: list[HasEpisodeEdge] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_edges.extend(partial)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
 
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
@@ -917,6 +995,22 @@ class NextEpisodeEdge(Edge):
                 )
             except NotImplementedError:
                 pass
+
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_edges: list[NextEpisodeEdge] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_edges.extend(partial)
+                all_edges.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_edges = all_edges[:limit]
+                return all_edges
 
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''

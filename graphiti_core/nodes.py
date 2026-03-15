@@ -427,6 +427,22 @@ class EpisodicNode(Node):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_episodes: list[EpisodicNode] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_episodes.extend(partial)
+                all_episodes.sort(key=lambda e: e.uuid, reverse=True)
+                if limit is not None:
+                    all_episodes = all_episodes[:limit]
+                return all_episodes
+
         cursor_query: LiteralString = 'AND e.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
@@ -635,6 +651,26 @@ class EntityNode(Node):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_nodes: list[EntityNode] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid),
+                        [gid],
+                        limit,
+                        uuid_cursor,
+                        with_embeddings,
+                    )
+                    all_nodes.extend(partial)
+                all_nodes.sort(key=lambda n: n.uuid, reverse=True)
+                if limit is not None:
+                    all_nodes = all_nodes[:limit]
+                return all_nodes
+
         cursor_query: LiteralString = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
         with_embeddings_query: LiteralString = (
@@ -817,6 +853,22 @@ class CommunityNode(Node):
             except NotImplementedError:
                 pass
 
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_communities: list[CommunityNode] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_communities.extend(partial)
+                all_communities.sort(key=lambda c: c.uuid, reverse=True)
+                if limit is not None:
+                    all_communities = all_communities[:limit]
+                return all_communities
+
         cursor_query: LiteralString = 'AND c.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
 
@@ -961,6 +1013,22 @@ class SagaNode(Node):
                 )
             except NotImplementedError:
                 pass
+
+        # For FalkorDB, route each group_id to its own graph database
+        if driver.provider == GraphProvider.FALKORDB and group_ids:
+            if len(group_ids) == 1:
+                driver = driver.clone(database=group_ids[0])
+            else:
+                all_sagas: list[SagaNode] = []
+                for gid in group_ids:
+                    partial = await cls.get_by_group_ids(
+                        driver.clone(database=gid), [gid], limit, uuid_cursor
+                    )
+                    all_sagas.extend(partial)
+                all_sagas.sort(key=lambda s: s.uuid, reverse=True)
+                if limit is not None:
+                    all_sagas = all_sagas[:limit]
+                return all_sagas
 
         cursor_query: LiteralString = 'AND s.uuid < $uuid' if uuid_cursor else ''
         limit_query: LiteralString = 'LIMIT $limit' if limit is not None else ''
