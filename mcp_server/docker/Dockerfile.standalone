@@ -1,8 +1,7 @@
-# syntax=docker/dockerfile:1
 # Standalone Graphiti MCP Server Image
 # This image runs only the MCP server and connects to an external database (Neo4j or FalkorDB)
 
-FROM python:3.11-slim-bookworm
+FROM docker.1ms.run/python:3.11-slim-bookworm
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,16 +9,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for Python package management
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
+# Install uv for Python package management.
+# Avoid astral.sh/GitHub during image build since some NAS environments can
+# reach Debian mirrors but cannot fetch GitHub-hosted installer artifacts.
+ARG PIP_INDEX_URL=https://pypi.org/simple
+RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} uv
 
 # Add uv to PATH
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Configure uv for optimal Docker usage
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX} \
     UV_PYTHON_DOWNLOADS=never \
     MCP_SERVER_HOST="0.0.0.0" \
     PYTHONUNBUFFERED=1
@@ -42,9 +45,9 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     rm -f uv.lock && \
     uv lock
 
-# Install Python dependencies (exclude dev dependency group)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+# Install Python dependencies (exclude dev dependency group).
+# Avoid BuildKit-only mount syntax so Synology's legacy builder can still build this image.
+RUN uv sync --no-group dev
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version

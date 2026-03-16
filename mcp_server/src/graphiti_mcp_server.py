@@ -34,6 +34,7 @@ from models.response_types import (
 from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result
+from utils.transport_security import build_transport_security_settings
 
 # Load .env file from mcp_server directory
 mcp_server_dir = Path(__file__).parent.parent
@@ -142,6 +143,83 @@ When searching, use specific queries and consider filtering by group_id for more
 For optimal performance, ensure the database is properly configured and accessible, and valid 
 API keys are provided for any language model operations.
 """
+
+
+def _get_openai_like_base_url(provider_config: Any) -> str | None:
+    """Return a provider base URL if present, without exposing secrets."""
+    if provider_config is None:
+        return None
+
+    return getattr(provider_config, 'api_url', None)
+
+
+def summarize_runtime_config(config: GraphitiConfig) -> dict[str, str | int | None]:
+    """Build a secret-safe runtime summary for startup logs and diagnostics."""
+    llm_provider_config = getattr(config.llm.providers, config.llm.provider, None)
+    embedder_provider_config = getattr(config.embedder.providers, config.embedder.provider, None)
+
+    return {
+        'llm_provider': config.llm.provider,
+        'llm_model': config.llm.model,
+        'llm_base_url': _get_openai_like_base_url(llm_provider_config),
+        'embedder_provider': config.embedder.provider,
+        'embedder_model': config.embedder.model,
+        'embedder_base_url': _get_openai_like_base_url(embedder_provider_config),
+        'embedder_dimensions': config.embedder.dimensions,
+        'database_provider': config.database.provider,
+        'group_id': config.graphiti.group_id,
+        'transport': config.server.transport,
+    }
+
+
+async def verify_embedder_connectivity(
+    config: GraphitiConfig,
+    probe_text: str = 'graphiti startup health check',
+) -> None:
+    """Verify the configured embedder endpoint is reachable before serving requests."""
+    provider = config.embedder.provider.lower()
+    provider_config = getattr(config.embedder.providers, provider, None)
+    base_url = _get_openai_like_base_url(provider_config)
+
+    if provider != 'openai' or not base_url:
+        logger.info(
+            'Skipping embedder connectivity check for provider=%s base_url=%s',
+            config.embedder.provider,
+            base_url,
+        )
+        return
+
+    try:
+        embedder = EmbedderFactory.create(config.embedder)
+        embedding = await embedder.create(probe_text)
+    except Exception as exc:
+        raise RuntimeError(
+            'Embedder connectivity check failed '
+            f'(provider={config.embedder.provider}, model={config.embedder.model}, '
+            f'base_url={base_url}): {exc}'
+        ) from exc
+
+    if not embedding:
+        raise RuntimeError(
+            'Embedder connectivity check returned no embedding data '
+            f'(provider={config.embedder.provider}, model={config.embedder.model}, '
+            f'base_url={base_url})'
+        )
+
+    if len(embedding) != config.embedder.dimensions:
+        raise RuntimeError(
+            'Embedder connectivity check returned an unexpected vector length '
+            f'(provider={config.embedder.provider}, model={config.embedder.model}, '
+            f'base_url={base_url}, expected={config.embedder.dimensions}, got={len(embedding)})'
+        )
+
+    logger.info(
+        'Embedder connectivity check passed: provider=%s model=%s base_url=%s dimensions=%s',
+        config.embedder.provider,
+        config.embedder.model,
+        base_url,
+        len(embedding),
+    )
 
 # MCP server instance
 mcp = FastMCP(
@@ -853,11 +931,23 @@ async def initialize_server() -> ServerConfig:
 
     # Log configuration details
     logger.info('Using configuration:')
-    logger.info(f'  - LLM: {config.llm.provider} / {config.llm.model}')
-    logger.info(f'  - Embedder: {config.embedder.provider} / {config.embedder.model}')
-    logger.info(f'  - Database: {config.database.provider}')
-    logger.info(f'  - Group ID: {config.graphiti.group_id}')
-    logger.info(f'  - Transport: {config.server.transport}')
+    runtime_summary = summarize_runtime_config(config)
+    logger.info(
+        '  - LLM: %s / %s',
+        runtime_summary['llm_provider'],
+        runtime_summary['llm_model'],
+    )
+    logger.info('    base_url: %s', runtime_summary['llm_base_url'])
+    logger.info(
+        '  - Embedder: %s / %s',
+        runtime_summary['embedder_provider'],
+        runtime_summary['embedder_model'],
+    )
+    logger.info('    base_url: %s', runtime_summary['embedder_base_url'])
+    logger.info('    dimensions: %s', runtime_summary['embedder_dimensions'])
+    logger.info('  - Database: %s', runtime_summary['database_provider'])
+    logger.info('  - Group ID: %s', runtime_summary['group_id'])
+    logger.info('  - Transport: %s', runtime_summary['transport'])
 
     # Log graphiti-core version
     try:
@@ -873,6 +963,9 @@ async def initialize_server() -> ServerConfig:
             logger.info(f'  - Graphiti Core: {graphiti_version}')
         else:
             logger.info('  - Graphiti Core: version unavailable')
+
+    # Fail fast if the configured embedder endpoint is unreachable.
+    await verify_embedder_connectivity(config)
 
     # Handle graph destruction if requested
     if hasattr(config, 'destroy_graph') and config.destroy_graph:
@@ -900,6 +993,7 @@ async def initialize_server() -> ServerConfig:
         mcp.settings.host = config.server.host
     if config.server.port:
         mcp.settings.port = config.server.port
+    mcp.settings.transport_security = build_transport_security_settings(config.server.host)
 
     # Return MCP configuration for transport
     return config.server

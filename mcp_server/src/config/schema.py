@@ -20,37 +20,112 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
         self.config_path = config_path or Path('config.yaml')
 
+    @staticmethod
+    def _find_closing_brace(value: str, start_index: int) -> int:
+        """Find the closing brace for a ${...} expression, supporting nested defaults."""
+        depth = 1
+        index = start_index
+
+        while index < len(value):
+            if value.startswith('${', index):
+                depth += 1
+                index += 2
+                continue
+
+            if value[index] == '}':
+                depth -= 1
+                if depth == 0:
+                    return index
+
+            index += 1
+
+        return -1
+
+    @staticmethod
+    def _split_env_expression(expr: str) -> tuple[str, str | None]:
+        """Split VAR and default parts, ignoring nested ${...} segments in the default."""
+        depth = 0
+        index = 0
+
+        while index < len(expr):
+            if expr.startswith('${', index):
+                depth += 1
+                index += 2
+                continue
+
+            if expr[index] == '}' and depth > 0:
+                depth -= 1
+            elif expr[index] == ':' and depth == 0:
+                return expr[:index], expr[index + 1 :]
+
+            index += 1
+
+        return expr, None
+
+    @staticmethod
+    def _coerce_scalar_value(result: Any) -> Any:
+        """Convert string scalars to booleans or None when the entire field is an env expression."""
+        if isinstance(result, str):
+            lower_result = result.lower().strip()
+            if lower_result in ('true', '1', 'yes', 'on'):
+                return True
+            if lower_result in ('false', '0', 'no', 'off'):
+                return False
+            if lower_result == '':
+                return None
+
+        return result
+
+    def _resolve_env_expression(self, expr: str, *, whole_value: bool) -> Any:
+        """Resolve a single ${VAR} or ${VAR:default} expression."""
+        var_name, default_value = self._split_env_expression(expr)
+        result = os.environ.get(var_name)
+
+        if result is None:
+            if default_value is None:
+                result = ''
+            else:
+                result = self._expand_env_vars(default_value)
+
+        if whole_value:
+            return self._coerce_scalar_value(result)
+
+        return '' if result is None else str(result)
+
     def _expand_env_vars(self, value: Any) -> Any:
         """Recursively expand environment variables in configuration values."""
         if isinstance(value, str):
-            # Support ${VAR} and ${VAR:default} syntax
-            import re
+            if '${' not in value:
+                return value
 
-            def replacer(match):
-                var_name = match.group(1)
-                default_value = match.group(3) if match.group(3) is not None else ''
-                return os.environ.get(var_name, default_value)
+            if value.startswith('${'):
+                closing_brace = self._find_closing_brace(value, 2)
+                if closing_brace == -1:
+                    return value
+                if closing_brace == len(value) - 1:
+                    return self._resolve_env_expression(value[2:-1], whole_value=True)
 
-            pattern = r'\$\{([^:}]+)(:([^}]*))?\}'
+            result_parts: list[str] = []
+            cursor = 0
 
-            # Check if the entire value is a single env var expression
-            full_match = re.fullmatch(pattern, value)
-            if full_match:
-                result = replacer(full_match)
-                # Convert boolean-like strings to actual booleans
-                if isinstance(result, str):
-                    lower_result = result.lower().strip()
-                    if lower_result in ('true', '1', 'yes', 'on'):
-                        return True
-                    elif lower_result in ('false', '0', 'no', 'off'):
-                        return False
-                    elif lower_result == '':
-                        # Empty string means env var not set - return None for optional fields
-                        return None
-                return result
-            else:
-                # Otherwise, do string substitution (keep as strings for partial replacements)
-                return re.sub(pattern, replacer, value)
+            while cursor < len(value):
+                start = value.find('${', cursor)
+                if start == -1:
+                    result_parts.append(value[cursor:])
+                    break
+
+                result_parts.append(value[cursor:start])
+                end = self._find_closing_brace(value, start + 2)
+                if end == -1:
+                    result_parts.append(value[start:])
+                    break
+
+                result_parts.append(
+                    self._resolve_env_expression(value[start + 2 : end], whole_value=False)
+                )
+                cursor = end + 1
+
+            return ''.join(result_parts)
         elif isinstance(value, dict):
             return {k: self._expand_env_vars(v) for k, v in value.items()}
         elif isinstance(value, list):

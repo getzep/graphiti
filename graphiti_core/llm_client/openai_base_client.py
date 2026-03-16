@@ -18,6 +18,7 @@ import json
 import logging
 import typing
 from abc import abstractmethod
+from time import perf_counter
 from typing import Any, ClassVar
 
 import openai
@@ -242,14 +243,27 @@ class BaseOpenAIClient(LLMClient):
 
             while retry_count <= self.MAX_RETRIES:
                 try:
+                    started_at = perf_counter()
                     response, input_tokens, output_tokens = await self._generate_response(
                         messages, response_model, max_tokens, model_size
                     )
+                    elapsed_ms = (perf_counter() - started_at) * 1000
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens
 
                     # Record token usage
                     self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
+                    logger.info(
+                        'LLM timing prompt=%s model=%s size=%s elapsed_ms=%.1f retries=%s input_tokens=%s output_tokens=%s client=%s',
+                        prompt_name or 'unknown',
+                        model,
+                        model_size.value,
+                        elapsed_ms,
+                        retry_count,
+                        input_tokens,
+                        output_tokens,
+                        self.__class__.__name__,
+                    )
 
                     return response
                 except (RateLimitError, RefusalError):

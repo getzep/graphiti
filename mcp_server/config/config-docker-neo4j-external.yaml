@@ -1,0 +1,66 @@
+# Graphiti MCP Server configuration for your NAS deployment.
+# This file is intentionally simplified for the current setup:
+# - external Neo4j is already running
+# - graphiti-api (REST) is already running on the NAS
+# - MCP is exposed separately on 8011 -> 8000
+# - LLM uses the same OpenAI-compatible endpoint style as the current REST service
+
+server:
+  transport: 'http'
+  host: '0.0.0.0'
+  port: 8000
+
+llm:
+  provider: 'openai'
+  model: ${LLM_MODEL:glm-5}
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://open.bigmodel.cn/api/paas/v4/}
+
+embedder:
+  provider: 'openai'
+  model: ${EMBEDDER_MODEL:text-embeddings-inference}
+  dimensions: ${EMBEDDER_DIMENSIONS:1536}
+
+  providers:
+    openai:
+      api_key: ${EMBEDDER_OPENAI_API_KEY:${OPENAI_API_KEY}}
+      api_url: ${EMBEDDER_OPENAI_API_URL:${OPENAI_API_URL:https://open.bigmodel.cn/api/paas/v4/}}
+
+database:
+  provider: 'neo4j'
+
+  providers:
+    neo4j:
+      uri: ${NEO4J_URI:bolt://192.168.123.104:7687}
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD}
+      database: ${NEO4J_DATABASE:neo4j}
+      use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:nas_mcp}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:}
+  user_id: ${USER_ID:mcp_user}
+  entity_types:
+    - name: 'Preference'
+      description: 'User preferences, choices, opinions, or selections (PRIORITIZE over most other types except User/Assistant)'
+    - name: 'Requirement'
+      description: 'Specific needs, features, or functionality that must be fulfilled'
+    - name: 'Procedure'
+      description: 'Standard operating procedures and sequential instructions'
+    - name: 'Location'
+      description: 'Physical or virtual places where activities occur'
+    - name: 'Event'
+      description: 'Time-bound activities, occurrences, or experiences'
+    - name: 'Organization'
+      description: 'Companies, institutions, groups, or formal entities'
+    - name: 'Document'
+      description: 'Information content in various forms (books, articles, reports, etc.)'
+    - name: 'Topic'
+      description: 'Subject of conversation, interest, or knowledge domain (use as last resort)'
+    - name: 'Object'
+      description: 'Physical items, tools, devices, or possessions (use as last resort)'

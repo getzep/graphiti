@@ -17,6 +17,7 @@ limitations under the License.
 import json
 import logging
 import typing
+from time import perf_counter
 from typing import Any, ClassVar
 
 import openai
@@ -166,8 +167,19 @@ class OpenAIGenericClient(LLMClient):
 
             while retry_count <= self.MAX_RETRIES:
                 try:
+                    started_at = perf_counter()
                     response = await self._generate_response(
                         messages, response_model, max_tokens=max_tokens, model_size=model_size
+                    )
+                    elapsed_ms = (perf_counter() - started_at) * 1000
+                    logger.info(
+                        'LLM timing prompt=%s model=%s size=%s elapsed_ms=%.1f retries=%s client=%s',
+                        prompt_name or 'unknown',
+                        self.model or DEFAULT_MODEL,
+                        model_size.value,
+                        elapsed_ms,
+                        retry_count,
+                        self.__class__.__name__,
                     )
                     return response
                 except (RateLimitError, RefusalError):
