@@ -105,17 +105,21 @@ async def extract_edges(
     extract_edges_max_tokens = 16384
     llm_client = clients.llm_client
 
-    edge_type_signature_map: dict[str, tuple[str, str]] = {
-        edge_type: signature
-        for signature, edge_types in edge_type_map.items()
-        for edge_type in edge_types
-    }
+    # Build map: edge_type_name -> list of all valid signatures
+    # A single edge type (e.g. ABOUT) can have multiple signatures
+    # (e.g. (Event, Service), (CreativeWork, Product)), so we must collect all of them.
+    # Previously this was a dict[str, tuple] which silently dropped all but the last
+    # signature per edge type, causing LLM to miss valid relationships.
+    edge_type_signatures_map: dict[str, list[tuple[str, str]]] = {}
+    for signature, edge_type_names in edge_type_map.items():
+        for edge_type in edge_type_names:
+            edge_type_signatures_map.setdefault(edge_type, []).append(signature)
 
     edge_types_context = (
         [
             {
                 'fact_type_name': type_name,
-                'fact_type_signature': edge_type_signature_map.get(type_name, ('Entity', 'Entity')),
+                'fact_type_signature': edge_type_signatures_map.get(type_name, [('Entity', 'Entity')]),
                 'fact_type_description': type_model.__doc__,
             }
             for type_name, type_model in edge_types.items()
