@@ -1,6 +1,9 @@
 services:
   graphiti-mcp:
-    image: docker.1ms.run/zepai/knowledge-graph-mcp:latest
+    # Use a local image tag so `up --build` always produces and reuses a
+    # source-built standalone image for this deployment path instead of the
+    # registry's combined/older variants.
+    image: graphiti-mcp-neo4j-external:local
     container_name: graphiti-mcp
     restart: always
     env_file:

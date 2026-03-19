@@ -52,6 +52,7 @@ except ImportError:
 
 try:
     from graphiti_core.llm_client.anthropic_client import AnthropicClient
+    from anthropic import AsyncAnthropic
 
     HAS_ANTHROPIC = True
 except ImportError:
@@ -227,7 +228,16 @@ class LLMClientFactory:
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
-                return AnthropicClient(config=llm_config)
+
+                anthropic_client = AsyncAnthropic(
+                    api_key=api_key,
+                    base_url=config.providers.anthropic.api_url,
+                    max_retries=1,
+                )
+
+                return InstrumentedLLMClient(
+                    AnthropicClient(config=llm_config, client=anthropic_client)
+                )
 
             case 'gemini':
                 if not HAS_GEMINI:

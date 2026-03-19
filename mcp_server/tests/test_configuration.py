@@ -309,6 +309,58 @@ def test_openai_llm_factory_uses_generic_client_for_custom_base_url(monkeypatch)
     assert client._inner.__class__.__name__ == 'OpenAICompatibleJSONClient'
 
 
+def test_anthropic_llm_factory_uses_configured_base_url(monkeypatch):
+    """Anthropic-compatible providers must pass through the configured API URL."""
+    import services.factories as factories
+    from config.schema import AnthropicProviderConfig, LLMConfig as ServerLLMConfig, LLMProvidersConfig
+
+    captured: dict[str, object] = {}
+
+    class FakeAsyncAnthropic:
+        def __init__(self, **kwargs):
+            captured['kwargs'] = kwargs
+
+    class FakeAnthropicClient:
+        def __init__(self, config=None, cache=False, client=None, max_tokens=None):
+            captured['client'] = client
+            captured['config'] = config
+            self.config = config
+            self.model = config.model
+            self.small_model = config.model
+            self.temperature = config.temperature
+            self.max_tokens = config.max_tokens
+            self.tracer = None
+            self.token_tracker = None
+
+        def set_tracer(self, tracer):
+            self.tracer = tracer
+
+    monkeypatch.setattr(factories, 'HAS_ANTHROPIC', True)
+    monkeypatch.setattr(factories, 'AsyncAnthropic', FakeAsyncAnthropic, raising=False)
+    monkeypatch.setattr(factories, 'AnthropicClient', FakeAnthropicClient, raising=False)
+
+    config = ServerLLMConfig(
+        provider='anthropic',
+        model='glm-5',
+        max_tokens=4096,
+        providers=LLMProvidersConfig(
+            anthropic=AnthropicProviderConfig(
+                api_key='test-anthropic-key',
+                api_url='https://open.bigmodel.cn/api/anthropic',
+            )
+        ),
+    )
+
+    _ = factories.LLMClientFactory.create(config)
+
+    assert captured['client'] is not None
+    assert captured['kwargs'] == {
+        'api_key': 'test-anthropic-key',
+        'base_url': 'https://open.bigmodel.cn/api/anthropic',
+        'max_retries': 1,
+    }
+
+
 @pytest.mark.asyncio
 async def test_openai_compatible_client_uses_json_object_for_structured_output():
     """Structured output for OpenAI-compatible providers should avoid json_schema mode."""

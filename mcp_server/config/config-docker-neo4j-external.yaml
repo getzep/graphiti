@@ -3,7 +3,8 @@
 # - external Neo4j is already running
 # - graphiti-api (REST) is already running on the NAS
 # - MCP is exposed separately on 8011 -> 8000
-# - LLM uses the same OpenAI-compatible endpoint style as the current REST service
+# - LLM can use Anthropic-compatible or OpenAI-compatible endpoints
+# - embeddings continue to use the OpenAI-compatible endpoint style
 
 server:
   transport: 'http'
@@ -11,7 +12,7 @@ server:
   port: 8000
 
 llm:
-  provider: 'openai'
+  provider: ${LLM_PROVIDER:openai}
   model: ${LLM_MODEL:glm-5}
   max_tokens: 4096
 
@@ -19,6 +20,10 @@ llm:
     openai:
       api_key: ${OPENAI_API_KEY}
       api_url: ${OPENAI_API_URL:https://open.bigmodel.cn/api/paas/v4/}
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY:${OPENAI_API_KEY}}
+      api_url: ${ANTHROPIC_API_URL:https://open.bigmodel.cn/api/anthropic}
+      max_retries: ${ANTHROPIC_MAX_RETRIES:3}
 
 embedder:
   provider: 'openai'
