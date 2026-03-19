@@ -17,6 +17,10 @@
 
 ## 2. 它能做什么
 
+> 注意：如果你在旧英文 README、旧博客或旧示例里看到 `add_episode`、`search_facts`，
+> 把它们视为历史名称。当前 `graphiti-mcp` 实际暴露的是 `add_memory` 和
+> `search_memory_facts`。
+
 ### 2.1 写入记忆
 
 核心工具：
@@ -80,6 +84,21 @@
 基础设施探活：
 
 - `GET /health`
+
+### 2.5 当前工具名与关键参数
+
+当前最常用的工具签名可以按下面理解：
+
+- `add_memory(name, episode_body, group_id?, source?, source_description?, uuid?)`
+- `search_nodes(query, group_ids?, max_nodes?, entity_types?)`
+- `search_memory_facts(query, group_ids?, max_facts?, center_node_uuid?)`
+- `get_episodes(group_ids?, max_episodes?)`
+- `clear_graph(group_ids?)`
+
+这里有两个容易混淆的点：
+
+- 检索类工具大多使用 `group_ids`，是列表，不是单个 `group_id`
+- `get_episodes` 当前参数是 `max_episodes`，不是旧资料里常见的 `last_n`
 
 ## 3. 什么时候选 MCP，而不是 API
 
@@ -432,16 +451,343 @@ uv run main.py --transport stdio
    - `Successfully processed episode`
    - 实际可检索时间
 
-## 11. 常见问题
+### 10.5 直接用基准脚本做对比
 
-### 11.1 `/health` 正常，但 tools 不可用
+仓库里现在提供了一个可复用脚本：
+
+- `mcp_server/benchmark_mcp.py`
+
+它会自动执行：
+
+1. MCP 协议 `initialize` 握手
+2. `add_memory`
+3. 轮询 `search_nodes`
+4. 轮询 `search_memory_facts`
+5. 输出 `success_at_seconds`
+6. 默认清理测试 `group_id`
+
+典型用法：
+
+```bash
+cd mcp_server
+python benchmark_mcp.py \
+  --url http://127.0.0.1:8011/mcp \
+  --group-id-prefix perfprobe \
+  --sleep-seconds 20 \
+  --max-attempts 18
+```
+
+如果你要保留测试数据方便排查：
+
+```bash
+python benchmark_mcp.py \
+  --url http://127.0.0.1:8011/mcp \
+  --keep-data
+```
+
+输出里最值得看的是：
+
+- `group_id`
+- `success_at_seconds`
+- `nodes_found`
+- `facts_found`
+
+所以以后切换 `.env.nas` 中的：
+
+- `LLM_MODEL`
+- `OPENAI_API_URL`
+
+后，直接重复跑这个脚本就能做 A/B 对比。
+
+## 11. 用 `examples/quickstart` 理解 Graphiti 本体
+
+虽然本文主要讲 `graphiti-mcp`，但如果你想真正理解它在底层封装了什么，仓库里最好的起点仍然是：
+
+- `examples/quickstart/README.md`
+- `examples/quickstart/quickstart_neo4j.py`
+- `examples/quickstart/quickstart_falkordb.py`
+- `examples/quickstart/quickstart_neptune.py`
+
+这组示例直接调用的是 `graphiti_core`，没有经过 MCP 包装，所以它非常适合用来建立“Graphiti 本体到底怎么工作”的心智模型。
+
+### 11.1 为什么这个示例值得先看
+
+它基本把 Graphiti 的核心主线都串起来了：
+
+1. 连接图数据库
+2. 初始化索引和约束
+3. 写入文本和 JSON episode
+4. 搜索事实关系
+5. 用图距离重排结果
+6. 用预定义搜索配方搜索节点
+
+把这条主线看懂之后，再回头看 `graphiti-mcp`，你会更容易理解：
+
+- MCP 的 `add_memory` 本质上就是在服务端调用 `graphiti.add_episode(...)`
+- MCP 的 `search_memory_facts` 本质上就是 Graphiti 的边搜索
+- MCP 的 `search_nodes` 本质上就是 Graphiti 的节点搜索配方封装
+
+### 11.2 Quickstart 和 MCP 的对应关系
+
+如果你把 quickstart 当成“底层 API 版”，那和 MCP 的关系可以这样对照：
+
+| Quickstart 直接 API | `graphiti-mcp` 对应能力 | 说明 |
+|---|---|---|
+| `Graphiti(...)` / `FalkorDriver(...)` / `NeptuneDriver(...)` | 服务启动时读取 YAML + `.env` 建 client | MCP 把连接配置搬到了服务端 |
+| `graphiti.add_episode(...)` | `add_memory` | MCP 用工具调用替代直接 Python 调用 |
+| `graphiti.search(...)` | `search_memory_facts` | 都是在找事实关系（边） |
+| `graphiti.search_()` + `NODE_HYBRID_SEARCH_RRF` | `search_nodes` | MCP 已经帮你选好了一个常用节点检索配方 |
+| `await graphiti.close()` | 服务端生命周期管理 | MCP 客户端不需要自己关连接 |
+
+### 11.3 安装和配置要点
+
+quickstart README 里给出的最小依赖是：
+
+- `graphiti-core`
+- `python-dotenv`
+
+最小环境变量是：
+
+- `OPENAI_API_KEY`
+
+按不同后端，还要再配：
+
+- Neo4j
+  - `NEO4J_URI`
+  - `NEO4J_USER`
+  - `NEO4J_PASSWORD`
+- FalkorDB
+  - 当前脚本实际读取的是 `FALKORDB_HOST`、`FALKORDB_PORT`
+  - 可选 `FALKORDB_USERNAME`、`FALKORDB_PASSWORD`
+- Neptune
+  - `NEPTUNE_HOST`
+  - `NEPTUNE_PORT`
+  - `AOSS_HOST`
+
+有两个细节值得注意：
+
+- `examples/quickstart/README.md` 里写了 `FALKORDB_URI`，但当前 `quickstart_falkordb.py` 实际是按 host/port 读取环境变量
+- quickstart README 写的是 Python 3.9+，但当前仓库根 `pyproject.toml` 和 `mcp_server` 都按 Python 3.10+ 运行更稳妥
+
+### 11.4 连接到 Neo4j 数据库
+
+quickstart 的 Neo4j 接法非常直接：
+
+```python
+graphiti = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+```
+
+也就是说：
+
+- Graphiti 默认可以直接接 Neo4j
+- 你只要把 URI、用户名、密码准备好，就能开始写入和检索
+
+如果你用的是自定义 Neo4j database，而不是默认库，quickstart README 还特别提醒了一个常见坑：
+
+- `Graph not found: default_db`
+
+遇到这种情况时，应该显式构造 `Neo4jDriver(..., database="your_db_name")`，而不是只传 URI。
+
+对于 `graphiti-mcp`，同样的连接信息不再写进代码，而是放在：
+
+- `config.yaml`
+- `.env`
+- 或命令行参数
+
+### 11.5 初始化 Graphiti 索引和约束
+
+从概念上说，这是第一次使用某个图数据库时应当做的初始化动作：
+
+```python
+await graphiti.build_indices_and_constraints()
+```
+
+它的作用是：
+
+- 建立必要的索引
+- 建立必要的约束
+- 让后续写入和检索更稳定、更快
+
+这里要特别说明当前示例的实际情况：
+
+- `quickstart_neptune.py` 明确调用了 `await graphiti.build_indices_and_constraints()`
+- `quickstart_neo4j.py` 和 `quickstart_falkordb.py` 的注释和 README 都强调这一步重要
+- 但这两个脚本当前本体没有显式调用这行代码
+
+所以如果你是第一次在一套新的 Neo4j / FalkorDB 上跑 Graphiti，建议把这一步当成“应该显式执行一次”的初始化步骤。
+
+而在 `graphiti-mcp` 里，这一步通常已经由服务启动流程自动处理了，所以 MCP 客户端不需要自己再调用单独工具。
+
+### 11.6 向图谱中添加 Episodes
+
+quickstart 里最关键的写入示例，是同时写入：
+
+- 纯文本 episode
+- 结构化 JSON episode
+
+典型形态是：
+
+```python
+await graphiti.add_episode(
+    name='Freakonomics Radio 0',
+    episode_body='...',
+    source=EpisodeType.text,
+    source_description='podcast transcript',
+    reference_time=datetime.now(timezone.utc),
+)
+```
+
+如果内容是 JSON，示例会先做一层：
+
+```python
+json.dumps(episode['content'])
+```
+
+这意味着：
+
+- 底层 `graphiti_core` 仍然接收字符串形式的 episode body
+- `EpisodeType.json` 只是告诉 Graphiti“这是结构化内容”
+- Graphiti 会据此抽实体、关系和摘要
+
+示例还说明了 `reference_time` 的意义：
+
+- 它不只是“写入时间”
+- 它还是事实生效时间的参考点
+- 这也是 Graphiti 能做时间语义检索的基础
+
+对应到 MCP：
+
+- 你不会直接调用 `add_episode`
+- 而是用 `add_memory`
+- `source` 仍然是 `text` / `json` / `message`
+- 但 `reference_time` 当前由服务端在入队处理时自动取当前 UTC 时间
+
+### 11.7 使用混合搜索查找关系（边）
+
+quickstart 演示关系搜索时，直接调用：
+
+```python
+results = await graphiti.search('Who was the California Attorney General?')
+```
+
+这个调用背后做的是混合搜索，核心包括：
+
+- 语义相似度
+- 关键词 / BM25
+- 图结构相关性
+
+返回结果的重点字段包括：
+
+- `fact`
+- `valid_at`
+- `invalid_at`
+- `source_node_uuid`
+- `target_node_uuid`
+
+所以它不是在返回“最像的文档块”，而是在返回“图谱中最相关的事实关系”。
+
+这就是 `graphiti-mcp` 里 `search_memory_facts` 的底层原型。
+
+### 11.8 使用图距离重排搜索结果
+
+quickstart 的第二个关键动作，是先搜一次，再把首条结果的源节点拿来做 anchor：
+
+```python
+center_node_uuid = results[0].source_node_uuid
+reranked_results = await graphiti.search(
+    'Who was the California Attorney General?',
+    center_node_uuid=center_node_uuid,
+)
+```
+
+它的思路是：
+
+1. 先用普通混合搜索找到一个足够靠谱的相关事实
+2. 再用这条事实关联的节点作为“中心节点”
+3. 让第二轮结果向图上更近的事实倾斜
+
+这对下面这些问题很有价值：
+
+- 先找到正确人物，再找该人物的其他事实
+- 先找到正确服务，再找与它强相关的依赖或配置
+- 先找到正确文档实体，再找同一主题链路上的其他节点和关系
+
+而 `graphiti-mcp` 的 `search_memory_facts` 也保留了 `center_node_uuid` 参数，所以这套思路可以直接迁移到 MCP 客户端。
+
+### 11.9 使用预定义配方搜索节点
+
+quickstart 的第六步演示了“不是搜边，而是直接搜节点”：
+
+```python
+node_search_config = NODE_HYBRID_SEARCH_RRF.model_copy(deep=True)
+node_search_config.limit = 5
+
+node_search_results = await graphiti._search(
+    query='California Governor',
+    config=node_search_config,
+)
+```
+
+这段代码有三个重点：
+
+1. 它用的是 `NODE_HYBRID_SEARCH_RRF`
+   - 这是内置的节点搜索配方
+   - 你不用手写复杂搜索参数
+2. 它会先复制 recipe 再改 `limit`
+   - 避免直接修改共享的全局配置对象
+3. 示例里调用的是 `_search()`
+   - 但在当前 `graphiti_core` 中，`_search()` 已经是兼容包装
+   - 新代码更建议直接用 `search_()`
+
+对应到 MCP，这一步其实已经被封装好了：
+
+- `search_nodes` 内部就是通过 `search_()` + `NODE_HYBRID_SEARCH_RRF` 来做节点检索
+
+也就是说，MCP 客户端天然就拿到了 quickstart 推荐的那套“节点搜索最佳实践”。
+
+### 11.10 这个示例如何帮助你理解 `graphiti-mcp`
+
+把 quickstart 看懂后，再看 MCP，你会发现 `graphiti-mcp` 做的事情主要是三类封装：
+
+- 把 Python API 变成 MCP tools
+- 把数据库 / LLM / embedder 配置搬到服务端
+- 把写入流程改造成异步队列，避免客户端阻塞等待
+
+所以一个很实用的理解路径是：
+
+1. 先跑通 quickstart
+2. 确认你理解 episode、fact、node、`reference_time`、`center_node_uuid`
+3. 再接 `graphiti-mcp`
+4. 把 direct API 心智模型映射成 MCP tools
+
+这样你在 Cursor、Claude、Codex 里调工具时，会更清楚每一步到底在底层触发了什么。
+
+### 11.11 跑完 quickstart 后下一步看什么
+
+quickstart README 里给的后续建议基本是对的，推荐顺序也可以照着走：
+
+1. 改 episode 内容，观察抽取结果如何变化
+2. 改搜索问题，看看边搜索怎么变化
+3. 改 `center_node_uuid`，观察图距离重排差异
+4. 继续看 `graphiti_core.search.search_config_recipes`
+5. 再看 `examples/quickstart/dense_vs_normal_ingestion.py`
+
+最后这个 `dense_vs_normal_ingestion.py` 很适合作为第二站，因为它会继续解释：
+
+- 什么内容会被当成普通 prose
+- 什么内容会触发 dense-content chunking
+- Graphiti 在实体非常密集的 JSON / 报表场景下会怎么分块处理
+
+## 12. 常见问题
+
+### 12.1 `/health` 正常，但 tools 不可用
 
 优先检查：
 
 - URL 是否指向 `/mcp/`
 - transport 是否一致
 
-### 11.2 写入成功，但搜索不到
+### 12.2 写入成功，但搜索不到
 
 先查：
 
@@ -451,7 +797,7 @@ uv run main.py --transport stdio
 
 不要只盯着检索接口。
 
-### 11.3 为什么 OpenAI 兼容端点看起来能调，但写入还是慢或失败
+### 12.3 为什么 OpenAI 兼容端点看起来能调，但写入还是慢或失败
 
 因为 Graphiti 不只是简单聊天：
 
@@ -459,7 +805,7 @@ uv run main.py --transport stdio
 - 会有多轮 prompt
 - 兼容端点如果返回 fenced JSON、`answer` 包装、列表包装，都会增加重试成本
 
-### 11.4 为什么我改了端点却没生效
+### 12.4 为什么我改了端点却没生效
 
 优先检查：
 
@@ -467,6 +813,6 @@ uv run main.py --transport stdio
 - 而不是误改成 API 侧的 `OPENAI_BASE_URL`
 - compose 是否真的重新 build
 
-### 11.5 如果我要给业务系统接入，不是给 AI 客户端接入
+### 12.5 如果我要给业务系统接入，不是给 AI 客户端接入
 
 那就不要优先用 MCP，直接看 [graphiti-api-guide.md](./graphiti-api-guide.md)。

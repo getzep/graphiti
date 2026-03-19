@@ -11,6 +11,9 @@ This is an experimental Model Context Protocol (MCP) server implementation for G
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
 
+For a repository-user guide that explains what this service does, when to choose it over the REST API, how to deploy
+it, and how to connect an MCP client, see the [Graphiti MCP Guide](../docs/graphiti-mcp-guide.md).
+
 ## Features
 
 The Graphiti MCP server provides comprehensive knowledge graph capabilities:
@@ -316,14 +319,14 @@ uv run main.py --config config/config-docker-falkordb.yaml
 
 ### Available Command-Line Arguments
 
-- `--config`: Path to YAML configuration file (default: config.yaml)
+- `--config`: Path to YAML configuration file (default: `config/config.yaml`)
 - `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
 - `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
 - `--model`: Model name to use with the LLM client
 - `--temperature`: Temperature setting for the LLM (0.0-2.0)
-- `--transport`: Choose the transport method (http or stdio, default: http)
-- `--group-id`: Set a namespace for the graph (optional). If not provided, defaults to "main"
+- `--transport`: Choose the transport method (`http`, `stdio`, or deprecated `sse`; default: `http`)
+- `--group-id`: Set a namespace for the graph (optional). The out-of-box default is `main`
 - `--destroy-graph`: If set, destroys all Graphiti graphs on startup
 
 ### Concurrency and LLM Provider 429 Rate Limit Errors
@@ -540,9 +543,9 @@ For HTTP transport (default), you can use this configuration:
 
 The Graphiti MCP server exposes the following tools:
 
-- `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
+- `add_memory`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
 - `search_nodes`: Search the knowledge graph for relevant node summaries
-- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
+- `search_memory_facts`: Search the knowledge graph for relevant facts (edges between entities)
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph
 - `delete_episode`: Delete an episode from the knowledge graph
 - `get_entity_edge`: Get an entity edge by its UUID
@@ -550,14 +553,17 @@ The Graphiti MCP server exposes the following tools:
 - `clear_graph`: Clear all data from the knowledge graph and rebuild indices
 - `get_status`: Get the status of the Graphiti MCP server and Neo4j connection
 
+If you see older examples using `add_episode` or `search_facts`, treat those as legacy names. The
+current server implementation exposes `add_memory` and `search_memory_facts`.
+
 ## Working with JSON Data
 
-The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This
+The Graphiti MCP server can process structured JSON data through the `add_memory` tool with `source="json"`. This
 allows you to automatically extract entities and relationships from structured data:
 
 ```
 
-add_episode(
+add_memory(
 name="Customer Profile",
 episode_body="{\"company\": {\"name\": \"Acme Technologies\"}, \"products\": [{\"id\": \"P001\", \"name\": \"CloudSync\"}, {\"id\": \"P002\", \"name\": \"DataMiner\"}]}",
 source="json",
