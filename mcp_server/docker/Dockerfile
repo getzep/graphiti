@@ -1,8 +1,8 @@
-# syntax=docker/dockerfile:1
+# syntax=docker.1ms.run/docker/dockerfile:1
 # Combined FalkorDB + Graphiti MCP Server Image
 # This extends the official FalkorDB image to include the MCP server
 
-FROM falkordb/falkordb:latest AS falkordb-base
+FROM docker.1ms.run/falkordb/falkordb:latest AS falkordb-base
 
 # Install Python and system dependencies
 # Note: Debian Bookworm (FalkorDB base) ships with Python 3.11
@@ -33,7 +33,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.28.1
+ARG GRAPHITI_CORE_VERSION=0.28.2
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock ./

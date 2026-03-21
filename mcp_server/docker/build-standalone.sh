@@ -23,11 +23,11 @@ docker build \
   --build-arg GRAPHITI_CORE_VERSION="${GRAPHITI_CORE_VERSION}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg VCS_REF="${VCS_REF}" \
-  -f Dockerfile.standalone \
+  -f mcp_server/docker/Dockerfile.standalone \
   -t "zepai/knowledge-graph-mcp:standalone" \
   -t "zepai/knowledge-graph-mcp:${MCP_VERSION}-standalone" \
   -t "zepai/knowledge-graph-mcp:${MCP_VERSION}-graphiti-${GRAPHITI_CORE_VERSION}-standalone" \
-  ..
+  ../..
 
 echo ""
 echo "Build complete!"

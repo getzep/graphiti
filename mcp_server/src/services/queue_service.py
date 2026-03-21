@@ -2,11 +2,31 @@
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class EpisodeIngestStatus:
+    episode_uuid: str
+    group_id: str
+    state: str
+    queued_at: datetime
+    started_at: datetime | None = None
+    processed_at: datetime | None = None
+    last_error: str | None = None
+    queue_position: int | None = None
+
+
+@dataclass
+class _QueuedEpisodeTask:
+    episode_uuid: str
+    process_func: Callable[[], Awaitable[None]]
 
 
 class QueueService:
@@ -18,11 +38,18 @@ class QueueService:
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
+        # Track queued episode UUIDs so queue positions can be surfaced externally.
+        self._pending_episode_uuids: dict[str, deque[str]] = {}
+        # Track ingest lifecycle by episode UUID.
+        self._episode_statuses: dict[str, EpisodeIngestStatus] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
 
     async def add_episode_task(
-        self, group_id: str, process_func: Callable[[], Awaitable[None]]
+        self,
+        group_id: str,
+        episode_uuid: str,
+        process_func: Callable[[], Awaitable[None]],
     ) -> int:
         """Add an episode processing task to the queue.
 
@@ -36,15 +63,28 @@ class QueueService:
         # Initialize queue for this group_id if it doesn't exist
         if group_id not in self._episode_queues:
             self._episode_queues[group_id] = asyncio.Queue()
+            self._pending_episode_uuids[group_id] = deque()
 
         # Add the episode processing function to the queue
-        await self._episode_queues[group_id].put(process_func)
+        await self._episode_queues[group_id].put(
+            _QueuedEpisodeTask(episode_uuid=episode_uuid, process_func=process_func)
+        )
+        self._pending_episode_uuids[group_id].append(episode_uuid)
+
+        queue_position = len(self._pending_episode_uuids[group_id])
+        self._episode_statuses[episode_uuid] = EpisodeIngestStatus(
+            episode_uuid=episode_uuid,
+            group_id=group_id,
+            state='queued',
+            queued_at=datetime.now(timezone.utc),
+            queue_position=queue_position,
+        )
 
         # Start a worker for this queue if one isn't already running
         if not self._queue_workers.get(group_id, False):
             asyncio.create_task(self._process_episode_queue(group_id))
 
-        return self._episode_queues[group_id].qsize()
+        return queue_position
 
     async def _process_episode_queue(self, group_id: str) -> None:
         """Process episodes for a specific group_id sequentially.
@@ -59,12 +99,32 @@ class QueueService:
             while True:
                 # Get the next episode processing function from the queue
                 # This will wait if the queue is empty
-                process_func = await self._episode_queues[group_id].get()
+                queued_task = await self._episode_queues[group_id].get()
+                process_func = queued_task.process_func
+                episode_uuid = queued_task.episode_uuid
+                pending_queue = self._pending_episode_uuids.get(group_id)
+                if pending_queue and pending_queue and pending_queue[0] == episode_uuid:
+                    pending_queue.popleft()
+                elif pending_queue and episode_uuid in pending_queue:
+                    pending_queue.remove(episode_uuid)
+
+                status = self._episode_statuses.get(episode_uuid)
+                if status is not None:
+                    status.state = 'processing'
+                    status.started_at = datetime.now(timezone.utc)
+                    status.queue_position = None
 
                 try:
                     # Process the episode
                     await process_func()
+                    if status is not None:
+                        status.state = 'completed'
+                        status.processed_at = datetime.now(timezone.utc)
                 except Exception as e:
+                    if status is not None:
+                        status.state = 'failed'
+                        status.last_error = str(e)
+                        status.processed_at = datetime.now(timezone.utc)
                     logger.error(
                         f'Error processing queued episode for group_id {group_id}: {str(e)}'
                     )
@@ -88,6 +148,33 @@ class QueueService:
     def is_worker_running(self, group_id: str) -> bool:
         """Check if a worker is running for a group_id."""
         return self._queue_workers.get(group_id, False)
+
+    def get_queue_position(self, episode_uuid: str) -> int | None:
+        """Return the current queue position for a queued episode UUID."""
+        status = self._episode_statuses.get(episode_uuid)
+        if status is None:
+            return None
+
+        pending_queue = self._pending_episode_uuids.get(status.group_id)
+        if pending_queue is None:
+            return None
+
+        for index, pending_uuid in enumerate(pending_queue, start=1):
+            if pending_uuid == episode_uuid:
+                return index
+
+        return None
+
+    def get_episode_status(self, episode_uuid: str) -> EpisodeIngestStatus | None:
+        """Return the latest ingest lifecycle state for an episode UUID."""
+        status = self._episode_statuses.get(episode_uuid)
+        if status is None:
+            return None
+
+        if status.state == 'queued':
+            status.queue_position = self.get_queue_position(episode_uuid)
+
+        return status
 
     async def initialize(self, graphiti_client: Any) -> None:
         """Initialize the queue service with a graphiti client.
@@ -124,6 +211,8 @@ class QueueService:
         """
         if self._graphiti_client is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
+        if uuid is None:
+            raise ValueError('uuid is required for queue-backed episode tracking')
 
         async def process_episode():
             """Process the episode using the graphiti client."""
@@ -149,4 +238,4 @@ class QueueService:
                 raise
 
         # Use the existing add_episode_task method to queue the processing
-        return await self.add_episode_task(group_id, process_episode)
+        return await self.add_episode_task(group_id, uuid, process_episode)

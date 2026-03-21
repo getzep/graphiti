@@ -13,6 +13,26 @@ class SuccessResponse(TypedDict):
     message: str
 
 
+class AddMemoryResponse(TypedDict):
+    message: str
+    episode_uuid: str
+    group_id: str
+    queue_position: int
+
+
+class IngestStatusResponse(TypedDict):
+    message: str
+    episode_uuid: str
+    group_id: str
+    state: str
+    queue_depth: int
+    queue_position: int | None
+    queued_at: str
+    started_at: str | None
+    processed_at: str | None
+    last_error: str | None
+
+
 class NodeResult(TypedDict):
     uuid: str
     name: str
@@ -41,3 +61,4 @@ class EpisodeSearchResponse(TypedDict):
 class StatusResponse(TypedDict):
     status: str
     message: str
+    details: dict[str, Any] | None

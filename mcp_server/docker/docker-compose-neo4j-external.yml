@@ -9,10 +9,10 @@ services:
     env_file:
       - ../.env.nas
     build:
-      # Relative default works when running from mcp_server/docker on the NAS.
-      # Override MCP_BUILD_CONTEXT if your compose project uses a different root.
-      context: ${MCP_BUILD_CONTEXT:-..}
-      dockerfile: docker/Dockerfile.standalone
+      # Build from the repo root so the image can bundle repo-local graphiti_core
+      # fixes alongside mcp_server.
+      context: ${MCP_BUILD_CONTEXT:-../..}
+      dockerfile: mcp_server/docker/Dockerfile.standalone
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
         UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}

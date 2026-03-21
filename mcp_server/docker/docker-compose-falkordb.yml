@@ -20,10 +20,10 @@ services:
     # To use the latest graphiti-core, build locally with:
     #   docker compose -f docker-compose-falkordb.yml build
     # The Docker Hub image may lag behind the latest release.
-    image: zepai/knowledge-graph-mcp:standalone
+    image: docker.1ms.run/zepai/knowledge-graph-mcp:standalone
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.standalone
+      context: ../..
+      dockerfile: mcp_server/docker/Dockerfile.standalone
     env_file:
       - path: ../.env
         required: false

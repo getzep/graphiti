@@ -588,6 +588,29 @@ class Graphiti:
 
         return episodic_edges, episode
 
+    async def _persist_searchable_entity_nodes(self, nodes: list[EntityNode]) -> None:
+        """Persist deduplicated entity nodes early so node search can see them before full hydration."""
+        if not nodes:
+            return
+
+        unique_nodes: list[EntityNode] = []
+        seen_uuids: set[str] = set()
+        for node in nodes:
+            if node.uuid in seen_uuids:
+                continue
+            seen_uuids.add(node.uuid)
+            unique_nodes.append(node)
+
+        await create_entity_node_embeddings(self.embedder, unique_nodes)
+        await add_nodes_and_edges_bulk(
+            self.driver,
+            [],
+            [],
+            unique_nodes,
+            [],
+            self.embedder,
+        )
+
     async def _extract_and_dedupe_nodes_bulk(
         self,
         episode_context: list[tuple[EpisodicNode, list[EpisodicNode]]],
@@ -904,10 +927,23 @@ class Graphiti:
                 )
 
                 # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(self.driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
+                if uuid is not None:
+                    try:
+                        episode = await EpisodicNode.get_by_uuid(self.driver, uuid)
+                    except NodeNotFoundError:
+                        episode = EpisodicNode(
+                            uuid=uuid,
+                            name=name,
+                            group_id=group_id,
+                            labels=[],
+                            source=source,
+                            content=episode_body,
+                            source_description=source_description,
+                            created_at=now,
+                            valid_at=reference_time,
+                        )
+                else:
+                    episode = EpisodicNode(
                         name=name,
                         group_id=group_id,
                         labels=[],
@@ -917,7 +953,6 @@ class Graphiti:
                         created_at=now,
                         valid_at=reference_time,
                     )
-                )
 
                 # Create default edge type map
                 edge_type_map_default = (
@@ -943,6 +978,9 @@ class Graphiti:
                     previous_episodes,
                     entity_types,
                 )
+
+                # Make resolved entity nodes searchable before the heavier edge/summary pipeline completes.
+                await self._persist_searchable_entity_nodes(nodes)
 
                 # Extract and resolve edges in parallel with attribute extraction
                 (
@@ -1122,21 +1160,37 @@ class Graphiti:
                     else {('Entity', 'Entity'): []}
                 )
 
-                episodes = [
-                    await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
-                    if episode.uuid is not None
-                    else EpisodicNode(
-                        name=episode.name,
-                        labels=[],
-                        source=episode.source,
-                        content=episode.content,
-                        source_description=episode.source_description,
-                        group_id=group_id,
-                        created_at=now,
-                        valid_at=episode.reference_time,
-                    )
-                    for episode in bulk_episodes
-                ]
+                episodes: list[EpisodicNode] = []
+                for episode in bulk_episodes:
+                    if episode.uuid is not None:
+                        try:
+                            existing_episode = await EpisodicNode.get_by_uuid(self.driver, episode.uuid)
+                        except NodeNotFoundError:
+                            existing_episode = EpisodicNode(
+                                uuid=episode.uuid,
+                                name=episode.name,
+                                labels=[],
+                                source=episode.source,
+                                content=episode.content,
+                                source_description=episode.source_description,
+                                group_id=group_id,
+                                created_at=now,
+                                valid_at=episode.reference_time,
+                            )
+                        episodes.append(existing_episode)
+                    else:
+                        episodes.append(
+                            EpisodicNode(
+                                name=episode.name,
+                                labels=[],
+                                source=episode.source,
+                                content=episode.content,
+                                source_description=episode.source_description,
+                                group_id=group_id,
+                                created_at=now,
+                                valid_at=episode.reference_time,
+                            )
+                        )
 
                 # Save all episodes
                 await add_nodes_and_edges_bulk(

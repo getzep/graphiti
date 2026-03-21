@@ -31,10 +31,10 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app/mcp
 
 # Accept graphiti-core version as build argument
-ARG GRAPHITI_CORE_VERSION=0.28.1
+ARG GRAPHITI_CORE_VERSION=0.28.2
 
-# Copy project files for dependency installation
-COPY pyproject.toml uv.lock ./
+# Copy MCP server project files for dependency installation
+COPY mcp_server/pyproject.toml mcp_server/uv.lock ./
 
 # Remove the local path override for graphiti-core in Docker builds
 # Install with BOTH neo4j and falkordb extras for maximum flexibility
@@ -52,10 +52,11 @@ RUN uv sync --no-group dev
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
 
-# Copy MCP server application code
-COPY main.py ./
-COPY src/ ./src/
-COPY config/ ./config/
+# Copy MCP server application code and repo-local graphiti_core overrides.
+COPY mcp_server/main.py ./
+COPY mcp_server/src/ ./src/
+COPY mcp_server/config/ ./config/
+COPY graphiti_core/ /app/graphiti_core/
 
 # Create log directory
 RUN mkdir -p /var/log/graphiti

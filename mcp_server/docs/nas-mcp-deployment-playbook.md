@@ -187,7 +187,9 @@ naming to docker.1ms.run/zepai/knowledge-graph-mcp:latest
 cd /opt/claude/graphiti
 
 rsync -rv --relative \
+  graphiti_core/ \
   mcp_server/main.py \
+  mcp_server/benchmark_mcp.py \
   mcp_server/pyproject.toml \
   mcp_server/uv.lock \
   mcp_server/docker/Dockerfile.standalone \
@@ -203,6 +205,8 @@ rsync -rv --relative \
 - 不要用 `rsync -a`
 - `rsync -rv --relative` 足够
 - 如果权限报错但文件内容已同步，优先检查内容而不是纠结元数据
+- standalone 镜像现在依赖 repo root build context；如果漏掉 `graphiti_core/`，容器内会回退到 PyPI 发布版逻辑
+- 如果漏掉 `benchmark_mcp.py`，NAS 上的 probe 将看不到 `INGEST_STATUS[...]` 调试输出
 
 ---
 
