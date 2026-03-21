@@ -6,6 +6,7 @@ Simple test to verify MCP server works with stdio transport.
 import asyncio
 import os
 
+from ingest_wait_helpers import extract_episode_uuid, wait_for_ingest_completion
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -24,6 +25,7 @@ async def test_stdio():
             'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
             'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
             'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'dummy'),
+            'UV_CACHE_DIR': '/tmp/graphiti-uv-cache',
         },
     )
 
@@ -60,12 +62,21 @@ async def test_stdio():
 
                 if result.content:
                     print(f'   ✅ Memory added: {result.content[0].text[:100]}')
+                episode_uuid = extract_episode_uuid(result)
+                if episode_uuid:
+                    await wait_for_ingest_completion(
+                        lambda tool_name, arguments: session.call_tool(tool_name, arguments),
+                        episode_uuids=[episode_uuid],
+                        group_id='test_group',
+                        max_wait=30,
+                        poll_interval=2,
+                    )
 
                 # Test search
-                print('\n🔍 Testing search_memory_nodes...')
+                print('\n🔍 Testing search_nodes...')
                 result = await session.call_tool(
-                    'search_memory_nodes',
-                    {'query': 'test', 'group_ids': ['test_group'], 'limit': 5},
+                    'search_nodes',
+                    {'query': 'test', 'group_ids': ['test_group'], 'max_nodes': 5},
                 )
 
                 if result.content:

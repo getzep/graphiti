@@ -9,20 +9,16 @@ import json
 import sys
 import time
 
+from http_mcp_test_client import RawHttpMCPClient
+from ingest_wait_helpers import extract_episode_uuid, wait_for_ingest_completion
 from mcp.client.session import ClientSession
 
 
 async def test_http_transport(base_url: str = 'http://localhost:8000'):
     """Test MCP server with HTTP streaming transport."""
 
-    # Import the streamable http client
-    try:
-        from mcp.client.streamable_http import streamablehttp_client as http_client
-    except ImportError:
-        print('❌ Streamable HTTP client not available in MCP SDK')
-        return False
-
     test_group_id = f'test_http_{int(time.time())}'
+    ingested_episode_uuids: list[str] = []
 
     print('🚀 Testing MCP Server with HTTP streaming transport')
     print(f'   Server URL: {base_url}')
@@ -32,8 +28,7 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
     try:
         # Connect to the server via HTTP
         print('\n🔌 Connecting to server...')
-        async with http_client(base_url) as (read_stream, write_stream):
-            session = ClientSession(read_stream, write_stream)
+        async with RawHttpMCPClient(base_url) as session:
             await session.initialize()
             print('✅ Connected successfully')
 
@@ -41,11 +36,12 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
             print('\n📋 Test 1: Listing tools...')
             try:
                 result = await session.list_tools()
-                tools = [tool.name for tool in result.tools]
+                tools = [tool['name'] for tool in result['result']['tools']]
 
                 expected = [
                     'add_memory',
-                    'search_memory_nodes',
+                    'get_ingest_status',
+                    'search_nodes',
                     'search_memory_facts',
                     'get_episodes',
                     'delete_episode',
@@ -75,9 +71,13 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
                     },
                 )
 
-                if result.content and result.content[0].text:
-                    response = result.content[0].text
+                content = result['result']['content'][0]['text']
+                if content:
+                    response = content
                     if 'success' in response.lower() or 'queued' in response.lower():
+                        episode_uuid = extract_episode_uuid(response)
+                        if episode_uuid:
+                            ingested_episode_uuids.append(episode_uuid)
                         print('   ✅ Memory added successfully')
                     else:
                         print(f'   ❌ Unexpected response: {response[:100]}')
@@ -87,18 +87,35 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
             except Exception as e:
                 print(f'   ❌ Failed: {e}')
 
-            # Test 3: Search nodes (with delay for processing)
+            # Test 3: Search nodes (after ingest completion)
             print('\n🔍 Test 3: Searching nodes...')
-            await asyncio.sleep(2)  # Wait for async processing
+            if ingested_episode_uuids:
+                completed = await wait_for_ingest_completion(
+                    lambda tool_name, arguments: session.call_tool(tool_name, arguments),
+                    episode_uuids=ingested_episode_uuids,
+                    group_id=test_group_id,
+                    max_wait=45,
+                    poll_interval=2,
+                )
+                print(
+                    '   ✅ Ingest completed before search'
+                    if completed
+                    else '   ⚠️ Ingest not completed before search timeout'
+                )
 
             try:
                 result = await session.call_tool(
-                    'search_memory_nodes',
-                    {'query': 'integration test episode', 'group_ids': [test_group_id], 'limit': 5},
+                    'search_nodes',
+                    {
+                        'query': 'integration test episode',
+                        'group_ids': [test_group_id],
+                        'max_nodes': 5,
+                    },
                 )
 
-                if result.content and result.content[0].text:
-                    response = result.content[0].text
+                content = result['result']['content'][0]['text']
+                if content:
+                    response = content
                     try:
                         data = json.loads(response)
                         nodes = data.get('nodes', [])
@@ -115,11 +132,12 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
             print('\n📚 Test 4: Getting episodes...')
             try:
                 result = await session.call_tool(
-                    'get_episodes', {'group_ids': [test_group_id], 'limit': 10}
+                    'get_episodes', {'group_ids': [test_group_id], 'max_episodes': 10}
                 )
 
-                if result.content and result.content[0].text:
-                    response = result.content[0].text
+                content = result['result']['content'][0]['text']
+                if content:
+                    response = content
                     try:
                         data = json.loads(response)
                         episodes = data.get('episodes', [])
@@ -135,10 +153,11 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
             # Test 5: Clear graph
             print('\n🧹 Test 5: Clearing graph...')
             try:
-                result = await session.call_tool('clear_graph', {'group_id': test_group_id})
+                result = await session.call_tool('clear_graph', {'group_ids': [test_group_id]})
 
-                if result.content and result.content[0].text:
-                    response = result.content[0].text
+                content = result['result']['content'][0]['text']
+                if content:
+                    response = content
                     if 'success' in response.lower() or 'cleared' in response.lower():
                         print('   ✅ Graph cleared successfully')
                     else:

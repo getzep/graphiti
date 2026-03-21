@@ -6,10 +6,15 @@ Tests MCP server functionality with FalkorDB as the graph database backend.
 
 import asyncio
 import json
+import os
+import socket
 import time
+from pathlib import Path
 from typing import Any
 
-from mcp import StdioServerParameters
+from dotenv import dotenv_values
+from ingest_wait_helpers import extract_episode_uuid, wait_for_ingest_completion
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
@@ -19,24 +24,40 @@ class GraphitiFalkorDBIntegrationTest:
     def __init__(self):
         self.test_group_id = f'falkor_test_group_{int(time.time())}'
         self.session = None
+        self.client_context = None
+        self.ingest_episode_uuids: list[str] = []
 
     async def __aenter__(self):
         """Start the MCP client session with FalkorDB configuration."""
+        nas_env_path = Path(__file__).resolve().parents[1] / '.env.nas'
+        nas_env = {
+            key: value for key, value in dotenv_values(nas_env_path).items() if isinstance(value, str)
+        } if nas_env_path.exists() else {}
+
         # Configure server parameters to run with FalkorDB backend
+        main_py = Path(__file__).resolve().parents[1] / 'main.py'
         server_params = StdioServerParameters(
-            command='uv',
-            args=['run', 'main.py', '--transport', 'stdio', '--database-provider', 'falkordb'],
+            command='bash',
+            args=[
+                '-c',
+                f'cd {main_py.parent} && uv run {main_py} --transport stdio --database-provider falkordb',
+            ],
             env={
+                **os.environ,
+                **nas_env,
                 'FALKORDB_URI': 'redis://localhost:6379',
                 'FALKORDB_PASSWORD': '',  # No password for test instance
                 'FALKORDB_DATABASE': 'default_db',
-                'OPENAI_API_KEY': 'dummy_key_for_testing',
+                'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', nas_env.get('OPENAI_API_KEY', 'test_key')),
                 'GRAPHITI_GROUP_ID': self.test_group_id,
+                'UV_CACHE_DIR': '/tmp/graphiti-uv-cache',
             },
         )
 
-        # Start the stdio client
-        self.session = await stdio_client(server_params).__aenter__()
+        self.client_context = stdio_client(server_params)
+        read, write = await self.client_context.__aenter__()
+        self.session = ClientSession(read, write)
+        await self.session.initialize()
         print('   📡 Started MCP client session with FalkorDB backend')
         return self
 
@@ -44,7 +65,9 @@ class GraphitiFalkorDBIntegrationTest:
         """Clean up the MCP client session."""
         if self.session:
             await self.session.close()
-            print('   🔌 Closed MCP client session')
+        if self.client_context is not None:
+            await self.client_context.__aexit__(exc_type, exc_val, exc_tb)
+        print('   🔌 Closed MCP client session')
 
     async def call_mcp_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call an MCP tool via the stdio client."""
@@ -93,12 +116,15 @@ class GraphitiFalkorDBIntegrationTest:
             'source_description': 'Integration test for FalkorDB backend',
         }
 
-        result = await self.call_mcp_tool('add_episode', episode_data)
+        result = await self.call_mcp_tool('add_memory', episode_data)
 
         if 'error' in result:
             print(f'   ❌ Add episode failed: {result["error"]}')
             return False
 
+        episode_uuid = extract_episode_uuid(result)
+        if episode_uuid:
+            self.ingest_episode_uuids.append(episode_uuid)
         print('   ✅ Episode added successfully to FalkorDB')
         return True
 
@@ -106,12 +132,21 @@ class GraphitiFalkorDBIntegrationTest:
         """Test search functionality with FalkorDB."""
         print('   🔍 Testing search functionality with FalkorDB...')
 
-        # Give some time for episode processing
-        await asyncio.sleep(2)
+        if self.ingest_episode_uuids:
+            completed = await wait_for_ingest_completion(
+                self.call_mcp_tool,
+                episode_uuids=self.ingest_episode_uuids,
+                group_id=self.test_group_id,
+                max_wait=30,
+                poll_interval=2,
+            )
+            if not completed:
+                print('   ⚠️  Ingest did not complete before search timeout')
 
         # Test node search
         search_result = await self.call_mcp_tool(
-            'search_nodes', {'query': 'FalkorDB test episode', 'limit': 5}
+            'search_nodes',
+            {'query': 'FalkorDB test episode', 'group_ids': [self.test_group_id], 'max_nodes': 5},
         )
 
         if 'error' in search_result:
@@ -125,7 +160,7 @@ class GraphitiFalkorDBIntegrationTest:
         """Test clearing the graph in FalkorDB."""
         print('   🧹 Testing graph clearing in FalkorDB...')
 
-        result = await self.call_mcp_tool('clear_graph', {})
+        result = await self.call_mcp_tool('clear_graph', {'group_ids': [self.test_group_id]})
 
         if 'error' in result:
             print(f'   ❌ Clear graph failed: {result["error"]}')
@@ -139,6 +174,14 @@ async def run_falkordb_integration_test() -> bool:
     """Run the complete FalkorDB integration test suite."""
     print('🧪 Starting FalkorDB Integration Test Suite')
     print('=' * 55)
+
+    with socket.socket() as sock:
+        try:
+            sock.settimeout(1.0)
+            sock.connect(('127.0.0.1', 6379))
+        except OSError:
+            print('⏭️  FalkorDB is not reachable on 127.0.0.1:6379, skipping FalkorDB-specific integration test')
+            return True
 
     test_results = []
 

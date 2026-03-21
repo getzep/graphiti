@@ -7,16 +7,26 @@ import contextlib
 import json
 import os
 import random
+import shlex
+import socket
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
+from dotenv import dotenv_values
 from faker import Faker
+from http_mcp_test_client import RawHttpMCPClient
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 fake = Faker()
+mcp_server_dir = Path(__file__).resolve().parents[1]
+nas_env_path = mcp_server_dir / '.env.nas'
+nas_env = {k: v for k, v in dotenv_values(nas_env_path).items() if isinstance(v, str)} if nas_env_path.exists() else {}
 
 
 class TestDataGenerator:
@@ -147,6 +157,30 @@ class MockLLMProvider:
             return 'Mock LLM response'
 
 
+class HttpSessionAdapter:
+    def __init__(self, client: RawHttpMCPClient):
+        self._client = client
+
+    async def list_tools(self):
+        payload = await self._client.list_tools()
+        tools = payload.get('result', {}).get('tools', [])
+        return SimpleNamespace(
+            tools=[SimpleNamespace(name=tool['name']) for tool in tools if isinstance(tool, dict)]
+        )
+
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]):
+        payload = await self._client.call_tool(tool_name, arguments)
+        result = payload.get('result', {})
+        content = result.get('content') or []
+        text = ''
+        if content and isinstance(content[0], dict):
+            text = content[0].get('text', '')
+        return SimpleNamespace(content=[SimpleNamespace(text=text)])
+
+    async def close(self):
+        return None
+
+
 @asynccontextmanager
 async def graphiti_test_client(
     group_id: str | None = None,
@@ -164,23 +198,33 @@ async def graphiti_test_client(
         config_overrides: Additional config overrides
     """
     test_group_id = group_id or f'test_{int(time.time())}_{random.randint(1000, 9999)}'
+    effective_database = database
+    if (
+        database == 'falkordb'
+        and 'FALKORDB_URI' not in os.environ
+        and nas_env.get('NEO4J_URI')
+    ):
+        effective_database = 'neo4j'
 
-    env = {
-        'DATABASE_PROVIDER': database,
-        'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'test_key' if use_mock_llm else None),
-    }
+    env = {**os.environ, **nas_env}
+    env['DATABASE_PROVIDER'] = effective_database
+    env.setdefault('OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY', 'test_key'))
+    env.setdefault('GRAPHITI_TELEMETRY_ENABLED', 'false')
+    env.setdefault('UV_CACHE_DIR', '/tmp/graphiti-uv-cache')
+    if effective_database == 'neo4j' and nas_env:
+        env['CONFIG_PATH'] = str(mcp_server_dir / 'config' / 'config-docker-neo4j-external.yaml')
 
     # Database-specific configuration
-    if database == 'neo4j':
+    if effective_database == 'neo4j':
         env.update(
             {
-                'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
-                'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
-                'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
+                'NEO4J_URI': os.environ.get('NEO4J_URI', env.get('NEO4J_URI', 'bolt://localhost:7687')),
+                'NEO4J_USER': os.environ.get('NEO4J_USER', env.get('NEO4J_USER', 'neo4j')),
+                'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', env.get('NEO4J_PASSWORD', 'graphiti')),
             }
         )
-    elif database == 'falkordb':
-        env['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', 'redis://localhost:6379')
+    elif effective_database == 'falkordb':
+        env['FALKORDB_URI'] = os.environ.get('FALKORDB_URI', env.get('FALKORDB_URI', 'redis://localhost:6379'))
 
     # Apply config overrides
     if config_overrides:
@@ -190,8 +234,71 @@ async def graphiti_test_client(
     if use_mock_llm:
         env['USE_MOCK_LLM'] = 'true'
 
+    main_py = mcp_server_dir / 'main.py'
+    command = (
+        f'cd {shlex.quote(str(mcp_server_dir))} && '
+        f'uv run {shlex.quote(str(main_py))} --transport stdio'
+    )
+    if env.get('CONFIG_PATH'):
+        command += f" --config {shlex.quote(env['CONFIG_PATH'])}"
+    use_http_transport = effective_database == 'neo4j' and bool(nas_env)
+    if use_http_transport:
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            http_port = sock.getsockname()[1]
+
+        http_command = command.replace('--transport stdio', f'--transport http --port {http_port}')
+        process = await asyncio.create_subprocess_exec(
+            'bash',
+            '-c',
+            http_command,
+            env=env,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+
+        base_url = f'http://127.0.0.1:{http_port}'
+        async with httpx.AsyncClient(timeout=2.0) as health_client:
+            ready = False
+            for _ in range(60):
+                with contextlib.suppress(Exception):
+                    response = await health_client.get(f'{base_url}/health')
+                    if response.status_code == 200:
+                        ready = True
+                        break
+                await asyncio.sleep(1)
+
+        if not ready:
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.terminate()
+            await process.wait()
+            raise RuntimeError(
+                f'HTTP test server did not become ready on {base_url} (returncode={process.returncode})'
+            )
+
+        async with RawHttpMCPClient(base_url) as client:
+            await client.initialize()
+            session = HttpSessionAdapter(client)
+            try:
+                yield session, test_group_id
+            finally:
+                with contextlib.suppress(Exception):
+                    await session.call_tool('clear_graph', {'group_ids': [test_group_id]})
+                if process.returncode is None:
+                    with contextlib.suppress(ProcessLookupError):
+                        process.terminate()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(process.wait(), timeout=5)
+        return
+
     server_params = StdioServerParameters(
-        command='uv', args=['run', 'main.py', '--transport', 'stdio'], env=env
+        command='bash',
+        args=[
+            '-c',
+            command,
+        ],
+        env=env,
     )
 
     async with stdio_client(server_params) as (read, write):
@@ -203,7 +310,7 @@ async def graphiti_test_client(
         finally:
             # Cleanup: Clear test data
             with contextlib.suppress(Exception):
-                await session.call_tool('clear_graph', {'group_id': test_group_id})
+                await session.call_tool('clear_graph', {'group_ids': [test_group_id]})
 
             await session.close()
 

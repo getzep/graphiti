@@ -6,12 +6,11 @@ Tests all major MCP tools and handles episode processing latency.
 
 import asyncio
 import json
-import os
 import time
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from ingest_wait_helpers import extract_episode_uuid, wait_for_ingest_completion
+from test_fixtures import graphiti_test_client
 
 
 class GraphitiMCPIntegrationTest:
@@ -20,35 +19,18 @@ class GraphitiMCPIntegrationTest:
     def __init__(self):
         self.test_group_id = f'test_group_{int(time.time())}'
         self.session = None
+        self.ingest_episode_uuids: list[str] = []
 
     async def __aenter__(self):
         """Start the MCP client session."""
-        # Configure server parameters to run our refactored server
-        server_params = StdioServerParameters(
-            command='uv',
-            args=['run', 'main.py', '--transport', 'stdio'],
-            env={
-                'NEO4J_URI': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
-                'NEO4J_USER': os.environ.get('NEO4J_USER', 'neo4j'),
-                'NEO4J_PASSWORD': os.environ.get('NEO4J_PASSWORD', 'graphiti'),
-                'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'dummy_key_for_testing'),
-            },
-        )
-
         print(f'🚀 Starting MCP client session with test group: {self.test_group_id}')
-
-        # Use the async context manager properly
-        self.client_context = stdio_client(server_params)
-        read, write = await self.client_context.__aenter__()
-        self.session = ClientSession(read, write)
-        await self.session.initialize()
+        self.client_context = graphiti_test_client(group_id=self.test_group_id)
+        self.session, self.test_group_id = await self.client_context.__aenter__()
 
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Close the MCP client session."""
-        if self.session:
-            await self.session.close()
         if hasattr(self, 'client_context'):
             await self.client_context.__aexit__(exc_type, exc_val, exc_tb)
 
@@ -71,7 +53,8 @@ class GraphitiMCPIntegrationTest:
 
             expected_tools = [
                 'add_memory',
-                'search_memory_nodes',
+                'get_ingest_status',
+                'search_nodes',
                 'search_memory_facts',
                 'get_episodes',
                 'delete_episode',
@@ -114,6 +97,9 @@ class GraphitiMCPIntegrationTest:
 
             if isinstance(result, str) and 'queued' in result.lower():
                 print(f'   ✅ Text episode: {result}')
+                episode_uuid = extract_episode_uuid(result)
+                if episode_uuid:
+                    self.ingest_episode_uuids.append(episode_uuid)
                 results['text'] = True
             else:
                 print(f'   ❌ Text episode failed: {result}')
@@ -147,6 +133,9 @@ class GraphitiMCPIntegrationTest:
 
             if isinstance(result, str) and 'queued' in result.lower():
                 print(f'   ✅ JSON episode: {result}')
+                episode_uuid = extract_episode_uuid(result)
+                if episode_uuid:
+                    self.ingest_episode_uuids.append(episode_uuid)
                 results['json'] = True
             else:
                 print(f'   ❌ JSON episode failed: {result}')
@@ -171,6 +160,9 @@ class GraphitiMCPIntegrationTest:
 
             if isinstance(result, str) and 'queued' in result.lower():
                 print(f'   ✅ Message episode: {result}')
+                episode_uuid = extract_episode_uuid(result)
+                if episode_uuid:
+                    self.ingest_episode_uuids.append(episode_uuid)
                 results['message'] = True
             else:
                 print(f'   ❌ Message episode failed: {result}')
@@ -185,13 +177,26 @@ class GraphitiMCPIntegrationTest:
         """Wait for episode processing to complete."""
         print(f'⏳ Waiting up to {max_wait} seconds for episode processing...')
 
+        if self.ingest_episode_uuids:
+            completed = await wait_for_ingest_completion(
+                self.call_tool,
+                episode_uuids=self.ingest_episode_uuids,
+                group_id=self.test_group_id,
+                max_wait=max_wait,
+                poll_interval=1,
+            )
+            if completed:
+                print(f'   ✅ Ingest completed for {len(self.ingest_episode_uuids)} episodes')
+                return True
+
         for i in range(max_wait):
             await asyncio.sleep(1)
 
             try:
                 # Check if we have any episodes
                 result = await self.call_tool(
-                    'get_episodes', {'group_id': self.test_group_id, 'last_n': 10}
+                    'get_episodes',
+                    {'group_ids': [self.test_group_id], 'max_episodes': 10},
                 )
 
                 # Parse the JSON result if it's a string
@@ -222,11 +227,11 @@ class GraphitiMCPIntegrationTest:
 
         results = {}
 
-        # Test search_memory_nodes
-        print('   Testing search_memory_nodes...')
+        # Test search_nodes
+        print('   Testing search_nodes...')
         try:
             result = await self.call_tool(
-                'search_memory_nodes',
+                'search_nodes',
                 {
                     'query': 'Acme Corp product launch AI',
                     'group_ids': [self.test_group_id],
@@ -294,22 +299,24 @@ class GraphitiMCPIntegrationTest:
 
         try:
             result = await self.call_tool(
-                'get_episodes', {'group_id': self.test_group_id, 'last_n': 10}
+                'get_episodes',
+                {'group_ids': [self.test_group_id], 'max_episodes': 10},
             )
 
             if isinstance(result, str):
                 try:
                     parsed = json.loads(result)
-                    if isinstance(parsed, list):
-                        print(f'   ✅ Retrieved {len(parsed)} episodes')
+                    episodes = parsed.get('episodes', []) if isinstance(parsed, dict) else []
+                    if isinstance(episodes, list):
+                        print(f'   ✅ Retrieved {len(episodes)} episodes')
 
                         # Show episode details
-                        for i, episode in enumerate(parsed[:3]):
+                        for i, episode in enumerate(episodes[:3]):
                             name = episode.get('name', 'Unknown')
                             source = episode.get('source', 'unknown')
                             print(f'     Episode {i + 1}: {name} (source: {source})')
 
-                        return len(parsed) > 0
+                        return len(episodes) > 0
                 except json.JSONDecodeError:
                     # Check if response indicates success
                     if 'episode' in result.lower():
@@ -333,7 +340,7 @@ class GraphitiMCPIntegrationTest:
         print('   Testing nonexistent group handling...')
         try:
             result = await self.call_tool(
-                'search_memory_nodes',
+                'search_nodes',
                 {
                     'query': 'nonexistent data',
                     'group_ids': ['nonexistent_group_12345'],
@@ -360,7 +367,7 @@ class GraphitiMCPIntegrationTest:
         print('   Testing empty query handling...')
         try:
             result = await self.call_tool(
-                'search_memory_nodes',
+                'search_nodes',
                 {'query': '', 'group_ids': [self.test_group_id], 'max_nodes': 5},
             )
 
