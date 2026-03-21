@@ -74,6 +74,7 @@
 - `get_episodes`
 - `get_entity_edge`
 - `get_status`
+- `get_ingest_status`
 
 维护类工具：
 
@@ -90,6 +91,7 @@
 当前最常用的工具签名可以按下面理解：
 
 - `add_memory(name, episode_body, group_id?, source?, source_description?, uuid?)`
+- `get_ingest_status(episode_uuid, group_id?)`
 - `search_nodes(query, group_ids?, max_nodes?, entity_types?)`
 - `search_memory_facts(query, group_ids?, max_facts?, center_node_uuid?)`
 - `get_episodes(group_ids?, max_episodes?)`
@@ -190,11 +192,36 @@
 `add_memory` 成功只表示：
 
 - 请求已入队
+- 返回里会带 `episode_uuid`
 - 后台会继续跑实体抽取、去重、关系抽取、摘要、embedding、入图
 
 它不表示：
 
 - 下一秒就一定能搜到
+
+更稳的使用顺序是：
+
+1. `add_memory`
+2. 读取返回中的 `episode_uuid`
+3. 轮询 `get_ingest_status`
+4. 等 `state == completed`
+5. 再做 `search_nodes` / `search_memory_facts`
+
+`get_ingest_status` 当前会显式暴露：
+
+- `queued`
+- `processing`
+- `completed`
+- `failed`
+
+以及：
+
+- `queue_position`
+- `queue_depth`
+- `queued_at`
+- `started_at`
+- `processed_at`
+- `last_error`
 
 这条链路在实践里可能是：
 
@@ -461,10 +488,11 @@ uv run main.py --transport stdio
 
 1. MCP 协议 `initialize` 握手
 2. `add_memory`
-3. 轮询 `search_nodes`
-4. 轮询 `search_memory_facts`
-5. 输出 `success_at_seconds`
-6. 默认清理测试 `group_id`
+3. 如果拿到了 `episode_uuid`，优先轮询 `get_ingest_status`
+4. 在 `state == completed` 后轮询 `search_nodes`
+5. 再轮询 `search_memory_facts`
+6. 输出 `success_at_seconds`
+7. 默认清理测试 `group_id`
 
 典型用法：
 
@@ -488,6 +516,7 @@ python benchmark_mcp.py \
 输出里最值得看的是：
 
 - `group_id`
+- `ingest_state`
 - `success_at_seconds`
 - `nodes_found`
 - `facts_found`

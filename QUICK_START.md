@@ -291,6 +291,7 @@ uv sync
 | 工具 | 用途 | 典型场景 |
 |------|------|----------|
 | `add_memory` | 写入一条 episode | 记录架构说明、评审结论、排障经验 |
+| `get_ingest_status` | 查看一条写入的摄入状态 | 等待异步处理完成 |
 | `search_nodes` | 搜索实体节点 | 找模块、服务、表、概念 |
 | `search_memory_facts` | 搜索事实关系 | 找“谁依赖谁”“谁负责什么” |
 | `get_episodes` | 查看原始记录 | 复查之前喂给 Graphiti 的文本 |
@@ -304,11 +305,13 @@ uv sync
 
 1. `add_memory` 是异步排队的，不是同步立即入图。
 2. 队列按 `group_id` 串行处理，同一个项目内连续写入更安全。
+3. `add_memory` 会回传 `episode_uuid`，可以配合 `get_ingest_status` 显式等待完成。
 
 这意味着：
 
 - 你刚写完一批 memory，立刻搜索可能会有短暂延迟
 - 如果你要给一个仓库持续补充记忆，尽量固定使用同一个 `group_id`
+- 更稳的顺序是 `add_memory -> get_ingest_status -> search_nodes/search_memory_facts`
 
 ---
 

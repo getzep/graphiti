@@ -544,6 +544,7 @@ For HTTP transport (default), you can use this configuration:
 The Graphiti MCP server exposes the following tools:
 
 - `add_memory`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
+- `get_ingest_status`: Inspect the ingest lifecycle for a queued episode by `episode_uuid`
 - `search_nodes`: Search the knowledge graph for relevant node summaries
 - `search_memory_facts`: Search the knowledge graph for relevant facts (edges between entities)
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph
@@ -555,6 +556,9 @@ The Graphiti MCP server exposes the following tools:
 
 If you see older examples using `add_episode` or `search_facts`, treat those as legacy names. The
 current server implementation exposes `add_memory` and `search_memory_facts`.
+
+`add_memory` is asynchronous. Current builds return `episode_uuid`, `group_id`, and `queue_position`
+so callers can poll `get_ingest_status` instead of guessing when a write has finished.
 
 ## Working with JSON Data
 
