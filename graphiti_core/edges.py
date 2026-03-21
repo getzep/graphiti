@@ -288,7 +288,7 @@ class EntityEdge(Edge):
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.debug(f'embedded edge {self.uuid} fact ({len(text)} chars) in {(end - start) * 1000} ms')
 
         return self.fact_embedding
 

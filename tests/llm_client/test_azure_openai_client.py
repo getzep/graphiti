@@ -19,10 +19,18 @@ class DummyResponses:
 class DummyChatCompletions:
     def __init__(self):
         self.create_calls: list[dict] = []
+        self.parse_calls: list[dict] = []
 
     async def create(self, **kwargs):
         self.create_calls.append(kwargs)
         message = SimpleNamespace(content='{}')
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+    async def parse(self, **kwargs):
+        self.parse_calls.append(kwargs)
+        parsed_model = kwargs.get('response_format')
+        message = SimpleNamespace(parsed=parsed_model(foo='bar'))
         choice = SimpleNamespace(message=message)
         return SimpleNamespace(choices=[choice])
 
@@ -32,10 +40,16 @@ class DummyChat:
         self.completions = DummyChatCompletions()
 
 
+class DummyBeta:
+    def __init__(self):
+        self.chat = DummyChat()
+
+
 class DummyAzureClient:
     def __init__(self):
         self.responses = DummyResponses()
         self.chat = DummyChat()
+        self.beta = DummyBeta()
 
 
 class DummyResponseModel(BaseModel):
@@ -62,14 +76,17 @@ async def test_structured_completion_strips_reasoning_for_unsupported_models():
         verbosity='low',
     )
 
-    assert len(dummy_client.responses.parse_calls) == 1
-    call_args = dummy_client.responses.parse_calls[0]
+    # For non-reasoning models, uses beta.chat.completions.parse
+    assert len(dummy_client.beta.chat.completions.parse_calls) == 1
+    call_args = dummy_client.beta.chat.completions.parse_calls[0]
     assert call_args['model'] == 'gpt-4.1'
-    assert call_args['input'] == []
-    assert call_args['max_output_tokens'] == 64
-    assert call_args['text_format'] is DummyResponseModel
+    assert call_args['messages'] == []
+    assert call_args['max_tokens'] == 64
+    assert call_args['response_format'] is DummyResponseModel
     assert call_args['temperature'] == 0.4
+    # Reasoning and verbosity parameters should not be passed for non-reasoning models
     assert 'reasoning' not in call_args
+    assert 'verbosity' not in call_args
     assert 'text' not in call_args
 
 

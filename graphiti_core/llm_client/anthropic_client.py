@@ -257,7 +257,7 @@ class AnthropicClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int | None = None,
         model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, typing.Any]:
+    ) -> tuple[dict[str, typing.Any], int, int]:
         """
         Generate a response from the Anthropic LLM using tool-based approach for all requests.
 
@@ -267,7 +267,7 @@ class AnthropicClient(LLMClient):
             max_tokens: Maximum number of tokens to generate.
 
         Returns:
-            Dictionary containing the structured response from the LLM.
+            Tuple of (response_dict, input_tokens, output_tokens).
 
         Raises:
             RateLimitError: If the rate limit is exceeded.
@@ -295,6 +295,13 @@ class AnthropicClient(LLMClient):
                 tool_choice=tool_choice,
             )
 
+            # Extract token usage from the response
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(result, 'usage') and result.usage:
+                input_tokens = getattr(result.usage, 'input_tokens', 0) or 0
+                output_tokens = getattr(result.usage, 'output_tokens', 0) or 0
+
             # Extract the tool output from the response
             for content_item in result.content:
                 if content_item.type == 'tool_use':
@@ -302,12 +309,16 @@ class AnthropicClient(LLMClient):
                         tool_args: dict[str, typing.Any] = content_item.input
                     else:
                         tool_args = json.loads(str(content_item.input))
-                    return tool_args
+                    return tool_args, input_tokens, output_tokens
 
             # If we didn't get a proper tool_use response, try to extract from text
             for content_item in result.content:
                 if content_item.type == 'text':
-                    return self._extract_json_from_text(content_item.text)
+                    return (
+                        self._extract_json_from_text(content_item.text),
+                        input_tokens,
+                        output_tokens,
+                    )
                 else:
                     raise ValueError(
                         f'Could not extract structured data from model response: {result.content}'
@@ -372,12 +383,19 @@ class AnthropicClient(LLMClient):
             retry_count = 0
             max_retries = 2
             last_error: Exception | None = None
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             while retry_count <= max_retries:
                 try:
-                    response = await self._generate_response(
+                    response, input_tokens, output_tokens = await self._generate_response(
                         messages, response_model, max_tokens, model_size
                     )
+                    total_input_tokens += input_tokens
+                    total_output_tokens += output_tokens
+
+                    # Record token usage
+                    self.token_tracker.record(prompt_name, total_input_tokens, total_output_tokens)
 
                     # If we have a response_model, attempt to validate the response
                     if response_model is not None:

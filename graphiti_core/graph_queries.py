@@ -86,7 +86,7 @@ def get_fulltext_indices(provider: GraphProvider) -> list[LiteralString]:
     if provider == GraphProvider.FALKORDB:
         from typing import cast
 
-        from graphiti_core.driver.falkordb_driver import STOPWORDS
+        from graphiti_core.driver.falkordb import STOPWORDS
 
         # Convert to string representation for embedding in queries
         stopwords_str = str(STOPWORDS)

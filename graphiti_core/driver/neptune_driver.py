@@ -25,6 +25,36 @@ from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
+from graphiti_core.driver.neptune.operations.community_edge_ops import (
+    NeptuneCommunityEdgeOperations,
+)
+from graphiti_core.driver.neptune.operations.community_node_ops import (
+    NeptuneCommunityNodeOperations,
+)
+from graphiti_core.driver.neptune.operations.entity_edge_ops import NeptuneEntityEdgeOperations
+from graphiti_core.driver.neptune.operations.entity_node_ops import NeptuneEntityNodeOperations
+from graphiti_core.driver.neptune.operations.episode_node_ops import NeptuneEpisodeNodeOperations
+from graphiti_core.driver.neptune.operations.episodic_edge_ops import NeptuneEpisodicEdgeOperations
+from graphiti_core.driver.neptune.operations.graph_ops import NeptuneGraphMaintenanceOperations
+from graphiti_core.driver.neptune.operations.has_episode_edge_ops import (
+    NeptuneHasEpisodeEdgeOperations,
+)
+from graphiti_core.driver.neptune.operations.next_episode_edge_ops import (
+    NeptuneNextEpisodeEdgeOperations,
+)
+from graphiti_core.driver.neptune.operations.saga_node_ops import NeptuneSagaNodeOperations
+from graphiti_core.driver.neptune.operations.search_ops import NeptuneSearchOperations
+from graphiti_core.driver.operations.community_edge_ops import CommunityEdgeOperations
+from graphiti_core.driver.operations.community_node_ops import CommunityNodeOperations
+from graphiti_core.driver.operations.entity_edge_ops import EntityEdgeOperations
+from graphiti_core.driver.operations.entity_node_ops import EntityNodeOperations
+from graphiti_core.driver.operations.episode_node_ops import EpisodeNodeOperations
+from graphiti_core.driver.operations.episodic_edge_ops import EpisodicEdgeOperations
+from graphiti_core.driver.operations.graph_ops import GraphMaintenanceOperations
+from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeOperations
+from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
+from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
+from graphiti_core.driver.operations.search_ops import SearchOperations
 
 logger = logging.getLogger(__name__)
 DEFAULT_SIZE = 10
@@ -150,6 +180,65 @@ class NeptuneDriver(GraphDriver):
             connection_class=Urllib3HttpConnection,
             pool_maxsize=20,
         )
+
+        # Instantiate Neptune operations
+        self._entity_node_ops = NeptuneEntityNodeOperations()
+        self._episode_node_ops = NeptuneEpisodeNodeOperations()
+        self._community_node_ops = NeptuneCommunityNodeOperations(driver=self)
+        self._saga_node_ops = NeptuneSagaNodeOperations()
+        self._entity_edge_ops = NeptuneEntityEdgeOperations()
+        self._episodic_edge_ops = NeptuneEpisodicEdgeOperations()
+        self._community_edge_ops = NeptuneCommunityEdgeOperations()
+        self._has_episode_edge_ops = NeptuneHasEpisodeEdgeOperations()
+        self._next_episode_edge_ops = NeptuneNextEpisodeEdgeOperations()
+        self._search_ops = NeptuneSearchOperations(driver=self)
+        self._graph_ops = NeptuneGraphMaintenanceOperations(driver=self)
+
+    # --- Operations properties ---
+
+    @property
+    def entity_node_ops(self) -> EntityNodeOperations:
+        return self._entity_node_ops
+
+    @property
+    def episode_node_ops(self) -> EpisodeNodeOperations:
+        return self._episode_node_ops
+
+    @property
+    def community_node_ops(self) -> CommunityNodeOperations:
+        return self._community_node_ops
+
+    @property
+    def saga_node_ops(self) -> SagaNodeOperations:
+        return self._saga_node_ops
+
+    @property
+    def entity_edge_ops(self) -> EntityEdgeOperations:
+        return self._entity_edge_ops
+
+    @property
+    def episodic_edge_ops(self) -> EpisodicEdgeOperations:
+        return self._episodic_edge_ops
+
+    @property
+    def community_edge_ops(self) -> CommunityEdgeOperations:
+        return self._community_edge_ops
+
+    @property
+    def has_episode_edge_ops(self) -> HasEpisodeEdgeOperations:
+        return self._has_episode_edge_ops
+
+    @property
+    def next_episode_edge_ops(self) -> NextEpisodeEdgeOperations:
+        return self._next_episode_edge_ops
+
+    @property
+    def search_ops(self) -> SearchOperations:
+        return self._search_ops
+
+    @property
+    def graph_ops(self) -> GraphMaintenanceOperations:
+        return self._graph_ops
 
     def _sanitize_parameters(self, query, params: dict):
         if isinstance(query, list):

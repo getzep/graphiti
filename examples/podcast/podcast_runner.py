@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -75,9 +76,22 @@ class IsPresidentOf(BaseModel):
     """Relationship between a person and the entity they are a president of"""
 
 
+class InterpersonalRelationship(BaseModel):
+    """A relationship between two people (e.g., knows, works with, interviewed)"""
+
+
+class LocatedIn(BaseModel):
+    """A relationship indicating something is located in or associated with a place"""
+
+
 async def main(use_bulk: bool = False):
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+
+    # Configure LLM client
+    llm_config = LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano')
+    llm_client = OpenAIClient(config=llm_config)
+
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client=llm_client)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
@@ -94,13 +108,31 @@ async def main(use_bulk: bool = False):
                 source_description='Podcast Transcript',
             )
         )
+    # Define edge types - note that some edge types are reused across multiple node type pairs
+    # This tests the fix for preserving all signatures when edge types are shared
+    edge_types = {
+        'IS_PRESIDENT_OF': IsPresidentOf,
+        'INTERPERSONAL_RELATIONSHIP': InterpersonalRelationship,
+        'LOCATED_IN': LocatedIn,
+    }
+
+    # Edge type map with shared edge types across multiple node type pairs:
+    # - INTERPERSONAL_RELATIONSHIP is used for both (Person, Person) and (Person, Entity)
+    # - LOCATED_IN is used for both (Person, City) and (Entity, City)
+    edge_type_map = {
+        ('Person', 'Entity'): ['IS_PRESIDENT_OF', 'INTERPERSONAL_RELATIONSHIP'],
+        ('Person', 'Person'): ['INTERPERSONAL_RELATIONSHIP'],  # Same type, different signature
+        ('Person', 'City'): ['LOCATED_IN'],
+        ('Entity', 'City'): ['LOCATED_IN'],  # Same type, different signature
+    }
+
     if use_bulk:
         await client.add_episode_bulk(
             raw_episodes,
             group_id=group_id,
             entity_types={'Person': Person, 'City': City},
-            edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
-            edge_type_map={('Person', 'Entity'): ['IS_PRESIDENT_OF']},
+            edge_types=edge_types,
+            edge_type_map=edge_type_map,
             saga='Freakonomics Podcast',
         )
     else:
@@ -117,11 +149,15 @@ async def main(use_bulk: bool = False):
                 source_description='Podcast Transcript',
                 group_id=group_id,
                 entity_types={'Person': Person, 'City': City},
-                edge_types={'IS_PRESIDENT_OF': IsPresidentOf},
-                edge_type_map={('Person', 'Entity'): ['PRESIDENT_OF']},
+                edge_types=edge_types,
+                edge_type_map=edge_type_map,
                 previous_episode_uuids=episode_uuids,
                 saga='Freakonomics Podcast',
             )
+
+    # Print token usage summary sorted by prompt type
+    print('\n\nIngestion complete. Token usage by prompt type:')
+    client.token_tracker.print_summary(sort_by='prompt_name')
 
 
 asyncio.run(main(False))

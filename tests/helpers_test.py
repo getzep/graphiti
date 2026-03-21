@@ -132,7 +132,12 @@ embeddings = {
     for key in [
         'Alice',
         'Bob',
+        'Charlie',
         'Alice likes Bob',
+        'Alice knows Bob',
+        'Alice knows Charlie',
+        'Alice works with Bob',
+        'Alice manages Bob',
         'test_entity_1',
         'test_entity_2',
         'test_entity_3',
