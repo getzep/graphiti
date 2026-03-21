@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -27,6 +28,48 @@ fake = Faker()
 mcp_server_dir = Path(__file__).resolve().parents[1]
 nas_env_path = mcp_server_dir / '.env.nas'
 nas_env = {k: v for k, v in dotenv_values(nas_env_path).items() if isinstance(v, str)} if nas_env_path.exists() else {}
+
+
+def _local_falkordb_reachable(uri: str) -> bool:
+    parsed = urlparse(uri)
+    host = parsed.hostname
+    port = parsed.port or 6379
+    if not host:
+        return False
+
+    with contextlib.closing(socket.socket()) as sock:
+        sock.settimeout(1.0)
+        try:
+            sock.connect((host, port))
+        except OSError:
+            return False
+    return True
+
+
+def resolve_test_database(
+    database: str,
+    env: dict[str, str],
+    nas_env_values: dict[str, str],
+) -> str:
+    if database != 'falkordb':
+        return database
+
+    if env.get('FALKORDB_URI'):
+        return 'falkordb'
+
+    if nas_env_values.get('NEO4J_URI'):
+        return 'neo4j'
+
+    fallback_uri = 'redis://localhost:6379'
+    if _local_falkordb_reachable(fallback_uri):
+        return 'falkordb'
+
+    raise RuntimeError(
+        'graphiti_test_client could not select a usable backend: '
+        'local mcp_server/.env.nas is missing and no local FalkorDB is reachable at '
+        'redis://localhost:6379. Restore mcp_server/.env.nas or export FALKORDB_URI '
+        'before running MCP integration, async, or stress tests.'
+    )
 
 
 class TestDataGenerator:
@@ -198,15 +241,8 @@ async def graphiti_test_client(
         config_overrides: Additional config overrides
     """
     test_group_id = group_id or f'test_{int(time.time())}_{random.randint(1000, 9999)}'
-    effective_database = database
-    if (
-        database == 'falkordb'
-        and 'FALKORDB_URI' not in os.environ
-        and nas_env.get('NEO4J_URI')
-    ):
-        effective_database = 'neo4j'
-
     env = {**os.environ, **nas_env}
+    effective_database = resolve_test_database(database, env, nas_env)
     env['DATABASE_PROVIDER'] = effective_database
     env.setdefault('OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY', 'test_key'))
     env.setdefault('GRAPHITI_TELEMETRY_ENABLED', 'false')
