@@ -12,18 +12,17 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 import pytest
+from graphiti_core.embedder.client import EmbedderClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.llm_client import LLMClient
+from graphiti_core.llm_client.config import ModelSize
+from graphiti_core.prompts.extract_nodes import ExtractedEntities, SummarizedEntities
 from pydantic import BaseModel
 
 from config.schema import GraphitiConfig
-from graphiti_core.prompts.extract_nodes import SummarizedEntities
-from graphiti_core.prompts.extract_nodes import ExtractedEntities
-from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
-from graphiti_core.embedder.client import EmbedderClient
-from graphiti_core.llm_client import LLMClient
-from graphiti_core.llm_client.config import ModelSize
+from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 from services.instrumented_clients import InstrumentedEmbedderClient, InstrumentedLLMClient
 from services.openai_compatible_client import OpenAICompatibleJSONClient
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
 
 
 def test_config_loading():
@@ -166,6 +165,8 @@ def test_cli_override():
     class Args:
         config = Path('config.yaml')
         transport = 'stdio'
+        host = '127.0.0.1'
+        port = 18011
         llm_provider = 'anthropic'
         model = 'claude-3-sonnet'
         temperature = 0.5
@@ -180,6 +181,8 @@ def test_cli_override():
 
     print('✓ CLI overrides applied successfully')
     print(f'  - Transport: {config.server.transport}')
+    print(f'  - Host: {config.server.host}')
+    print(f'  - Port: {config.server.port}')
     print(f'  - LLM provider: {config.llm.provider}')
     print(f'  - LLM model: {config.llm.model}')
     print(f'  - Temperature: {config.llm.temperature}')
@@ -187,6 +190,9 @@ def test_cli_override():
     print(f'  - Database provider: {config.database.provider}')
     print(f'  - Group ID: {config.graphiti.group_id}')
     print(f'  - User ID: {config.graphiti.user_id}')
+
+    assert config.server.host == '127.0.0.1'
+    assert config.server.port == 18011
 
 
 async def main():
@@ -312,7 +318,8 @@ def test_openai_llm_factory_uses_generic_client_for_custom_base_url(monkeypatch)
 def test_anthropic_llm_factory_uses_configured_base_url(monkeypatch):
     """Anthropic-compatible providers must pass through the configured API URL."""
     import services.factories as factories
-    from config.schema import AnthropicProviderConfig, LLMConfig as ServerLLMConfig, LLMProvidersConfig
+    from config.schema import AnthropicProviderConfig, LLMProvidersConfig
+    from config.schema import LLMConfig as ServerLLMConfig
 
     captured: dict[str, object] = {}
 
