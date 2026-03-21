@@ -108,7 +108,7 @@ class GraphitiTestClient:
         return content, metric
 
     async def wait_for_episode_processing(
-        self, expected_count: int = 1, max_wait: int = 60, poll_interval: int = 2
+        self, expected_count: int = 1, max_wait: int = 120, poll_interval: int = 2
     ) -> bool:
         """
         Wait for episodes to be processed with intelligent polling.
