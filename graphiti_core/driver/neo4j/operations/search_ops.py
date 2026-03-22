@@ -607,10 +607,10 @@ class Neo4jSearchOperations(SearchOperations):
 
         for uuid in node_uuids:
             if uuid not in scores:
-                scores[uuid] = float('inf')
+                scores[uuid] = 0
 
         sorted_uuids = list(node_uuids)
-        sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid])
+        sorted_uuids.sort(key=lambda cur_uuid: scores[cur_uuid], reverse=True)
 
         reranked_uuids = [u for u in sorted_uuids if scores[u] >= min_score]
 
