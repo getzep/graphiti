@@ -22,7 +22,7 @@ from typing import Any, ClassVar
 
 import openai
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
@@ -169,16 +169,29 @@ class BaseOpenAIClient(LLMClient):
 
         try:
             if response_model:
-                response = await self._create_structured_completion(
-                    model=model,
-                    messages=openai_messages,
-                    temperature=self.temperature,
-                    max_tokens=max_tokens or self.max_tokens,
-                    response_model=response_model,
-                    reasoning=self.reasoning,
-                    verbosity=self.verbosity,
-                )
-                return self._handle_structured_response(response)
+                try:
+                    response = await self._create_structured_completion(
+                        model=model,
+                        messages=openai_messages,
+                        temperature=self.temperature,
+                        max_tokens=max_tokens or self.max_tokens,
+                        response_model=response_model,
+                        reasoning=self.reasoning,
+                        verbosity=self.verbosity,
+                    )
+                    return self._handle_structured_response(response)
+                except (AttributeError, TypeError) as e:
+                    logger.info(
+                        "Structured completion not supported by this provider, "
+                        f"falling back to JSON mode: {e}"
+                    )
+                    response = await self._create_completion(
+                        model=model,
+                        messages=openai_messages,
+                        temperature=self.temperature,
+                        max_tokens=max_tokens or self.max_tokens,
+                    )
+                    return self._handle_json_response(response)
             else:
                 response = await self._create_completion(
                     model=model,
