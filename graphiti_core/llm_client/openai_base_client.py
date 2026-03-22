@@ -16,6 +16,7 @@ limitations under the License.
 
 import json
 import logging
+import re
 import typing
 from abc import abstractmethod
 from typing import Any, ClassVar
@@ -135,6 +136,20 @@ class BaseOpenAIClient(LLMClient):
         else:
             raise Exception(f'Invalid response from LLM: {response}')
 
+    @staticmethod
+    def _strip_json_fences(text: str) -> str:
+        """Strip markdown code fences from LLM output.
+
+        Handles patterns like:
+          ```json\\n{...}```
+          ```\\n[...]```
+          ```json\\n[...]```
+        """
+        match = re.match(r'^```(?:json)?\s*\n?(.*?)\n?\s*```$', text.strip(), re.DOTALL)
+        if match:
+            return match.group(1)
+        return text.strip()
+
     def _handle_json_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle JSON response parsing.
 
@@ -142,6 +157,7 @@ class BaseOpenAIClient(LLMClient):
             tuple: (parsed_response, input_tokens, output_tokens)
         """
         result = response.choices[0].message.content or '{}'
+        result = self._strip_json_fences(result)
 
         # Extract token usage
         input_tokens = 0
@@ -151,6 +167,73 @@ class BaseOpenAIClient(LLMClient):
             output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
 
         return json.loads(result), input_tokens, output_tokens
+
+    @staticmethod
+    def _lenient_validate(
+        response_dict: dict[str, Any], response_model: type[BaseModel]
+    ) -> dict[str, Any]:
+        """Validate with lenient defaults for missing or mistyped fields.
+
+        Some LLMs (especially smaller or non-OpenAI models) omit required fields
+        or return wrong types. This patches issues so processing can continue.
+        """
+        try:
+            return response_model.model_validate(response_dict).model_dump()
+        except ValidationError as e:
+            for err in e.errors():
+                err_type = err['type']
+                loc = err['loc']
+                if not loc:
+                    continue
+                top_key = loc[0]
+                if err_type == 'missing':
+                    if isinstance(response_dict.get(top_key), list) and len(loc) > 1:
+                        idx = loc[1]
+                        if isinstance(idx, int) and idx < len(response_dict[top_key]):
+                            response_dict[top_key][idx][loc[-1]] = ''
+                    elif top_key not in response_dict:
+                        response_dict[top_key] = []
+                elif err_type == 'list_type' and len(loc) == 1:
+                    response_dict[top_key] = []
+            return response_dict
+
+    @staticmethod
+    def _normalize_structured_response(
+        response_dict: Any, response_model: type[BaseModel]
+    ) -> dict[str, Any]:
+        """Normalize LLM JSON output to match a pydantic response_model.
+
+        Handles common non-conformant patterns from smaller/compat models:
+          - Wrapped in model class name key (e.g. {"ExtractedEntities": [...]})
+          - Bare list (e.g. [{"name": "foo", ...}])
+          - Wrong key casing (e.g. {"entities": [...]} instead of {"extracted_entities": [...]})
+        """
+        expected_fields = list(response_model.model_fields.keys())
+        first_field = expected_fields[0]
+
+        if isinstance(response_dict, list):
+            return {first_field: response_dict}
+
+        if not isinstance(response_dict, dict):
+            return response_dict
+
+        if first_field in response_dict:
+            return response_dict
+
+        class_name = response_model.__name__
+        if class_name in response_dict:
+            unwrapped = response_dict[class_name]
+            if isinstance(unwrapped, dict):
+                return unwrapped
+            return {first_field: unwrapped}
+
+        lower_map = {k.lower(): k for k in response_dict.keys()}
+        for field in expected_fields:
+            if field.lower() in lower_map:
+                response_dict[field] = response_dict.pop(lower_map[field.lower()])
+                break
+
+        return response_dict
 
     async def _generate_response(
         self,
@@ -180,10 +263,10 @@ class BaseOpenAIClient(LLMClient):
                         verbosity=self.verbosity,
                     )
                     return self._handle_structured_response(response)
-                except (AttributeError, TypeError) as e:
+                except Exception as e:
                     logger.info(
-                        "Structured completion not supported by this provider, "
-                        f"falling back to JSON mode: {e}"
+                        'Structured completion not supported by this provider, '
+                        f'falling back to JSON mode: {e}'
                     )
                     response = await self._create_completion(
                         model=model,
@@ -191,7 +274,12 @@ class BaseOpenAIClient(LLMClient):
                         temperature=self.temperature,
                         max_tokens=max_tokens or self.max_tokens,
                     )
-                    return self._handle_json_response(response)
+                    response_dict, input_tokens, output_tokens = self._handle_json_response(response)
+                    response_dict = self._normalize_structured_response(
+                        response_dict, response_model
+                    )
+                    response_dict = self._lenient_validate(response_dict, response_model)
+                    return response_dict, input_tokens, output_tokens
             else:
                 response = await self._create_completion(
                     model=model,
