@@ -228,6 +228,33 @@ class GraphitiService:
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
                     )
+                elif self.config.database.provider.lower() == 'kuzu':
+                    from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+                    kuzu_driver = KuzuDriver(db=db_config['db_path'])
+                    kuzu_driver._database = ''
+
+                    import kuzu as kuzu_mod
+                    from graphiti_core.graph_queries import get_fulltext_indices
+                    fts_conn = kuzu_mod.Connection(kuzu_driver.db)
+                    for stmt in ['INSTALL FTS', 'LOAD EXTENSION FTS']:
+                        try:
+                            fts_conn.execute(stmt + ';')
+                        except RuntimeError:
+                            pass
+                    for idx_query in get_fulltext_indices(kuzu_driver.provider):
+                        try:
+                            fts_conn.execute(idx_query)
+                        except RuntimeError:
+                            pass
+                    fts_conn.close()
+
+                    self.client = Graphiti(
+                        graph_driver=kuzu_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
                 else:
                     # For Neo4j (default), use the original approach
                     self.client = Graphiti(
@@ -806,7 +833,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
+        choices=['neo4j', 'falkordb', 'kuzu'],
         help='Database provider to use',
     )
 

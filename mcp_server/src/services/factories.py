@@ -125,6 +125,7 @@ class LLMClientFactory:
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
+                    base_url=config.providers.openai.api_url,
                 )
 
                 # Check if this is a reasoning model (o1, o3, gpt-5 family)
@@ -429,6 +430,22 @@ class DatabaseDriverFactory:
                     'port': port,
                     'password': password,
                     'database': falkor_config.database,
+                }
+
+            case 'kuzu':
+                if config.providers.kuzu:
+                    kuzu_config = config.providers.kuzu
+                else:
+                    from config.schema import KuzuProviderConfig
+
+                    kuzu_config = KuzuProviderConfig()
+
+                import os
+
+                db_path = os.environ.get('KUZU_DB_PATH', kuzu_config.db_path)
+                return {
+                    'driver': 'kuzu',
+                    'db_path': db_path,
                 }
 
             case _:
