@@ -156,7 +156,10 @@ class BaseOpenAIClient(LLMClient):
         Returns:
             tuple: (parsed_response, input_tokens, output_tokens)
         """
-        result = response.choices[0].message.content or '{}'
+        result = response.choices[0].message.content or ''
+        result = result.strip()
+        if not result:
+            raise ValueError('Empty response content from LLM')
         result = self._strip_json_fences(result)
 
         # Extract token usage
