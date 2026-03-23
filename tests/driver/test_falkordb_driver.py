@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.helpers import get_default_group_id
 
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
@@ -390,3 +391,147 @@ class TestFalkorDriverIntegration:
 
         except Exception as e:
             pytest.skip(f'FalkorDB not available for integration test: {e}')
+
+
+class TestGetDefaultGroupId:
+    """Test get_default_group_id returns correct defaults per provider."""
+
+    def test_falkordb_default_is_underscore(self):
+        """Test FalkorDB default group_id is underscore."""
+        assert get_default_group_id(GraphProvider.FALKORDB) == '_'
+
+    def test_neo4j_default_is_empty(self):
+        """Test Neo4j default group_id is empty string."""
+        assert get_default_group_id(GraphProvider.NEO4J) == ''
+
+
+class TestFalkorDriverSanitize:
+    """Test FalkorDriver.sanitize handles underscore as a RedisSearch separator."""
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = MagicMock()
+        with patch('graphiti_core.driver.falkordb_driver.FalkorDB'):
+            self.driver = FalkorDriver()
+        self.driver.client = self.mock_client
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_underscore_replaced_with_space(self):
+        """Test underscore is treated as a separator."""
+        assert self.driver.sanitize('foo_bar') == 'foo bar'
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_only_underscore_becomes_empty(self):
+        """Test lone underscore sanitizes to empty string."""
+        assert self.driver.sanitize('_') == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_multiple_underscores_become_empty(self):
+        """Test multiple underscores sanitize to empty string."""
+        assert self.driver.sanitize('___') == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_mixed_separators(self):
+        """Test multiple separator types are all replaced."""
+        assert self.driver.sanitize('a_b-c') == 'a b c'
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_no_special_chars(self):
+        """Test plain text passes through unchanged."""
+        assert self.driver.sanitize('hello') == 'hello'
+
+
+class TestFalkorDriverBuildFulltextQueryGroupIds:
+    """Test build_fulltext_query handles group_ids tokenized by RedisSearch (issue #1319)."""
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = MagicMock()
+        with patch('graphiti_core.driver.falkordb_driver.FalkorDB'):
+            self.driver = FalkorDriver()
+        self.driver.client = self.mock_client
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_no_group_ids(self):
+        """Test no group_ids produces no group filter."""
+        result = self.driver.build_fulltext_query('hello world')
+        assert '@group_id' not in result
+        assert 'hello' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_empty_group_ids(self):
+        """Test empty group_ids list produces no group filter."""
+        result = self.driver.build_fulltext_query('hello world', group_ids=[])
+        assert '@group_id' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_underscore_group_id_omitted_from_filter(self):
+        """Test group_id '_' sanitizes to empty and is omitted from filter."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['_'])
+        assert '@group_id' not in result
+        assert 'hello' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_multiple_separator_only_group_ids(self):
+        """Test all separator-only group_ids produces no group filter."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['_', '___'])
+        assert '@group_id' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_simple_group_id(self):
+        """Test simple group_id appears quoted in filter."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['mygroup'])
+        assert '(@group_id:"mygroup")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_multiple_group_ids(self):
+        """Test multiple group_ids are pipe-separated."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['alpha', 'beta'])
+        assert '(@group_id:"alpha"|"beta")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_group_id_with_underscore_kept(self):
+        """Test group_id containing underscore is kept with original value."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['foo_bar'])
+        assert '(@group_id:"foo_bar")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_group_id_with_leading_underscore(self):
+        """Test group_id with leading underscore is kept."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['_mygroup'])
+        assert '(@group_id:"_mygroup")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_group_id_with_trailing_underscore(self):
+        """Test group_id with trailing underscore is kept."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['mygroup_'])
+        assert '(@group_id:"mygroup_")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_mixed_group_ids_drops_separator_only(self):
+        """Test separator-only group_id is dropped but others are kept."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['_', 'mygroup'])
+        assert '(@group_id:"mygroup")' in result
+        assert '"_"' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_mixed_underscore_and_compound(self):
+        """Test '_' dropped while 'foo_bar' is kept."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['_', 'foo_bar'])
+        assert '(@group_id:"foo_bar")' in result
+        assert '"_"' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_group_id_with_hyphen(self):
+        """Test group_id with hyphen is kept."""
+        result = self.driver.build_fulltext_query('hello', group_ids=['my-group'])
+        assert '(@group_id:"my-group")' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_query_text_sanitized(self):
+        """Test search text has separators stripped and stopwords removed."""
+        result = self.driver.build_fulltext_query('hello_world', group_ids=['mygroup'])
+        assert 'hello' in result
+        assert 'world' in result
