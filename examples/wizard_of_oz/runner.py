@@ -24,15 +24,19 @@ from dotenv import load_dotenv
 
 from examples.wizard_of_oz.parser import get_wizard_of_oz_messages
 from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+from graphiti_core.driver.falkordb_driver import FalkorDriver
+from graphiti_core.embedder.huggingface import HuggingFaceEmbedder, HuggingFaceEmbedderConfig
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
 
-neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
-neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
-neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
+falkor_host = os.environ.get('FALKORDB_HOST', 'localhost')
+falkor_port = os.environ.get('FALKORDB_PORT', '6379')
+falkor_username = os.environ.get('FALKORDB_USERNAME', None)
+falkor_password = os.environ.get('FALKORDB_PASSWORD', None)
 
 
 def setup_logging():
@@ -58,8 +62,20 @@ def setup_logging():
 
 async def main():
     setup_logging()
-    llm_client = AnthropicClient(LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY')))
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client)
+    llm_client = AnthropicClient(
+        LLMConfig(api_key=os.environ.get('ANTHROPIC_API_KEY'), model='claude-haiku-4-5-20251001')
+    )
+    falkor_driver = FalkorDriver(
+        host=falkor_host, port=falkor_port, username=falkor_username, password=falkor_password
+    )
+    embedder = HuggingFaceEmbedder(HuggingFaceEmbedderConfig(embedding_dim=384))
+    cross_encoder = BGERerankerClient()
+    client = Graphiti(
+        graph_driver=falkor_driver,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
+    )
     messages = get_wizard_of_oz_messages()
     print(messages)
     print(len(messages))

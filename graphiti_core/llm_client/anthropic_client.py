@@ -47,25 +47,39 @@ else:
 logger = logging.getLogger(__name__)
 
 AnthropicModel = Literal[
+    # Claude 4.6 models
+    'claude-sonnet-4-6',
+    'claude-opus-4-6',
+    # Claude 4.5 models
+    'claude-haiku-4-5-20251001',
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-5-20250929',
     'claude-haiku-4-5-latest',
+    # Claude 4.1 models
+    'claude-opus-4-1-20250805',
+    # Claude 4 models
+    'claude-opus-4-20250514',
+    'claude-sonnet-4-20250514',
+    # Claude 3.7 models
     'claude-3-7-sonnet-latest',
     'claude-3-7-sonnet-20250219',
+    # Claude 3.5 models
     'claude-3-5-haiku-latest',
     'claude-3-5-haiku-20241022',
     'claude-3-5-sonnet-latest',
     'claude-3-5-sonnet-20241022',
     'claude-3-5-sonnet-20240620',
+    # Claude 3 models
     'claude-3-opus-latest',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
     'claude-3-haiku-20240307',
+    # Claude 2 models
     'claude-2.1',
     'claude-2.0',
 ]
 
-DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
+DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-20251001'
 
 # Maximum output tokens for different Anthropic models
 # Based on official Anthropic documentation (as of 2025)
@@ -73,10 +87,19 @@ DEFAULT_MODEL: AnthropicModel = 'claude-haiku-4-5-latest'
 # Some models support higher limits with additional configuration (e.g., Claude 3.7 supports
 # 128K with 'anthropic-beta: output-128k-2025-02-19' header, but this is not currently implemented).
 ANTHROPIC_MODEL_MAX_TOKENS = {
+    # Claude 4.6 models - 64K tokens
+    'claude-sonnet-4-6': 65536,
+    'claude-opus-4-6': 32000,
     # Claude 4.5 models - 64K tokens
+    'claude-haiku-4-5-20251001': 65536,
     'claude-sonnet-4-5-latest': 65536,
     'claude-sonnet-4-5-20250929': 65536,
     'claude-haiku-4-5-latest': 65536,
+    # Claude 4.1 models
+    'claude-opus-4-1-20250805': 32000,
+    # Claude 4 models
+    'claude-opus-4-20250514': 32000,
+    'claude-sonnet-4-20250514': 65536,
     # Claude 3.7 models - standard 64K tokens
     'claude-3-7-sonnet-latest': 65536,
     'claude-3-7-sonnet-20250219': 65536,
