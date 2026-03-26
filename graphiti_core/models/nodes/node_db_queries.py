@@ -162,6 +162,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
                 SET n:{labels}
                 SET n = $entity_data
                 SET n.name_embedding = vecf32($entity_data.name_embedding)
+                SET n.summary_embedding = CASE WHEN $entity_data.summary_embedding IS NOT NULL THEN vecf32($entity_data.summary_embedding) ELSE NULL END
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
