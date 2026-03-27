@@ -20,8 +20,6 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
-import json
-
 import boto3
 from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
@@ -156,19 +154,15 @@ class NeptuneDriver(GraphDriver):
         if host.startswith('neptune-db://'):
             # This is a Neptune Database Cluster
             endpoint = host.replace('neptune-db://', '')
-            # Build the NeptuneGraph without calling _refresh_schema(), which
-            # requires the Summary API (engine >=1.2.1.0 with statistics
-            # enabled).  Graphiti only needs the .query() / .client interface,
-            # not langchain's schema introspection.
-            graph = NeptuneGraph.__new__(NeptuneGraph)
-            graph.property_descriptions = {}
-            graph.schema = ''
-            session = boto3.Session()
-            graph.client = session.client(
-                'neptunedata',
-                endpoint_url=f'https://{endpoint}:{port}',
-            )
-            self.client = graph
+            # Monkey-patch _refresh_schema to skip the Summary API call
+            # (requires engine >=1.2.1.0 with statistics enabled).
+            # Graphiti only uses .query(), not langchain's schema introspection.
+            _orig = NeptuneGraph._refresh_schema
+            NeptuneGraph._refresh_schema = lambda self: setattr(self, 'schema', '')
+            try:
+                self.client = NeptuneGraph(endpoint, port)
+            finally:
+                NeptuneGraph._refresh_schema = _orig
             logger.debug('Creating Neptune Database session for %s', host)
         elif host.startswith('neptune-graph://'):
             # This is a Neptune Analytics Graph
