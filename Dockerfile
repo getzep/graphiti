@@ -57,9 +57,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         *) echo "Unknown GRAPH_DB_PROVIDER: $GRAPH_DB_PROVIDER" && exit 1 ;; \
     esac && \
     if [ -n "$GRAPHITI_VERSION" ]; then \
-        uv pip install --system --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
+        uv pip install --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
     else \
-        uv pip install --system --upgrade "graphiti-core${EXTRA}"; \
+        uv pip install --upgrade "graphiti-core${EXTRA}"; \
     fi
 
 ENV GRAPH_DB_PROVIDER=${GRAPH_DB_PROVIDER}
