@@ -43,22 +43,26 @@ COPY ./server/graph_service ./graph_service
 # Install server dependencies (without graphiti-core from lockfile)
 # Then install graphiti-core from PyPI at the desired version
 # This prevents the stale lockfile from pinning an old graphiti-core version
-ARG INSTALL_FALKORDB=false
+#
+# GRAPH_DB_PROVIDER controls which pip extras are installed and is also baked
+# as the runtime default so there is a single knob instead of separate build-
+# and run-time flags.  Valid values: neo4j (default), falkordb, neptune, kuzu.
+ARG GRAPH_DB_PROVIDER=neo4j
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev && \
+    EXTRA="" && \
+    case "$GRAPH_DB_PROVIDER" in \
+        neo4j)   EXTRA="" ;; \
+        falkordb|neptune|kuzu) EXTRA="[$GRAPH_DB_PROVIDER]" ;; \
+        *) echo "Unknown GRAPH_DB_PROVIDER: $GRAPH_DB_PROVIDER" && exit 1 ;; \
+    esac && \
     if [ -n "$GRAPHITI_VERSION" ]; then \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
-        else \
-            uv pip install --system --upgrade "graphiti-core==$GRAPHITI_VERSION"; \
-        fi; \
+        uv pip install --system --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
     else \
-        if [ "$INSTALL_FALKORDB" = "true" ]; then \
-            uv pip install --system --upgrade "graphiti-core[falkordb]"; \
-        else \
-            uv pip install --system --upgrade graphiti-core; \
-        fi; \
+        uv pip install --system --upgrade "graphiti-core${EXTRA}"; \
     fi
+
+ENV GRAPH_DB_PROVIDER=${GRAPH_DB_PROVIDER}
 
 # Change ownership to app user
 RUN chown -R app:app /app
