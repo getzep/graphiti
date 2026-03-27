@@ -57,10 +57,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     fi && \
     uv pip install --reinstall --no-cache "/graphiti-core${EXTRA}"
 
-# Ensure our local neptune_driver.py overrides the installed copy
-COPY ./graphiti_core/driver/neptune_driver.py /app/.venv/lib/python3.12/site-packages/graphiti_core/driver/neptune_driver.py
-RUN rm -rf /app/.venv/lib/python3.12/site-packages/graphiti_core/driver/__pycache__
-
 # Change ownership to app user
 RUN chown -R app:app /app
 
