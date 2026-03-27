@@ -193,6 +193,8 @@ class NeptuneDriver(GraphDriver):
             port (int, optional): The Neptune Database port, ignored for Neptune Analytics. Defaults to 8182.
             aoss_port (int, optional): The OpenSearch port. Defaults to 443.
         """
+        self._database = 'default'
+
         if not host:
             raise ValueError('You must provide an endpoint to create a NeptuneDriver')
 
@@ -326,6 +328,13 @@ class NeptuneDriver(GraphDriver):
         self, cypher_query_, **kwargs: Any
     ) -> tuple[list[dict[str, Any]], None, None]:
         params = dict(kwargs)
+        # Unwrap nested 'params' dict (legacy search_utils compatibility)
+        if 'params' in params and isinstance(params['params'], dict):
+            nested = params.pop('params')
+            params.update(nested)
+        # Remove kwargs that are not openCypher parameters
+        for key in ('routing_', 'database_', 'search_vector', 'min_score'):
+            params.pop(key, None)
         if isinstance(cypher_query_, list):
             result: list[dict[str, Any]] = []
             for q in cypher_query_:
