@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EpisodeType
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -85,7 +86,12 @@ class LocatedIn(BaseModel):
 
 async def main(use_bulk: bool = False):
     setup_logging()
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password)
+
+    # Configure LLM client
+    llm_config = LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano')
+    llm_client = OpenAIClient(config=llm_config)
+
+    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client=llm_client)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
@@ -148,6 +154,10 @@ async def main(use_bulk: bool = False):
                 previous_episode_uuids=episode_uuids,
                 saga='Freakonomics Podcast',
             )
+
+    # Print token usage summary sorted by prompt type
+    print('\n\nIngestion complete. Token usage by prompt type:')
+    client.token_tracker.print_summary(sort_by='prompt_name')
 
 
 asyncio.run(main(False))

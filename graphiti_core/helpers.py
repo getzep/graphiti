@@ -28,9 +28,11 @@ from numpy._typing import NDArray
 from pydantic import BaseModel
 
 from graphiti_core.driver.driver import GraphProvider
-from graphiti_core.errors import GroupIdValidationError
+from graphiti_core.errors import GroupIdValidationError, NodeLabelValidationError
 
 load_dotenv()
+
+SAFE_CYPHER_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
@@ -153,6 +155,33 @@ def validate_group_id(group_id: str | None) -> bool:
     # Pattern matches: letters (a-z, A-Z), digits (0-9), hyphens (-), and underscores (_)
     if not re.match(r'^[a-zA-Z0-9_-]+$', group_id):
         raise GroupIdValidationError(group_id)
+
+    return True
+
+
+def validate_group_ids(group_ids: list[str] | None) -> bool:
+    """Validate a list of group ids used by search paths."""
+
+    if group_ids is None:
+        return True
+
+    for group_id in group_ids:
+        validate_group_id(group_id)
+
+    return True
+
+
+def validate_node_labels(node_labels: list[str] | None) -> bool:
+    """Validate that node labels are safe to interpolate into Cypher label expressions."""
+
+    if not node_labels:
+        return True
+
+    invalid_labels = [
+        label for label in node_labels if not SAFE_CYPHER_IDENTIFIER_PATTERN.match(label)
+    ]
+    if invalid_labels:
+        raise NodeLabelValidationError(invalid_labels)
 
     return True
 
