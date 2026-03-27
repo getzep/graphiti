@@ -40,12 +40,9 @@ WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
 
-# Copy the local graphiti-core source so we can install from it
-COPY ./pyproject.toml ./README.md /graphiti-core/
-COPY ./graphiti_core /graphiti-core/graphiti_core
-
 # Install server dependencies (without graphiti-core from lockfile)
-# Then install graphiti-core from local source with the appropriate extras.
+# Then install graphiti-core from PyPI at the desired version
+# This prevents the stale lockfile from pinning an old graphiti-core version
 #
 # GRAPH_DB_PROVIDER controls which pip extras are installed and is also baked
 # as the runtime default so there is a single knob instead of separate build-
@@ -59,7 +56,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         falkordb|neptune|kuzu) EXTRA="[$GRAPH_DB_PROVIDER]" ;; \
         *) echo "Unknown GRAPH_DB_PROVIDER: $GRAPH_DB_PROVIDER" && exit 1 ;; \
     esac && \
-    uv pip install --reinstall --no-cache "/graphiti-core${EXTRA}"
+    if [ -n "$GRAPHITI_VERSION" ]; then \
+        uv pip install --system --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
+    else \
+        uv pip install --system --upgrade "graphiti-core${EXTRA}"; \
+    fi
 
 ENV GRAPH_DB_PROVIDER=${GRAPH_DB_PROVIDER}
 
