@@ -40,11 +40,9 @@ WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
 
-# Copy the local graphiti-core source so we can install from it
-COPY ./pyproject.toml ./README.md /graphiti-core/
-COPY ./graphiti_core /graphiti-core/graphiti_core
-
-# Then install graphiti-core from local source with the appropriate extras.
+# Install server dependencies (without graphiti-core from lockfile)
+# Then install graphiti-core from PyPI at the desired version
+# This prevents the stale lockfile from pinning an old graphiti-core version
 ARG INSTALL_FALKORDB=false
 ARG INSTALL_NEPTUNE=false
 ARG INSTALL_KUZU=false
@@ -55,7 +53,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     elif [ "$INSTALL_NEPTUNE" = "true" ]; then EXTRA="[neptune]"; \
     elif [ "$INSTALL_KUZU" = "true" ]; then EXTRA="[kuzu]"; \
     fi && \
-    uv pip install --reinstall --no-cache "/graphiti-core${EXTRA}"
+    if [ -n "$GRAPHITI_VERSION" ]; then \
+        uv pip install --upgrade "graphiti-core${EXTRA}==$GRAPHITI_VERSION"; \
+    else \
+        uv pip install --upgrade "graphiti-core${EXTRA}"; \
+    fi
 
 # Change ownership to app user
 RUN chown -R app:app /app
