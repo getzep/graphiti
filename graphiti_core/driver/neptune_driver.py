@@ -16,12 +16,12 @@ limitations under the License.
 
 import asyncio
 import datetime
+import json
 import logging
 from collections.abc import Coroutine
 from typing import Any
 
 import boto3
-from langchain_aws.graphs import NeptuneAnalyticsGraph, NeptuneGraph
 from opensearchpy import OpenSearch, Urllib3AWSV4SignerAuth, Urllib3HttpConnection, helpers
 
 from graphiti_core.driver.driver import GraphDriver, GraphDriverSession, GraphProvider
@@ -136,6 +136,51 @@ aoss_indices = [
 ]
 
 
+class NeptuneDatabaseClient:
+    """Lightweight Neptune Database query client using boto3 directly.
+
+    This replaces langchain_aws's NeptuneGraph, which unconditionally calls the
+    Summary/Statistics API on construction—requiring engine >=1.2.1.0 with
+    statistics enabled.  Graphiti only needs openCypher query execution, not
+    langchain's schema introspection, so we skip that overhead entirely.
+    """
+
+    def __init__(self, host: str, port: int = 8182):
+        session = boto3.Session()
+        self.client = session.client(
+            'neptunedata',
+            endpoint_url=f'https://{host}:{port}',
+        )
+
+    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
+        kwargs: dict[str, Any] = {'openCypherQuery': query}
+        if params:
+            kwargs['parameters'] = json.dumps(params)
+        return self.client.execute_open_cypher_query(**kwargs)['results']
+
+
+class NeptuneAnalyticsClient:
+    """Lightweight Neptune Analytics query client using boto3 directly.
+
+    Same rationale as NeptuneDatabaseClient—avoids the langchain_aws
+    NeptuneAnalyticsGraph class and its mandatory schema introspection.
+    """
+
+    def __init__(self, graph_identifier: str):
+        session = boto3.Session()
+        self.client = session.client('neptune-graph')
+        self.graph_identifier = graph_identifier
+
+    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
+        resp = self.client.execute_query(
+            graphIdentifier=self.graph_identifier,
+            queryString=query,
+            parameters=params or {},
+            language='OPEN_CYPHER',
+        )
+        return json.loads(resp['payload'].read().decode('UTF-8'))['results']
+
+
 class NeptuneDriver(GraphDriver):
     provider: GraphProvider = GraphProvider.NEPTUNE
 
@@ -154,20 +199,12 @@ class NeptuneDriver(GraphDriver):
         if host.startswith('neptune-db://'):
             # This is a Neptune Database Cluster
             endpoint = host.replace('neptune-db://', '')
-            # Monkey-patch _refresh_schema to skip the Summary API call
-            # (requires engine >=1.2.1.0 with statistics enabled).
-            # Graphiti only uses .query(), not langchain's schema introspection.
-            _orig = NeptuneGraph._refresh_schema
-            NeptuneGraph._refresh_schema = lambda self: setattr(self, 'schema', '')
-            try:
-                self.client = NeptuneGraph(endpoint, port)
-            finally:
-                NeptuneGraph._refresh_schema = _orig
+            self.client = NeptuneDatabaseClient(endpoint, port)
             logger.debug('Creating Neptune Database session for %s', host)
         elif host.startswith('neptune-graph://'):
             # This is a Neptune Analytics Graph
             graphId = host.replace('neptune-graph://', '')
-            self.client = NeptuneAnalyticsGraph(graphId)
+            self.client = NeptuneAnalyticsClient(graphId)
             logger.debug('Creating Neptune Graph session for %s', host)
         else:
             raise ValueError(
