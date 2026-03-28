@@ -153,6 +153,8 @@ def test_cli_override():
     class Args:
         config = Path('config.yaml')
         transport = 'stdio'
+        host = '127.0.0.1'
+        port = 9999
         llm_provider = 'anthropic'
         model = 'claude-3-sonnet'
         temperature = 0.5
@@ -167,6 +169,8 @@ def test_cli_override():
 
     print('✓ CLI overrides applied successfully')
     print(f'  - Transport: {config.server.transport}')
+    print(f'  - Host: {config.server.host}')
+    print(f'  - Port: {config.server.port}')
     print(f'  - LLM provider: {config.llm.provider}')
     print(f'  - LLM model: {config.llm.model}')
     print(f'  - Temperature: {config.llm.temperature}')
@@ -174,6 +178,9 @@ def test_cli_override():
     print(f'  - Database provider: {config.database.provider}')
     print(f'  - Group ID: {config.graphiti.group_id}')
     print(f'  - User ID: {config.graphiti.user_id}')
+
+    assert config.server.host == '127.0.0.1', f'Expected host 127.0.0.1, got {config.server.host}'
+    assert config.server.port == 9999, f'Expected port 9999, got {config.server.port}'
 
 
 async def main():
