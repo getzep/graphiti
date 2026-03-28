@@ -362,6 +362,12 @@ class EntityEdge(Edge):
                 edge_data=edge_data,
             )
 
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'edge_name_and_fact',
+                [{'uuid': self.uuid, 'name': self.name, 'fact': self.fact, 'group_id': self.group_id}],
+            )
+
         logger.debug(f'Saved edge to Graph: {self.uuid}')
 
         return result

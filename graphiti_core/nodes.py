@@ -347,6 +347,18 @@ class EpisodicNode(Node):
             get_episode_node_save_query(driver.provider), **episode_args
         )
 
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
+                'episode_content',
+                [{
+                    'uuid': self.uuid,
+                    'content': self.content,
+                    'source': self.source.value,
+                    'source_description': self.source_description,
+                    'group_id': self.group_id,
+                }],
+            )
+
         logger.debug(f'Saved Node to Graph: {self.uuid}')
 
         return result

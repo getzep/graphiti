@@ -10,7 +10,7 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('uvicorn.error')
 
 
 class AsyncWorker:
