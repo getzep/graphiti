@@ -183,6 +183,32 @@ def test_cli_override():
     assert config.server.port == 9999, f'Expected port 9999, got {config.server.port}'
 
 
+def test_cli_override_port_zero():
+    """Test that --port 0 (OS-assigned ephemeral port) is not silently ignored."""
+    print('\nTesting CLI argument override with port=0...')
+
+    class Args:
+        config = Path('config.yaml')
+        transport = None
+        host = None
+        port = 0
+        llm_provider = None
+        model = None
+        temperature = None
+        embedder_provider = None
+        embedder_model = None
+        database_provider = None
+        group_id = None
+        user_id = None
+
+    config = GraphitiConfig()
+    config.apply_cli_overrides(Args())
+
+    print(f'  - Port: {config.server.port}')
+    assert config.server.port == 0, f'Expected port 0, got {config.server.port}'
+    print('✓ port=0 override applied correctly')
+
+
 async def main():
     """Run all tests."""
     print('=' * 60)
@@ -200,6 +226,7 @@ async def main():
 
         # Test CLI overrides
         test_cli_override()
+        test_cli_override_port_zero()
 
         print('\n' + '=' * 60)
         print('✓ All tests completed successfully!')

@@ -267,7 +267,7 @@ class GraphitiConfig(BaseSettings):
             self.server.transport = args.transport
         if hasattr(args, 'host') and args.host:
             self.server.host = args.host
-        if hasattr(args, 'port') and args.port:
+        if hasattr(args, 'port') and args.port is not None:
             self.server.port = args.port
 
         # Override LLM settings
