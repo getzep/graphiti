@@ -350,13 +350,15 @@ class EpisodicNode(Node):
         if driver.provider == GraphProvider.NEPTUNE:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
                 'episode_content',
-                [{
-                    'uuid': self.uuid,
-                    'content': self.content,
-                    'source': self.source.value,
-                    'source_description': self.source_description,
-                    'group_id': self.group_id,
-                }],
+                [
+                    {
+                        'uuid': self.uuid,
+                        'content': self.content,
+                        'source': self.source.value,
+                        'source_description': self.source_description,
+                        'group_id': self.group_id,
+                    }
+                ],
             )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -513,7 +515,9 @@ class EntityNode(Node):
         text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms')
+        logger.debug(
+            f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms'
+        )
 
         return self.name_embedding
 
@@ -576,6 +580,19 @@ class EntityNode(Node):
             result = await driver.execute_query(
                 get_entity_node_save_query(driver.provider, labels),
                 entity_data=entity_data,
+            )
+
+        if driver.provider == GraphProvider.NEPTUNE:
+            driver.save_to_aoss(  # pyright: ignore[reportAttributeAccessIssue]
+                'node_name_and_summary',
+                [
+                    {
+                        'uuid': self.uuid,
+                        'name': self.name,
+                        'summary': self.summary,
+                        'group_id': self.group_id,
+                    }
+                ],
             )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -718,7 +735,9 @@ class CommunityNode(Node):
         text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms')
+        logger.debug(
+            f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms'
+        )
 
         return self.name_embedding
 

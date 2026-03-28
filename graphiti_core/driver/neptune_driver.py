@@ -412,8 +412,12 @@ class NeptuneDriver(GraphDriver):
                         if p in d:
                             item[p] = d[p]
                     to_index.append(item)
-                success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
-                return success
+                try:
+                    success, failed = helpers.bulk(self.aoss_client, to_index, stats_only=True)
+                    return success
+                except Exception as e:
+                    logger.error('save_to_aoss failed for index %s: %s', name, e)
+                    return 0
 
         return 0
 

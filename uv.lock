@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10, <4"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1029,7 +1029,6 @@ neo4j-opensearch = [
 ]
 neptune = [
     { name = "boto3" },
-    { name = "langchain-aws" },
     { name = "opensearch-py" },
 ]
 sentence-transformers = [
@@ -1063,7 +1062,6 @@ requires-dist = [
     { name = "kuzu", marker = "extra == 'kuzu'", specifier = ">=0.11.3" },
     { name = "langchain-anthropic", marker = "extra == 'dev'", specifier = ">=0.2.4" },
     { name = "langchain-aws", marker = "extra == 'dev'", specifier = ">=0.2.29" },
-    { name = "langchain-aws", marker = "extra == 'neptune'", specifier = ">=0.2.29" },
     { name = "langchain-openai", marker = "extra == 'dev'", specifier = ">=0.2.6" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2.15" },
     { name = "langsmith", marker = "extra == 'dev'", specifier = ">=0.1.108" },
