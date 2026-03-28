@@ -229,17 +229,18 @@ async def edge_fulltext_search(
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
-            # Match the edge ids and return the values
+            neptune_filter = ''
+            if filter_queries:
+                neptune_filter = ' AND ' + (' AND '.join(filter_queries))
+
             query = (
                 """
-                                UNWIND $ids as id
-                                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
-                                WHERE e.group_id IN $group_ids 
-                                AND id(e)=id 
-                                """
-                + filter_query
+                UNWIND $ids as id
+                MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)
+                WHERE e.uuid = id.id
+                """
+                + neptune_filter
                 + """
-                AND id(e)=id
                 WITH e, id.score as score, startNode(e) AS n, endNode(e) AS m
                 RETURN
                     e.uuid AS uuid,
@@ -255,12 +256,11 @@ async def edge_fulltext_search(
                     e.invalid_at AS invalid_at,
                     properties(e) AS attributes
                 ORDER BY score DESC LIMIT $limit
-                            """
+                """
             )
 
             records, _, _ = await driver.execute_query(
                 query,
-                query=fuzzy_query,
                 ids=input_ids,
                 limit=limit,
                 routing_='r',
@@ -913,11 +913,11 @@ async def episode_fulltext_search(
             for r in res['hits']['hits']:
                 input_ids.append({'id': r['_source']['uuid'], 'score': r['_score']})
 
-            # Match the edge ides and return the values
+            # Match the episode nodes by uuid
             query = """
                 UNWIND $ids as i
                 MATCH (e:Episodic)
-                WHERE e.uuid=i.uuid
+                WHERE e.uuid=i.id
             RETURN
                     e.content AS content,
                     e.created_at AS created_at,
