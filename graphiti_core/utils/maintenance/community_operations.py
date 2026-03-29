@@ -98,7 +98,13 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
 
     community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
 
-    while True:
+    # FIX START: replace `while True` with a bounded loop to prevent infinite
+    # oscillation when candidate_rank > 1 causes IDs to decrease while the
+    # max() fallback in the else-branch causes them to increase, creating a
+    # cycle that never satisfies no_change == True.
+    max_iterations = len(projection) * 10 + 10
+    for _ in range(max_iterations):
+    # FIX END
         no_change = True
         new_community_map: dict[str, int] = {}
 
@@ -124,10 +130,15 @@ def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
             if new_community != curr_community:
                 no_change = False
 
+        # FIX START: must update community_map before the break check so that
+        # the last iteration's result is preserved when the loop exits at
+        # max_iterations. In the original while-loop the update came after the
+        # break, which was safe; in a for-loop it must come before.
+        community_map = new_community_map
+
         if no_change:
             break
-
-        community_map = new_community_map
+        # FIX END
 
     community_cluster_map = defaultdict(list)
     for uuid, community in community_map.items():
