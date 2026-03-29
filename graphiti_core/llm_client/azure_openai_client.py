@@ -22,6 +22,7 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from .client import ResponseMode
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import BaseOpenAIClient
 
@@ -110,6 +111,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel] | None = None,  # noqa: ARG002 - inherited from abstract method
+        response_mode: ResponseMode = 'structured_json',
     ):
         """Create a regular completion with JSON format using Azure OpenAI."""
         supports_reasoning = self._supports_reasoning_features(model)
@@ -118,8 +120,9 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             'model': model,
             'messages': messages,
             'max_tokens': max_tokens,
-            'response_format': {'type': 'json_object'},
         }
+        if response_mode == 'structured_json':
+            request_kwargs['response_format'] = {'type': 'json_object'}
 
         temperature_value = temperature if not supports_reasoning else None
         if temperature_value is not None:

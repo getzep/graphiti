@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.prompts.models import Message
 
@@ -159,3 +160,27 @@ async def test_openai_generic_client_uses_json_schema_for_structured_json():
     assert result == {'name': 'Alice'}
     create_kwargs = client_impl.chat.completions.create.await_args.kwargs
     assert create_kwargs['response_format']['type'] == 'json_schema'
+
+
+@pytest.mark.asyncio
+async def test_openai_client_supports_structured_text_mode():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content='BEGIN ITEMS\nEND ITEMS'))],
+        usage=SimpleNamespace(prompt_tokens=7, completion_tokens=3),
+    )
+    client_impl = SimpleNamespace(
+        responses=SimpleNamespace(parse=AsyncMock()),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=AsyncMock(return_value=response))),
+    )
+    client = OpenAIClient(config=LLMConfig(), client=client_impl)
+
+    result = await client.generate_response(
+        messages=[Message(role='user', content='Prompt')],
+        response_model=DummyResponseModel,
+        response_mode='structured_text',
+    )
+
+    assert result == {'content': 'BEGIN ITEMS\nEND ITEMS'}
+    create_kwargs = client_impl.chat.completions.create.await_args.kwargs
+    assert 'response_format' not in create_kwargs
+    client_impl.responses.parse.assert_not_awaited()

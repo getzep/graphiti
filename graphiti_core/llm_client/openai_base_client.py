@@ -25,7 +25,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import LLMClient, get_extraction_language_instruction
+from .client import LLMClient, ResponseMode, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -75,6 +75,7 @@ class BaseOpenAIClient(LLMClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel] | None = None,
+        response_mode: ResponseMode = 'structured_json',
     ) -> Any:
         """Create a completion using the specific client implementation."""
         pass
@@ -135,13 +136,15 @@ class BaseOpenAIClient(LLMClient):
         else:
             raise Exception(f'Invalid response from LLM: {response}')
 
-    def _handle_json_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
-        """Handle JSON response parsing.
+    def _handle_chat_response(
+        self, response: Any, response_mode: ResponseMode
+    ) -> tuple[dict[str, Any], int, int]:
+        """Handle chat completion responses for JSON and plain text modes.
 
         Returns:
             tuple: (parsed_response, input_tokens, output_tokens)
         """
-        result = response.choices[0].message.content or '{}'
+        result = response.choices[0].message.content or ''
 
         # Extract token usage
         input_tokens = 0
@@ -150,7 +153,10 @@ class BaseOpenAIClient(LLMClient):
             input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
             output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
 
-        return json.loads(result), input_tokens, output_tokens
+        if response_mode == 'structured_json':
+            return json.loads(result or '{}'), input_tokens, output_tokens
+
+        return {'content': result}, input_tokens, output_tokens
 
     async def _generate_response(
         self,
@@ -158,6 +164,7 @@ class BaseOpenAIClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        response_mode: ResponseMode = 'structured_json',
     ) -> tuple[dict[str, Any], int, int]:
         """Generate a response using the appropriate client implementation.
 
@@ -168,7 +175,7 @@ class BaseOpenAIClient(LLMClient):
         model = self._get_model_for_size(model_size)
 
         try:
-            if response_model:
+            if response_model and response_mode == 'structured_json':
                 response = await self._create_structured_completion(
                     model=model,
                     messages=openai_messages,
@@ -185,8 +192,10 @@ class BaseOpenAIClient(LLMClient):
                     messages=openai_messages,
                     temperature=self.temperature,
                     max_tokens=max_tokens or self.max_tokens,
+                    response_model=response_model,
+                    response_mode=response_mode,
                 )
-                return self._handle_json_response(response)
+                return self._handle_chat_response(response, response_mode)
 
         except openai.LengthFinishReasonError as e:
             raise Exception(f'Output length exceeded max tokens {self.max_tokens}: {e}') from e
@@ -216,10 +225,19 @@ class BaseOpenAIClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         """Generate a response with retry logic and error handling."""
         if max_tokens is None:
             max_tokens = self.max_tokens
+
+        if response_model is not None and response_mode == 'structured_json':
+            serialized_model = json.dumps(response_model.model_json_schema())
+            messages[
+                -1
+            ].content += (
+                f'\n\nRespond with a JSON object in the following format:\n\n{serialized_model}'
+            )
 
         # Add multilingual extraction instructions
         messages[0].content += get_extraction_language_instruction(group_id)
@@ -243,7 +261,7 @@ class BaseOpenAIClient(LLMClient):
             while retry_count <= self.MAX_RETRIES:
                 try:
                     response, input_tokens, output_tokens = await self._generate_response(
-                        messages, response_model, max_tokens, model_size
+                        messages, response_model, max_tokens, model_size, response_mode
                     )
                     total_input_tokens += input_tokens
                     total_output_tokens += output_tokens

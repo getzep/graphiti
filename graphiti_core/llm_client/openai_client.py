@@ -20,6 +20,7 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from .client import ResponseMode
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
 
@@ -107,19 +108,21 @@ class OpenAIClient(BaseOpenAIClient):
         temperature: float | None,
         max_tokens: int,
         response_model: type[BaseModel] | None = None,
-        reasoning: str | None = None,
-        verbosity: str | None = None,
+        response_mode: ResponseMode = 'structured_json',
     ):
-        """Create a regular completion with JSON format."""
+        """Create a regular completion using chat completions."""
         # Reasoning models (gpt-5 family) don't support temperature
         is_reasoning_model = (
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
-        return await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature if not is_reasoning_model else None,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
-        )
+        request_kwargs = {
+            'model': model,
+            'messages': messages,
+            'temperature': temperature if not is_reasoning_model else None,
+            'max_tokens': max_tokens,
+        }
+        if response_mode == 'structured_json':
+            request_kwargs['response_format'] = {'type': 'json_object'}
+
+        return await self.client.chat.completions.create(**request_kwargs)
