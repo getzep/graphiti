@@ -34,3 +34,40 @@
 ### Task 6: Verification and branch completion
 - Run focused unit tests, broader maintenance/LLM-client regression tests, ruff, and pyright.
 - Commit on the isolated branch, push to origin, and verify CI runs on GitHub.
+
+## Completion Notes
+
+### Final implementation scope
+
+- `graphiti_core.llm_client` now supports `structured_text` end-to-end for both the generic OpenAI-compatible client and the default `OpenAIClient` path.
+- The graph service bootstrap now wires `model_name`, `small_model_name`, and `embedding_model_name` into the instantiated Graphiti clients instead of mutating only the primary LLM client after construction.
+- Added a regression test for the OpenAI structured-text path and a service bootstrap regression test to prevent future MiniMax/OpenAI-compatible configuration drift.
+
+### Local Docker deployment findings
+
+The local `zepai/graphiti:latest` image used in Docker does not automatically exercise this branch's code unless both of the following are replaced:
+
+- `graphiti_core` in the runtime site-packages directory
+- `server/graph_service` in `/app/graph_service`
+
+For the local MiniMax-backed deployment used during verification, the effective bind mounts were:
+
+- `graphiti_core -> /app/.venv/lib/python3.12/site-packages/graphiti_core`
+- `server/graph_service -> /app/graph_service`
+
+Mounting only the system Python site-packages path was insufficient because the service process runs under `/app/.venv/bin/python`.
+
+### Provider compatibility notes
+
+Two runtime issues surfaced while validating against the local MiniMax proxy:
+
+1. Structured-text extraction call sites passed `response_mode='structured_text'`, but the default `OpenAIClient` path initially did not accept or honor that mode.
+2. The graph service did not initially propagate `SMALL_MODEL_NAME`, causing `ModelSize.small` requests to fall back to `gpt-4.1-nano`, which MiniMax rejected with `400 unknown model`.
+
+These are now covered by code and regression tests.
+
+### End-to-end verification notes
+
+- `/messages` ingestion, `/episodes/{group_id}`, `/search`, and `/get-memory` were verified locally against Neo4j plus the MiniMax/Ollama proxy stack.
+- The local MiniMax-backed extraction flow is relatively slow. In practice, one episode took roughly a minute to finish processing, and a two-message queue completed after roughly 70 to 140 seconds depending on the extraction stage.
+- `GET /get-memory` requires `center_node_uuid` to be present in the request body; use `null` when there is no center node.
