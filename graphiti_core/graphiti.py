@@ -145,6 +145,7 @@ class Graphiti:
         max_coroutines: int | None = None,
         tracer: Tracer | None = None,
         trace_span_prefix: str = 'graphiti',
+        use_default_cross_encoder: bool = True,
     ):
         """
         Initialize a Graphiti instance.
@@ -168,7 +169,8 @@ class Graphiti:
             If not provided, a default OpenAIEmbedder will be initialized.
         cross_encoder : CrossEncoderClient | None, optional
             An instance of CrossEncoderClient for reranking tasks.
-            If not provided, a default OpenAIRerankerClient will be initialized.
+            If not provided and use_default_cross_encoder is True, a default
+            OpenAIRerankerClient will be initialized.
         store_raw_episode_content : bool, optional
             Whether to store the raw content of episodes. Defaults to True.
         graph_driver : GraphDriver | None, optional
@@ -181,6 +183,9 @@ class Graphiti:
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
             Prefix to prepend to all span names. Defaults to 'graphiti'.
+        use_default_cross_encoder : bool, optional
+            Whether to use the default OpenAIRerankerClient when cross_encoder is None.
+            Set to False to disable reranking entirely. Defaults to True.
 
         Returns
         -------
@@ -218,10 +223,15 @@ class Graphiti:
             self.embedder = embedder
         else:
             self.embedder = OpenAIEmbedder()
-        if cross_encoder:
-            self.cross_encoder = cross_encoder
-        else:
+        if cross_encoder is not None:
+            # Use provided cross encoder
+            self.cross_encoder: CrossEncoderClient | None = cross_encoder
+        elif use_default_cross_encoder:
+            # Use default OpenAI reranker
             self.cross_encoder = OpenAIRerankerClient()
+        else:
+            # Explicitly disable reranking
+            self.cross_encoder = None
 
         # Initialize tracer
         self.tracer = create_tracer(tracer, trace_span_prefix)
