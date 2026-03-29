@@ -26,6 +26,11 @@ from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
+from graphiti_core.llm_compat.builders import (
+    build_entity_records,
+    build_node_dedupe_records,
+    build_summary_records,
+)
 from graphiti_core.nodes import (
     EntityNode,
     EpisodeType,
@@ -138,6 +143,21 @@ async def _extract_nodes_single(
 ) -> list[ExtractedEntity]:
     """Extract entities using a single LLM call."""
     llm_response = await _call_extraction_llm(llm_client, episode, context)
+    if 'content' in llm_response:
+        entity_type_lookup = {
+            item['entity_type_name'].strip().lower(): item['entity_type_id']
+            for item in context['entity_types']
+        }
+        return [
+            ExtractedEntity(
+                name=record.name,
+                entity_type_id=entity_type_lookup.get(
+                    (record.entity_type or 'Entity').strip().lower(),
+                    0,
+                ),
+            )
+            for record in build_entity_records(llm_response['content'])
+        ]
     response_object = ExtractedEntities(**llm_response)
     return response_object.extracted_entities
 
@@ -167,6 +187,7 @@ async def _call_extraction_llm(
         response_model=ExtractedEntities,
         group_id=episode.group_id,
         prompt_name=prompt_name,
+        response_mode='structured_text',
     )
 
 
@@ -325,9 +346,20 @@ async def _resolve_with_llm(
         prompt_library.dedupe_nodes.nodes(context),
         response_model=NodeResolutions,
         prompt_name='dedupe_nodes.nodes',
+        response_mode='structured_text',
     )
 
-    node_resolutions: list[NodeDuplicate] = NodeResolutions(**llm_response).entity_resolutions
+    if 'content' in llm_response:
+        node_resolutions = [
+            NodeDuplicate(
+                id=record.idx,
+                name=record.name,
+                duplicate_name=record.match or '',
+            )
+            for record in build_node_dedupe_records(llm_response['content'])
+        ]
+    else:
+        node_resolutions = NodeResolutions(**llm_response).entity_resolutions
 
     valid_relative_range = range(len(state.unresolved_indices))
     processed_relative_ids: set[int] = set()
@@ -645,6 +677,7 @@ async def _process_summary_flight(
         model_size=ModelSize.small,
         group_id=group_id,
         prompt_name='extract_nodes.extract_summaries_batch',
+        response_mode='structured_text',
     )
 
     # Build case-insensitive name -> nodes mapping (handles duplicates)
@@ -656,17 +689,24 @@ async def _process_summary_flight(
         name_to_nodes[key].append(node)
 
     # Apply summaries from LLM response
-    summaries_response = SummarizedEntities(**llm_response)
-    for summarized_entity in summaries_response.summaries:
-        matching_nodes = name_to_nodes.get(summarized_entity.name.lower(), [])
+    summary_pairs = (
+        [(record.name, record.summary) for record in build_summary_records(llm_response['content'])]
+        if 'content' in llm_response
+        else [
+            (summarized_entity.name, summarized_entity.summary)
+            for summarized_entity in SummarizedEntities(**llm_response).summaries
+        ]
+    )
+    for summarized_name, summarized_text in summary_pairs:
+        matching_nodes = name_to_nodes.get(summarized_name.lower(), [])
         if matching_nodes:
-            truncated_summary = truncate_at_sentence(summarized_entity.summary, MAX_SUMMARY_CHARS)
+            truncated_summary = truncate_at_sentence(summarized_text, MAX_SUMMARY_CHARS)
             for node in matching_nodes:
                 node.summary = truncated_summary
         else:
             logger.warning(
                 'LLM returned summary for unknown entity (first 30 chars): %.30s',
-                summarized_entity.name,
+                summarized_name,
             )
 
 

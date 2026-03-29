@@ -20,6 +20,24 @@ from pydantic import BaseModel, Field
 
 from .models import Message, PromptFunction, PromptVersion
 
+STRUCTURED_TEXT_EDGE_DEDUPE_FORMAT = """
+Return only plain text in this format:
+
+BEGIN ITEMS
+BEGIN ITEM
+DUPLICATE_FACTS: 0,2
+CONTRADICTED_FACTS: 4
+END ITEM
+END ITEMS
+
+Rules:
+- Do not return JSON.
+- Do not return XML.
+- Do not return markdown.
+- Do not add explanations outside the protocol.
+- Return exactly one item.
+- Use empty values when a list is empty.
+"""
 
 class EdgeDuplicate(BaseModel):
     duplicate_facts: list[int] = Field(
@@ -85,6 +103,8 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
         <NEW FACT>
         {context['new_edge']}
         </NEW FACT>
+
+        {STRUCTURED_TEXT_EDGE_DEDUPE_FORMAT}
         """,
         ),
     ]

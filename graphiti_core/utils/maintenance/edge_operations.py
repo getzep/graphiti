@@ -32,6 +32,7 @@ from graphiti_core.graphiti_types import GraphitiClients
 from graphiti_core.helpers import semaphore_gather
 from graphiti_core.llm_client import LLMClient
 from graphiti_core.llm_client.config import ModelSize
+from graphiti_core.llm_compat.builders import build_edge_dedupe_record, build_edge_records
 from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
@@ -142,8 +143,22 @@ async def extract_edges(
         max_tokens=extract_edges_max_tokens,
         group_id=group_id,
         prompt_name='extract_edges.edge',
+        response_mode='structured_text',
     )
-    all_edges_data = ExtractedEdges(**llm_response).edges
+    if 'content' in llm_response:
+        all_edges_data = [
+            ExtractedEdge(
+                source_entity_name=record.source,
+                target_entity_name=record.target,
+                relation_type=record.relation_type or 'RELATES_TO',
+                fact=record.fact,
+                valid_at=record.valid_at,
+                invalid_at=record.invalid_at,
+            )
+            for record in build_edge_records(llm_response['content'])
+        ]
+    else:
+        all_edges_data = ExtractedEdges(**llm_response).edges
 
     # Validate entity names
     edges_data: list[ExtractedEdge] = []
@@ -558,8 +573,16 @@ async def resolve_extracted_edge(
         response_model=EdgeDuplicate,
         model_size=ModelSize.small,
         prompt_name='dedupe_edges.resolve_edge',
+        response_mode='structured_text',
     )
-    response_object = EdgeDuplicate(**llm_response)
+    if 'content' in llm_response:
+        parsed_record = build_edge_dedupe_record(llm_response['content'])
+        response_object = EdgeDuplicate(
+            duplicate_facts=parsed_record.duplicate_facts,
+            contradicted_facts=parsed_record.contradicted_facts,
+        )
+    else:
+        response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
 
     # Validate duplicate_facts are in valid range for EXISTING FACTS

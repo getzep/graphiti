@@ -93,13 +93,15 @@ async def test_resolve_nodes_exact_match_skips_llm(monkeypatch):
 async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
     clients, llm_generate = _make_clients()
     llm_generate.return_value = {
-        'entity_resolutions': [
-            {
-                'id': 0,
-                'name': 'Joe',
-                'duplicate_name': '',
-            }
-        ]
+        'content': """
+        BEGIN ITEMS
+        BEGIN ITEM
+        IDX: 0
+        NAME: Joe
+        MATCH:
+        END ITEM
+        END ITEMS
+        """
     }
 
     extracted = EntityNode(name='Joe', group_id='group', labels=['Entity'])
@@ -122,6 +124,7 @@ async def test_resolve_nodes_low_entropy_uses_llm(monkeypatch):
     assert resolved[0].uuid == extracted.uuid
     assert uuid_map[extracted.uuid] == extracted.uuid
     llm_generate.assert_awaited()
+    assert llm_generate.await_args.kwargs['response_mode'] == 'structured_text'
 
 
 @pytest.mark.asyncio

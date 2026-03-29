@@ -24,6 +24,42 @@ from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 from .snippets import summary_instructions
 
+STRUCTURED_TEXT_ENTITY_FORMAT = """
+Return only plain text in this format:
+
+BEGIN ITEMS
+BEGIN ITEM
+NAME: ...
+TYPE: ...
+END ITEM
+END ITEMS
+
+Rules:
+- Do not return JSON.
+- Do not return XML.
+- Do not return markdown.
+- Do not add explanations outside the protocol.
+- Use one BEGIN ITEM ... END ITEM block per record.
+- Each field value must stay on one line.
+"""
+
+STRUCTURED_TEXT_SUMMARY_FORMAT = f"""
+Return only plain text in this format:
+
+BEGIN ITEMS
+BEGIN ITEM
+NAME: ...
+SUMMARY: ...
+END ITEM
+END ITEMS
+
+Rules:
+- Do not return JSON.
+- Do not return XML.
+- Do not return markdown.
+- Do not add explanations outside the protocol.
+- Each summary must be under {MAX_SUMMARY_CHARS} characters.
+"""
 
 class ExtractedEntity(BaseModel):
     name: str = Field(..., description='Name of the extracted entity')
@@ -115,6 +151,8 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE. Don
    - Be **explicit and unambiguous** in naming entities (e.g., use full names when available).
 
 {context['custom_extraction_instructions']}
+
+{STRUCTURED_TEXT_ENTITY_FORMAT}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -148,6 +186,8 @@ Guidelines:
 1. Extract all entities that the JSON represents. This will often be something like a "name" or "user" field
 2. Extract all entities mentioned in all other properties throughout the JSON structure
 3. Do NOT extract any properties that contain dates
+
+{STRUCTURED_TEXT_ENTITY_FORMAT}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -179,6 +219,8 @@ Guidelines:
 2. Avoid creating nodes for relationships or actions.
 3. Avoid creating nodes for temporal information like dates, times or years (these will be added to edges later).
 4. Be as explicit as possible in your node names, using full names and avoiding abbreviations.
+
+{STRUCTURED_TEXT_ENTITY_FORMAT}
 """
     return [
         Message(role='system', content=sys_prompt),
@@ -300,6 +342,8 @@ Each summary must be under {MAX_SUMMARY_CHARS} characters.
 For each entity, combine relevant information from the MESSAGES with any existing summary content.
 Only return summaries for entities that have meaningful information to summarize.
 If an entity has no relevant information in the messages and no existing summary, you may skip it.
+
+{STRUCTURED_TEXT_SUMMARY_FORMAT}
 """,
         ),
     ]

@@ -25,7 +25,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
-from .client import LLMClient, get_extraction_language_instruction
+from .client import LLMClient, ResponseMode, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
@@ -98,6 +98,7 @@ class OpenAIGenericClient(LLMClient):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
@@ -107,28 +108,31 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            # Prepare response format
-            response_format: dict[str, Any] = {'type': 'json_object'}
-            if response_model is not None:
+            request_kwargs: dict[str, Any] = {
+                'model': self.model or DEFAULT_MODEL,
+                'messages': openai_messages,
+                'temperature': self.temperature,
+                'max_tokens': self.max_tokens,
+            }
+
+            if response_mode == 'structured_json' and response_model is not None:
                 schema_name = getattr(response_model, '__name__', 'structured_response')
                 json_schema = response_model.model_json_schema()
-                response_format = {
+                request_kwargs['response_format'] = {
                     'type': 'json_schema',
                     'json_schema': {
                         'name': schema_name,
                         'schema': json_schema,
                     },
                 }
+            elif response_mode == 'structured_json':
+                request_kwargs['response_format'] = {'type': 'json_object'}
 
-            response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
-                messages=openai_messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format=response_format,  # type: ignore[arg-type]
-            )
+            response = await self.client.chat.completions.create(**request_kwargs)
             result = response.choices[0].message.content or ''
-            return json.loads(result)
+            if response_mode == 'structured_json':
+                return json.loads(result)
+            return {'content': result}
         except openai.RateLimitError as e:
             raise RateLimitError from e
         except Exception as e:
@@ -143,6 +147,7 @@ class OpenAIGenericClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
@@ -167,7 +172,11 @@ class OpenAIGenericClient(LLMClient):
             while retry_count <= self.MAX_RETRIES:
                 try:
                     response = await self._generate_response(
-                        messages, response_model, max_tokens=max_tokens, model_size=model_size
+                        messages,
+                        response_model,
+                        max_tokens=max_tokens,
+                        model_size=model_size,
+                        response_mode=response_mode,
                     )
                     return response
                 except (RateLimitError, RefusalError):

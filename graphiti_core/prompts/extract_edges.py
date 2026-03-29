@@ -21,6 +21,28 @@ from pydantic import BaseModel, Field
 from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
+STRUCTURED_TEXT_EDGE_FORMAT = """
+Return only plain text in this format:
+
+BEGIN ITEMS
+BEGIN ITEM
+SOURCE: ...
+TARGET: ...
+RELATION_TYPE: ...
+FACT: ...
+VALID_AT: ...
+INVALID_AT: ...
+END ITEM
+END ITEMS
+
+Rules:
+- Do not return JSON.
+- Do not return XML.
+- Do not return markdown.
+- Do not add explanations outside the protocol.
+- Use one BEGIN ITEM ... END ITEM block per record.
+- Each field value must stay on one line.
+"""
 
 class Edge(BaseModel):
     source_entity_name: str = Field(
@@ -132,6 +154,8 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 - Leave both fields `null` if no explicit or resolvable time is stated.
 - If only a date is mentioned (no time), assume 00:00:00.
 - If only a year is mentioned, use January 1st at 00:00:00.
+
+{STRUCTURED_TEXT_EDGE_FORMAT}
         """,
         ),
     ]

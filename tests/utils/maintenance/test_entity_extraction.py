@@ -202,6 +202,7 @@ class TestExtractNodesPromptSelection:
         # Check prompt_name parameter
         call_kwargs = llm_generate.call_args[1]
         assert call_kwargs.get('prompt_name') == 'extract_nodes.extract_text'
+        assert call_kwargs.get('response_mode') == 'structured_text'
 
     @pytest.mark.asyncio
     async def test_uses_json_prompt_for_json_episodes(self, monkeypatch):
@@ -215,6 +216,7 @@ class TestExtractNodesPromptSelection:
 
         call_kwargs = llm_generate.call_args[1]
         assert call_kwargs.get('prompt_name') == 'extract_nodes.extract_json'
+        assert call_kwargs.get('response_mode') == 'structured_text'
 
     @pytest.mark.asyncio
     async def test_uses_message_prompt_for_message_episodes(self, monkeypatch):
@@ -228,6 +230,45 @@ class TestExtractNodesPromptSelection:
 
         call_kwargs = llm_generate.call_args[1]
         assert call_kwargs.get('prompt_name') == 'extract_nodes.extract_message'
+        assert call_kwargs.get('response_mode') == 'structured_text'
+
+    @pytest.mark.asyncio
+    async def test_structured_text_entity_parsing_tolerates_bad_items(self, monkeypatch):
+        clients, llm_generate = _make_clients()
+        llm_generate.return_value = {
+            'content': """
+            BEGIN ITEMS
+            BEGIN ITEM
+            NAME: Alice
+            TYPE: Person
+            END ITEM
+            BEGIN ITEM
+            TYPE: Organization
+            END ITEM
+            BEGIN ITEM
+            NAME: Acme
+            TYPE:
+            END ITEM
+            END ITEMS
+            """
+        }
+
+        from pydantic import BaseModel
+
+        class Person(BaseModel):
+            """A human person."""
+
+        episode = _make_episode(content='Alice works at Acme.')
+        nodes = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            entity_types={'Person': Person},
+        )
+
+        assert [node.name for node in nodes] == ['Alice', 'Acme']
+        assert 'Person' in nodes[0].labels
+        assert 'Entity' in nodes[1].labels
 
 
 class TestBuildEntityTypesContext:
@@ -364,9 +405,14 @@ class TestExtractEntitySummariesBatch:
         llm_client = MagicMock()
         llm_generate = AsyncMock()
         llm_generate.return_value = {
-            'summaries': [
-                {'name': 'Alice', 'summary': 'Alice is a software engineer at Acme Corp.'}
-            ]
+            'content': """
+            BEGIN ITEMS
+            BEGIN ITEM
+            NAME: Alice
+            SUMMARY: Alice is a software engineer at Acme Corp.
+            END ITEM
+            END ITEMS
+            """
         }
         llm_client.generate_response = llm_generate
 
@@ -385,6 +431,7 @@ class TestExtractEntitySummariesBatch:
 
         # LLM should be called
         llm_generate.assert_awaited_once()
+        assert llm_generate.await_args.kwargs['response_mode'] == 'structured_text'
         # Summary should be updated from LLM response
         assert node.summary == 'Alice is a software engineer at Acme Corp.'
 

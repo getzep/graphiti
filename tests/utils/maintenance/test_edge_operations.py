@@ -160,7 +160,18 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     from graphiti_core.utils.maintenance import edge_operations as edge_ops
 
     monkeypatch.setattr(edge_ops, 'create_entity_edge_embeddings', AsyncMock(return_value=None))
-    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[]))
+    related_existing_edge = EntityEdge(
+        source_node_uuid='source_uuid',
+        target_node_uuid='target_uuid',
+        name='INTERACTED_WITH',
+        group_id='group_1',
+        fact='Existing topic interaction',
+        episodes=['episode_older'],
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        valid_at=None,
+        invalid_at=None,
+    )
+    monkeypatch.setattr(EntityEdge, 'get_between_nodes', AsyncMock(return_value=[related_existing_edge]))
 
     async def immediate_gather(*aws, max_coroutines=None):
         return [await aw for aw in aws]
@@ -171,8 +182,14 @@ async def test_resolve_extracted_edges_keeps_unknown_names(monkeypatch):
     llm_client = MagicMock()
     llm_client.generate_response = AsyncMock(
         return_value={
-            'duplicate_facts': [],
-            'contradicted_facts': [],
+            'content': """
+            BEGIN ITEMS
+            BEGIN ITEM
+            DUPLICATE_FACTS:
+            CONTRADICTED_FACTS:
+            END ITEM
+            END ITEMS
+            """,
         }
     )
 
@@ -240,8 +257,14 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
     """Test that resolve_extracted_edge correctly uses integer indices for LLM duplicate detection."""
     # Mock LLM to return duplicate_facts with integer indices
     mock_llm_client.generate_response.return_value = {
-        'duplicate_facts': [0, 1],  # LLM identifies first two related edges as duplicates
-        'contradicted_facts': [],
+        'content': """
+        BEGIN ITEMS
+        BEGIN ITEM
+        DUPLICATE_FACTS: 0, 1
+        CONTRADICTED_FACTS:
+        END ITEM
+        END ITEMS
+        """
     }
 
     extracted_edge = EntityEdge(
@@ -316,6 +339,7 @@ async def test_resolve_extracted_edge_uses_integer_indices_for_duplicates(mock_l
 
     # Verify LLM was called
     mock_llm_client.generate_response.assert_called_once()
+    assert mock_llm_client.generate_response.await_args.kwargs['response_mode'] == 'structured_text'
 
     # Verify the system correctly identified duplicates using integer indices
     # The LLM returned [0, 1], so related_edge_0 and related_edge_1 should be marked as duplicates

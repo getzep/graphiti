@@ -21,6 +21,25 @@ from pydantic import BaseModel, Field
 from .models import Message, PromptFunction, PromptVersion
 from .prompt_helpers import to_prompt_json
 
+STRUCTURED_TEXT_NODE_DEDUPE_FORMAT = """
+Return only plain text in this format:
+
+BEGIN ITEMS
+BEGIN ITEM
+IDX: ...
+NAME: ...
+MATCH: ...
+END ITEM
+END ITEMS
+
+Rules:
+- Do not return JSON.
+- Do not return XML.
+- Do not return markdown.
+- Do not add explanations outside the protocol.
+- Include exactly one item per entity.
+- `MATCH` must be empty when there is no duplicate.
+"""
 
 class NodeDuplicate(BaseModel):
     id: int = Field(..., description='integer id of the entity')
@@ -161,16 +180,16 @@ def nodes(context: dict[str, Any]) -> list[Message]:
         ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
         Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions with IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip or add IDs.
 
-        For every entity, return an object with the following keys:
-        {{
-            "id": integer id from ENTITIES,
-            "name": the best full name for the entity (preserve the original name unless a duplicate has a more complete name),
-            "duplicate_name": the name of the EXISTING ENTITY that is the best duplicate match, or empty string if there is no duplicate
-        }}
+        For every entity, return:
+        - `IDX`: the integer id from ENTITIES
+        - `NAME`: the best full name for the entity
+        - `MATCH`: the matching EXISTING ENTITY name, or empty string if there is no duplicate
 
-        - Only use names that appear in EXISTING ENTITIES.
-        - Use empty string if there is no duplicate.
+        - Only use names that appear in EXISTING ENTITIES for `MATCH`.
+        - Use empty `MATCH` if there is no duplicate.
         - Never fabricate entity names.
+
+        {STRUCTURED_TEXT_NODE_DEDUPE_FORMAT}
         """,
         ),
     ]

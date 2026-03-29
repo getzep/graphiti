@@ -19,6 +19,7 @@ import json
 import logging
 import typing
 from abc import ABC, abstractmethod
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel
@@ -33,6 +34,7 @@ from .token_tracker import TokenUsageTracker
 
 DEFAULT_TEMPERATURE = 0
 DEFAULT_CACHE_DIR = './llm_cache'
+ResponseMode = Literal['structured_json', 'structured_text', 'plain_text']
 
 
 def get_extraction_language_instruction(group_id: str | None = None) -> str:
@@ -130,9 +132,16 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         try:
-            return await self._generate_response(messages, response_model, max_tokens, model_size)
+            return await self._generate_response(
+                messages,
+                response_model,
+                max_tokens,
+                model_size,
+                response_mode,
+            )
         except (httpx.HTTPStatusError, RateLimitError) as e:
             raise e
 
@@ -143,6 +152,7 @@ class LLMClient(ABC):
         response_model: type[BaseModel] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         pass
 
@@ -160,11 +170,12 @@ class LLMClient(ABC):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        response_mode: ResponseMode = 'structured_json',
     ) -> dict[str, typing.Any]:
         if max_tokens is None:
             max_tokens = self.max_tokens
 
-        if response_model is not None:
+        if response_model is not None and response_mode == 'structured_json':
             serialized_model = json.dumps(response_model.model_json_schema())
             messages[
                 -1
@@ -204,7 +215,11 @@ class LLMClient(ABC):
             # Execute LLM call
             try:
                 response = await self._generate_response_with_retry(
-                    messages, response_model, max_tokens, model_size
+                    messages,
+                    response_model,
+                    max_tokens,
+                    model_size,
+                    response_mode,
                 )
             except Exception as e:
                 span.set_status('error', str(e))

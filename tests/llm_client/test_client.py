@@ -14,14 +14,40 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from pydantic import BaseModel
+
 from graphiti_core.llm_client.client import LLMClient
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+from graphiti_core.prompts.models import Message
+
+
+class DummyResponseModel(BaseModel):
+    name: str
 
 
 class MockLLMClient(LLMClient):
     """Concrete implementation of LLMClient for testing"""
 
-    async def _generate_response(self, messages, response_model=None):
+    def __init__(self, config: LLMConfig | None = None):
+        super().__init__(config or LLMConfig())
+        self.last_messages = []
+        self.last_response_mode = None
+
+    async def _generate_response(
+        self,
+        messages,
+        response_model=None,
+        max_tokens=None,
+        model_size=None,
+        response_mode='structured_json',
+    ):
+        self.last_messages = [Message(role=m.role, content=m.content) for m in messages]
+        self.last_response_mode = response_mode
         return {'content': 'test'}
 
 
@@ -55,3 +81,81 @@ def test_clean_input():
 
     for input_str, expected in test_cases:
         assert client._clean_input(input_str) == expected, f'Failed for input: {repr(input_str)}'
+
+
+@pytest.mark.asyncio
+async def test_generate_response_appends_schema_for_structured_json():
+    client = MockLLMClient()
+    messages = [
+        Message(role='system', content='System'),
+        Message(role='user', content='User prompt'),
+    ]
+
+    await client.generate_response(
+        messages,
+        response_model=DummyResponseModel,
+        response_mode='structured_json',
+    )
+
+    assert client.last_response_mode == 'structured_json'
+    assert 'Respond with a JSON object' in client.last_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_generate_response_skips_schema_for_structured_text():
+    client = MockLLMClient()
+    messages = [
+        Message(role='system', content='System'),
+        Message(role='user', content='User prompt'),
+    ]
+
+    await client.generate_response(
+        messages,
+        response_model=DummyResponseModel,
+        response_mode='structured_text',
+    )
+
+    assert client.last_response_mode == 'structured_text'
+    assert 'Respond with a JSON object' not in client.last_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_openai_generic_client_returns_plain_text_for_structured_text():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content='BEGIN ITEMS\nEND ITEMS'))]
+    )
+    client_impl = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=AsyncMock(return_value=response)))
+    )
+    client = OpenAIGenericClient(config=LLMConfig(), client=client_impl)
+
+    result = await client._generate_response(
+        messages=[Message(role='user', content='Prompt')],
+        response_model=DummyResponseModel,
+        response_mode='structured_text',
+    )
+
+    assert result == {'content': 'BEGIN ITEMS\nEND ITEMS'}
+    create_kwargs = client_impl.chat.completions.create.await_args.kwargs
+    assert 'response_format' not in create_kwargs
+
+
+@pytest.mark.asyncio
+async def test_openai_generic_client_uses_json_schema_for_structured_json():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content='{"name":"Alice"}'))]
+    )
+    client_impl = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=AsyncMock(return_value=response)))
+    )
+    client = OpenAIGenericClient(config=LLMConfig(), client=client_impl)
+
+    result = await client._generate_response(
+        messages=[Message(role='user', content='Prompt')],
+        response_model=DummyResponseModel,
+        response_mode='structured_json',
+    )
+
+    assert result == {'name': 'Alice'}
+    create_kwargs = client_impl.chat.completions.create.await_args.kwargs
+    assert create_kwargs['response_format']['type'] == 'json_schema'
