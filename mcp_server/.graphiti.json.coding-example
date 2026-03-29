@@ -1,0 +1,177 @@
+{
+  "group_id": "my-coding-project",
+  "description": "AI Coding Memory configuration with smart memory classification",
+  "shared_group_ids": [
+    "personal-prefs",
+    "std-coding",
+    "std-design",
+    "std-arch",
+    "proc-dev",
+    "proc-test",
+    "proc-product",
+    "kb-tech"
+  ],
+  "shared_entity_types": [
+    "Preference",
+    "Convention",
+    "DesignPattern",
+    "Architecture",
+    "Procedure",
+    "Decision"
+  ],
+  "shared_patterns": [
+    "偏好", "习惯", "喜欢", "倾向",
+    "规范", "约定", "标准", "convention", "standard",
+    "流程", "步骤", "procedure", "workflow",
+    "通用", "跨项目", "所有项目", "cross-project",
+    "best practice", "最佳实践"
+  ],
+  "write_strategy": "llm_based"
+}
+
+// === AI Coding Memory Configuration Guide ===
+//
+// This configuration uses fine-grained shared knowledge spaces for optimal memory
+// organization and automatic routing. The system automatically classifies and routes
+// memories to appropriate knowledge spaces based on content type.
+//
+// === Fine-Grained Shared Knowledge Spaces ===
+//
+// The system uses 8 specialized shared knowledge spaces, automatically routing
+// memories based on content type:
+//
+// 1. personal-prefs: Personal preferences, tool choices, work habits
+//    → Entity types: Preference
+//    → Examples: "User prefers dark mode", "User likes TypeScript"
+//
+// 2. std-coding: Coding standards, naming conventions, formatting rules
+//    → Entity types: Convention
+//    → Examples: "4-space indentation", "Use camelCase for variables"
+//
+// 3. std-design: Design standards, UI patterns, interaction principles
+//    → Entity types: DesignPattern
+//    → Examples: "Use Material Design", "Follow accessibility guidelines"
+//
+// 4. std-arch: Architecture standards, design patterns, technology choices
+//    → Entity types: Architecture, Decision
+//    → Examples: "Use microservices architecture", "Prefer REST over GraphQL"
+//
+// 5. proc-dev: Development procedures, Git workflows, code review processes
+//    → Entity types: Procedure
+//    → Examples: "Run tests before commit", "Code review required for PRs"
+//
+// 6. proc-test: Testing procedures, test strategies, quality standards
+//    → Entity types: Procedure, TestPlan
+//    → Examples: "Write unit tests for all functions", "Coverage target: 80%"
+//
+// 7. proc-product: Product procedures, requirement management, version planning
+//    → Entity types: Procedure
+//    → Examples: "Follow semantic versioning", "Update changelog for releases"
+//
+// 8. kb-tech: Technical knowledge base, API usage, best practices
+//    → Entity types: Document, Topic
+//    → Examples: "React Hooks best practices", "Docker optimization tips"
+//
+// === Knowledge Classification ===
+//
+// Shared Knowledge (Cross-project accessible):
+//    - Automatically routed to appropriate shared groups based on content
+//    - Accessible from all projects using the same shared_group_ids
+//    - Examples: User preferences, coding standards, development procedures
+//
+// Project-Specific Knowledge:
+//    - Stored only in the project's group_id
+//    - Not accessible from other projects
+//    - Examples: API endpoints, project-specific configurations, implementation details
+//
+// === Configuration Options ===
+//
+// a) shared_group_ids: List of fine-grained shared knowledge spaces
+//    - Use the 8 predefined spaces for optimal organization
+//    - System automatically routes memories to the correct space
+//    - All projects using the same shared_group_ids can access shared knowledge
+//
+// b) shared_entity_types: Entity types that indicate shared knowledge
+//    - Preference: User preferences (coding style, tool choices)
+//    - Convention: Coding standards and naming conventions
+//    - DesignPattern: UI patterns and design standards
+//    - Architecture: Architecture decisions and patterns
+//    - Procedure: Development and testing procedures
+//    - Decision: Technical decisions and choices
+//
+// c) shared_patterns: Keywords that indicate shared knowledge
+//    - Includes common terms in English and Chinese
+//    - Used by rule-based classifier (write_strategy: "simple")
+//    - Less important when using llm_based strategy
+//
+// d) write_strategy: Classification strategy
+//    - "simple": Fast, rule-based (no extra LLM cost, less accurate)
+//    - "llm_based": Intelligent classification with content splitting (recommended)
+//
+// === Strategy Comparison ===
+//
+// simple (Rule-Based):
+//   Pros: Fast, zero extra LLM cost, predictable
+//   Cons: Limited to predefined patterns, may miss nuanced content
+//   Use case: Simple projects with clear patterns
+//
+// llm_based (LLM Classifier - RECOMMENDED):
+//   Pros: More accurate, understands context, can split mixed content
+//   Cons: Additional LLM API cost per classification
+//   Use case: Complex projects with nuanced knowledge classification
+//
+// === Example: llm_based Content Splitting ===
+//
+// Input: "User prefers 4-space indentation. The API endpoint is at /api/v1/users."
+//
+// Output (automatically split):
+//   - Shared: "User prefers 4-space indentation"
+//     → Classified as: Convention
+//     → Routed to: std-coding (shared group)
+//     → Accessible from: All projects
+//
+//   - Project: "The API endpoint is at /api/v1/users"
+//     → Classified as: PROJECT_SPECIFIC
+//     → Routed to: my-coding-project (project group only)
+//     → Accessible from: This project only
+//
+// === Relationship with Cursor Rules ===
+//
+// Cursor Rules (.cursor/rules/*.mdc):
+//   - Static rules: Define when and how to use Graphiti tools
+//   - Behavior guidance: Tell AI when to search/store memories
+//   - Universal: Apply to all projects
+//
+// Graphiti Memory (this configuration):
+//   - Dynamic knowledge: Stores actual user preferences and project knowledge
+//   - Context provider: Provides personalized context for AI decisions
+//   - Project-specific: Tailored to each project's needs
+//
+// Workflow:
+//   1. Cursor Rules trigger: "User mentions preference"
+//   2. AI calls add_memory: Stores preference to Graphiti
+//   3. System auto-routes: Preference → personal-prefs (shared)
+//   4. Future queries: All projects can access this preference
+//
+// === Minimal Configuration ===
+//
+// For a basic setup without shared knowledge:
+//
+// {
+//   "group_id": "my-simple-project"
+// }
+//
+// === Advanced Configuration ===
+//
+// For projects with custom shared knowledge spaces:
+//
+// {
+//   "group_id": "my-app",
+//   "shared_group_ids": ["team-standards", "company-policies"],
+//   "shared_entity_types": ["Preference", "Procedure", "Requirement"],
+//   "shared_patterns": ["convention", "workflow", "standard"],
+//   "write_strategy": "llm_based"
+// }
+//
+// Note: Using the 8 fine-grained shared groups (as in this example) is
+// recommended for optimal knowledge organization and automatic routing.

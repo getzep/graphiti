@@ -55,6 +55,7 @@ This example requires two Azure OpenAI model deployments:
 Make sure Neo4j is running and accessible at the URI specified in your `.env` file.
 
 For local development:
+
 - Download and install [Neo4j Desktop](https://neo4j.com/download/)
 - Create a new database
 - Start the database
@@ -114,12 +115,14 @@ graphiti = Graphiti(
 ### Episodes
 
 Episodes are the primary units of information in Graphiti. They can be:
+
 - **Text**: Raw text content (e.g., transcripts, documents)
 - **JSON**: Structured data with key-value pairs
 
 ### Hybrid Search
 
 Graphiti combines multiple search strategies:
+
 - **Semantic Search**: Uses embeddings to find semantically similar content
 - **BM25**: Keyword-based text retrieval
 - **Graph Traversal**: Leverages relationships between entities

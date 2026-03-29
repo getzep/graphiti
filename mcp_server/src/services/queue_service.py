@@ -10,16 +10,27 @@ logger = logging.getLogger(__name__)
 
 
 class QueueService:
-    """Service for managing sequential episode processing queues by group_id."""
+    """Service for managing sequential episode processing queues by group_id with global concurrency control."""
 
-    def __init__(self):
-        """Initialize the queue service."""
+    def __init__(self, max_concurrent: int = 5):
+        """Initialize the queue service.
+
+        Args:
+            max_concurrent: Maximum number of episodes to process concurrently across all group_ids.
+                          - 1-3: Strict limit for low-tier APIs (OpenAI Free, Anthropic Free)
+                          - 5-8: Balanced for mid-tier APIs (OpenAI Tier 2-3, default: 5)
+                          - 10-20: High concurrency for high-tier APIs (OpenAI Tier 4+)
+        """
         # Dictionary to store queues for each group_id
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
+        # Global semaphore to limit concurrent processing across all group_ids
+        self._max_concurrent = max_concurrent
+        self._process_semaphore = asyncio.Semaphore(max_concurrent)
+        logger.info(f'QueueService initialized with max_concurrent={max_concurrent}')
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -50,7 +61,8 @@ class QueueService:
         """Process episodes for a specific group_id sequentially.
 
         This function runs as a long-lived task that processes episodes
-        from the queue one at a time.
+        from the queue one at a time. A global semaphore limits concurrent
+        processing across all group_ids to prevent LLM API rate limit errors.
         """
         logger.info(f'Starting episode queue worker for group_id: {group_id}')
         self._queue_workers[group_id] = True
@@ -62,8 +74,17 @@ class QueueService:
                 process_func = await self._episode_queues[group_id].get()
 
                 try:
-                    # Process the episode
-                    await process_func()
+                    # Acquire semaphore before processing
+                    # This limits concurrent processing across ALL group_ids
+                    async with self._process_semaphore:
+                        # Calculate active concurrent tasks
+                        active = self._max_concurrent - self._process_semaphore._value
+                        logger.debug(
+                            f'Processing episode for {group_id} '
+                            f'(active: {active}/{self._max_concurrent}, queued: {self._episode_queues[group_id].qsize()})'
+                        )
+                        # Process the episode
+                        await process_func()
                 except Exception as e:
                     logger.error(
                         f'Error processing queued episode for group_id {group_id}: {str(e)}'

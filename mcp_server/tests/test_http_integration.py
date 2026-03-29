@@ -15,6 +15,10 @@ from mcp.client.session import ClientSession
 async def test_http_transport(base_url: str = 'http://localhost:8000'):
     """Test MCP server with HTTP streaming transport."""
 
+    # Ensure we're using the /mcp/ endpoint
+    if not base_url.endswith('/mcp/'):
+        base_url = base_url.rstrip('/') + '/mcp/'
+
     # Import the streamable http client
     try:
         from mcp.client.streamable_http import streamablehttp_client as http_client
@@ -32,7 +36,7 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
     try:
         # Connect to the server via HTTP
         print('\n🔌 Connecting to server...')
-        async with http_client(base_url) as (read_stream, write_stream):
+        async with http_client(base_url) as (read_stream, write_stream, get_session_id):
             session = ClientSession(read_stream, write_stream)
             await session.initialize()
             print('✅ Connected successfully')
@@ -161,6 +165,10 @@ async def test_http_transport(base_url: str = 'http://localhost:8000'):
 async def test_sse_transport(base_url: str = 'http://localhost:8000'):
     """Test MCP server with SSE transport."""
 
+    # Ensure we're using the /sse endpoint
+    if not base_url.endswith('/sse'):
+        base_url = base_url.rstrip('/') + '/sse'
+
     # Import the SSE client
     try:
         from mcp.client.sse import sse_client
@@ -171,14 +179,14 @@ async def test_sse_transport(base_url: str = 'http://localhost:8000'):
     test_group_id = f'test_sse_{int(time.time())}'
 
     print('🚀 Testing MCP Server with SSE transport')
-    print(f'   Server URL: {base_url}/sse')
+    print(f'   Server URL: {base_url}')
     print(f'   Test Group: {test_group_id}')
     print('=' * 60)
 
     try:
         # Connect to the server via SSE
         print('\n🔌 Connecting to server...')
-        async with sse_client(f'{base_url}/sse') as (read_stream, write_stream):
+        async with sse_client(base_url) as (read_stream, write_stream):
             session = ClientSession(read_stream, write_stream)
             await session.initialize()
             print('✅ Connected successfully')

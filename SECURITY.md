@@ -9,7 +9,6 @@ currently being supported with security updates.
 |---------|--------------------|
 | 0.x     | :white_check_mark: |
 
-
 ## Reporting a Vulnerability
 
 Please use GitHub's Private Vulnerability Reporting mechanism found in the Security section of this repo.
