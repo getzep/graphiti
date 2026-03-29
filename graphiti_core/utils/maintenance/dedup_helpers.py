@@ -43,8 +43,12 @@ def _normalize_string_exact(name: str) -> str:
 
 
 def _normalize_name_for_fuzzy(name: str) -> str:
-    """Produce a fuzzier form that keeps alphanumerics and apostrophes for n-gram shingles."""
-    normalized = re.sub(r"[^a-z0-9' ]", ' ', _normalize_string_exact(name))
+    """Produce a fuzzier form that keeps word characters and apostrophes for n-gram shingles.
+
+    Uses \\w (which includes Unicode letters, digits, and underscore) instead of
+    [a-z0-9] so that CJK and other non-Latin scripts are preserved.
+    """
+    normalized = re.sub(r"[^\w' ]", ' ', _normalize_string_exact(name))
     normalized = normalized.strip()
     return re.sub(r'[\s]+', ' ', normalized)
 
@@ -85,13 +89,37 @@ def _has_high_entropy(normalized_name: str) -> bool:
     return _name_entropy(normalized_name) >= _NAME_ENTROPY_THRESHOLD
 
 
+def _has_cjk(text: str) -> bool:
+    """Return True if any character falls in CJK Unified Ideographs or common CJK ranges."""
+    for ch in text:
+        cp = ord(ch)
+        if (
+            0x4E00 <= cp <= 0x9FFF      # CJK Unified Ideographs
+            or 0x3400 <= cp <= 0x4DBF    # CJK Extension A
+            or 0xF900 <= cp <= 0xFAFF    # CJK Compatibility Ideographs
+            or 0x3000 <= cp <= 0x303F    # CJK Symbols and Punctuation
+            or 0x3040 <= cp <= 0x30FF    # Hiragana + Katakana
+            or 0xAC00 <= cp <= 0xD7AF    # Hangul Syllables
+        ):
+            return True
+    return False
+
+
 def _shingles(normalized_name: str) -> set[str]:
-    """Create 3-gram shingles from the normalized name for MinHash calculations."""
+    """Create n-gram shingles from the normalized name for MinHash calculations.
+
+    Uses 2-gram for CJK text (each character carries more information than a
+    Latin letter) and 3-gram for Latin text (unchanged behaviour).
+    """
     cleaned = normalized_name.replace(' ', '')
     if len(cleaned) < 2:
         return {cleaned} if cleaned else set()
 
-    return {cleaned[i : i + 3] for i in range(len(cleaned) - 2)}
+    n = 2 if _has_cjk(cleaned) else 3
+    if len(cleaned) < n:
+        return {cleaned}
+
+    return {cleaned[i : i + n] for i in range(len(cleaned) - n + 1)}
 
 
 def _hash_shingle(shingle: str, seed: int) -> int:
@@ -251,6 +279,7 @@ __all__ = [
     'DedupResolutionState',
     '_normalize_string_exact',
     '_normalize_name_for_fuzzy',
+    '_has_cjk',
     '_has_high_entropy',
     '_minhash_signature',
     '_lsh_bands',

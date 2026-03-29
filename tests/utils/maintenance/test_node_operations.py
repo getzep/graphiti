@@ -13,6 +13,7 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupResolutionState,
     _build_candidate_indexes,
     _cached_shingles,
+    _has_cjk,
     _has_high_entropy,
     _hash_shingle,
     _jaccard_similarity,
@@ -629,3 +630,83 @@ async def test_batch_summaries_calls_llm_for_long_summary():
     # LLM should have been called to condense the long summary
     llm_client.generate_response.assert_awaited_once()
     assert node.summary == 'Condensed summary'
+
+
+# --- CJK support tests ---
+
+
+def test_has_cjk_detection():
+    assert _has_cjk('中际旭创') is True
+    assert _has_cjk('Alice Smith') is False
+    assert _has_cjk('源杰半导体 Semiconductors') is True
+    assert _has_cjk('') is False
+
+
+def test_normalize_name_for_fuzzy_preserves_cjk():
+    """CJK characters must survive normalization (the old [^a-z0-9] regex stripped them)."""
+    assert '中际旭创' in _normalize_name_for_fuzzy('中际旭创')
+    assert '源杰' in _normalize_name_for_fuzzy('源杰半导体')
+    # Mixed: Latin and CJK both preserved
+    result = _normalize_name_for_fuzzy('Google 中际旭创')
+    assert 'google' in result
+    assert '中际旭创' in result
+
+
+def test_shingles_cjk_uses_bigrams():
+    """CJK text should produce 2-gram shingles (not 3-gram)."""
+    shingle_set = _shingles('中际旭创')
+    # 4 CJK chars → 3 bigrams: 中际, 际旭, 旭创
+    assert shingle_set == {'中际', '际旭', '旭创'}
+
+
+def test_shingles_latin_still_uses_trigrams():
+    """Latin text behaviour must be unchanged."""
+    shingle_set = _shingles('alice')
+    assert shingle_set == {'ali', 'lic', 'ice'}
+
+
+def test_shingles_short_cjk():
+    """Two CJK chars → single bigram."""
+    assert _shingles('中际') == {'中际'}
+
+
+def test_cjk_fuzzy_matching_end_to_end():
+    """Two similar CJK names should get non-zero Jaccard similarity after the fix."""
+    name_a = _normalize_name_for_fuzzy('中际旭创')
+    name_b = _normalize_name_for_fuzzy('中际旭创科技')
+    shingles_a = _shingles(name_a)
+    shingles_b = _shingles(name_b)
+    # Both should have non-empty shingles (the bug was empty shingles)
+    assert len(shingles_a) > 0
+    assert len(shingles_b) > 0
+    # They share common bigrams so Jaccard > 0
+    score = _jaccard_similarity(shingles_a, shingles_b)
+    assert score > 0.0
+
+
+def test_cjk_entity_resolution_deterministic():
+    """CJK entity with exact name match should resolve deterministically."""
+    # Use a longer name to pass the entropy/length filter
+    candidate = EntityNode(name='中际旭创光电科技', group_id='group', labels=['Entity'])
+    extracted = EntityNode(name='中际旭创光电科技', group_id='group', labels=['Entity'])
+
+    indexes = _build_candidate_indexes([candidate])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    assert state.resolved_nodes[0].uuid == candidate.uuid
+    assert state.uuid_map[extracted.uuid] == candidate.uuid
+
+
+def test_short_cjk_name_defers_to_llm():
+    """Short CJK names (< 6 chars, single token) should defer to LLM, not fuzzy match."""
+    extracted = EntityNode(name='中际旭创', group_id='group', labels=['Entity'])
+    indexes = _build_candidate_indexes([])
+    state = DedupResolutionState(resolved_nodes=[None], uuid_map={}, unresolved_indices=[])
+
+    _resolve_with_similarity([extracted], indexes, state)
+
+    # Short CJK name → low entropy filter → deferred to LLM
+    assert state.resolved_nodes[0] is None
+    assert state.unresolved_indices == [0]
