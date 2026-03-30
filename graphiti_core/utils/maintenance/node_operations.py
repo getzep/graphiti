@@ -39,15 +39,15 @@ from graphiti_core.prompts.extract_nodes import (
     ExtractedEntity,
     SummarizedEntities,
 )
-from graphiti_core.search.search import search
-from graphiti_core.search.search_config import SearchResults
-from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
+from graphiti_core.search.search_utils import node_similarity_search
 from graphiti_core.utils.datetime_utils import utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import (
     DedupCandidateIndexes,
     DedupResolutionState,
     _build_candidate_indexes,
+    _normalize_string_exact,
+    _promote_resolved_node,
     _resolve_with_similarity,
 )
 from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
@@ -56,6 +56,8 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of nodes to summarize in a single LLM call
 MAX_NODES = 30
+NODE_DEDUP_CANDIDATE_LIMIT = 15
+NODE_DEDUP_COSINE_MIN_SCORE = 0.6
 
 NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
@@ -98,6 +100,7 @@ async def extract_nodes(
     extracted_nodes = _create_entity_nodes(
         filtered_entities, entity_types_context, excluded_entity_types, episode
     )
+    extracted_nodes = _collapse_exact_duplicate_extracted_nodes(extracted_nodes)
 
     logger.debug(f'Extracted nodes: {[n.uuid for n in extracted_nodes]}')
     return extracted_nodes
@@ -112,8 +115,12 @@ def _build_entity_types_context(
             'entity_type_id': 0,
             'entity_type_name': 'Entity',
             'entity_type_description': (
-                'Default entity classification. Use this entity type '
-                'if the entity is not one of the other listed types.'
+                'A specific, identifiable entity that does not fit any of the other listed '
+                'types. Must still be a concrete, meaningful thing — specific enough to be '
+                'uniquely identifiable. GOOD: a named entity not covered by the other types. '
+                'BAD: "luck", "ideas", "tomorrow", "things", "them", "everybody", '
+                '"a sense of wonder", "great times". '
+                'When in doubt, do not extract the entity.'
             ),
         }
     ]
@@ -129,6 +136,14 @@ def _build_entity_types_context(
         ]
 
     return entity_types_context
+
+
+def _get_entity_type_description(
+    labels: list[str], entity_types: dict[str, type[BaseModel]] | None
+) -> str:
+    type_name = next((item for item in labels if item != 'Entity'), '')
+    type_model = entity_types.get(type_name) if entity_types is not None else None
+    return (type_model.__doc__ if type_model is not None else None) or 'Default Entity Type'
 
 
 async def _extract_nodes_single(
@@ -206,39 +221,118 @@ def _create_entity_nodes(
     return extracted_nodes
 
 
-async def _collect_candidate_nodes(
-    clients: GraphitiClients,
+def _collapse_exact_duplicate_extracted_nodes(
     extracted_nodes: list[EntityNode],
+) -> list[EntityNode]:
+    """Collapse same-message duplicates with the same normalized name.
+
+    This is intentionally narrow: it only merges exact normalized-name duplicates that the
+    extraction prompt should already have emitted once. When duplicates disagree on specificity,
+    keep the more specific node (for example, `Person` over bare `Entity`).
+    """
+    if len(extracted_nodes) < 2:
+        return extracted_nodes
+
+    canonical_by_name: dict[str, EntityNode] = {}
+    ordered_names: list[str] = []
+
+    for node in extracted_nodes:
+        normalized_name = _normalize_string_exact(node.name)
+        existing = canonical_by_name.get(normalized_name)
+        if existing is None:
+            canonical_by_name[normalized_name] = node
+            ordered_names.append(normalized_name)
+            continue
+
+        existing_specific_labels = {label for label in existing.labels if label != 'Entity'}
+        node_specific_labels = {label for label in node.labels if label != 'Entity'}
+        if len(node_specific_labels) > len(existing_specific_labels) or (
+            len(node_specific_labels) == len(existing_specific_labels)
+            and len(node.name.strip()) > len(existing.name.strip())
+        ):
+            canonical_by_name[normalized_name] = node
+
+    return [canonical_by_name[name] for name in ordered_names]
+
+
+def _merge_candidate_nodes(
+    candidate_nodes: list[EntityNode],
     existing_nodes_override: list[EntityNode] | None,
 ) -> list[EntityNode]:
-    """Search per extracted name and return unique candidates with overrides honored in order."""
-    search_results: list[SearchResults] = await semaphore_gather(
-        *[
-            search(
-                clients=clients,
-                query=node.name,
-                group_ids=[node.group_id],
-                search_filter=SearchFilters(),
-                config=NODE_HYBRID_SEARCH_RRF,
-            )
-            for node in extracted_nodes
-        ]
-    )
-
-    candidate_nodes: list[EntityNode] = [node for result in search_results for node in result.nodes]
-
+    """Deduplicate candidate nodes while preserving search order and overrides."""
+    merged_candidates = list(candidate_nodes)
     if existing_nodes_override is not None:
-        candidate_nodes.extend(existing_nodes_override)
+        merged_candidates.extend(existing_nodes_override)
 
     seen_candidate_uuids: set[str] = set()
     ordered_candidates: list[EntityNode] = []
-    for candidate in candidate_nodes:
+    for candidate in merged_candidates:
         if candidate.uuid in seen_candidate_uuids:
             continue
         seen_candidate_uuids.add(candidate.uuid)
         ordered_candidates.append(candidate)
 
     return ordered_candidates
+
+
+async def _collect_candidate_nodes(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+    existing_nodes_override: list[EntityNode] | None,
+) -> list[list[EntityNode]]:
+    """Search per extracted name and return ordered candidates for each extracted node."""
+    search_results = await _semantic_candidate_search(clients, extracted_nodes)
+
+    return [_merge_candidate_nodes(result, existing_nodes_override) for result in search_results]
+
+
+async def _semantic_candidate_search(
+    clients: GraphitiClients,
+    extracted_nodes: list[EntityNode],
+) -> list[list[EntityNode]]:
+    """Run direct cosine similarity search per extracted node without reranking."""
+    if not extracted_nodes:
+        return []
+
+    queries = [node.name.replace('\n', ' ') for node in extracted_nodes]
+    try:
+        query_vectors = await clients.embedder.create_batch(queries)
+    except NotImplementedError:
+        query_vectors = list(
+            await semaphore_gather(
+                *[clients.embedder.create(input_data=[query]) for query in queries]
+            )
+        )
+
+    return list(
+        await semaphore_gather(
+            *[
+                node_similarity_search(
+                    clients.driver,
+                    query_vector,
+                    SearchFilters(),
+                    [node.group_id],
+                    NODE_DEDUP_CANDIDATE_LIMIT,
+                    NODE_DEDUP_COSINE_MIN_SCORE,
+                )
+                for node, query_vector in zip(extracted_nodes, query_vectors, strict=True)
+            ]
+        )
+    )
+
+
+def _commit_resolution(
+    state: DedupResolutionState,
+    resolved_node: EntityNode | None,
+    uuid_map: dict[str, str],
+    duplicate_pairs: list[tuple[EntityNode, EntityNode]],
+    index: int,
+) -> None:
+    """Commit a single-node resolution result into the batch-level state."""
+    if resolved_node is not None:
+        state.resolved_nodes[index] = resolved_node
+    state.uuid_map.update(uuid_map)
+    state.duplicate_pairs.extend(duplicate_pairs)
 
 
 async def _resolve_with_llm(
@@ -267,10 +361,7 @@ async def _resolve_with_llm(
             'id': i,
             'name': node.name,
             'entity_type': node.labels,
-            'entity_type_description': entity_types_dict.get(
-                next((item for item in node.labels if item != 'Entity'), '')
-            ).__doc__
-            or 'Default Entity Type',
+            'entity_type_description': _get_entity_type_description(node.labels, entity_types_dict),
         }
         for i, node in enumerate(llm_extracted_nodes)
     ]
@@ -298,18 +389,18 @@ async def _resolve_with_llm(
 
     existing_nodes_context = [
         {
-            **{
-                'name': candidate.name,
-                'entity_types': candidate.labels,
-            },
             **candidate.attributes,
+            'candidate_id': i,
+            'name': candidate.name,
+            'entity_types': candidate.labels,
+            'summary': candidate.summary[:120] if candidate.summary else '',
         }
-        for candidate in indexes.existing_nodes
+        for i, candidate in enumerate(indexes.existing_nodes)
     ]
 
-    # Build name -> node mapping for resolving duplicates by name
-    existing_nodes_by_name: dict[str, EntityNode] = {
-        node.name: node for node in indexes.existing_nodes
+    # Build candidate_id -> node mapping for resolving duplicates by ID
+    candidates_by_id: dict[int, EntityNode] = {
+        i: node for i, node in enumerate(indexes.existing_nodes)
     }
 
     context = {
@@ -356,7 +447,7 @@ async def _resolve_with_llm(
 
     for resolution in node_resolutions:
         relative_id: int = resolution.id
-        duplicate_name: str = resolution.duplicate_name
+        duplicate_candidate_id: int = resolution.duplicate_candidate_id
 
         if relative_id not in valid_relative_range:
             logger.warning(
@@ -376,16 +467,17 @@ async def _resolve_with_llm(
         extracted_node = extracted_nodes[original_index]
 
         resolved_node: EntityNode
-        if not duplicate_name:
+        if duplicate_candidate_id < 0:
             resolved_node = extracted_node
-        elif duplicate_name in existing_nodes_by_name:
-            resolved_node = existing_nodes_by_name[duplicate_name]
+        elif duplicate_candidate_id in candidates_by_id:
+            resolved_node = _promote_resolved_node(
+                extracted_node, candidates_by_id[duplicate_candidate_id]
+            )
         else:
             logger.warning(
-                'Invalid duplicate_name for extracted node %s; treating as no duplicate. '
-                'duplicate_name was: %r',
+                'Invalid duplicate_candidate_id %d for extracted node %s; treating as no duplicate.',
+                duplicate_candidate_id,
                 extracted_node.uuid,
-                duplicate_name[:50] + '...' if len(duplicate_name) > 50 else duplicate_name,
             )
             resolved_node = extracted_node
 
@@ -403,15 +495,13 @@ async def resolve_extracted_nodes(
     entity_types: dict[str, type[BaseModel]] | None = None,
     existing_nodes_override: list[EntityNode] | None = None,
 ) -> tuple[list[EntityNode], dict[str, str], list[tuple[EntityNode, EntityNode]]]:
-    """Search for existing nodes, resolve deterministic matches, then escalate holdouts to the LLM dedupe prompt."""
+    """Resolve nodes with semantic retrieval first, then deterministic and LLM dedup."""
     llm_client = clients.llm_client
-    existing_nodes = await _collect_candidate_nodes(
+    candidate_nodes_by_extracted = await _collect_candidate_nodes(
         clients,
         extracted_nodes,
         existing_nodes_override,
     )
-
-    indexes: DedupCandidateIndexes = _build_candidate_indexes(existing_nodes)
 
     state = DedupResolutionState(
         resolved_nodes=[None] * len(extracted_nodes),
@@ -419,17 +509,50 @@ async def resolve_extracted_nodes(
         unresolved_indices=[],
     )
 
-    _resolve_with_similarity(extracted_nodes, indexes, state)
+    for idx, (node, candidates) in enumerate(
+        zip(extracted_nodes, candidate_nodes_by_extracted, strict=True)
+    ):
+        if not candidates:
+            continue
 
-    await _resolve_with_llm(
-        llm_client,
-        extracted_nodes,
-        indexes,
-        state,
-        episode,
-        previous_episodes,
-        entity_types,
-    )
+        indexes = _build_candidate_indexes(candidates)
+        local_state = DedupResolutionState(
+            resolved_nodes=[None], uuid_map={}, unresolved_indices=[]
+        )
+        _resolve_with_similarity([node], indexes, local_state)
+        if local_state.resolved_nodes[0] is not None:
+            _commit_resolution(
+                state,
+                local_state.resolved_nodes[0],
+                local_state.uuid_map,
+                local_state.duplicate_pairs,
+                idx,
+            )
+            continue
+
+        state.unresolved_indices.append(idx)
+
+    if state.unresolved_indices:
+        llm_candidate_nodes = _merge_candidate_nodes(
+            [
+                candidate
+                for idx in state.unresolved_indices
+                for candidate in candidate_nodes_by_extracted[idx]
+            ],
+            None,
+        )
+        await _resolve_with_llm(
+            llm_client,
+            extracted_nodes,
+            _build_candidate_indexes(llm_candidate_nodes),
+            state,
+            episode,
+            previous_episodes,
+            entity_types,
+        )
+
+    if not state.unresolved_indices and not any(candidate_nodes_by_extracted):
+        logger.debug('No semantic dedup candidates found; keeping all extracted nodes as new')
 
     for idx, node in enumerate(extracted_nodes):
         if state.resolved_nodes[idx] is None:
@@ -471,6 +594,7 @@ async def extract_attributes_from_nodes(
     entity_types: dict[str, type[BaseModel]] | None = None,
     should_summarize_node: NodeSummaryFilter | None = None,
     edges: list[EntityEdge] | None = None,
+    skip_fact_appending: bool = False,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -508,6 +632,7 @@ async def extract_attributes_from_nodes(
         previous_episodes,
         should_summarize_node,
         edges_by_node,
+        skip_fact_appending=skip_fact_appending,
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -557,12 +682,18 @@ async def _extract_entity_summaries_batch(
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
+    *,
+    skip_fact_appending: bool = False,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
-    Nodes that don't need LLM summarization (short enough with edge facts appended)
-    are handled directly without an LLM call. Nodes needing summarization are
+    When skip_fact_appending is False (default), nodes with short summaries get edge
+    facts appended directly without an LLM call.  Nodes needing summarization are
     partitioned into flights of MAX_NODES and processed with separate LLM calls.
+
+    When skip_fact_appending is True, the raw fact-append shortcut is bypassed and all
+    nodes are routed through LLM summarization using an episode-based prompt that
+    matches the async graph summary worker.
     """
     # Determine which nodes need LLM summarization vs direct edge fact appending
     nodes_needing_llm: list[EntityNode] = []
@@ -570,6 +701,12 @@ async def _extract_entity_summaries_batch(
     for node in nodes:
         # Check if node should be summarized at all
         if should_summarize_node is not None and not await should_summarize_node(node):
+            continue
+
+        if skip_fact_appending:
+            # Always route through LLM — no raw fact concatenation.
+            if episode is not None or node.summary:
+                nodes_needing_llm.append(node)
             continue
 
         node_edges = edges_by_node.get(node.uuid, [])
@@ -580,8 +717,8 @@ async def _extract_entity_summaries_batch(
             edge_facts = '\n'.join(edge.fact for edge in node_edges if edge.fact)
             summary_with_edges = f'{summary_with_edges}\n{edge_facts}'.strip()
 
-        # If summary is short enough, use it directly (append edge facts, no LLM call)
-        if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 4:
+        # If summary is close to the persisted limit, use it directly (append edge facts, no LLM call)
+        if summary_with_edges and len(summary_with_edges) <= MAX_SUMMARY_CHARS * 2:
             node.summary = summary_with_edges
             continue
 
@@ -604,7 +741,13 @@ async def _extract_entity_summaries_batch(
     # Process flights in parallel
     await semaphore_gather(
         *[
-            _process_summary_flight(llm_client, flight, episode, previous_episodes)
+            _process_summary_flight(
+                llm_client,
+                flight,
+                episode,
+                previous_episodes,
+                use_episode_prompt=skip_fact_appending,
+            )
             for flight in node_flights
         ]
     )
@@ -615,6 +758,8 @@ async def _process_summary_flight(
     nodes: list[EntityNode],
     episode: EpisodicNode | None,
     previous_episodes: list[EpisodicNode] | None,
+    *,
+    use_episode_prompt: bool = False,
 ) -> None:
     """Process a single flight of nodes for batch summarization."""
     # Build context for batch summarization
@@ -639,12 +784,19 @@ async def _process_summary_flight(
     # Get group_id from the first node (all nodes in a batch should have same group_id)
     group_id = nodes[0].group_id if nodes else None
 
+    if use_episode_prompt:
+        prompt = prompt_library.extract_nodes.extract_entity_summaries_from_episodes(batch_context)
+        prompt_name = 'extract_nodes.extract_entity_summaries_from_episodes'
+    else:
+        prompt = prompt_library.extract_nodes.extract_summaries_batch(batch_context)
+        prompt_name = 'extract_nodes.extract_summaries_batch'
+
     llm_response = await llm_client.generate_response(
-        prompt_library.extract_nodes.extract_summaries_batch(batch_context),
+        prompt,
         response_model=SummarizedEntities,
         model_size=ModelSize.small,
         group_id=group_id,
-        prompt_name='extract_nodes.extract_summaries_batch',
+        prompt_name=prompt_name,
     )
 
     # Build case-insensitive name -> nodes mapping (handles duplicates)

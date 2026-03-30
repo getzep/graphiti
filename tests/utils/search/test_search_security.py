@@ -36,14 +36,18 @@ def test_node_search_filter_constructor_keeps_valid_label_expression():
 def test_node_search_filter_constructor_rejects_unsafe_labels_bypassing_pydantic():
     filters = SearchFilters.model_construct(node_labels=['Entity`) DETACH DELETE x //'])
 
-    with pytest.raises(NodeLabelValidationError, match='node_labels must start with a letter or underscore'):
+    with pytest.raises(
+        NodeLabelValidationError, match='node_labels must start with a letter or underscore'
+    ):
         node_search_filter_query_constructor(filters, GraphProvider.NEO4J)
 
 
 def test_edge_search_filter_constructor_rejects_unsafe_labels_bypassing_pydantic():
     filters = SearchFilters.model_construct(node_labels=['Entity`) DETACH DELETE x //'])
 
-    with pytest.raises(NodeLabelValidationError, match='node_labels must start with a letter or underscore'):
+    with pytest.raises(
+        NodeLabelValidationError, match='node_labels must start with a letter or underscore'
+    ):
         edge_search_filter_query_constructor(filters, GraphProvider.NEO4J)
 
 

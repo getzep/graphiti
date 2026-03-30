@@ -277,6 +277,9 @@ class EntityEdge(Edge):
     invalid_at: datetime | None = Field(
         default=None, description='datetime of when the fact stopped being true'
     )
+    reference_time: datetime | None = Field(
+        default=None, description='reference timestamp from the episode that produced this edge'
+    )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
@@ -288,7 +291,9 @@ class EntityEdge(Edge):
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
-        logger.debug(f'embedded edge {self.uuid} fact ({len(text)} chars) in {(end - start) * 1000} ms')
+        logger.debug(
+            f'embedded edge {self.uuid} fact ({len(text)} chars) in {(end - start) * 1000} ms'
+        )
 
         return self.fact_embedding
 
@@ -347,6 +352,7 @@ class EntityEdge(Edge):
             'expired_at': self.expired_at,
             'valid_at': self.valid_at,
             'invalid_at': self.invalid_at,
+            'reference_time': self.reference_time,
         }
 
         if driver.provider == GraphProvider.KUZU:
@@ -975,6 +981,7 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         attributes.pop('expired_at', None)
         attributes.pop('valid_at', None)
         attributes.pop('invalid_at', None)
+        attributes.pop('reference_time', None)
 
     edge = EntityEdge(
         uuid=record['uuid'],
@@ -989,6 +996,7 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
+        reference_time=parse_db_date(record.get('reference_time')),
         attributes=attributes,
     )
 
