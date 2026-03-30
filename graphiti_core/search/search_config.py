@@ -37,6 +37,7 @@ class EdgeSearchMethod(Enum):
 
 class NodeSearchMethod(Enum):
     cosine_similarity = 'cosine_similarity'
+    summary_similarity = 'summary_similarity'
     bm25 = 'bm25'
     bfs = 'breadth_first_search'
 
