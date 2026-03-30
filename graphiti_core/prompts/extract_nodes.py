@@ -447,8 +447,6 @@ If an entity has no relevant information in the messages and no existing summary
     ]
 
 
-# NOTE: This prompt is semantically mirrored in the Go async summary worker at
-# src/lib/graphsummary/processor.go (entitySummarySystemPrompt). Keep both in sync.
 _entity_episode_summary_system_prompt = """You maintain detailed, information-dense entity memories from episode text.
 
 Use ONLY facts explicitly stated in EPISODES and durable facts already present in EXISTING_SUMMARY.
