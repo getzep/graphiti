@@ -16,7 +16,7 @@ env:
 
 jobs:
   release:
-    runs-on: depot-ubuntu-24.04-small
+    runs-on: the-forge-hot/4cpu
     permissions:
       contents: write
       id-token: write

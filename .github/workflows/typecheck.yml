@@ -11,7 +11,7 @@ on:
 
 jobs:
   pyright:
-    runs-on: depot-ubuntu-22.04
+    runs-on: the-forge-hot/4cpu
     environment: development
     steps:
       - uses: actions/checkout@v4

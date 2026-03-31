@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   unit-tests:
-    runs-on: depot-ubuntu-22.04
+    runs-on: the-forge-hot/4cpu
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -45,7 +45,7 @@ jobs:
             --ignore=tests/evals/
 
   database-integration-tests:
-    runs-on: depot-ubuntu-22.04
+    runs-on: the-forge-hot/4cpu
     services:
       falkordb:
         image: falkordb/falkordb:latest

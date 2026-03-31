@@ -9,7 +9,7 @@ on:
 jobs:
   ruff:
     environment: development
-    runs-on: depot-ubuntu-22.04
+    runs-on: the-forge-hot/4cpu
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
