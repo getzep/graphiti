@@ -210,36 +210,56 @@ class GraphitiService:
             self.entity_types = custom_types
 
             # Initialize Graphiti client with appropriate driver
-            try:
-                if self.config.database.provider.lower() == 'falkordb':
-                    # For FalkorDB, create a FalkorDriver instance directly
-                    from graphiti_core.driver.falkordb_driver import FalkorDriver
+            # Retry with backoff -- FalkorDB may not be up yet after a system restart
+            import asyncio as _asyncio
+            max_retries = 5
+            retry_delay = 2  # seconds, doubles each attempt
+            last_error = None
 
-                    falkor_driver = FalkorDriver(
-                        host=db_config['host'],
-                        port=db_config['port'],
-                        password=db_config['password'],
-                        database=db_config['database'],
-                    )
+            for attempt in range(max_retries):
+                try:
+                    if self.config.database.provider.lower() == 'falkordb':
+                        # For FalkorDB, create a FalkorDriver instance directly
+                        from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-                    self.client = Graphiti(
-                        graph_driver=falkor_driver,
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
-                else:
-                    # For Neo4j (default), use the original approach
-                    self.client = Graphiti(
-                        uri=db_config['uri'],
-                        user=db_config['user'],
-                        password=db_config['password'],
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
-            except Exception as db_error:
-                # Check for connection errors
+                        falkor_driver = FalkorDriver(
+                            host=db_config['host'],
+                            port=db_config['port'],
+                            password=db_config['password'],
+                            database=db_config['database'],
+                        )
+
+                        self.client = Graphiti(
+                            graph_driver=falkor_driver,
+                            llm_client=llm_client,
+                            embedder=embedder_client,
+                            max_coroutines=self.semaphore_limit,
+                        )
+                    else:
+                        # For Neo4j (default), use the original approach
+                        self.client = Graphiti(
+                            uri=db_config['uri'],
+                            user=db_config['user'],
+                            password=db_config['password'],
+                            llm_client=llm_client,
+                            embedder=embedder_client,
+                            max_coroutines=self.semaphore_limit,
+                        )
+                    last_error = None
+                    break  # Connected successfully
+                except Exception as e:
+                    last_error = e
+                    error_msg = str(e).lower()
+                    if 'connection refused' in error_msg or 'could not connect' in error_msg:
+                        if attempt < max_retries - 1:
+                            wait = retry_delay * (2 ** attempt)
+                            logger.warning(f'Database not ready (attempt {attempt + 1}/{max_retries}), retrying in {wait}s...')
+                            await _asyncio.sleep(wait)
+                            continue
+                    raise  # Non-connection error, don't retry
+
+            if last_error is not None:
+                db_error = last_error
                 error_msg = str(db_error).lower()
                 if 'connection refused' in error_msg or 'could not connect' in error_msg:
                     db_provider = self.config.database.provider
