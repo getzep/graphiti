@@ -22,7 +22,7 @@ from typing import Any, ClassVar
 import openai
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
@@ -107,25 +107,17 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            # Prepare response format
-            response_format: dict[str, Any] = {'type': 'json_object'}
-            if response_model is not None:
-                schema_name = getattr(response_model, '__name__', 'structured_response')
-                json_schema = response_model.model_json_schema()
-                response_format = {
-                    'type': 'json_schema',
-                    'json_schema': {
-                        'name': schema_name,
-                        'schema': json_schema,
-                    },
-                }
-
+            # Use json_object format for maximum compatibility with local/generic LLMs.
+            # Many local models (Ollama, vLLM, etc.) do not support the json_schema
+            # response_format and may return the schema definition itself instead of
+            # actual data. The schema is already embedded in the prompt by the base
+            # class, so json_object is sufficient to guide the output format.
             response = await self.client.chat.completions.create(
                 model=self.model or DEFAULT_MODEL,
                 messages=openai_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                response_format=response_format,  # type: ignore[arg-type]
+                response_format={'type': 'json_object'},
             )
             result = response.choices[0].message.content or ''
             return json.loads(result)
@@ -169,6 +161,15 @@ class OpenAIGenericClient(LLMClient):
                     response = await self._generate_response(
                         messages, response_model, max_tokens=max_tokens, model_size=model_size
                     )
+
+                    # Validate the response against the response_model if provided.
+                    # This catches cases where the LLM returns valid JSON but with
+                    # wrong structure (e.g., returning the schema definition itself
+                    # instead of actual data — common with local/generic LLMs).
+                    if response_model is not None:
+                        model_instance = response_model(**response)
+                        return model_instance.model_dump()
+
                     return response
                 except (RateLimitError, RefusalError):
                     # These errors should not trigger retries
@@ -187,21 +188,34 @@ class OpenAIGenericClient(LLMClient):
 
                     # Don't retry if we've hit the max retries
                     if retry_count >= self.MAX_RETRIES:
-                        logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
+                        if isinstance(e, ValidationError):
+                            logger.error(
+                                f'Validation error after {retry_count}/{self.MAX_RETRIES} attempts: {e}'
+                            )
+                        else:
+                            logger.error(f'Max retries ({self.MAX_RETRIES}) exceeded. Last error: {e}')
                         span.set_status('error', str(e))
                         span.record_exception(e)
                         raise
 
                     retry_count += 1
 
-                    # Construct a detailed error message for the LLM
-                    error_context = (
-                        f'The previous response attempt was invalid. '
-                        f'Error type: {e.__class__.__name__}. '
-                        f'Error details: {str(e)}. '
-                        f'Please try again with a valid response, ensuring the output matches '
-                        f'the expected format and constraints.'
-                    )
+                    # Provide a specific error message for validation errors so the
+                    # LLM knows exactly what schema to follow on retry.
+                    if isinstance(e, ValidationError) and response_model is not None:
+                        error_context = (
+                            f'The previous response was invalid. '
+                            f'Please provide a valid {response_model.__name__} object. '
+                            f'Error: {e}'
+                        )
+                    else:
+                        error_context = (
+                            f'The previous response attempt was invalid. '
+                            f'Error type: {e.__class__.__name__}. '
+                            f'Error details: {str(e)}. '
+                            f'Please try again with a valid response, ensuring the output matches '
+                            f'the expected format and constraints.'
+                        )
 
                     error_message = Message(role='user', content=error_context)
                     messages.append(error_message)
