@@ -353,13 +353,17 @@ def get_saga_node_save_query(provider: GraphProvider) -> str:
                 SET
                     n.name = $name,
                     n.group_id = $group_id,
-                    n.created_at = $created_at
+                    n.created_at = $created_at,
+                    n.summary = $summary,
+                    n.first_episode_uuid = $first_episode_uuid,
+                    n.last_episode_uuid = $last_episode_uuid,
+                    n.last_summarized_at = $last_summarized_at
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j, FalkorDB, Neptune
             return """
                 MERGE (n:Saga {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at}
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at, summary: $summary, first_episode_uuid: $first_episode_uuid, last_episode_uuid: $last_episode_uuid, last_summarized_at: $last_summarized_at}
                 RETURN n.uuid AS uuid
             """
 
@@ -368,12 +372,20 @@ SAGA_NODE_RETURN = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at
 """
 
 SAGA_NODE_RETURN_NEPTUNE = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at
 """
