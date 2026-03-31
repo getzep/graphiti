@@ -28,8 +28,10 @@ F = TypeVar('F', bound=Callable[..., Awaitable[Any]])
 
 def handle_multiple_group_ids(func: F) -> F:
     """
-    Decorator for FalkorDB methods that need to handle multiple group_ids.
-    Runs the function for each group_id separately and merges results.
+    Decorator for FalkorDB methods that need to handle group_ids.
+    Each group_id maps to a separate FalkorDB graph database, so this
+    decorator clones the driver to point at the correct graph for each
+    group_id and runs the function per-group, merging results.
     """
 
     @functools.wraps(func)
@@ -44,13 +46,16 @@ def handle_multiple_group_ids(func: F) -> F:
         if group_ids is None and group_ids_pos is not None and len(args) > group_ids_pos:
             group_ids = args[group_ids_pos]
 
-        # Only handle FalkorDB with multiple group_ids
+        # Handle FalkorDB group_ids — each group_id is a separate graph database,
+        # so we must clone the driver to target the correct one.  Previously this
+        # only handled len > 1, which meant single-group queries used whatever
+        # driver state was left over from the last add_episode call.
         if (
             hasattr(self, 'clients')
             and hasattr(self.clients, 'driver')
             and self.clients.driver.provider == GraphProvider.FALKORDB
             and group_ids
-            and len(group_ids) > 1
+            and len(group_ids) >= 1
         ):
             # Execute for each group_id concurrently
             driver = self.clients.driver
