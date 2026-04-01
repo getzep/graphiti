@@ -170,19 +170,17 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
-# Build transport security settings.
-# FastMCP defaults host to 127.0.0.1 which auto-enables DNS rebinding protection,
-# but Graphiti overrides host to 0.0.0.0 later for Docker/network deployments.
-# When MCP_HOSTNAME is set, enable protection allowing that hostname.
-# Otherwise, disable it so non-localhost connections (e.g. umbrel.local) are not rejected.
+# Configure transport security for DNS rebinding protection.
+# FastMCP auto-enables this for localhost. When MCP_HOSTNAME is set, add it to the
+# allowed hosts so non-localhost connections (e.g. from LAN clients) are accepted.
 _mcp_hostname = os.environ.get('MCP_HOSTNAME', '')
 if _mcp_hostname:
-    _transport_security = TransportSecuritySettings(
+    _transport_security: TransportSecuritySettings | None = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[f'{_mcp_hostname}:*', '127.0.0.1:*', 'localhost:*', '[::1]:*'],
     )
 else:
-    _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    _transport_security = None  # Use FastMCP defaults
 
 # MCP server instance
 mcp = FastMCP(
