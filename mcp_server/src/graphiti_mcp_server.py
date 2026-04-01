@@ -19,6 +19,7 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -169,10 +170,25 @@ For optimal performance, ensure the database is properly configured and accessib
 API keys are provided for any language model operations.
 """
 
+# Build transport security settings.
+# FastMCP defaults host to 127.0.0.1 which auto-enables DNS rebinding protection,
+# but Graphiti overrides host to 0.0.0.0 later for Docker/network deployments.
+# When MCP_HOSTNAME is set, enable protection allowing that hostname.
+# Otherwise, disable it so non-localhost connections (e.g. umbrel.local) are not rejected.
+_mcp_hostname = os.environ.get('MCP_HOSTNAME', '')
+if _mcp_hostname:
+    _transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[f'{_mcp_hostname}:*', '127.0.0.1:*', 'localhost:*', '[::1]:*'],
+    )
+else:
+    _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
 # MCP server instance
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    transport_security=_transport_security,
 )
 
 # Global services
