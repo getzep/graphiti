@@ -75,7 +75,7 @@ Evaluate the PR and produce a triage assessment. Follow this process:
 **C. Check alignment signals (true/false):**
 - `follows_patterns` — For provider PRs: uses TYPE_CHECKING guard, adds to pyproject.toml extras, doesn't pollute `__init__.py`. For driver PRs: implements GraphDriver interface, adds operations module, registers in GraphProvider enum.
 - `focused_scope` — PR does ONE thing. No bundled unrelated changes.
-- `has_rfc_if_needed` — For >500 LOC: links to a GitHub issue with architectural discussion. Set to `"n/a"` if <500 LOC.
+- `has_rfc_if_needed` — Required for: (1) any new feature or integration (driver, LLM provider, embedder) regardless of size, and (2) any PR >500 LOC. Must link to a GitHub issue with design discussion. Set to `"n/a"` only for bug fixes under 500 LOC.
 
 **D. Check for slop signals (list all that apply):**
 - `boilerplate-description` — Generic/AI-generated description that doesn't specifically describe the actual changes
@@ -98,11 +98,13 @@ Run `gh pr list --state open --json number,title --limit 200` to get all open PR
 
 ### Step 4: Determine Priority
 
+**Bug fixes to existing functionality are the top priority.** New features and integrations (database drivers, LLM providers, embedders, etc.) require an RFC (GitHub issue) discussing the design — regardless of size. PRs adding new integrations or features without a linked RFC should be flagged with `request-rfc`.
+
 Apply this logic:
-- **HIGH**: Bug fix affecting core path or primary backend (Neo4j/FalkorDB), OR quality_score >= 9/12 AND all alignment signals true for a feature/provider PR
-- **MEDIUM**: Provider/driver addition that correctly follows patterns, OR feature with good test coverage, OR bug fix on non-primary path
-- **LOW**: Documentation-only, minor chore, OR provider PR with fixable quality issues
-- **SKIP**: Duplicate of another open PR, OR slop-detected (3+ slop signals), OR >500 LOC without RFC, OR abandoned >60 days with no response to feedback
+- **HIGH**: Bug fix affecting existing functionality — especially core path or primary backend (Neo4j/FalkorDB)
+- **MEDIUM**: Bug fix on non-primary path, OR well-tested feature/provider WITH a linked RFC issue
+- **LOW**: Documentation-only, minor chore, OR feature/provider PR with a linked RFC but fixable quality issues
+- **SKIP**: Duplicate of another open PR, OR slop-detected (3+ slop signals), OR new feature/integration without RFC, OR abandoned >60 days with no response to feedback
 
 ### Step 5: Determine Recommended Action
 
@@ -111,7 +113,7 @@ Apply this logic:
 - `needs-major-rework` — Concept is sound but implementation needs significant changes
 - `close-as-duplicate` — Another open PR addresses the same issue (specify which)
 - `close-as-misaligned` — Doesn't fit project principles or architecture
-- `request-rfc` — Too large without prior design discussion
+- `request-rfc` — New feature or integration (driver, LLM provider, embedder) without a linked RFC issue, OR any PR >500 LOC without prior design discussion
 - `stale-close` — Abandoned with no activity >60 days
 
 ### Step 6: Post the Assessment
