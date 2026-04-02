@@ -21,7 +21,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # SECURITY: Always check out the BASE repo, never the fork.
           # We read the PR diff via `gh pr diff` (GitHub API), never by
@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 1
 
       - name: Claude Code Review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
