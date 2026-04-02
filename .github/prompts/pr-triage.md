@@ -24,9 +24,11 @@ Graphiti is a Python framework for building temporally-aware knowledge graphs de
 - `server/` — FastAPI REST API
 - `mcp_server/` — Model Context Protocol server
 
-### Contribution Requirements (from CONTRIBUTING.md)
+### Contribution Priorities and Requirements (from CONTRIBUTING.md)
 
-- Large changes (>500 LOC) require an RFC (GitHub issue) discussing design first
+- **Bug fixes to existing functionality are the top priority** — these get the fastest review
+- **All new features and integrations require an RFC** (GitHub issue discussing design) before submitting a PR — this includes new database drivers, LLM providers, embedding providers, new API endpoints, and any major architectural change
+- Additionally, any PR over 500 LOC requires an RFC regardless of type
 - All third-party integrations must use the optional dependency pattern:
   ```python
   from typing import TYPE_CHECKING
