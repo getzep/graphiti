@@ -36,8 +36,23 @@ Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and p
 
 ## What happens next?
 
-### Notes for Large Changes
-> Please keep the changes as concise as possible. For major architectural changes (>500 LOC), we would expect a GitHub issue (RFC) discussing the technical design and justification. Otherwise, we will tag it with rfc-required and might not go through the PR.
+### Contribution Priorities
+
+We prioritize **bug fixes to existing functionality**. If you've found a bug, please submit a fix — these PRs get the most attention and fastest review.
+
+### RFC Required for New Features and Integrations
+
+**All new features and integrations require an RFC** (a GitHub issue discussing the technical design and justification) **before submitting a PR.** This includes:
+
+- New database drivers
+- New LLM provider clients
+- New embedding provider clients
+- New API endpoints or capabilities
+- Any major architectural change
+
+Additionally, any PR over 500 LOC requires an RFC regardless of type.
+
+PRs submitted without a linked RFC issue will be tagged with `needs-rfc` and will not be reviewed until the RFC is approved. Please open the issue first, discuss the design, and then submit your PR referencing it.
 
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
