@@ -76,40 +76,60 @@ def get_default_group_id(provider: GraphProvider) -> str:
         return ''
 
 
-def lucene_sanitize(query: str) -> str:
-    # Escape special characters from a query before passing into Lucene
-    # + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
-    escape_map = str.maketrans(
-        {
-            '+': r'\+',
-            '-': r'\-',
-            '&': r'\&',
-            '|': r'\|',
-            '!': r'\!',
-            '(': r'\(',
-            ')': r'\)',
-            '{': r'\{',
-            '}': r'\}',
-            '[': r'\[',
-            ']': r'\]',
-            '^': r'\^',
-            '"': r'\"',
-            '~': r'\~',
-            '*': r'\*',
-            '?': r'\?',
-            ':': r'\:',
-            '\\': r'\\',
-            '/': r'\/',
-            'O': r'\O',
-            'R': r'\R',
-            'N': r'\N',
-            'T': r'\T',
-            'A': r'\A',
-            'D': r'\D',
-        }
-    )
+# Regex to match Lucene boolean keywords as whole words (case-sensitive).
+# Only standalone AND, OR, NOT should be escaped — never individual characters.
+_LUCENE_KEYWORD_RE = re.compile(r'\b(AND|OR|NOT)\b')
 
-    sanitized = query.translate(escape_map)
+# str.maketrans map for Lucene special *characters* only.
+# The previous implementation included uppercase letters O, R, N, T, A, D
+# intending to escape the keywords OR, NOT, AND — but str.maketrans operates
+# on individual characters, so *every* occurrence of those letters was escaped,
+# destroying queries like "Donald Trump" → "\Donald \Trump".  The keyword
+# escaping is now handled separately by _LUCENE_KEYWORD_RE above.
+_LUCENE_CHAR_ESCAPE_MAP = str.maketrans(
+    {
+        '+': r'\+',
+        '-': r'\-',
+        '&': r'\&',
+        '|': r'\|',
+        '!': r'\!',
+        '(': r'\(',
+        ')': r'\)',
+        '{': r'\{',
+        '}': r'\}',
+        '[': r'\[',
+        ']': r'\]',
+        '^': r'\^',
+        '"': r'\"',
+        '~': r'\~',
+        '*': r'\*',
+        '?': r'\?',
+        ':': r'\:',
+        '\\': r'\\',
+        '/': r'\/',
+    }
+)
+
+
+def lucene_sanitize(query: str) -> str:
+    """Escape a raw query string so it is safe for Lucene fulltext search.
+
+    Two kinds of escaping are applied:
+
+    1. **Special characters** listed in the Lucene query-parser syntax
+       (``+ - && || ! ( ) { } [ ] ^ " ~ * ? : \\ /``) are backslash-escaped
+       via a character-level translation table.
+
+    2. **Boolean keywords** ``AND``, ``OR``, ``NOT`` — when they appear as
+       standalone uppercase words — are backslash-escaped so they are treated
+       as literal text rather than query operators.  Only whole-word matches
+       are escaped; the individual letters are left untouched so that names
+       like *"Donald"*, *"Toronto"*, or *"ORACLE"* pass through correctly.
+    """
+    # Step 1: escape special characters
+    sanitized = query.translate(_LUCENE_CHAR_ESCAPE_MAP)
+    # Step 2: escape whole-word boolean keywords
+    sanitized = _LUCENE_KEYWORD_RE.sub(lambda m: '\\' + m.group(1), sanitized)
     return sanitized
 
 
