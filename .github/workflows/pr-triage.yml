@@ -135,7 +135,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
-          direct_prompt: |
+          prompt: |
             You are triaging PR #${{ steps.pr.outputs.number }} for the getzep/graphiti repository.
 
             Read the evaluation rubric in .github/prompts/pr-triage.md and follow it exactly.
@@ -253,7 +253,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: false
-          direct_prompt: |
+          prompt: |
             You need to triage the following open PRs for the getzep/graphiti repository:
             PR numbers: ${{ steps.prs.outputs.pr_numbers }}
 
