@@ -80,11 +80,15 @@ Evaluate the PR and produce a triage assessment. Follow this process:
 - `has_rfc_if_needed` — Required for: (1) any new feature or integration (driver, LLM provider, embedder) regardless of size, and (2) any PR >500 LOC. Must link to a GitHub issue with design discussion. Set to `"n/a"` only for bug fixes under 500 LOC.
 
 **D. Check for slop signals (list all that apply):**
-- `boilerplate-description` — Generic/AI-generated description that doesn't specifically describe the actual changes
+
+AI-generated slop is characterized by the *combination* of: overarchitected code, long/verbose/unfocused PR descriptions, and missing tests. A PR missing tests alone is not necessarily slop — but missing tests combined with other signals is a strong indicator.
+
+- `overarchitected` — Unnecessarily complex abstractions, excessive indirection, wrapper classes that add no value, or enterprise-style patterns for simple tasks
+- `verbose-unfocused-description` — Long, generic, AI-generated PR description that reads like a blog post rather than a focused technical summary; description doesn't match actual changes
 - `copy-paste-errors` — Code copied from another provider/module with wrong names in comments, docstrings, or class names
 - `incomplete-implementation` — Commented-out code, TODO/FIXME placeholders, stub methods that do nothing
 - `no-error-handling` — Integration code missing try/except around provider-specific calls
-- `tests-missing` — No tests whatsoever for new functionality
+- `tests-missing` — No tests whatsoever for new functionality (a signal, but only counts toward slop when combined with other signals)
 - `template-ignored` — PR template completely unfilled
 - `abandoned` — No author activity in >60 days despite review feedback
 
@@ -106,7 +110,7 @@ Apply this logic:
 - **HIGH**: Bug fix affecting existing functionality — especially core path or primary backend (Neo4j/FalkorDB)
 - **MEDIUM**: Bug fix on non-primary path, OR well-tested feature/provider WITH a linked RFC issue
 - **LOW**: Documentation-only, minor chore, OR feature/provider PR with a linked RFC but fixable quality issues
-- **SKIP**: Duplicate of another open PR, OR slop-detected (3+ slop signals), OR new feature/integration without RFC, OR abandoned >60 days with no response to feedback
+- **SKIP**: Duplicate of another open PR, OR slop-detected (overarchitected + verbose description + missing tests), OR new feature/integration without RFC, OR abandoned >60 days with no response to feedback
 
 ### Step 5: Determine Recommended Action
 
@@ -147,6 +151,15 @@ Post a single sticky PR comment (`gh pr comment`) with this format:
 ### Maintainer Note
 {2-3 sentence actionable guidance for the maintainer — what to do with this PR}
 
+### Note to Author
+{Address the PR author directly. Based on the evaluation, tell them specifically what they need to do to bring this PR into compliance with the [contributor guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md). Examples:
+- If missing RFC: "This PR adds a new integration, which requires an RFC (GitHub issue) discussing the design before the PR can be reviewed. Please open an issue first."
+- If missing tests: "Please add unit tests for the new functionality."
+- If >500 LOC without RFC: "This PR exceeds 500 lines of changes. Please open an RFC issue to discuss the design."
+- If bug fix and compliant: "Thanks for the bug fix! This looks ready for maintainer review."
+- If slop detected: "This PR appears to be AI-generated and does not meet our quality bar. Please review the contributor guide and rework the PR with focused, tested changes."
+Keep this section concise and actionable — 2-3 sentences max.}
+
 <details>
 <summary>Raw triage data (JSON)</summary>
 
@@ -164,8 +177,8 @@ Use `gh pr edit {PR_NUMBER} --add-label "label1,label2"` to apply:
 1. **Priority label** (exactly one): `triage/high`, `triage/medium`, `triage/low`, or `triage/skip`
 2. **Signal labels** (any that apply):
    - `needs-tests` — if tests score is 0 or 1
-   - `needs-rfc` — if >500 LOC and no linked RFC
-   - `slop-detected` — if 3+ slop signals found
+   - `needs-rfc` — if new feature/integration without RFC, OR >500 LOC without RFC
+   - `slop-detected` — if `overarchitected` + `verbose-unfocused-description` + `tests-missing` are all present, or 3+ other slop signals
    - `duplicate` — if duplicate_of is set
    - `recommend-close` — if action is `close-as-*` or `stale-close`
 
