@@ -35,7 +35,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
-          direct_prompt: |
+          prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ inputs.pr_number }}
 
