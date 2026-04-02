@@ -19,12 +19,39 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────
+  # Check if PR is from a fork (external contributor)
+  # Maintainer PRs (from getzep/graphiti directly) skip triage
+  # ──────────────────────────────────────────────
+  check-fork:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      is_fork: ${{ steps.check.outputs.is_fork }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "is_fork=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ──────────────────────────────────────────────
   # Single PR triage (auto on open or manual dispatch)
+  # Only runs for fork PRs (external contributors) on auto-trigger.
+  # Manual dispatch always runs (maintainers can triage any PR).
   # ──────────────────────────────────────────────
   triage:
+    needs: [check-fork]
+    # Run if: (1) fork PR auto-trigger, or (2) manual dispatch with PR number.
+    # check-fork is skipped on workflow_dispatch, so needs.check-fork.result will be 'skipped'.
     if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '')
+      always() && (
+        (github.event_name == 'pull_request_target' && needs.check-fork.outputs.is_fork == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -201,16 +228,24 @@ jobs:
           gh label create "duplicate"         --color "cfd3d7" --description "Duplicate of another open PR" --force
           gh label create "recommend-close"   --color "b60205" --description "Triage recommends closing" --force
 
-      - name: Get open PR numbers
+      - name: Get open PR numbers (external contributors only)
         id: prs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get all open PRs, excluding any already triaged (has triage/* label)
-          ALL_PRS=$(gh pr list --state open --json number,labels --limit 300)
-          UNTRIAGED=$(echo "$ALL_PRS" | jq -r '[.[] | select(.labels | map(.name) | any(startswith("triage/")) | not) | .number] | join(",")')
+          # Get all open PRs with head repo info, excluding:
+          # 1. Already triaged PRs (has triage/* label)
+          # 2. Maintainer PRs (head repo is getzep/graphiti, i.e. not a fork)
+          ALL_PRS=$(gh pr list --state open --json number,labels,headRepository --limit 300)
+          UNTRIAGED=$(echo "$ALL_PRS" | jq -r '[
+            .[] |
+            select(.labels | map(.name) | any(startswith("triage/")) | not) |
+            select(.headRepository.owner.login != "getzep" or .headRepository.name != "graphiti") |
+            .number
+          ] | join(",")')
           echo "pr_numbers=$UNTRIAGED" >> $GITHUB_OUTPUT
-          echo "Found $(echo "$UNTRIAGED" | tr ',' '\n' | wc -l) untriaged PRs"
+          COUNT=$(echo "$UNTRIAGED" | tr ',' '\n' | grep -c '[0-9]' || true)
+          echo "Found $COUNT untriaged external PRs"
 
       - name: Batch triage
         if: steps.prs.outputs.pr_numbers != ''
