@@ -19,7 +19,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      id-token: write
     steps:
       - name: Checkout base repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -82,6 +81,19 @@ jobs:
 
           # SECURITY: Strict tool allowlist. No arbitrary Bash, no file writes.
           claude_args: |
+            # ============================================================
+            # SECURITY-CRITICAL: Tool allowlist
+            # ============================================================
+            # This allowlist is the primary security boundary preventing
+            # prompt injection attacks from exfiltrating secrets (ANTHROPIC_API_KEY,
+            # GITHUB_TOKEN) via arbitrary shell commands. It restricts Claude to
+            # read-only gh commands + comment/label posting. No curl, env, echo,
+            # or arbitrary Bash is permitted.
+            #
+            # DO NOT modify this list without a thorough security review.
+            # Adding Bash(*) or any unrestricted shell access would allow
+            # malicious PR content to exfiltrate environment secrets.
+            # ============================================================
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read"
             --model claude-opus-4-5-20251101
             --max-turns 30

@@ -57,7 +57,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - name: Checkout base repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -158,9 +157,20 @@ jobs:
             Post your triage assessment as a PR comment and apply labels as specified in the rubric.
             Do not output anything other than the PR comment and label changes.
 
-          # SECURITY: Strict tool allowlist. No arbitrary Bash, no file writes.
-          # Only GitHub CLI commands for reading PR data and posting results.
           claude_args: |
+            # ============================================================
+            # SECURITY-CRITICAL: Tool allowlist
+            # ============================================================
+            # This allowlist is the primary security boundary preventing
+            # prompt injection attacks from exfiltrating secrets (ANTHROPIC_API_KEY,
+            # GITHUB_TOKEN) via arbitrary shell commands. It restricts Claude to
+            # read-only gh commands + comment/label posting. No curl, env, echo,
+            # or arbitrary Bash is permitted.
+            #
+            # DO NOT modify this list without a thorough security review.
+            # Adding Bash(*) or any unrestricted shell access would allow
+            # malicious PR content to exfiltrate environment secrets.
+            # ============================================================
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh label create:*),Read"
             --model claude-opus-4-5-20251101
             --max-turns 30
@@ -206,7 +216,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - name: Checkout base repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -285,6 +294,19 @@ jobs:
             before moving to the next one.
 
           claude_args: |
+            # ============================================================
+            # SECURITY-CRITICAL: Tool allowlist
+            # ============================================================
+            # This allowlist is the primary security boundary preventing
+            # prompt injection attacks from exfiltrating secrets (ANTHROPIC_API_KEY,
+            # GITHUB_TOKEN) via arbitrary shell commands. It restricts Claude to
+            # read-only gh commands + comment/label posting. No curl, env, echo,
+            # or arbitrary Bash is permitted.
+            #
+            # DO NOT modify this list without a thorough security review.
+            # Adding Bash(*) or any unrestricted shell access would allow
+            # malicious PR content to exfiltrate environment secrets.
+            # ============================================================
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh label create:*),Bash(wc:*),Read"
             --model claude-opus-4-5-20251101
             --max-turns 500
