@@ -721,7 +721,7 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 
 
 @mcp.tool()
-async def forget(
+async def forget_memory(
     query: str,
     group_ids: list[str] | None = None,
     max_deletions: int = 10,
@@ -734,7 +734,7 @@ async def forget(
 
     Args:
         query: Natural language description of what to forget (e.g. "Acme Corp")
-        group_ids: Optional list of group IDs to scope the forget operation
+        group_ids: Optional list of group IDs to scope the forget_memory operation
         max_deletions: Maximum number of nodes to delete (default: 10, max: 100)
     """
     global graphiti_service
@@ -787,8 +787,8 @@ async def forget(
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error in forget operation: {error_msg}')
-        return ErrorResponse(error=f'Error in forget operation: {error_msg}')
+        logger.error(f'Error in forget_memory operation: {error_msg}')
+        return ErrorResponse(error=f'Error in forget_memory operation: {error_msg}')
 
 
 @mcp.tool()
