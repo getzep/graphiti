@@ -107,6 +107,7 @@ class QueueService:
         episode_type: Any,
         entity_types: Any,
         uuid: str | None,
+        reference_time: datetime | None = None,
     ) -> int:
         """Add an episode for processing.
 
@@ -118,6 +119,7 @@ class QueueService:
             episode_type: Type of the episode
             entity_types: Entity types for extraction
             uuid: Episode UUID
+            reference_time: Optional timestamp for the episode. If None, uses current UTC time.
 
         Returns:
             The position in the queue
@@ -125,10 +127,12 @@ class QueueService:
         if self._graphiti_client is None:
             raise RuntimeError('Queue service not initialized. Call initialize() first.')
 
+        effective_reference_time = reference_time or datetime.now(timezone.utc)
+
         async def process_episode():
             """Process the episode using the graphiti client."""
             try:
-                logger.info(f'Processing episode {uuid} for group {group_id}')
+                logger.info(f'Processing episode {uuid} for group {group_id} (ref_time={effective_reference_time.isoformat()})')
 
                 # Process the episode using the graphiti client
                 await self._graphiti_client.add_episode(
@@ -137,7 +141,7 @@ class QueueService:
                     source_description=source_description,
                     source=episode_type,
                     group_id=group_id,
-                    reference_time=datetime.now(timezone.utc),
+                    reference_time=effective_reference_time,
                     entity_types=entity_types,
                     uuid=uuid,
                 )
