@@ -74,6 +74,18 @@ def test_falkordb_fulltext_query_rejects_invalid_group_ids():
         FalkorDriver.build_fulltext_query(driver, 'test', ['bad"group'])
 
 
+def test_falkordb_fulltext_query_returns_empty_string_for_stopword_only_query():
+    # Import inside the test so collection still works when FalkorDB extras are unavailable.
+    from graphiti_core.driver.falkordb_driver import FalkorDriver
+
+    driver = MagicMock(spec=FalkorDriver)
+    driver.sanitize.return_value = 'the and'
+
+    result = FalkorDriver.build_fulltext_query(driver, 'the and', ['standups'])
+
+    assert result == ''
+
+
 @pytest.mark.asyncio
 async def test_shared_search_rejects_invalid_group_ids():
     clients = SimpleNamespace(
