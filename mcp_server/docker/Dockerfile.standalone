@@ -46,6 +46,14 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-group dev
 
+# Patch graphiti-core: reasoning.effort 'minimal' is not supported by newer
+# OpenAI models (gpt-5.4-mini etc). Change default to 'low'.
+# See: https://github.com/getzep/graphiti/issues/902
+RUN sed -i "s/DEFAULT_REASONING = 'minimal'/DEFAULT_REASONING = 'low'/" \
+    .venv/lib/python*/site-packages/graphiti_core/llm_client/openai_base_client.py && \
+    find .venv/lib/python*/site-packages/graphiti_core/ -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null; \
+    python -m compileall .venv/lib/python*/site-packages/graphiti_core/ -q || true
+
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
 
