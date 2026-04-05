@@ -57,10 +57,9 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # SECURITY: Always check out the BASE repo, never the fork.
           # We read the PR diff via `gh pr diff` (GitHub API), never by
@@ -131,7 +130,7 @@ jobs:
 
       - name: Run PR Triage
         if: steps.check_size.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
@@ -158,9 +157,20 @@ jobs:
             Post your triage assessment as a PR comment and apply labels as specified in the rubric.
             Do not output anything other than the PR comment and label changes.
 
-          # SECURITY: Strict tool allowlist. No arbitrary Bash, no file writes.
-          # Only GitHub CLI commands for reading PR data and posting results.
           claude_args: |
+            # ============================================================
+            # SECURITY-CRITICAL: Tool allowlist
+            # ============================================================
+            # This allowlist is the primary security boundary preventing
+            # prompt injection attacks from exfiltrating secrets (ANTHROPIC_API_KEY,
+            # GITHUB_TOKEN) via arbitrary shell commands. It restricts Claude to
+            # read-only gh commands + comment/label posting. No curl, env, echo,
+            # or arbitrary Bash is permitted.
+            #
+            # DO NOT modify this list without a thorough security review.
+            # Adding Bash(*) or any unrestricted shell access would allow
+            # malicious PR content to exfiltrate environment secrets.
+            # ============================================================
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh label create:*),Read"
             --model claude-opus-4-5-20251101
             --max-turns 30
@@ -206,10 +216,9 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
@@ -249,7 +258,7 @@ jobs:
 
       - name: Batch triage
         if: steps.prs.outputs.pr_numbers != ''
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@ba026a3e56b9f646ae3b1be02dd9c0812aa2f8ae # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: false
@@ -285,6 +294,19 @@ jobs:
             before moving to the next one.
 
           claude_args: |
+            # ============================================================
+            # SECURITY-CRITICAL: Tool allowlist
+            # ============================================================
+            # This allowlist is the primary security boundary preventing
+            # prompt injection attacks from exfiltrating secrets (ANTHROPIC_API_KEY,
+            # GITHUB_TOKEN) via arbitrary shell commands. It restricts Claude to
+            # read-only gh commands + comment/label posting. No curl, env, echo,
+            # or arbitrary Bash is permitted.
+            #
+            # DO NOT modify this list without a thorough security review.
+            # Adding Bash(*) or any unrestricted shell access would allow
+            # malicious PR content to exfiltrate environment secrets.
+            # ============================================================
             --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(gh label create:*),Bash(wc:*),Read"
             --model claude-opus-4-5-20251101
             --max-turns 500
