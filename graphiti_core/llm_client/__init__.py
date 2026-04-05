@@ -17,11 +17,13 @@ limitations under the License.
 from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
+from .minimax_client import MiniMaxClient
 from .openai_client import OpenAIClient
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
+    'MiniMaxClient',
     'OpenAIClient',
     'LLMConfig',
     'RateLimitError',
