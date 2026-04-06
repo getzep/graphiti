@@ -191,11 +191,25 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class NeptuneProviderConfig(BaseModel):
+    """Amazon Neptune provider configuration."""
+
+    host: str | None = Field(
+        default=None, description='Neptune endpoint (neptune-db:// or neptune-graph:// URI)'
+    )
+    aoss_host: str | None = Field(
+        default=None, description='OpenSearch Serverless (AOSS) host'
+    )
+    port: int = 8182
+    aoss_port: int = 443
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    neptune: NeptuneProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):

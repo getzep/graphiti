@@ -82,11 +82,11 @@ class NeptuneEntityNodeOperations(EntityNodeOperations):
 
         queries = get_entity_node_save_bulk_query(GraphProvider.NEPTUNE, prepared)
 
-        for query in queries:
+        for query, node_data in zip(queries, prepared):
             if tx is not None:
-                await tx.run(query, nodes=prepared)
+                await tx.run(query, nodes=[node_data])
             else:
-                await executor.execute_query(query, nodes=prepared)
+                await executor.execute_query(query, nodes=[node_data])
 
     async def delete(
         self,

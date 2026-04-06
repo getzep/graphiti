@@ -168,3 +168,4 @@ cache.db*
 .DS_Store
 
 Dockerfile.local
+Dockerfile.*.local

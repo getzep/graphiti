@@ -8,11 +8,11 @@
 server:
   transport: "http"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
-  port: 8000
+  port: ${PORT:8000}
   
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
+  provider: ${LLM_PROVIDER:openai}  # Options: openai, azure_openai, anthropic, gemini, groq
+  model: ${MODEL_NAME:gpt-4o-mini}
   max_tokens: 4096
   
   providers:
@@ -71,7 +71,7 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: ${GRAPH_DB_PROVIDER:falkordb}  # Options: neo4j, falkordb, neptune
 
   providers:
     falkordb:
@@ -85,6 +85,12 @@ database:
       password: ${NEO4J_PASSWORD}
       database: ${NEO4J_DATABASE:neo4j}
       use_parallel_runtime: ${USE_PARALLEL_RUNTIME:false}
+
+    neptune:
+      host: ${NEPTUNE_HOST:}
+      aoss_host: ${AOSS_HOST:}
+      port: ${NEPTUNE_PORT:8182}
+      aoss_port: ${AOSS_PORT:443}
 
 graphiti:
   group_id: ${GRAPHITI_GROUP_ID:main}
