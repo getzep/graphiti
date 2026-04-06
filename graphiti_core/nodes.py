@@ -343,6 +343,12 @@ class EpisodicNode(Node):
         description='Content size in bytes',
     )
 
+    # User isolation field
+    user_id: str | None = Field(
+        default=None,
+        description='User ID for data isolation within a group',
+    )
+
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
             return await driver.graph_operations_interface.episodic_node_save(self, driver)
@@ -386,6 +392,8 @@ class EpisodicNode(Node):
             'content_storage_type': self.content_storage_type,
             'content_file_path': self.content_file_path,
             'content_file_size': self.content_file_size,
+            # User isolation
+            'user_id': self.user_id,
         }
 
         result = await driver.execute_query(
@@ -878,6 +886,8 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
         content_storage_type=record.get('content_storage_type'),
         content_file_path=record.get('content_file_path'),
         content_file_size=record.get('content_file_size'),
+        # User isolation
+        user_id=record.get('user_id'),
     )
 
 

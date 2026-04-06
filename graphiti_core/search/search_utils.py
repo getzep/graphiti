@@ -894,6 +894,13 @@ async def episode_fulltext_search(
         filter_params['group_ids'] = group_ids
     # Exclude document type episodes (they are searched separately via DocumentSearchService)
     group_filter_query += "\nAND e.source <> 'document'"
+    # user_id filtering: only return episodes accessible to the requesting user
+    if _search_filter.user_id is not None:
+        if _search_filter.user_id == '__shared__':
+            group_filter_query += '\nAND e.user_id IS NULL'
+        else:
+            group_filter_query += '\nAND (e.user_id IS NULL OR e.user_id = $user_id)'
+            filter_params['user_id'] = _search_filter.user_id
 
     if driver.provider == GraphProvider.NEPTUNE:
         res = driver.run_aoss_query('episode_content', query, limit=limit)  # pyright: ignore reportAttributeAccessIssue

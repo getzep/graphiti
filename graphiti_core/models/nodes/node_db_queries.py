@@ -25,7 +25,7 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
             return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-                entity_edges: join([x IN coalesce($entity_edges, []) | toString(x) ], '|'), created_at: $created_at, valid_at: $valid_at}
+                entity_edges: join([x IN coalesce($entity_edges, []) | toString(x) ], '|'), created_at: $created_at, valid_at: $valid_at, user_id: $user_id}
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
@@ -39,7 +39,8 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                     n.source_description = $source_description,
                     n.content = $content,
                     n.valid_at = $valid_at,
-                    n.entity_edges = $entity_edges
+                    n.entity_edges = $entity_edges,
+                    n.user_id = $user_id
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.FALKORDB:
@@ -59,14 +60,15 @@ def get_episode_node_save_query(provider: GraphProvider) -> str:
                     n.content_hash = $content_hash,
                     n.content_storage_type = $content_storage_type,
                     n.content_file_path = $content_file_path,
-                    n.content_file_size = $content_file_size
+                    n.content_file_size = $content_file_size,
+                    n.user_id = $user_id
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
             return """
                 MERGE (n:Episodic {uuid: $uuid})
                 SET n = {uuid: $uuid, name: $name, group_id: $group_id, source_description: $source_description, source: $source, content: $content,
-                entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at}
+                entity_edges: $entity_edges, created_at: $created_at, valid_at: $valid_at, user_id: $user_id}
                 RETURN n.uuid AS uuid
             """
 
@@ -79,7 +81,7 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                 MERGE (n:Episodic {uuid: episode.uuid})
                 SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description,
                     source: episode.source, content: episode.content,
-                entity_edges: join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at}
+                entity_edges: join([x IN coalesce(episode.entity_edges, []) | toString(x) ], '|'), created_at: episode.created_at, valid_at: episode.valid_at, user_id: episode.user_id}
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.KUZU:
@@ -93,7 +95,8 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                     n.source_description = $source_description,
                     n.content = $content,
                     n.valid_at = $valid_at,
-                    n.entity_edges = $entity_edges
+                    n.entity_edges = $entity_edges,
+                    n.user_id = $user_id
                 RETURN n.uuid AS uuid
             """
         case GraphProvider.FALKORDB:
@@ -108,15 +111,16 @@ def get_episode_node_save_bulk_query(provider: GraphProvider) -> str:
                     n.content_hash = episode.content_hash,
                     n.content_storage_type = episode.content_storage_type,
                     n.content_file_path = episode.content_file_path,
-                    n.content_file_size = episode.content_file_size
+                    n.content_file_size = episode.content_file_size,
+                    n.user_id = episode.user_id
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j
             return """
                 UNWIND $episodes AS episode
                 MERGE (n:Episodic {uuid: episode.uuid})
-                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, 
-                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}
+                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content,
+                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at, user_id: episode.user_id}
                 RETURN n.uuid AS uuid
             """
 
@@ -136,7 +140,8 @@ EPISODIC_NODE_RETURN = """
     e.content_hash AS content_hash,
     e.content_storage_type AS content_storage_type,
     e.content_file_path AS content_file_path,
-    e.content_file_size AS content_file_size
+    e.content_file_size AS content_file_size,
+    e.user_id AS user_id
 """
 
 EPISODIC_NODE_RETURN_NEPTUNE = """
