@@ -179,6 +179,7 @@ class FalkorEntityNodeOperations(EntityNodeOperations):
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityNode]:
         cursor_clause = 'AND n.uuid < $uuid' if uuid_cursor else ''
         limit_clause = 'LIMIT $limit' if limit is not None else ''
@@ -191,7 +192,7 @@ class FalkorEntityNodeOperations(EntityNodeOperations):
             + """
             RETURN
             """
-            + get_entity_node_return_query(GraphProvider.FALKORDB)
+            + get_entity_node_return_query(GraphProvider.FALKORDB, lightweight=lightweight)
             + """
             ORDER BY n.uuid DESC
             """
@@ -203,7 +204,7 @@ class FalkorEntityNodeOperations(EntityNodeOperations):
             uuid=uuid_cursor,
             limit=limit,
         )
-        return [entity_node_from_record(r) for r in records]
+        return [entity_node_from_record(r, lightweight=lightweight) for r in records]
 
     async def load_embeddings(
         self,

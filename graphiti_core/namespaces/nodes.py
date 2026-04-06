@@ -90,8 +90,11 @@ class EntityNodeNamespace:
         group_ids: list[str],
         limit: int | None = None,
         uuid_cursor: str | None = None,
+        lightweight: bool = False,
     ) -> list[EntityNode]:
-        return await self._ops.get_by_group_ids(self._driver, group_ids, limit, uuid_cursor)
+        return await self._ops.get_by_group_ids(
+            self._driver, group_ids, limit, uuid_cursor, lightweight=lightweight
+        )
 
     async def load_embeddings(self, node: EntityNode) -> None:
         await self._ops.load_embeddings(self._driver, node)
