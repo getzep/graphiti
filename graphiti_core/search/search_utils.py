@@ -734,7 +734,7 @@ async def node_similarity_search(
                                                                                                                                                                 UNWIND $ids as i
                                                                                                                                                                 MATCH (n:Entity)
                                                                                                                                                                 WHERE id(n)=i.id
-                                                                                                                                                                RETURN 
+                                                                                                                                                                RETURN
                                                                                                                                                                 """
                 + get_entity_node_return_query(driver.provider)
                 + """
