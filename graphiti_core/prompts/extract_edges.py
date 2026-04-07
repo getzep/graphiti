@@ -113,11 +113,15 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 
 1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.
    - **CRITICAL**: Using names not in the list will cause the edge to be rejected
-2. Each fact must involve two **distinct** entities.
-3. Do not emit duplicate or semantically redundant facts.
-4. The `fact` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
-5. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
-6. Do **not** hallucinate or infer temporal bounds from unrelated events.
+2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.
+3. NEVER extract facts that describe only a single entity's state, feeling, or attribute. Instead, identify the second entity that the state or feeling relates to and form a proper triple.
+   - BAD: "Alice feels happy" (single-entity state — what is Alice happy about?)
+   - GOOD: "Alice feels happy about Bob's promotion" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion
+   - GOOD: "Alice congratulated Bob" (relationship between two entities), "Alice lives in Paris" (relationship between entity and place)
+4. NEVER emit duplicate or semantically redundant facts.
+5. The `fact` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
+6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
+7. Do **not** hallucinate or infer temporal bounds from unrelated events.
 
 # RELATION TYPE RULES
 
@@ -141,33 +145,33 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that extracts fact properties from the provided text.',
+            content='You are a fact attribute extraction specialist. NEVER hallucinate or infer values not explicitly stated.',
         ),
         Message(
             role='user',
             content=f"""
-        Given the following FACT, its REFERENCE TIME, and any EXISTING ATTRIBUTES, extract or update
-        attributes based on the information explicitly stated in the fact. Use the provided attribute
-        descriptions to understand how each attribute should be determined.
+Given the following FACT, its REFERENCE TIME, and any EXISTING ATTRIBUTES, extract or update
+attributes based on the information explicitly stated in the fact. Use the provided attribute
+descriptions to understand how each attribute should be determined.
 
-        Guidelines:
-        1. Do not hallucinate attribute values if they cannot be found explicitly in the fact.
-        2. Only use information stated in the FACT to set attribute values.
-        3. Use REFERENCE TIME to resolve any relative temporal expressions in the fact.
-        4. Preserve existing attribute values unless the fact explicitly provides new information.
+Guidelines:
+1. NEVER hallucinate or infer attribute values — only use values explicitly stated in the FACT.
+2. Only use information stated in the FACT to set attribute values.
+3. Use REFERENCE TIME to resolve any relative temporal expressions in the fact.
+4. Preserve existing attribute values unless the fact explicitly provides new information.
 
-        <FACT>
-        {context['fact']}
-        </FACT>
+<FACT>
+{context['fact']}
+</FACT>
 
-        <REFERENCE TIME>
-        {context['reference_time']}
-        </REFERENCE TIME>
+<REFERENCE TIME>
+{context['reference_time']}
+</REFERENCE TIME>
 
-        <EXISTING ATTRIBUTES>
-        {to_prompt_json(context['existing_attributes'])}
-        </EXISTING ATTRIBUTES>
-        """,
+<EXISTING ATTRIBUTES>
+{to_prompt_json(context['existing_attributes'])}
+</EXISTING ATTRIBUTES>
+""",
         ),
     ]
 

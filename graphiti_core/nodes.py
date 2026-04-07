@@ -23,7 +23,7 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import (
@@ -32,7 +32,7 @@ from graphiti_core.driver.driver import (
 )
 from graphiti_core.embedder import EmbedderClient
 from graphiti_core.errors import NodeNotFoundError
-from graphiti_core.helpers import parse_db_date
+from graphiti_core.helpers import parse_db_date, validate_node_labels
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
     COMMUNITY_NODE_RETURN_NEPTUNE,
@@ -93,6 +93,14 @@ class Node(BaseModel, ABC):
     group_id: str = Field(description='partition of the graph')
     labels: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: utc_now())
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator('labels')
+    @classmethod
+    def validate_labels(cls, value: list[str]) -> list[str]:
+        validate_node_labels(value)
+        return value
 
     @abstractmethod
     async def save(self, driver: GraphDriver): ...
@@ -493,7 +501,9 @@ class EntityNode(Node):
         text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.debug(
+            f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms'
+        )
 
         return self.name_embedding
 
@@ -698,7 +708,9 @@ class CommunityNode(Node):
         text = self.name.replace('\n', ' ')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.debug(
+            f'embedded entity {self.uuid} name ({len(text)} chars) in {(end - start) * 1000} ms'
+        )
 
         return self.name_embedding
 
@@ -842,6 +854,11 @@ class CommunityNode(Node):
 
 
 class SagaNode(Node):
+    summary: str = ''
+    first_episode_uuid: str | None = None
+    last_episode_uuid: str | None = None
+    last_summarized_at: datetime | None = None
+
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
             try:
@@ -855,6 +872,10 @@ class SagaNode(Node):
             name=self.name,
             group_id=self.group_id,
             created_at=self.created_at,
+            summary=self.summary,
+            first_episode_uuid=self.first_episode_uuid,
+            last_episode_uuid=self.last_episode_uuid,
+            last_summarized_at=self.last_summarized_at,
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -1012,7 +1033,30 @@ def get_episodic_node_from_record(record: Any) -> EpisodicNode:
 def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityNode:
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
+    elif provider == GraphProvider.NEO4J:
+        # Neo4j: Try new JSON format first, fall back to old spread format
+        raw_attrs = record.get('attributes', '')
+        if raw_attrs and isinstance(raw_attrs, str):
+            # New format: JSON string in n.attributes
+            attributes = json.loads(raw_attrs)
+        else:
+            # Old format: attributes spread as individual properties
+            all_props = record.get('all_properties', {})
+            if all_props:
+                attributes = dict(all_props)
+                # Remove known system fields
+                attributes.pop('uuid', None)
+                attributes.pop('name', None)
+                attributes.pop('group_id', None)
+                attributes.pop('name_embedding', None)
+                attributes.pop('summary', None)
+                attributes.pop('created_at', None)
+                attributes.pop('labels', None)
+                attributes.pop('attributes', None)  # Remove the empty attributes field
+            else:
+                attributes = {}
     else:
+        # FalkorDB, Neptune: Original behavior
         attributes = record['attributes']
         attributes.pop('uuid', None)
         attributes.pop('name', None)
@@ -1053,11 +1097,16 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
 
 
 def get_saga_node_from_record(record: Any) -> SagaNode:
+    last_summarized_at = record.get('last_summarized_at')
     return SagaNode(
         uuid=record['uuid'],
         name=record['name'],
         group_id=record['group_id'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
+        summary=record.get('summary', '') or '',
+        first_episode_uuid=record.get('first_episode_uuid'),
+        last_episode_uuid=record.get('last_episode_uuid'),
+        last_summarized_at=parse_db_date(last_summarized_at) if last_summarized_at else None,  # type: ignore
     )
 
 

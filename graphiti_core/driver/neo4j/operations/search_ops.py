@@ -32,7 +32,7 @@ from graphiti_core.graph_queries import (
     get_relationships_query,
     get_vector_cosine_func_query,
 )
-from graphiti_core.helpers import lucene_sanitize
+from graphiti_core.helpers import lucene_sanitize, validate_group_ids
 from graphiti_core.models.edges.edge_db_queries import get_entity_edge_return_query
 from graphiti_core.models.nodes.node_db_queries import (
     COMMUNITY_NODE_RETURN,
@@ -56,6 +56,8 @@ def _build_neo4j_fulltext_query(
     group_ids: list[str] | None = None,
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
+    validate_group_ids(group_ids)
+
     group_ids_filter_list = [f'group_id:"{g}"' for g in group_ids] if group_ids is not None else []
     group_ids_filter = ''
     for f in group_ids_filter_list:

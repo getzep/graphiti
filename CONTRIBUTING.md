@@ -36,8 +36,23 @@ Join our [Discord server](https://discord.com/invite/W8Kw6bsgXQ) community and p
 
 ## What happens next?
 
-### Notes for Large Changes
-> Please keep the changes as concise as possible. For major architectural changes (>500 LOC), we would expect a GitHub issue (RFC) discussing the technical design and justification. Otherwise, we will tag it with rfc-required and might not go through the PR.
+### Contribution Priorities
+
+We prioritize **bug fixes to existing functionality**. If you've found a bug, please submit a fix — these PRs get the most attention and fastest review.
+
+### RFC Required for New Features and Integrations
+
+**All new features and integrations require an RFC** (a GitHub issue discussing the technical design and justification) **before submitting a PR.** This includes:
+
+- New database drivers
+- New LLM provider clients
+- New embedding provider clients
+- New API endpoints or capabilities
+- Any major architectural change
+
+Additionally, any PR over 500 LOC requires an RFC regardless of type.
+
+PRs submitted without a linked RFC issue will be tagged with `needs-rfc` and will not be reviewed until the RFC is approved. Please open the issue first, discuss the design, and then submit your PR referencing it.
 
 Once you've found an issue tagged with "good first issue" or "help wanted," or prepared an example to share, here's how to turn that into a contribution:
 
@@ -184,6 +199,31 @@ All third-party integrations must be optional dependencies to keep the core libr
 - Place embedding clients in `graphiti_core/embedder/`
 - Place database drivers in `graphiti_core/driver/`
 - Follow existing naming conventions (e.g., `your_service_client.py`)
+
+### Adding a Graph Driver
+
+Graphiti's driver layer is backend-agnostic. To add support for a new graph database, mirror the existing drivers in
+`graphiti_core/driver/` and keep the implementation split between the top-level driver and provider-specific
+operations.
+
+1. Add the new provider to `graphiti_core/driver/driver.py` in `GraphProvider`.
+2. Create `graphiti_core/driver/<backend>_driver.py` implementing the `GraphDriver` interface:
+   `execute_query()`, `session()`, `close()`, `build_indices_and_constraints()`, and `delete_all_indexes()`.
+3. Add `graphiti_core/driver/<backend>/operations/` and implement the operations interfaces from
+   `graphiti_core/driver/operations/`:
+   `EntityNodeOperations`, `EpisodeNodeOperations`, `CommunityNodeOperations`, `SagaNodeOperations`,
+   `EntityEdgeOperations`, `EpisodicEdgeOperations`, `CommunityEdgeOperations`, `HasEpisodeEdgeOperations`,
+   `NextEpisodeEdgeOperations`, `SearchOperations`, and `GraphMaintenanceOperations`.
+4. Expose those concrete operations from the driver via the corresponding `@property` accessors on `GraphDriver`.
+5. Add provider-specific query variants to `graphiti_core/models/nodes/node_db_queries.py` and
+   `graphiti_core/models/edges/edge_db_queries.py`.
+6. If the backend needs connection or transaction management, implement a matching `GraphDriverSession`.
+7. Register the backend dependency in `pyproject.toml` under `[project.optional-dependencies]` and add tests under
+   `tests/driver/`.
+
+For reference implementations, start with `graphiti_core/driver/neo4j_driver.py`,
+`graphiti_core/driver/falkordb_driver.py`, `graphiti_core/driver/kuzu_driver.py`, and
+`graphiti_core/driver/neptune_driver.py`.
 
 ### Testing
 

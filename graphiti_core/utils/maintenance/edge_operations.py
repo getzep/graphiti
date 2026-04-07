@@ -166,6 +166,16 @@ async def extract_edges(
             )
             continue
 
+        # Drop self-edges where source and target resolve to the same node
+        source_node = name_to_node[source_name]
+        target_node = name_to_node[target_name]
+        if source_node.uuid == target_node.uuid:
+            logger.info(
+                'Dropping self-edge for node %s (source and target resolve to same node)',
+                source_node.uuid,
+            )
+            continue
+
         edges_data.append(edge_data)
 
     end = time()
@@ -223,6 +233,7 @@ async def extract_edges(
             created_at=utc_now(),
             valid_at=valid_at_datetime,
             invalid_at=invalid_at_datetime,
+            reference_time=episode.valid_at,
         )
         edges.append(edge)
         logger.debug(
@@ -241,6 +252,7 @@ async def resolve_extracted_edges(
     entities: list[EntityNode],
     edge_types: dict[str, type[BaseModel]],
     edge_type_map: dict[tuple[str, str], list[str]],
+    existing_edges_override: list[EntityEdge] | None = None,
 ) -> tuple[list[EntityEdge], list[EntityEdge], list[EntityEdge]]:
     """Resolve extracted edges against existing graph context.
 
@@ -279,6 +291,26 @@ async def resolve_extracted_edges(
             for edge in extracted_edges
         ]
     )
+
+    # Merge override edges (e.g. from the recent Redis dedup cache) into
+    # the per-extracted-edge candidate lists so that recently resolved edges
+    # that are not yet visible in the graph-service indexes are still
+    # considered during deduplication.
+    if existing_edges_override:
+        override_by_pair: dict[tuple[str, str], list[EntityEdge]] = {}
+        for oe in existing_edges_override:
+            key = (oe.source_node_uuid, oe.target_node_uuid)
+            override_by_pair.setdefault(key, []).append(oe)
+
+        for i, extracted_edge in enumerate(extracted_edges):
+            pair_key = (extracted_edge.source_node_uuid, extracted_edge.target_node_uuid)
+            overrides = override_by_pair.get(pair_key, [])
+            if overrides:
+                existing_uuids = {e.uuid for e in valid_edges_list[i]}
+                for oe in overrides:
+                    if oe.uuid not in existing_uuids:
+                        valid_edges_list[i].append(oe)
+                        existing_uuids.add(oe.uuid)
 
     related_edges_results: list[SearchResults] = await semaphore_gather(
         *[
@@ -492,9 +524,7 @@ async def resolve_extracted_edge(
     """
     if len(related_edges) == 0 and len(existing_edges) == 0:
         # Still extract custom attributes even when no dedup/invalidation is needed
-        edge_model = (
-            edge_type_candidates.get(extracted_edge.name) if edge_type_candidates else None
-        )
+        edge_model = edge_type_candidates.get(extracted_edge.name) if edge_type_candidates else None
         if edge_model is not None and len(edge_model.model_fields) != 0:
             edge_attributes_context = {
                 'fact': extracted_edge.fact,
@@ -628,7 +658,7 @@ async def resolve_extracted_edge(
 
     end = time()
     logger.debug(
-        f'Resolved Edge: {extracted_edge.name} is {resolved_edge.name}, in {(end - start) * 1000} ms'
+        f'Resolved Edge: {extracted_edge.uuid} -> {resolved_edge.uuid}, in {(end - start) * 1000} ms'
     )
 
     now = utc_now()

@@ -5,6 +5,9 @@ import sys
 # Without this file, you might encounter ModuleNotFoundError when trying to import modules from your project, especially when running tests.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
-from tests.helpers_test import graph_driver, mock_embedder
+from tests.helpers_test import graph_driver, mock_embedder  # noqa: E402
+
+# Exclude mcp_server from test collection - it has its own test suite and conftest
+collect_ignore_glob = ['mcp_server/*']
 
 __all__ = ['graph_driver', 'mock_embedder']

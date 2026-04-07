@@ -17,6 +17,14 @@ limitations under the License.
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.helpers import validate_node_labels
+
+
+def _validate_entity_labels(labels: str | list[str]) -> list[str]:
+    resolved_labels = labels.split(':') if isinstance(labels, str) else labels
+    filtered_labels = [label for label in resolved_labels if label]
+    validate_node_labels(filtered_labels)
+    return filtered_labels
 
 
 def get_episode_node_save_query(provider: GraphProvider) -> str:
@@ -127,6 +135,9 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
 
 
 def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: bool = False) -> str:
+    validated_labels = _validate_entity_labels(labels)
+    labels = ':'.join(validated_labels)
+
     match provider:
         case GraphProvider.FALKORDB:
             return f"""
@@ -152,7 +163,7 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
             """
         case GraphProvider.NEPTUNE:
             label_subquery = ''
-            for label in labels.split(':'):
+            for label in validated_labels:
                 label_subquery += f' SET n:{label}\n'
             return f"""
                 MERGE (n:Entity {{uuid: $entity_data.uuid}})
@@ -183,6 +194,9 @@ def get_entity_node_save_query(provider: GraphProvider, labels: str, has_aoss: b
 def get_entity_node_save_bulk_query(
     provider: GraphProvider, nodes: list[dict], has_aoss: bool = False
 ) -> str | Any:
+    for node in nodes:
+        _validate_entity_labels(node.get('labels', []))
+
     match provider:
         case GraphProvider.FALKORDB:
             queries = []
@@ -265,6 +279,18 @@ def get_entity_node_return_query(provider: GraphProvider) -> str:
             n.summary AS summary,
             n.attributes AS attributes
         """
+    
+    if provider == GraphProvider.NEO4J:
+        return """
+            n.uuid AS uuid,
+            n.name AS name,
+            n.group_id AS group_id,
+            n.created_at AS created_at,
+            n.summary AS summary,
+            labels(n) AS labels,
+            COALESCE(n.attributes, '') AS attributes,
+            properties(n) AS all_properties
+        """
 
     return """
         n.uuid AS uuid,
@@ -339,13 +365,17 @@ def get_saga_node_save_query(provider: GraphProvider) -> str:
                 SET
                     n.name = $name,
                     n.group_id = $group_id,
-                    n.created_at = $created_at
+                    n.created_at = $created_at,
+                    n.summary = $summary,
+                    n.first_episode_uuid = $first_episode_uuid,
+                    n.last_episode_uuid = $last_episode_uuid,
+                    n.last_summarized_at = $last_summarized_at
                 RETURN n.uuid AS uuid
             """
         case _:  # Neo4j, FalkorDB, Neptune
             return """
                 MERGE (n:Saga {uuid: $uuid})
-                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at}
+                SET n = {uuid: $uuid, name: $name, group_id: $group_id, created_at: $created_at, summary: $summary, first_episode_uuid: $first_episode_uuid, last_episode_uuid: $last_episode_uuid, last_summarized_at: $last_summarized_at}
                 RETURN n.uuid AS uuid
             """
 
@@ -354,12 +384,20 @@ SAGA_NODE_RETURN = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at
 """
 
 SAGA_NODE_RETURN_NEPTUNE = """
     s.uuid AS uuid,
     s.name AS name,
     s.group_id AS group_id,
-    s.created_at AS created_at
+    s.created_at AS created_at,
+    s.summary AS summary,
+    s.first_episode_uuid AS first_episode_uuid,
+    s.last_episode_uuid AS last_episode_uuid,
+    s.last_summarized_at AS last_summarized_at
 """

@@ -96,6 +96,7 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -160,6 +161,7 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -203,6 +205,23 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         properties(e) AS attributes
     """
 
+    if provider == GraphProvider.NEO4J:
+        return """
+            e.uuid AS uuid,
+            n.uuid AS source_node_uuid,
+            m.uuid AS target_node_uuid,
+            e.group_id AS group_id,
+            e.created_at AS created_at,
+            e.name AS name,
+            e.fact AS fact,
+            e.episodes AS episodes,
+            e.expired_at AS expired_at,
+            e.valid_at AS valid_at,
+            e.invalid_at AS invalid_at,
+            COALESCE(e.attributes, '') AS attributes,
+            properties(e) AS all_properties
+        """
+    
     return """
         e.uuid AS uuid,
         n.uuid AS source_node_uuid,
