@@ -1,16 +1,36 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from graph_service.dto.common import Message
 
 
 class SearchQuery(BaseModel):
-    group_ids: list[str] | None = Field(
-        None, description='The group ids for the memories to search'
+    group_ids: str | list[str] | None = Field(
+        None, description='The group id or list of group ids for the memories to search. Can be a string (single group ID) or list of strings.'
     )
     query: str
     max_facts: int = Field(default=10, description='The maximum number of facts to retrieve')
+    
+    @field_validator('group_ids')
+    @classmethod
+    def normalize_group_ids(cls, v: str | list[str] | None) -> list[str] | None:
+        """Normalize group_ids parameter to list[str] | None.
+        
+        Accepts str | list[str] | None and returns list[str] | None.
+        - Returns None if input is None
+        - Converts string to single-element list
+        - Returns list as-is
+        """
+        if v is None:
+            return None
+        
+        # Convert string to single-element list
+        if isinstance(v, str):
+            return [v]
+        
+        # Already a list, return as-is
+        return v
 
 
 class FactResult(BaseModel):
