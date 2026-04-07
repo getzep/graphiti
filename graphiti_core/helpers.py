@@ -171,6 +171,41 @@ def validate_group_ids(group_ids: list[str] | None) -> bool:
     return True
 
 
+def normalize_group_ids(group_ids: str | list[str] | None) -> list[str] | None:
+    """
+    Normalize group_ids parameter to list[str] | None.
+    
+    Accepts str | list[str] | None and returns list[str] | None.
+    - Returns None if input is None
+    - Converts string to single-element list
+    - Validates each group_id using validate_group_id
+    - Returns the normalized list
+    
+    Args:
+        group_ids: The group_ids to normalize, can be string, list of strings, or None
+        
+    Returns:
+        Normalized list of group_ids or None
+        
+    Raises:
+        GroupIdValidationError: If any group_id contains invalid characters
+    """
+    if group_ids is None:
+        return None
+    
+    # Convert string to single-element list
+    if isinstance(group_ids, str):
+        normalized = [group_ids]
+    else:
+        normalized = group_ids
+    
+    # Validate each group_id
+    for group_id in normalized:
+        validate_group_id(group_id)
+    
+    return normalized
+
+
 def validate_node_labels(node_labels: list[str] | None) -> bool:
     """Validate that node labels are safe to interpolate into Cypher label expressions."""
 
