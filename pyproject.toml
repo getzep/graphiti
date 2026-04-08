@@ -1,7 +1,7 @@
 [project]
 name = "graphiti-core"
 description = "A temporal graph building library"
-version = "0.28.1"
+version = "0.28.2"
 authors = [
     { name = "Paul Paliychuk", email = "paul@getzep.com" },
     { name = "Preston Rasmussen", email = "preston@getzep.com" },
@@ -49,7 +49,7 @@ dev = [
     "langchain-aws>=0.2.29",
     "ipykernel>=6.29.5",
     "jupyterlab>=4.2.4",
-    "langgraph>=0.2.15",
+    "langgraph>=1.0.10",
     "langchain-anthropic>=0.2.4",
     "langsmith>=0.1.108",
     "langchain-openai>=0.2.6",

@@ -105,6 +105,7 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -178,6 +179,7 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
+                    e.reference_time = $reference_time,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """

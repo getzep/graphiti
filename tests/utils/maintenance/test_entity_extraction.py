@@ -187,6 +187,45 @@ class TestExtractNodesSmallInput:
         assert len(nodes) == 1
         assert nodes[0].name == 'Alice'
 
+    @pytest.mark.asyncio
+    async def test_collapses_exact_duplicate_names_preferring_specific_type(self, monkeypatch):
+        """Exact same-name duplicates from one message should collapse deterministically."""
+        clients, llm_generate = _make_clients()
+
+        from pydantic import BaseModel
+
+        class Person(BaseModel):
+            """A human person."""
+
+            pass
+
+        llm_generate.return_value = {
+            'extracted_entities': [
+                {'name': 'Caroline', 'entity_type_id': 0},  # Default Entity
+                {'name': 'Caroline', 'entity_type_id': 1},  # Person
+                {'name': 'Melanie', 'entity_type_id': 1},
+            ]
+        }
+
+        episode = _make_episode(
+            content=(
+                'Caroline: Hey Mel! Good to see you! How have you been?\n'
+                'Melanie: Hey Caroline! Good to see you!'
+            ),
+            source=EpisodeType.message,
+        )
+
+        nodes = await extract_nodes(
+            clients,
+            episode,
+            previous_episodes=[],
+            entity_types={'Person': Person},
+        )
+
+        assert [node.name for node in nodes] == ['Caroline', 'Melanie']
+        caroline = next(node for node in nodes if node.name == 'Caroline')
+        assert 'Person' in caroline.labels
+
 
 class TestExtractNodesPromptSelection:
     @pytest.mark.asyncio

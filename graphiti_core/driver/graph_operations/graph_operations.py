@@ -353,6 +353,49 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve saga nodes by group IDs with optional pagination."""
         raise NotImplementedError
 
+    # -----------------------
+    # Saga: Queries
+    # -----------------------
+
+    async def saga_get_previous_episode_uuid(
+        self,
+        driver: Any,
+        saga_uuid: str,
+        current_episode_uuid: str,
+    ) -> str | None:
+        """Find the most recent episode UUID in a saga, excluding the current one.
+
+        Args:
+            driver: GraphDriver instance
+            saga_uuid: UUID of the saga
+            current_episode_uuid: UUID of the current episode to exclude
+
+        Returns:
+            UUID of the previous episode, or None if the saga has no other episodes
+        """
+        raise NotImplementedError
+
+    async def saga_get_episode_contents(
+        self,
+        driver: Any,
+        saga_uuid: str,
+        since: Any | None = None,
+        limit: int = 200,
+    ) -> list[str]:
+        """Retrieve episode content strings from a saga for summarization.
+
+        Args:
+            driver: GraphDriver instance
+            saga_uuid: UUID of the saga
+            since: Optional datetime. If provided, only returns episodes with
+                created_at after this timestamp. If None, returns all episodes.
+            limit: Maximum number of episodes to return
+
+        Returns:
+            list[str]: Episode content strings in chronological order
+        """
+        raise NotImplementedError
+
     # -----------------
     # Edge: Save/Delete
     # -----------------
