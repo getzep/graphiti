@@ -393,6 +393,7 @@ async def add_memory(
             episode_type=episode_type,
             entity_types=graphiti_service.entity_types,
             uuid=uuid or None,  # Ensure None is passed if uuid is None
+            user_id=config.graphiti.user_id,
         )
 
         return SuccessResponse(
@@ -439,6 +440,7 @@ async def search_nodes(
         # Create search filters
         search_filters = SearchFilters(
             node_labels=entity_types,
+            user_ids=[config.graphiti.user_id] if config.graphiti.user_id else None,
         )
 
         # Use the search_ method with node search config
@@ -525,6 +527,9 @@ async def search_memory_facts(
             query=query,
             num_results=max_facts,
             center_node_uuid=center_node_uuid,
+            search_filter=SearchFilters(
+                user_ids=[config.graphiti.user_id] if config.graphiti.user_id else None,
+            ),
         )
 
         if not relevant_edges:
