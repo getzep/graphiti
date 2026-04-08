@@ -53,14 +53,8 @@ class SearchFilters(BaseModel):
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
     edge_uuids: list[str] | None = Field(default=None)
-    user_id: str | None = Field(
-        default=None,
-        description=(
-            'User ID for data isolation. '
-            'None=no filter (all results), '
-            'specific value=shared + that user data, '
-            '"__shared__"=shared-only (user_id IS NULL)'
-        ),
+    user_ids: list[str] | None = Field(
+        default=None, description='List of owner IDs for episode-level isolation. None=no filter.'
     )
 
 
@@ -90,29 +84,14 @@ def node_search_filter_query_constructor(
             node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
 
-    # user_id filtering: entity must have at least one accessible episode
-    # (shared episode OR episode matching the requested user_id)
-    if filters.user_id is not None:
-        if provider == GraphProvider.FALKORDB:
-            # FalkorDB does not support EXISTS { MATCH ... } subqueries.
-            # Use a post-hoc filter approach: the filter is applied after
-            # search results are collected. We return a sentinel that
-            # the caller must interpret.  For now, we skip the Cypher-level
-            # filter and rely on post-fetch filtering in the service layer.
-            #
-            # The actual filtering is handled in search_utils.py
-            # via _apply_user_id_post_filter for FalkorDB.
-            pass
-        elif filters.user_id == '__shared__':
-            filter_queries.append(
-                'EXISTS { MATCH (n)<-[:MENTIONS]-(e:Episodic) WHERE e.user_id IS NULL }'
-            )
-        else:
-            filter_queries.append(
-                'EXISTS { MATCH (n)<-[:MENTIONS]-(e:Episodic) '
-                'WHERE e.user_id IS NULL OR e.user_id = $user_id }'
-            )
-            filter_params['user_id'] = filters.user_id
+    # user_ids filtering: entity must have at least one episode whose user_id is in the list
+    # FalkorDB does not support EXISTS subqueries; handled via post-fetch in search.py
+    if filters.user_ids is not None and provider != GraphProvider.FALKORDB:
+        filter_queries.append(
+            'EXISTS { MATCH (n)<-[:MENTIONS]-(e:Episodic) '
+            'WHERE e.user_id IN $user_ids }'
+        )
+        filter_params['user_ids'] = filters.user_ids
 
     return filter_queries, filter_params
 
@@ -281,22 +260,13 @@ def edge_search_filter_query_constructor(
 
         filter_queries.append(expired_at_filter)
 
-    # user_id filtering: edge must have at least one accessible episode
-    if filters.user_id is not None:
-        if provider == GraphProvider.FALKORDB:
-            # FalkorDB does not support EXISTS { MATCH ... } subqueries.
-            # Filtering is handled via post-fetch in search_utils.py.
-            pass
-        elif filters.user_id == '__shared__':
-            filter_queries.append(
-                'EXISTS { MATCH (ep:Episodic) WHERE ep.uuid IN e.episodes AND ep.user_id IS NULL }'
-            )
-        else:
-            filter_queries.append(
-                'EXISTS { MATCH (ep:Episodic) WHERE ep.uuid IN e.episodes '
-                'AND (ep.user_id IS NULL OR ep.user_id = $user_id) }'
-            )
-            if 'user_id' not in filter_params:
-                filter_params['user_id'] = filters.user_id
+    # user_ids filtering: edge must have at least one episode whose user_id is in the list
+    # FalkorDB does not support EXISTS subqueries; handled via post-fetch in search.py
+    if filters.user_ids is not None and provider != GraphProvider.FALKORDB:
+        filter_queries.append(
+            'EXISTS { MATCH (ep:Episodic) WHERE ep.uuid IN e.episodes '
+            'AND ep.user_id IN $user_ids }'
+        )
+        filter_params['user_ids'] = filters.user_ids
 
     return filter_queries, filter_params

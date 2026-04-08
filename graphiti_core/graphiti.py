@@ -687,7 +687,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         source: EpisodeType | None = None,
         driver: GraphDriver | None = None,
-        user_id: str | None = None,
+        user_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -719,7 +719,7 @@ class Graphiti:
         if driver is None:
             driver = self.clients.driver
 
-        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source, user_id)
+        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source, user_ids=user_ids)
 
     async def add_episode(
         self,
@@ -738,6 +738,7 @@ class Graphiti:
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         kernel_to_subtypes: dict[str, list[str]] | None = None,
         user_id: str | None = None,
+        user_ids: list[str] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -824,7 +825,7 @@ class Graphiti:
                         last_n=RELEVANT_SCHEMA_LIMIT,
                         group_ids=[group_id],
                         source=source,
-                        user_id=user_id,
+                        user_ids=user_ids if user_ids is not None else ([user_id] if user_id is not None else None),
                     )
                     if previous_episode_uuids is None
                     else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)

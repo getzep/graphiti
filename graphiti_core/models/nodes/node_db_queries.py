@@ -155,7 +155,8 @@ EPISODIC_NODE_RETURN_NEPTUNE = """
     e.source AS source,
     split(e.entity_edges, ",") AS entity_edges,
     e.summary AS summary,
-    split(e.tags, "|") AS tags
+    split(e.tags, "|") AS tags,
+    e.user_id AS user_id
 """
 
 

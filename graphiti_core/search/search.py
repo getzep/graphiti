@@ -67,50 +67,48 @@ from graphiti_core.search.search_utils import (
 logger = logging.getLogger(__name__)
 
 
-def _needs_falkordb_user_id_post_filter(search_filter: SearchFilters, driver: Any) -> bool:
-    """Check if FalkorDB requires post-fetch user_id filtering."""
-    if search_filter.user_id is None:
+def _needs_falkordb_user_ids_post_filter(
+    search_filter: SearchFilters, driver: Any
+) -> bool:
+    """Check if FalkorDB requires post-fetch user_ids filtering."""
+    if search_filter.user_ids is None:
         return False
     try:
         from graphiti_core.driver.driver import GraphProvider
-        return getattr(driver, 'provider', None) == GraphProvider.FALKORDB
+
+        provider_val = getattr(driver, 'provider', None)
+        logger.debug(f"FalkorDB post-filter check: provider={provider_val}, user_ids={search_filter.user_ids}")
+        return provider_val == GraphProvider.FALKORDB
     except ImportError:
         return False
 
 
 async def _falkordb_filter_accessible_nodes(
-    nodes: list[Any], driver: Any, group_ids: list[str], user_id: str,
+    nodes: list[Any], driver: Any, group_ids: list[str], user_ids: list[str],
 ) -> list[Any]:
-    """Filter nodes to only those with at least one accessible episode."""
+    """Filter nodes to only those with at least one episode whose user_id is in user_ids."""
     if not nodes:
         return nodes
 
-    if user_id == '__shared__':
-        query = (
-            "MATCH (e:Episodic)-[:MENTIONS]->(n:Entity) "
-            "WHERE n.uuid IN $uuids AND n.group_id IN $group_ids AND e.user_id IS NULL "
-            "RETURN DISTINCT n.uuid AS uuid"
-        )
-    else:
-        query = (
-            "MATCH (e:Episodic)-[:MENTIONS]->(n:Entity) "
-            "WHERE n.uuid IN $uuids AND n.group_id IN $group_ids "
-            "AND (e.user_id IS NULL OR e.user_id = $user_id) "
-            "RETURN DISTINCT n.uuid AS uuid"
-        )
+    query = (
+        "MATCH (e:Episodic)-[:MENTIONS]->(n:Entity) "
+        "WHERE n.uuid IN $uuids AND n.group_id IN $group_ids "
+        "AND e.user_id IN $user_ids "
+        "RETURN DISTINCT n.uuid AS uuid"
+    )
 
     uuids = [n.uuid for n in nodes]
     records, _, _ = await driver.execute_query(
-        query, uuids=uuids, group_ids=group_ids, user_id=user_id, routing_='r',
+        query, uuids=uuids, group_ids=group_ids, user_ids=user_ids, routing_='r',
     )
     accessible = {r['uuid'] for r in records}
     return [n for n in nodes if n.uuid in accessible]
 
 
 async def _falkordb_filter_accessible_edges(
-    edges: list[Any], driver: Any, group_ids: list[str], user_id: str,
+    edges: list[Any], driver: Any, group_ids: list[str], user_ids: list[str],
 ) -> list[Any]:
-    """Filter edges to only those with at least one accessible episode."""
+    """Filter edges to only those with at least one episode whose user_id is in user_ids."""
     if not edges:
         return edges
 
@@ -126,20 +124,14 @@ async def _falkordb_filter_accessible_edges(
     if not all_episode_uuids:
         return edges
 
-    if user_id == '__shared__':
-        query = (
-            "MATCH (e:Episodic) WHERE e.uuid IN $uuids AND e.user_id IS NULL "
-            "RETURN e.uuid AS uuid"
-        )
-    else:
-        query = (
-            "MATCH (e:Episodic) WHERE e.uuid IN $uuids "
-            "AND (e.user_id IS NULL OR e.user_id = $user_id) "
-            "RETURN e.uuid AS uuid"
-        )
+    query = (
+        "MATCH (e:Episodic) WHERE e.uuid IN $uuids "
+        "AND e.user_id IN $user_ids "
+        "RETURN e.uuid AS uuid"
+    )
 
     records, _, _ = await driver.execute_query(
-        query, uuids=list(all_episode_uuids), user_id=user_id, routing_='r',
+        query, uuids=list(all_episode_uuids), user_ids=user_ids, routing_='r',
     )
     accessible_episodes = {r['uuid'] for r in records}
 
@@ -283,15 +275,15 @@ async def search(
         ),
     )
 
-    # FalkorDB post-fetch user_id filtering
+    # FalkorDB post-fetch user_ids filtering
     # FalkorDB does not support EXISTS subqueries in Cypher, so we filter
     # entities and edges after the search results are collected.
-    if _needs_falkordb_user_id_post_filter(search_filter, driver):
+    if _needs_falkordb_user_ids_post_filter(search_filter, driver):
         nodes = await _falkordb_filter_accessible_nodes(
-            nodes, driver, group_ids, search_filter.user_id,
+            nodes, driver, group_ids, search_filter.user_ids,
         )
         edges = await _falkordb_filter_accessible_edges(
-            edges, driver, group_ids, search_filter.user_id,
+            edges, driver, group_ids, search_filter.user_ids,
         )
 
     # 截取到用户请求的 limit

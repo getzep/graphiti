@@ -64,7 +64,7 @@ async def retrieve_episodes(
     last_n: int = EPISODE_WINDOW_LEN,
     group_ids: list[str] | None = None,
     source: EpisodeType | None = None,
-    user_id: str | None = None,
+    user_ids: list[str] | None = None,
 ) -> list[EpisodicNode]:
     """
     Retrieve the last n episodic nodes from the graph.
@@ -91,9 +91,9 @@ async def retrieve_episodes(
         query_filter += '\nAND e.source = $source'
         query_params['source'] = source.name
 
-    if user_id is not None:
-        query_filter += '\nAND e.user_id = $user_id'
-        query_params['user_id'] = user_id
+    if user_ids is not None:
+        query_filter += '\nAND e.user_id IN $user_ids'
+        query_params['user_ids'] = user_ids
 
     query: LiteralString = (
         """
