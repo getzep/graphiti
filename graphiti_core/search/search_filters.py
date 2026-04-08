@@ -18,7 +18,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from graphiti_core.driver.driver import GraphProvider
 
@@ -56,6 +56,14 @@ class SearchFilters(BaseModel):
     user_ids: list[str] | None = Field(
         default=None, description='List of owner IDs for episode-level isolation. None=no filter.'
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def _normalize_empty_list(cls, values: Any) -> Any:
+        """Treat empty user_ids list as None (no filter)."""
+        if isinstance(values, dict) and values.get('user_ids') == []:
+            values['user_ids'] = None
+        return values
 
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:

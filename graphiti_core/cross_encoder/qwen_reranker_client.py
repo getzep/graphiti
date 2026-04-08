@@ -32,6 +32,7 @@ class QwenRerankerConfig:
 
     base_url: str = 'http://localhost:7001'
     model: str = 'qwen3-reranker-0.6b'
+    api_key: str | None = None
     timeout: float = 30.0
     max_concurrent: int = 10
 
@@ -51,7 +52,10 @@ class QwenRerankerClient(CrossEncoderClient):
 
     def __init__(self, config: QwenRerankerConfig | None = None):
         self.config = config or QwenRerankerConfig()
-        self._client = httpx.AsyncClient(timeout=self.config.timeout)
+        headers = {}
+        if self.config.api_key:
+            headers['Authorization'] = f'Bearer {self.config.api_key}'
+        self._client = httpx.AsyncClient(timeout=self.config.timeout, headers=headers)
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent)
 
     async def _score_single(self, query: str, document: str) -> float:
@@ -112,10 +116,10 @@ class QwenRerankerClient(CrossEncoderClient):
                             score = yes_prob / (yes_prob + no_prob)
                         else:
                             score = math.exp(yes_logprob)
-                        return score
+                        return min(max(score, 0.0), 1.0)
                     elif no_logprob is not None:
                         # 只有 no，返回 1 - no_prob
-                        return 1 - math.exp(no_logprob)
+                        return min(max(1 - math.exp(no_logprob), 0.0), 1.0)
 
                 # 回退：检查生成的文本
                 content = choice.get('message', {}).get('content', '').lower().strip()
