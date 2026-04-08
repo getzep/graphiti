@@ -217,7 +217,7 @@ class GraphitiAppConfig(BaseModel):
 
     group_id: str = Field(default='main', description='Group ID')
     episode_id_prefix: str | None = Field(default='', description='Episode ID prefix')
-    user_id: str = Field(default='mcp_user', description='User ID')
+    user_id: str = Field(default='mcp_user', description='User ID for data isolation')
     entity_types: list[EntityTypeConfig] = Field(default_factory=list)
 
     def model_post_init(self, __context) -> None:
@@ -287,5 +287,3 @@ class GraphitiConfig(BaseSettings):
         # Override Graphiti settings
         if hasattr(args, 'group_id') and args.group_id:
             self.graphiti.group_id = args.group_id
-        if hasattr(args, 'user_id') and args.user_id:
-            self.graphiti.user_id = args.user_id

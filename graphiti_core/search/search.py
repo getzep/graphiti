@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from collections import defaultdict
 from time import time
+from typing import Any
 
 from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.driver.driver import GraphDriver
@@ -64,6 +65,81 @@ from graphiti_core.search.search_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _needs_falkordb_user_ids_post_filter(
+    search_filter: SearchFilters, driver: Any
+) -> bool:
+    """Check if FalkorDB requires post-fetch user_ids filtering."""
+    if search_filter.user_ids is None:
+        return False
+    try:
+        from graphiti_core.driver.driver import GraphProvider
+
+        provider_val = getattr(driver, 'provider', None)
+        logger.debug(f"FalkorDB post-filter check: provider={provider_val}, user_ids={search_filter.user_ids}")
+        return provider_val == GraphProvider.FALKORDB
+    except ImportError:
+        return False
+
+
+async def _falkordb_filter_accessible_nodes(
+    nodes: list[Any], driver: Any, group_ids: list[str], user_ids: list[str],
+) -> list[Any]:
+    """Filter nodes to only those with at least one episode whose user_id is in user_ids."""
+    if not nodes:
+        return nodes
+
+    query = (
+        "MATCH (e:Episodic)-[:MENTIONS]->(n:Entity) "
+        "WHERE n.uuid IN $uuids AND n.group_id IN $group_ids "
+        "AND e.user_id IN $user_ids "
+        "RETURN DISTINCT n.uuid AS uuid"
+    )
+
+    uuids = [n.uuid for n in nodes]
+    records, _, _ = await driver.execute_query(
+        query, uuids=uuids, group_ids=group_ids, user_ids=user_ids, routing_='r',
+    )
+    accessible = {r['uuid'] for r in records}
+    return [n for n in nodes if n.uuid in accessible]
+
+
+async def _falkordb_filter_accessible_edges(
+    edges: list[Any], driver: Any, group_ids: list[str], user_ids: list[str],
+) -> list[Any]:
+    """Filter edges to only those with at least one episode whose user_id is in user_ids."""
+    if not edges:
+        return edges
+
+    all_episode_uuids: set[str] = set()
+    edge_episode_map: dict[str, list[str]] = {}
+    for e in edges:
+        ep_uuids = getattr(e, 'episodes', []) or []
+        if not ep_uuids:
+            continue
+        edge_episode_map[e.uuid] = ep_uuids
+        all_episode_uuids.update(ep_uuids)
+
+    if not all_episode_uuids:
+        return edges
+
+    query = (
+        "MATCH (e:Episodic) WHERE e.uuid IN $uuids "
+        "AND e.user_id IN $user_ids "
+        "RETURN e.uuid AS uuid"
+    )
+
+    records, _, _ = await driver.execute_query(
+        query, uuids=list(all_episode_uuids), user_ids=user_ids, routing_='r',
+    )
+    accessible_episodes = {r['uuid'] for r in records}
+
+    return [
+        e for e in edges
+        if not edge_episode_map.get(e.uuid)
+        or any(ep in accessible_episodes for ep in edge_episode_map[e.uuid])
+    ]
 
 
 async def search(
@@ -198,6 +274,17 @@ async def search(
             config.reranker_min_score,
         ),
     )
+
+    # FalkorDB post-fetch user_ids filtering
+    # FalkorDB does not support EXISTS subqueries in Cypher, so we filter
+    # entities and edges after the search results are collected.
+    if _needs_falkordb_user_ids_post_filter(search_filter, driver):
+        nodes = await _falkordb_filter_accessible_nodes(
+            nodes, driver, group_ids, search_filter.user_ids,
+        )
+        edges = await _falkordb_filter_accessible_edges(
+            edges, driver, group_ids, search_filter.user_ids,
+        )
 
     # 截取到用户请求的 limit
     results = SearchResults(

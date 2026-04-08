@@ -687,6 +687,7 @@ class Graphiti:
         group_ids: list[str] | None = None,
         source: EpisodeType | None = None,
         driver: GraphDriver | None = None,
+        user_ids: list[str] | None = None,
     ) -> list[EpisodicNode]:
         """
         Retrieve the last n episodic nodes from the graph.
@@ -702,6 +703,8 @@ class Graphiti:
             The number of episodes to retrieve. Defaults to EPISODE_WINDOW_LEN.
         group_ids : list[str | None], optional
             The group ids to return data from.
+        user_id : str | None, optional
+            Filter episodes by user ID for data isolation.
 
         Returns
         -------
@@ -716,7 +719,7 @@ class Graphiti:
         if driver is None:
             driver = self.clients.driver
 
-        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source)
+        return await retrieve_episodes(driver, reference_time, last_n, group_ids, source, user_ids=user_ids)
 
     async def add_episode(
         self,
@@ -734,6 +737,8 @@ class Graphiti:
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
         kernel_to_subtypes: dict[str, list[str]] | None = None,
+        user_id: str | None = None,
+        user_ids: list[str] | None = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -820,6 +825,7 @@ class Graphiti:
                         last_n=RELEVANT_SCHEMA_LIMIT,
                         group_ids=[group_id],
                         source=source,
+                        user_ids=user_ids if user_ids is not None else ([user_id] if user_id is not None else None),
                     )
                     if previous_episode_uuids is None
                     else await EpisodicNode.get_by_uuids(self.driver, previous_episode_uuids)
@@ -839,6 +845,7 @@ class Graphiti:
                         source_description=source_description,
                         created_at=now,
                         valid_at=reference_time,
+                        user_id=user_id,
                     )
                 )
 
@@ -1137,6 +1144,7 @@ class Graphiti:
                         group_id=group_id,
                         created_at=now,
                         valid_at=episode.reference_time,
+                        user_id=episode.user_id,
                     )
                     for episode in bulk_episodes
                 ]

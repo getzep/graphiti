@@ -53,6 +53,9 @@ class SearchFilters(BaseModel):
     created_at: list[list[DateFilter]] | None = Field(default=None)
     expired_at: list[list[DateFilter]] | None = Field(default=None)
     edge_uuids: list[str] | None = Field(default=None)
+    user_ids: list[str] | None = Field(
+        default=None, description='List of owner IDs for episode-level isolation. None=no filter.'
+    )
 
 
 def cypher_to_opensearch_operator(op: ComparisonOperator) -> str:
@@ -80,6 +83,15 @@ def node_search_filter_query_constructor(
             node_labels = '|'.join(filters.node_labels)
             node_label_filter = 'n:' + node_labels
         filter_queries.append(node_label_filter)
+
+    # user_ids filtering: entity must have at least one episode whose user_id is in the list
+    # FalkorDB does not support EXISTS subqueries; handled via post-fetch in search.py
+    if filters.user_ids is not None and provider != GraphProvider.FALKORDB:
+        filter_queries.append(
+            'EXISTS { MATCH (n)<-[:MENTIONS]-(e:Episodic) '
+            'WHERE e.user_id IN $user_ids }'
+        )
+        filter_params['user_ids'] = filters.user_ids
 
     return filter_queries, filter_params
 
@@ -247,5 +259,14 @@ def edge_search_filter_query_constructor(
                 expired_at_filter += ' OR '
 
         filter_queries.append(expired_at_filter)
+
+    # user_ids filtering: edge must have at least one episode whose user_id is in the list
+    # FalkorDB does not support EXISTS subqueries; handled via post-fetch in search.py
+    if filters.user_ids is not None and provider != GraphProvider.FALKORDB:
+        filter_queries.append(
+            'EXISTS { MATCH (ep:Episodic) WHERE ep.uuid IN e.episodes '
+            'AND ep.user_id IN $user_ids }'
+        )
+        filter_params['user_ids'] = filters.user_ids
 
     return filter_queries, filter_params

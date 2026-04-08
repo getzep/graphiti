@@ -107,6 +107,7 @@ class QueueService:
         episode_type: Any,
         entity_types: Any,
         uuid: str | None,
+        user_id: str | None = None,
     ) -> int:
         """Add an episode for processing.
 
@@ -118,6 +119,7 @@ class QueueService:
             episode_type: Type of the episode
             entity_types: Entity types for extraction
             uuid: Episode UUID
+            user_id: User ID for data isolation
 
         Returns:
             The position in the queue
@@ -140,6 +142,7 @@ class QueueService:
                     reference_time=datetime.now(timezone.utc),
                     entity_types=entity_types,
                     uuid=uuid,
+                    user_id=user_id,
                 )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')

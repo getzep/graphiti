@@ -917,6 +917,7 @@ class RawEpisode(BaseModel):
     source_description: str
     source: EpisodeType
     reference_time: datetime
+    user_id: str | None = Field(default=None)
 
 
 async def retrieve_previous_episodes_bulk(
@@ -925,7 +926,7 @@ async def retrieve_previous_episodes_bulk(
     previous_episodes_list = await semaphore_gather(
         *[
             retrieve_episodes(
-                driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id]
+                driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id], user_ids=[episode.user_id] if episode.user_id else None
             )
             for episode in episodes
         ]
