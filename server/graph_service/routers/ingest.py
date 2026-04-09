@@ -1,13 +1,19 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from functools import partial
 
 from fastapi import APIRouter, FastAPI, status
 from graphiti_core.nodes import EpisodeType  # type: ignore
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # type: ignore
 
+from graph_service.config import get_settings
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
-from graph_service.zep_graphiti import ZepGraphitiDep
+from graph_service.zep_graphiti import ZepGraphiti, ZepGraphitiDep
+
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncWorker:
@@ -23,6 +29,8 @@ class AsyncWorker:
                 await job()
             except asyncio.CancelledError:
                 break
+            except Exception:
+                logger.exception('Graphiti async worker job failed')
 
     async def start(self):
         self.task = asyncio.create_task(self.worker())
@@ -48,21 +56,43 @@ async def lifespan(_: FastAPI):
 router = APIRouter(lifespan=lifespan)
 
 
+def _build_graphiti_client() -> ZepGraphiti:
+    settings = get_settings()
+    client = ZepGraphiti(
+        uri=settings.neo4j_uri,
+        user=settings.neo4j_user,
+        password=settings.neo4j_password,
+    )
+    if settings.openai_base_url is not None:
+        client.llm_client.config.base_url = settings.openai_base_url
+    if settings.openai_api_key is not None:
+        client.llm_client.config.api_key = settings.openai_api_key
+    if settings.model_name is not None:
+        client.llm_client.model = settings.model_name
+    return client
+
+
 @router.post('/messages', status_code=status.HTTP_202_ACCEPTED)
 async def add_messages(
     request: AddMessagesRequest,
-    graphiti: ZepGraphitiDep,
 ):
     async def add_messages_task(m: Message):
-        await graphiti.add_episode(
-            uuid=m.uuid,
-            group_id=request.group_id,
-            name=m.name,
-            episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
-            reference_time=m.timestamp,
-            source=EpisodeType.message,
-            source_description=m.source_description,
-        )
+        client = _build_graphiti_client()
+        try:
+            reference_time = m.timestamp
+            if reference_time is None:
+                reference_time = datetime.now(timezone.utc)
+            await client.add_episode(
+                uuid=m.uuid,
+                group_id=request.group_id,
+                name=m.name,
+                episode_body=f'{m.role or ""}({m.role_type}): {m.content}',
+                reference_time=reference_time,
+                source=EpisodeType.message,
+                source_description=m.source_description,
+            )
+        finally:
+            await client.close()
 
     for m in request.messages:
         await async_worker.queue.put(partial(add_messages_task, m))
