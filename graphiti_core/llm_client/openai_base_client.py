@@ -36,7 +36,7 @@ DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
 DEFAULT_REASONING = 'low'
 DEFAULT_VERBOSITY = 'low'
 VALID_REASONING_VALUES: frozenset[str | None] = frozenset(
-    {None, 'none', 'low', 'medium', 'high', 'xhigh'}
+    {None, 'none', 'low', 'medium', 'high', 'xhigh', 'minimal', 'intense'}
 )
 VALID_VERBOSITY_VALUES: frozenset[str | None] = frozenset(
     {None, 'low', 'medium', 'high'}

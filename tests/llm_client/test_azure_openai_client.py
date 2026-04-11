@@ -126,7 +126,7 @@ async def test_reasoning_fields_forwarded_for_supported_models():
     assert 'temperature' not in create_args
 
 
-@pytest.mark.parametrize('invalid_reasoning', ['minimal', 'intense', 'invalid', '', 'NONE'])
+@pytest.mark.parametrize('invalid_reasoning', ['invalid', '', 'NONE'])
 def test_invalid_reasoning_raises_error(invalid_reasoning):
     with pytest.raises(ValueError, match='Invalid reasoning value'):
         AzureOpenAILLMClient(
