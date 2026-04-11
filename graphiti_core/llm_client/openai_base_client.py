@@ -33,8 +33,14 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4.1-mini'
 DEFAULT_SMALL_MODEL = 'gpt-4.1-nano'
-DEFAULT_REASONING = 'minimal'
+DEFAULT_REASONING = 'low'
 DEFAULT_VERBOSITY = 'low'
+VALID_REASONING_VALUES: frozenset[str | None] = frozenset(
+    {None, 'none', 'low', 'medium', 'high', 'xhigh'}
+)
+VALID_VERBOSITY_VALUES: frozenset[str | None] = frozenset(
+    {None, 'low', 'medium', 'high'}
+)
 
 
 class BaseOpenAIClient(LLMClient):
@@ -58,6 +64,18 @@ class BaseOpenAIClient(LLMClient):
     ):
         if cache:
             raise NotImplementedError('Caching is not implemented for OpenAI-based clients')
+
+        if reasoning not in VALID_REASONING_VALUES:
+            raise ValueError(
+                f'Invalid reasoning value: {reasoning!r}. '
+                f'Must be one of {sorted(v for v in VALID_REASONING_VALUES if v is not None)}'
+            )
+
+        if verbosity not in VALID_VERBOSITY_VALUES:
+            raise ValueError(
+                f'Invalid verbosity value: {verbosity!r}. '
+                f'Must be one of {sorted(v for v in VALID_VERBOSITY_VALUES if v is not None)}'
+            )
 
         if config is None:
             config = LLMConfig()
