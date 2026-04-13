@@ -11,7 +11,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "graphiti-core>=0.28.2",
     "pydantic-settings>=2.4.0",
-    "uvicorn>=0.30.6",
+    "uvicorn>=0.44.0",
     "httpx>=0.28.1",
 ]
 
