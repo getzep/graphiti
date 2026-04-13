@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pydantic>=2.8.2",
+    "pydantic>=2.13.0",
     "pyright>=1.1.380",
     "pytest>=8.3.2",
     "python-dotenv>=1.0.1",
