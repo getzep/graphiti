@@ -185,7 +185,12 @@ class GraphitiService:
             try:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
-                logger.warning(f'Failed to create embedder client: {e}')
+                logger.error(f'Failed to create embedder client: {e}')
+                raise RuntimeError(
+                    f'Embedder initialization failed: {e}. '
+                    f'Search functionality requires a working embedder. '
+                    f'Check your embedder configuration and API keys.'
+                ) from e
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -325,6 +330,22 @@ class GraphitiService:
             logger.info(f'Using database: {self.config.database.provider}')
             logger.info(f'Using group_id: {self.config.graphiti.group_id}')
 
+            # Verify search pipeline works end-to-end
+            if embedder_client:
+                try:
+                    test_vector = await embedder_client.create(input_data=['health check'])
+                    if test_vector and len(test_vector) > 0:
+                        logger.info(
+                            f'Search health check passed: embedder returned {len(test_vector)}-dim vector'
+                        )
+                    else:
+                        logger.warning(
+                            'Search health check: embedder returned empty vector. '
+                            'Search results may be incomplete.'
+                        )
+                except Exception as e:
+                    logger.warning(f'Search health check failed: {e}. Search may not work correctly.')
+
         except Exception as e:
             logger.error(f'Failed to initialize Graphiti client: {e}')
             raise
@@ -461,6 +482,13 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
+        # Verify embedder is available for hybrid search
+        if client.embedder is None:
+            return ErrorResponse(
+                error='Search unavailable: embedder not initialized. '
+                'Restart the server and check embedder configuration.'
+            )
+
         # Use the search_ method with node search config
         from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
@@ -539,6 +567,13 @@ async def search_memory_facts(
             if config.graphiti.group_id
             else []
         )
+
+        # Verify embedder is available for search
+        if client.embedder is None:
+            return ErrorResponse(
+                error='Search unavailable: embedder not initialized. '
+                'Restart the server and check embedder configuration.'
+            )
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
