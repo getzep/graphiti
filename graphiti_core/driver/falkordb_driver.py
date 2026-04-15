@@ -109,7 +109,7 @@ class FalkorDriverSession(GraphDriverSession):
 
 class FalkorDriver(GraphDriver):
     provider = GraphProvider.FALKORDB
-    default_group_id: str = '\\_'
+    default_group_id: str = '_'
     fulltext_syntax: str = '@'  # FalkorDB uses a redisearch-like syntax for fulltext queries
     aoss_client: None = None
 
@@ -375,6 +375,7 @@ class FalkorDriver(GraphDriver):
                 '+': ' ',
                 '=': ' ',
                 '~': ' ',
+                '_': ' ',
                 '?': ' ',
                 '|': ' ',
                 '/': ' ',
@@ -403,11 +404,17 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-            group_values = '|'.join(escaped_group_ids)
-            group_filter = f'(@group_id:{group_values})'
+            # Filter out group_ids that consist entirely of RedisSearch separator
+            # characters (e.g. "_") — these get tokenized away by the fulltext
+            # index and can't be matched.  The downstream Cypher
+            # WHERE … group_id IN $group_ids clause still filters correctly.
+            filterable_ids = [gid for gid in group_ids if self.sanitize(gid).strip()]
+            if not filterable_ids:
+                group_filter = ''
+            else:
+                escaped_group_ids = [f'"{gid}"' for gid in filterable_ids]
+                group_values = '|'.join(escaped_group_ids)
+                group_filter = f'(@group_id:{group_values})'
 
         sanitized_query = self.sanitize(query)
 
