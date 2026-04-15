@@ -62,6 +62,15 @@ EPISODIC_EDGE_RETURN = """
 
 def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) -> str:
     match provider:
+        case GraphProvider.ARCADEDB:
+            # ArcadeDB: embeddings stored as regular properties, no vector API call
+            return """
+                MATCH (source:Entity {uuid: $edge_data.source_uuid})
+                MATCH (target:Entity {uuid: $edge_data.target_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: $edge_data.uuid}]->(target)
+                SET e = $edge_data
+                RETURN e.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             return """
                 MATCH (source:Entity {uuid: $edge_data.source_uuid})
@@ -124,6 +133,15 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
 
 def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = False) -> str:
     match provider:
+        case GraphProvider.ARCADEDB:
+            return """
+                UNWIND $entity_edges AS edge
+                MATCH (source:Entity {uuid: edge.source_node_uuid})
+                MATCH (target:Entity {uuid: edge.target_node_uuid})
+                MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)
+                SET e = edge
+                RETURN edge.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             return """
                 UNWIND $entity_edges AS edge
@@ -226,6 +244,15 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
 
 def get_community_edge_save_query(provider: GraphProvider) -> str:
     match provider:
+        case GraphProvider.ARCADEDB:
+            # ArcadeDB: use label-less MATCH for target node (matches any type)
+            return """
+                MATCH (community:Community {uuid: $community_uuid})
+                MATCH (node {uuid: $entity_uuid})
+                MERGE (community)-[e:HAS_MEMBER {uuid: $uuid}]->(node)
+                SET e = {uuid: $uuid, group_id: $group_id, created_at: $created_at}
+                RETURN e.uuid AS uuid
+            """
         case GraphProvider.FALKORDB:
             return """
                 MATCH (community:Community {uuid: $community_uuid})
