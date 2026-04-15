@@ -416,6 +416,9 @@ class FalkorDriver(GraphDriver):
         filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
         sanitized_query = ' | '.join(filtered_words)
 
+        if not sanitized_query:
+            return ''
+
         # If the query is too long return no query
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
             return ''
