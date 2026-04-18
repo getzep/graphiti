@@ -82,7 +82,9 @@ class GraphOperationsInterface(BaseModel):
         """Retrieve a single node by UUID."""
         raise NotImplementedError
 
-    async def node_get_by_uuids(self, _cls: Any, driver: Any, uuids: list[str]) -> list[Any]:
+    async def node_get_by_uuids(
+        self, _cls: Any, driver: Any, uuids: list[str], group_id: str | None = None
+    ) -> list[Any]:
         """Retrieve multiple nodes by UUIDs."""
         raise NotImplementedError
 

@@ -50,7 +50,11 @@ from graphiti_core.utils.maintenance.dedup_helpers import (
     _promote_resolved_node,
     _resolve_with_similarity,
 )
-from graphiti_core.utils.text_utils import MAX_SUMMARY_CHARS, truncate_at_sentence
+from graphiti_core.utils.text_utils import (
+    MAX_SUMMARY_CHARS,
+    concatenate_episodes,
+    truncate_at_sentence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,31 +68,67 @@ NodeSummaryFilter = Callable[[EntityNode], Awaitable[bool]]
 
 async def extract_nodes(
     clients: GraphitiClients,
-    episode: EpisodicNode,
+    episode: EpisodicNode | list[EpisodicNode],
     previous_episodes: list[EpisodicNode],
     entity_types: dict[str, type[BaseModel]] | None = None,
     excluded_entity_types: list[str] | None = None,
     custom_extraction_instructions: str | None = None,
-) -> list[EntityNode]:
-    """Extract entity nodes from an episode."""
+) -> tuple[list[EntityNode], dict[str, list[int]]]:
+    """Extract entity nodes from one or more episodes.
+
+    Parameters
+    ----------
+    episode : EpisodicNode | list[EpisodicNode]
+        A single episode or a list of episodes to extract entities from.
+        When a list is provided, their contents are concatenated for extraction
+        and the first episode is used for metadata (source type, group_id, etc.).
+
+    Returns
+    -------
+    tuple[list[EntityNode], dict[str, list[int]]]
+        A tuple of (extracted_nodes, node_episode_index_map) where
+        node_episode_index_map maps node UUID to a list of 0-indexed episode
+        positions that the node was extracted from.
+    """
+    episodes = episode if isinstance(episode, list) else [episode]
+    primary_episode = episodes[0]
+
     start = time()
     llm_client = clients.llm_client
 
     # Build entity types context
     entity_types_context = _build_entity_types_context(entity_types)
 
+    # Build episode attribution instructions for multi-episode extraction
+    episode_attribution = ''
+    if len(episodes) > 1:
+        episode_attribution = (
+            '\n7. **Episode Attribution**: The content contains multiple episodes labeled '
+            '[Episode 1], [Episode 2], etc. Each episode header includes a timestamp indicating '
+            'when that episode occurred. For each extracted entity, set `episode_indices` '
+            'to the list of episode numbers where that entity is mentioned. '
+            'An entity appearing in Episodes 1 and 3 should have `episode_indices: [1, 3]`.'
+        )
+
     # Build base context
     context = {
-        'episode_content': episode.content,
-        'episode_timestamp': episode.valid_at.isoformat(),
-        'previous_episodes': [ep.content for ep in previous_episodes],
-        'custom_extraction_instructions': custom_extraction_instructions or '',
+        'episode_content': concatenate_episodes(episodes),
+        'episode_timestamp': primary_episode.valid_at.isoformat(),
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+            }
+            for ep in previous_episodes
+        ],
+        'custom_extraction_instructions': (custom_extraction_instructions or '')
+        + episode_attribution,
         'entity_types': entity_types_context,
-        'source_description': episode.source_description,
+        'source_description': primary_episode.source_description,
     }
 
     # Extract entities
-    extracted_entities = await _extract_nodes_single(llm_client, episode, context)
+    extracted_entities = await _extract_nodes_single(llm_client, primary_episode, context)
 
     # Filter empty names
     filtered_entities = [e for e in extracted_entities if e.name.strip()]
@@ -96,14 +136,16 @@ async def extract_nodes(
     end = time()
     logger.debug(f'Extracted {len(filtered_entities)} entities in {(end - start) * 1000:.0f} ms')
 
-    # Convert to EntityNode objects
-    extracted_nodes = _create_entity_nodes(
-        filtered_entities, entity_types_context, excluded_entity_types, episode
+    # Convert to EntityNode objects with episode attribution
+    extracted_nodes, node_episode_index_map = _create_entity_nodes(
+        filtered_entities, entity_types_context, excluded_entity_types, episodes
     )
-    extracted_nodes = _collapse_exact_duplicate_extracted_nodes(extracted_nodes)
+    extracted_nodes = _collapse_exact_duplicate_extracted_nodes(
+        extracted_nodes, node_episode_index_map
+    )
 
     logger.debug(f'Extracted nodes: {[n.uuid for n in extracted_nodes]}')
-    return extracted_nodes
+    return extracted_nodes, node_episode_index_map
 
 
 def _build_entity_types_context(
@@ -144,6 +186,58 @@ def _get_entity_type_description(
     type_name = next((item for item in labels if item != 'Entity'), '')
     type_model = entity_types.get(type_name) if entity_types is not None else None
     return (type_model.__doc__ if type_model is not None else None) or 'Default Entity Type'
+
+
+def _truncate_type_description(docstring: str) -> str:
+    """Extract a concise type description from a docstring for summary prompts.
+
+    Returns the first paragraph (up to the first blank line), capped at 3
+    sentences.  This strips GOOD/BAD examples, trigger patterns, and other
+    extraction-specific guidance that is irrelevant to summarization.
+    """
+    # Take only the first paragraph.
+    paragraph_lines: list[str] = []
+    for line in docstring.splitlines():
+        if not line.strip():
+            if paragraph_lines:
+                break
+            continue  # skip leading blank lines
+        paragraph_lines.append(line)
+
+    text = ' '.join(line.strip() for line in paragraph_lines)
+
+    # Cap at 3 sentences.
+    sentences: list[str] = []
+    remaining = text
+    for _ in range(3):
+        idx = _find_sentence_end(remaining)
+        if idx == -1:
+            sentences.append(remaining)
+            remaining = ''
+            break
+        sentences.append(remaining[: idx + 1])
+        remaining = remaining[idx + 1 :].lstrip()
+    return ' '.join(sentences).strip()
+
+
+def _find_sentence_end(text: str) -> int:
+    """Return the index of the first sentence boundary.
+
+    A sentence ends at `.`, `!`, or `?` when followed by end-of-string or
+    a space then an uppercase letter.  This avoids splitting on abbreviations
+    like "e.g.", "Dr.", or decimals like "2.0".
+    """
+    n = len(text)
+    for i, ch in enumerate(text):
+        if ch not in '.!?':
+            continue
+        # End of string counts as a sentence boundary.
+        if i + 1 >= n:
+            return i
+        # Space followed by an uppercase letter is a sentence boundary.
+        if text[i + 1] == ' ' and i + 2 < n and text[i + 2].isupper():
+            return i
+    return -1
 
 
 async def _extract_nodes_single(
@@ -189,10 +283,19 @@ def _create_entity_nodes(
     extracted_entities: list[ExtractedEntity],
     entity_types_context: list[dict],
     excluded_entity_types: list[str] | None,
-    episode: EpisodicNode,
-) -> list[EntityNode]:
-    """Convert ExtractedEntity objects to EntityNode objects."""
+    episodes: list[EpisodicNode],
+) -> tuple[list[EntityNode], dict[str, list[int]]]:
+    """Convert ExtractedEntity objects to EntityNode objects.
+
+    Returns
+    -------
+    tuple[list[EntityNode], dict[str, list[int]]]
+        A tuple of (nodes, node_episode_index_map) where node_episode_index_map
+        maps each node UUID to 0-indexed episode positions the node was extracted from.
+    """
+    primary_episode = episodes[0]
     extracted_nodes = []
+    node_episode_index_map: dict[str, list[int]] = {}
 
     for extracted_entity in extracted_entities:
         type_id = extracted_entity.entity_type_id
@@ -210,25 +313,37 @@ def _create_entity_nodes(
 
         new_node = EntityNode(
             name=extracted_entity.name,
-            group_id=episode.group_id,
+            group_id=primary_episode.group_id,
             labels=labels,
             summary='',
             created_at=utc_now(),
         )
         extracted_nodes.append(new_node)
+
+        # Map node to 0-indexed episode positions (LLM returns 1-indexed).
+        # Clamp to valid range; fall back to all episodes if empty.
+        indices = [i - 1 for i in extracted_entity.episode_indices if 1 <= i <= len(episodes)]
+        if not indices:
+            indices = list(range(len(episodes)))
+        node_episode_index_map[new_node.uuid] = indices
+
         logger.debug(f'Created new node: {new_node.uuid}')
 
-    return extracted_nodes
+    return extracted_nodes, node_episode_index_map
 
 
 def _collapse_exact_duplicate_extracted_nodes(
     extracted_nodes: list[EntityNode],
+    node_episode_index_map: dict[str, list[int]] | None = None,
 ) -> list[EntityNode]:
     """Collapse same-message duplicates with the same normalized name.
 
     This is intentionally narrow: it only merges exact normalized-name duplicates that the
     extraction prompt should already have emitted once. When duplicates disagree on specificity,
     keep the more specific node (for example, `Person` over bare `Entity`).
+
+    When node_episode_index_map is provided, episode indices from discarded nodes are merged
+    into the canonical node's entry so attribution is preserved.
     """
     if len(extracted_nodes) < 2:
         return extracted_nodes
@@ -250,7 +365,20 @@ def _collapse_exact_duplicate_extracted_nodes(
             len(node_specific_labels) == len(existing_specific_labels)
             and len(node.name.strip()) > len(existing.name.strip())
         ):
+            old_canonical = existing
             canonical_by_name[normalized_name] = node
+            # Merge episode indices: old canonical -> new canonical
+            if node_episode_index_map is not None:
+                old_indices = node_episode_index_map.pop(old_canonical.uuid, [])
+                new_indices = node_episode_index_map.get(node.uuid, [])
+                node_episode_index_map[node.uuid] = sorted(set(new_indices + old_indices))
+        elif node_episode_index_map is not None:
+            # Discard this node; merge its indices into the existing canonical
+            discarded_indices = node_episode_index_map.pop(node.uuid, [])
+            canonical_indices = node_episode_index_map.get(existing.uuid, [])
+            node_episode_index_map[existing.uuid] = sorted(
+                set(canonical_indices + discarded_indices)
+            )
 
     return [canonical_by_name[name] for name in ordered_names]
 
@@ -408,7 +536,15 @@ async def _resolve_with_llm(
         'existing_nodes': existing_nodes_context,
         'episode_content': episode.content if episode is not None else '',
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
     }
 
@@ -589,12 +725,13 @@ def _build_edges_by_node(edges: list[EntityEdge] | None) -> dict[str, list[Entit
 async def extract_attributes_from_nodes(
     clients: GraphitiClients,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None = None,
+    episode: EpisodicNode | list[EpisodicNode] | None = None,
     previous_episodes: list[EpisodicNode] | None = None,
     entity_types: dict[str, type[BaseModel]] | None = None,
     should_summarize_node: NodeSummaryFilter | None = None,
     edges: list[EntityEdge] | None = None,
     skip_fact_appending: bool = False,
+    include_type_descriptions: bool = False,
 ) -> list[EntityNode]:
     llm_client = clients.llm_client
     embedder = clients.embedder
@@ -633,6 +770,7 @@ async def extract_attributes_from_nodes(
         should_summarize_node,
         edges_by_node,
         skip_fact_appending=skip_fact_appending,
+        entity_types=entity_types if include_type_descriptions else None,
     )
 
     await create_entity_node_embeddings(embedder, nodes)
@@ -643,7 +781,7 @@ async def extract_attributes_from_nodes(
 async def _extract_entity_attributes(
     llm_client: LLMClient,
     node: EntityNode,
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     entity_type: type[BaseModel] | None,
 ) -> dict[str, Any]:
@@ -678,12 +816,13 @@ async def _extract_entity_attributes(
 async def _extract_entity_summaries_batch(
     llm_client: LLMClient,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     should_summarize_node: NodeSummaryFilter | None,
     edges_by_node: dict[str, list[EntityEdge]],
     *,
     skip_fact_appending: bool = False,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> None:
     """Extract summaries for multiple entities in batched LLM calls.
 
@@ -747,6 +886,7 @@ async def _extract_entity_summaries_batch(
                 episode,
                 previous_episodes,
                 use_episode_prompt=skip_fact_appending,
+                entity_types=entity_types,
             )
             for flight in node_flights
         ]
@@ -756,12 +896,21 @@ async def _extract_entity_summaries_batch(
 async def _process_summary_flight(
     llm_client: LLMClient,
     nodes: list[EntityNode],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
     *,
     use_episode_prompt: bool = False,
+    entity_types: dict[str, type[BaseModel]] | None = None,
 ) -> None:
     """Process a single flight of nodes for batch summarization."""
+    # Build entity type descriptions from docstrings, stripping GOOD/BAD
+    # few-shot examples that are intended for extraction prompts only.
+    entity_type_descriptions: dict[str, str] = {}
+    if entity_types is not None:
+        for type_name, type_model in entity_types.items():
+            if type_model.__doc__:
+                entity_type_descriptions[type_name] = _truncate_type_description(type_model.__doc__)
+
     # Build context for batch summarization
     entities_context = [
         {
@@ -773,12 +922,28 @@ async def _process_summary_flight(
         for node in nodes
     ]
 
-    batch_context = {
+    if episode is None:
+        episode_content = ''
+    elif isinstance(episode, list):
+        episode_content = concatenate_episodes(episode)
+    else:
+        episode_content = episode.content
+
+    batch_context: dict[str, Any] = {
         'entities': entities_context,
-        'episode_content': episode.content if episode is not None else '',
+        'episode_content': episode_content,
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
+        'entity_type_descriptions': entity_type_descriptions,
     }
 
     # Get group_id from the first node (all nodes in a batch should have same group_id)
@@ -824,13 +989,27 @@ async def _process_summary_flight(
 
 def _build_episode_context(
     node_data: dict[str, Any],
-    episode: EpisodicNode | None,
+    episode: EpisodicNode | list[EpisodicNode] | None,
     previous_episodes: list[EpisodicNode] | None,
 ) -> dict[str, Any]:
+    if episode is None:
+        episode_content = ''
+    elif isinstance(episode, list):
+        episode_content = concatenate_episodes(episode)
+    else:
+        episode_content = episode.content
     return {
         'node': node_data,
-        'episode_content': episode.content if episode is not None else '',
+        'episode_content': episode_content,
         'previous_episodes': (
-            [ep.content for ep in previous_episodes] if previous_episodes is not None else []
+            [
+                {
+                    'content': ep.content,
+                    'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+                }
+                for ep in previous_episodes
+            ]
+            if previous_episodes is not None
+            else []
         ),
     }

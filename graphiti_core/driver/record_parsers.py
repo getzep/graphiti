@@ -65,6 +65,7 @@ def entity_edge_from_record(record: Any) -> EntityEdge:
     attributes.pop('expired_at', None)
     attributes.pop('valid_at', None)
     attributes.pop('invalid_at', None)
+    attributes.pop('reference_time', None)
 
     return EntityEdge(
         uuid=record['uuid'],
@@ -79,6 +80,7 @@ def entity_edge_from_record(record: Any) -> EntityEdge:
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
+        reference_time=parse_db_date(record.get('reference_time')),
         attributes=attributes,
     )
 

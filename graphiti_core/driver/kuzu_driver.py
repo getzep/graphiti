@@ -92,6 +92,7 @@ SCHEMA_QUERIES = """
         expired_at TIMESTAMP,
         valid_at TIMESTAMP,
         invalid_at TIMESTAMP,
+        reference_time TIMESTAMP,
         attributes STRING
     );
     CREATE REL TABLE IF NOT EXISTS RELATES_TO(

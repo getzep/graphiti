@@ -45,6 +45,11 @@ class Edge(BaseModel):
         None,
         description='The date and time when the relationship described by the edge fact stopped being true or ended. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
     )
+    episode_indices: list[int] = Field(
+        default_factory=lambda: [1],
+        description='List of episode numbers (1-indexed) that this fact was derived from. '
+        'When processing a single episode, this should be [1].',
+    )
 
 
 class ExtractedEdges(BaseModel):
@@ -74,14 +79,16 @@ def edge(context: dict[str, Any]) -> list[Message]:
         Message(
             role='system',
             content='You are an expert fact extractor that extracts fact triples from text. '
-            '1. Extracted fact triples should also be extracted with relevant date information.'
-            '2. Treat the CURRENT TIME as the time the CURRENT MESSAGE was sent. All temporal information should be extracted relative to this time.',
+            '1. Extracted fact triples should also be extracted with relevant date information. '
+            '2. The CURRENT_MESSAGE may contain multiple episodes, each with its own timestamp. '
+            "Use each episode's timestamp to resolve temporal references within that episode. "
+            'REFERENCE_TIME is a fallback for when no per-episode timestamp is available.',
         ),
         Message(
             role='user',
             content=f"""
 <PREVIOUS_MESSAGES>
-{to_prompt_json([ep for ep in context['previous_episodes']])}
+{to_prompt_json(context['previous_episodes'])}
 </PREVIOUS_MESSAGES>
 
 <CURRENT_MESSAGE>
@@ -114,13 +121,18 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.
    - **CRITICAL**: Using names not in the list will cause the edge to be rejected
 2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.
-3. NEVER extract facts that describe only a single entity's state, feeling, or attribute. Instead, identify the second entity that the state or feeling relates to and form a proper triple.
-   - BAD: "Alice feels happy" (single-entity state — what is Alice happy about?)
+3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.
+   - BAD: "Alice feels happy" (vague single-entity state with no concrete detail — what is Alice happy about?)
    - GOOD: "Alice feels happy about Bob's promotion" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion
+   - GOOD: "Nate plays games on a Gamecube" → Nate -> PLAYS_GAMES_ON -> Gamecube (when "Gamecube" is in ENTITIES)
    - GOOD: "Alice congratulated Bob" (relationship between two entities), "Alice lives in Paris" (relationship between entity and place)
-4. NEVER emit duplicate or semantically redundant facts.
-5. The `fact` should closely paraphrase the original source sentence(s). Do not verbatim quote the original text.
-6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week").
+4. Do not emit semantically redundant facts, even across episodes within the CURRENT_MESSAGE. However, if a later episode adds specific details to a previously stated fact (e.g., adding a brand name, a count, a color, a location, or any concrete attribute), extract the more detailed version as a NEW fact — it is NOT a duplicate. Only treat facts as duplicates when they convey the same specificity.
+   - NOT a duplicate: "user plays video games" (episode 1) vs. "user plays games on a Gamecube" (episode 2) → extract the second, more detailed fact.
+   - IS a duplicate: "user plays games on a Gamecube" (episode 1) vs. "user plays Gamecube games" (episode 2) → extract once, list both episodes in `episode_indices`.
+5. The `fact` MUST preserve all specific details from the source text: proper nouns, brand names, product names, model numbers, quantities, counts, colors, materials, physical descriptions, specific items, named locations, and named activities. Paraphrase the sentence structure but NEVER generalize:
+   - NEVER generalize "Gamecube" to "gaming console", "Ford Mustang" to "car", "wool coat" to "coat", "red and purple lighting" to "lighting", "cracked windshield" to "car damage", or "three screenplays" to "several screenplays".
+   - Do not verbatim quote the original text, but every concrete noun, number, and descriptor in the source should survive into the `fact`.
+6. Use `REFERENCE_TIME` to resolve vague or relative temporal expressions (e.g., "last week"). When the CURRENT_MESSAGE contains multiple episodes with per-episode timestamps, prefer the timestamp of the specific episode the fact originates from.
 7. Do **not** hallucinate or infer temporal bounds from unrelated events.
 
 # RELATION TYPE RULES
@@ -131,7 +143,7 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 # DATETIME RULES
 
 - Use ISO 8601 with "Z" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
-- If the fact is ongoing (present tense), set `valid_at` to REFERENCE_TIME.
+- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.
 - If a change/termination is expressed, set `invalid_at` to the relevant timestamp.
 - Leave both fields `null` if no explicit or resolvable time is stated.
 - If only a date is mentioned (no time), assume 00:00:00.

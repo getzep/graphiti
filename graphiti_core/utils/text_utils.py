@@ -14,7 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from graphiti_core.nodes import EpisodicNode
 
 # Maximum length for entity/community summaries
 MAX_SUMMARY_CHARS = 1000
@@ -51,3 +57,19 @@ def truncate_at_sentence(text: str, max_chars: int) -> str:
 
     # No sentence boundary found, truncate at max_chars
     return truncated.rstrip()
+
+
+def concatenate_episodes(episodes: list[EpisodicNode]) -> str:
+    """Concatenate episode contents with enumerated headers.
+
+    When given a single episode, returns its content as-is.
+    When given multiple episodes, each is prefixed with an ``[Episode N]``
+    header so the LLM can distinguish where one ends and the next begins.
+    """
+    if len(episodes) == 1:
+        return episodes[0].content
+    parts: list[str] = []
+    for i, ep in enumerate(episodes, start=1):
+        timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
+        parts.append(f'[Episode {i}] (timestamp: {timestamp})\n{ep.content}')
+    return '\n\n'.join(parts)
