@@ -74,6 +74,7 @@ class EpisodeType(Enum):
     message = 'message'
     json = 'json'
     text = 'text'
+    fact_triple = 'fact_triple'
 
     @staticmethod
     def from_str(episode_type: str):
@@ -83,6 +84,8 @@ class EpisodeType(Enum):
             return EpisodeType.json
         if episode_type == 'text':
             return EpisodeType.text
+        if episode_type == 'fact_triple':
+            return EpisodeType.fact_triple
         logger.error(f'Episode type: {episode_type} not implemented')
         raise NotImplementedError
 
@@ -323,6 +326,10 @@ class EpisodicNode(Node):
         description='list of entity edges referenced in this episode',
         default_factory=list,
     )
+    episode_metadata: dict[str, Any] | None = Field(
+        description='customer-defined metadata key-value pairs for filtering',
+        default=None,
+    )
 
     async def save(self, driver: GraphDriver):
         if driver.graph_operations_interface:
@@ -560,7 +567,9 @@ class EntityNode(Node):
                 **entity_data,
             )
         else:
-            entity_data.update(self.attributes or {})
+            for k, v in (self.attributes or {}).items():
+                if k not in entity_data:
+                    entity_data[k] = v
             labels = ':'.join(self.labels + ['Entity'])
 
             result = await driver.execute_query(
@@ -598,10 +607,12 @@ class EntityNode(Node):
         return nodes[0]
 
     @classmethod
-    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str]):
+    async def get_by_uuids(cls, driver: GraphDriver, uuids: list[str], group_id: str | None = None):
         if driver.graph_operations_interface:
             try:
-                return await driver.graph_operations_interface.node_get_by_uuids(cls, driver, uuids)
+                return await driver.graph_operations_interface.node_get_by_uuids(
+                    cls, driver, uuids, group_id
+                )
             except NotImplementedError:
                 pass
 

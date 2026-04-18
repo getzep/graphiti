@@ -31,6 +31,11 @@ class ExtractedEntity(BaseModel):
         description='ID of the classified entity type. '
         'Must be one of the provided entity_type_id integers.',
     )
+    episode_indices: list[int] = Field(
+        default_factory=lambda: [1],
+        description='List of episode numbers (1-indexed) this entity was extracted from. '
+        'When processing a single episode, this should be [1].',
+    )
 
 
 class ExtractedEntities(BaseModel):
@@ -127,7 +132,16 @@ reference entities. Only extract distinct entities from the CURRENT MESSAGE.
 
 2. **Entity Identification**:
    - Extract named entities and specific, concrete things that are **explicitly** mentioned in the CURRENT MESSAGE.
-   - Only extract entities that are specific enough to be uniquely identifiable. Ask: "Could this have its own Wikipedia article or database entry?"
+   - Only extract entities that are specific enough to be uniquely identifiable. Ask: "Could this have its own Wikipedia article or database entry, OR is it specific enough to distinguish from other items of the same category within this conversation?"
+   - For objects, possessions, and physical items, extract when they are specific enough
+     to distinguish from other items of the same category. SHOULD be extracted:
+     - Brand-named items ("Gamecube", "Ford Mustang", "Moen faucet")
+     - Qualified items ("wool coat", "red and purple lighting", "cracked windshield",
+       "dog leash")
+     - Items with a concrete distinguishing descriptor (color, material, size, model,
+       owner, specific use)
+     Should NOT be extracted:
+     - Bare head nouns alone ("car", "coat", "game", "lighting", "windshield")
    - When a speaker or named person refers to a relative, pet, or associate using a bare term
      (e.g., "my dad", "his cat"), extract the entity qualified with the possessor's name
      (e.g., "Nisha's dad", "Jordan's cat"). Do NOT extract the bare term alone.
@@ -168,6 +182,12 @@ Do NOT extract: "dad" (bare relational term — qualify as "Nisha's dad"), "dogs
 Message: "Mary: I forgot Trigger's leash so I couldn't take him on a dog walk. After that I went road cycling in my new wool coat."
 Good extractions: "Mary" (speaker), "Trigger" (animal name), "dog leash" (Object), "road cycling" (Topic), "wool coat" (Object)
 Do NOT extract: "leash" (too generic — use "dog leash"), "cycling" (too generic — use "road cycling"), "coat" (too generic — use "wool coat"), "dog walk" (activity, not an entity)
+</EXAMPLE>
+
+<EXAMPLE>
+Message: "Nate: My gaming room has red and purple lighting and I mostly play on a Gamecube. Last week the windshield on my Mustang got cracked."
+Good extractions: "Nate" (speaker), "gaming room" (Object), "red and purple lighting" (Object), "Gamecube" (Object), "Mustang" (Object), "cracked windshield" (Object)
+Do NOT extract: "lighting" (bare head noun — use "red and purple lighting"), "windshield" (bare head noun — use "cracked windshield"), "week" (temporal)
 </EXAMPLE>
 
 <EXAMPLE>
@@ -416,6 +436,21 @@ def extract_summary(context: dict[str, Any]) -> list[Message]:
     ]
 
 
+def _entity_type_descriptions_section(context: dict[str, Any]) -> str:
+    """Build an optional prompt section with entity type descriptions."""
+    descriptions = context.get('entity_type_descriptions')
+    if not descriptions:
+        return ''
+    return f"""
+<ENTITY_TYPE_DESCRIPTIONS>
+{to_prompt_json(descriptions)}
+</ENTITY_TYPE_DESCRIPTIONS>
+When an entity's type appears in ENTITY_TYPE_DESCRIPTIONS, use the description to decide which facts are \
+most relevant to that entity type. NEVER mention the entity type, type description, or classification \
+in the summary text itself.
+"""
+
+
 def extract_summaries_batch(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
@@ -434,7 +469,7 @@ Each summary must be under {MAX_SUMMARY_CHARS} characters.
 {to_prompt_json(context['previous_episodes'])}
 {to_prompt_json(context['episode_content'])}
 </MESSAGES>
-
+{_entity_type_descriptions_section(context)}
 <ENTITIES>
 {to_prompt_json(context['entities'])}
 </ENTITIES>
@@ -447,6 +482,8 @@ If an entity has no relevant information in the messages and no existing summary
     ]
 
 
+# NOTE: This prompt is semantically mirrored in the Go async summary worker at
+# src/lib/graphsummary/processor.go (entitySummarySystemPrompt). Keep both in sync.
 _entity_episode_summary_system_prompt = """You maintain detailed, information-dense entity memories from episode text.
 
 Use ONLY facts explicitly stated in EPISODES and durable facts already present in EXISTING_SUMMARY.
@@ -454,6 +491,9 @@ NEVER infer beyond what is directly supported.
 
 Primary goal:
 Write a dense factual summary of the entity that preserves as many supported details as possible while staying coherent and durable.
+
+When the input includes entity_type_descriptions, use them to decide which facts are most relevant \
+to the entity type. NEVER mention the entity type, type description, or classification in the summary text itself.
 
 What to capture:
 - Stable facts about the entity
@@ -535,7 +575,7 @@ existing summary already on the entity.
 {to_prompt_json(context['previous_episodes'])}
 {to_prompt_json(context['episode_content'])}
 </EPISODES>
-
+{_entity_type_descriptions_section(context)}
 <ENTITIES>
 {to_prompt_json(context['entities'])}
 </ENTITIES>

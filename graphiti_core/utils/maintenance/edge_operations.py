@@ -43,24 +43,52 @@ from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
+from graphiti_core.utils.text_utils import concatenate_episodes
 
 logger = logging.getLogger(__name__)
 
 
 def build_episodic_edges(
     entity_nodes: list[EntityNode],
-    episode_uuid: str,
+    episode_uuid: str | list[str],
     created_at: datetime,
+    node_episode_index_map: dict[str, list[int]] | None = None,
 ) -> list[EpisodicEdge]:
-    episodic_edges: list[EpisodicEdge] = [
-        EpisodicEdge(
-            source_node_uuid=episode_uuid,
-            target_node_uuid=node.uuid,
-            created_at=created_at,
-            group_id=node.group_id,
-        )
-        for node in entity_nodes
-    ]
+    """Build episodic (MENTIONED_IN) edges between entity nodes and episodes.
+
+    Parameters
+    ----------
+    entity_nodes : list[EntityNode]
+        Nodes to connect to episodes.
+    episode_uuid : str | list[str]
+        A single episode UUID or a list of episode UUIDs.
+    created_at : datetime
+        Timestamp for the edges.
+    node_episode_index_map : dict[str, list[int]] | None
+        Optional mapping from node UUID to 0-indexed episode positions.
+        When provided with a list of episode_uuids, each node is connected
+        only to its attributed episodes. When None, every node is connected
+        to all episodes.
+    """
+    episode_uuids = [episode_uuid] if isinstance(episode_uuid, str) else episode_uuid
+
+    episodic_edges: list[EpisodicEdge] = []
+    for node in entity_nodes:
+        if node_episode_index_map and node.uuid in node_episode_index_map:
+            indices = node_episode_index_map[node.uuid]
+        else:
+            indices = list(range(len(episode_uuids)))
+
+        for idx in indices:
+            if 0 <= idx < len(episode_uuids):
+                episodic_edges.append(
+                    EpisodicEdge(
+                        source_node_uuid=episode_uuids[idx],
+                        target_node_uuid=node.uuid,
+                        created_at=created_at,
+                        group_id=node.group_id,
+                    )
+                )
 
     logger.debug(f'Built {len(episodic_edges)} episodic edges')
 
@@ -87,7 +115,7 @@ def build_community_edges(
 
 async def extract_edges(
     clients: GraphitiClients,
-    episode: EpisodicNode,
+    episode: EpisodicNode | list[EpisodicNode],
     nodes: list[EntityNode],
     previous_episodes: list[EpisodicNode],
     edge_type_map: dict[tuple[str, str], list[str]],
@@ -95,6 +123,18 @@ async def extract_edges(
     edge_types: dict[str, type[BaseModel]] | None = None,
     custom_extraction_instructions: str | None = None,
 ) -> list[EntityEdge]:
+    """Extract edges from one or more episodes.
+
+    Parameters
+    ----------
+    episode : EpisodicNode | list[EpisodicNode]
+        A single episode or a list of episodes to extract edges from.
+        When a list is provided, their contents are concatenated for extraction
+        and edges are linked to all episode UUIDs.
+    """
+    episodes = episode if isinstance(episode, list) else [episode]
+    primary_episode = episodes[0]
+
     start = time()
 
     extract_edges_max_tokens = 16384
@@ -126,21 +166,43 @@ async def extract_edges(
     # Build name-to-node mapping for validation
     name_to_node: dict[str, EntityNode] = {node.name: node for node in nodes}
 
+    # Build episode attribution instructions for multi-episode extraction
+    episode_attribution = ''
+    if len(episodes) > 1:
+        episode_attribution = (
+            '\n8. **Episode Attribution**: The CURRENT_MESSAGE contains multiple episodes labeled '
+            '[Episode 1], [Episode 2], etc. Each episode header includes a timestamp indicating '
+            'when that episode occurred. Use the per-episode timestamp to resolve relative time '
+            'mentions within each episode rather than relying solely on REFERENCE_TIME. '
+            'For each extracted fact, set `episode_indices` '
+            'to the list of episode numbers that the fact was derived from. '
+            'A fact sourced from Episodes 1 and 2 should have `episode_indices: [1, 2]`.'
+        )
+
     # Prepare context for LLM
+    # Use the latest episode's timestamp as the primary reference time
+    latest_episode = max(episodes, key=lambda ep: ep.valid_at)
     context = {
-        'episode_content': episode.content,
+        'episode_content': concatenate_episodes(episodes),
         'nodes': [{'name': node.name, 'entity_types': node.labels} for node in nodes],
-        'previous_episodes': [ep.content for ep in previous_episodes],
-        'reference_time': episode.valid_at,
+        'previous_episodes': [
+            {
+                'content': ep.content,
+                'timestamp': ep.valid_at.isoformat() if ep.valid_at else None,
+            }
+            for ep in previous_episodes
+        ],
+        'reference_time': latest_episode.valid_at,
         'edge_types': edge_types_context,
-        'custom_extraction_instructions': custom_extraction_instructions or '',
+        'custom_extraction_instructions': (custom_extraction_instructions or '')
+        + episode_attribution,
     }
 
     llm_response = await llm_client.generate_response(
         prompt_library.extract_edges.edge(context),
         response_model=ExtractedEdges,
         max_tokens=extract_edges_max_tokens,
-        group_id=group_id,
+        group_id=group_id or primary_episode.group_id,
         prompt_name='extract_edges.edge',
     )
     all_edges_data = ExtractedEdges(**llm_response).edges
@@ -213,8 +275,8 @@ async def extract_edges(
                 valid_at_datetime = ensure_utc(
                     datetime.fromisoformat(valid_at.replace('Z', '+00:00'))
                 )
-            except ValueError as e:
-                logger.warning(f'WARNING: Error parsing valid_at date: {e}. Input: {valid_at}')
+            except ValueError:
+                logger.warning('Error parsing valid_at date, skipping')
 
         if invalid_at:
             try:
@@ -223,17 +285,31 @@ async def extract_edges(
                 )
             except ValueError as e:
                 logger.warning(f'WARNING: Error parsing invalid_at date: {e}. Input: {invalid_at}')
+
+        # Map episode_indices (1-indexed) to episode UUIDs.
+        # Clamp indices to valid range and fall back to all episodes if empty.
+        edge_episode_uuids = []
+        for idx in edge_data.episode_indices:
+            if 1 <= idx <= len(episodes):
+                edge_episode_uuids.append(episodes[idx - 1].uuid)
+        if not edge_episode_uuids:
+            edge_episode_uuids = [ep.uuid for ep in episodes]
+
         edge = EntityEdge(
             source_node_uuid=source_node_uuid,
             target_node_uuid=target_node_uuid,
             name=edge_data.relation_type,
-            group_id=group_id,
+            group_id=group_id or primary_episode.group_id,
             fact=edge_data.fact,
-            episodes=[episode.uuid],
+            episodes=edge_episode_uuids,
             created_at=utc_now(),
             valid_at=valid_at_datetime,
             invalid_at=invalid_at_datetime,
-            reference_time=episode.valid_at,
+            reference_time=(
+                episodes[edge_data.episode_indices[0] - 1].valid_at
+                if edge_data.episode_indices and 1 <= edge_data.episode_indices[0] <= len(episodes)
+                else primary_episode.valid_at
+            ),
         )
         edges.append(edge)
         logger.debug(
@@ -369,7 +445,11 @@ async def resolve_extracted_edges(
 
     # Fetch missing nodes from the database
     if referenced_node_uuids:
-        missing_nodes = await EntityNode.get_by_uuids(driver, list(referenced_node_uuids))
+        # Pass group_id so graph-service implementations can scope the lookup
+        edge_group_id = extracted_edges[0].group_id
+        missing_nodes = await EntityNode.get_by_uuids(
+            driver, list(referenced_node_uuids), group_id=edge_group_id
+        )
         for node in missing_nodes:
             uuid_entity_map[node.uuid] = node
 
