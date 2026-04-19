@@ -902,6 +902,13 @@ async def initialize_server() -> ServerConfig:
         mcp.settings.port = config.server.port
 
     # Return MCP configuration for transport
+
+    # When binding to 0.0.0.0, disable DNS rebinding protection so LAN clients work.
+    if config.server.host not in ("127.0.0.1", "localhost", "::1", None, ""):
+        from mcp.server.transport_security import TransportSecuritySettings
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
     return config.server
 
 
