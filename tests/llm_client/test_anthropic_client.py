@@ -23,7 +23,7 @@ import pytest
 from pydantic import BaseModel
 
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
-from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.config import LLMConfig, ModelSize
 from graphiti_core.llm_client.errors import RateLimitError, RefusalError
 from graphiti_core.prompts.models import Message
 
@@ -34,6 +34,29 @@ class ResponseModel(BaseModel):
 
     test_field: str
     optional_field: int = 0
+
+
+def _make_usage(
+    input_tokens=100,
+    output_tokens=50,
+    cache_creation_input_tokens=0,
+    cache_read_input_tokens=0,
+):
+    """Create a mock usage object with the expected Anthropic response fields."""
+    usage = MagicMock()
+    usage.input_tokens = input_tokens
+    usage.output_tokens = output_tokens
+    usage.cache_creation_input_tokens = cache_creation_input_tokens
+    usage.cache_read_input_tokens = cache_read_input_tokens
+    return usage
+
+
+def _make_response(content_items, usage=None):
+    """Create a mock Anthropic API response."""
+    resp = MagicMock()
+    resp.content = content_items
+    resp.usage = usage or _make_usage()
+    return resp
 
 
 @pytest.fixture
@@ -81,7 +104,7 @@ class TestAnthropicClientInitialization:
         config = LLMConfig(api_key='test_api_key')
         client = AnthropicClient(config=config, cache=False)
 
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-sonnet-4-5-latest'
 
     @patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'env_api_key'})
     def test_init_without_config(self):
@@ -89,7 +112,7 @@ class TestAnthropicClientInitialization:
         client = AnthropicClient(cache=False)
 
         assert client.config.api_key == 'env_api_key'
-        assert client.model == 'claude-haiku-4-5-latest'
+        assert client.model == 'claude-sonnet-4-5-latest'
 
     def test_init_with_custom_client(self):
         """Test initialization with a custom AsyncAnthropic client."""
@@ -99,22 +122,61 @@ class TestAnthropicClientInitialization:
         assert client.client == mock_client
 
 
+class TestAnthropicClientModelSizeRouting:
+    """Tests for model size routing."""
+
+    def test_get_model_for_size_small(self):
+        """Test that small size returns the small model."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.small)
+        assert result == 'claude-haiku-4-5-latest'
+
+    def test_get_model_for_size_medium(self):
+        """Test that medium size returns the default (larger) model."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.medium)
+        assert result == 'claude-sonnet-4-5-latest'
+
+    def test_small_model_default_on_init(self):
+        """Test that small_model is correctly defaulted during initialization."""
+        config = LLMConfig(api_key='test_api_key')
+        client = AnthropicClient(config=config, cache=False)
+
+        assert client.small_model == 'claude-haiku-4-5-latest'
+
+    def test_custom_small_model(self):
+        """Test that a custom small_model is respected."""
+        config = LLMConfig(api_key='test_api_key', small_model='claude-3-haiku-20240307')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.small)
+        assert result == 'claude-3-haiku-20240307'
+
+    def test_custom_model_for_medium(self):
+        """Test that a custom model is used for medium size."""
+        config = LLMConfig(api_key='test_api_key', model='claude-3-5-sonnet-latest')
+        client = AnthropicClient(config=config, cache=False)
+
+        result = client._get_model_for_size(ModelSize.medium)
+        assert result == 'claude-3-5-sonnet-latest'
+
+
 class TestAnthropicClientGenerateResponse:
     """Tests for AnthropicClient generate_response method."""
 
     @pytest.mark.asyncio
     async def test_generate_response_with_tool_use(self, anthropic_client, mock_async_anthropic):
         """Test successful response generation with tool use."""
-        # Setup mock response
         content_item = MagicMock()
         content_item.type = 'tool_use'
         content_item.input = {'test_field': 'test_value'}
 
-        mock_response = MagicMock()
-        mock_response.content = [content_item]
-        mock_async_anthropic.messages.create.return_value = mock_response
+        mock_async_anthropic.messages.create.return_value = _make_response([content_item])
 
-        # Call method
         messages = [
             Message(role='system', content='System message'),
             Message(role='user', content='User message'),
@@ -123,7 +185,6 @@ class TestAnthropicClientGenerateResponse:
             messages=messages, response_model=ResponseModel
         )
 
-        # Assertions
         assert isinstance(result, dict)
         assert result['test_field'] == 'test_value'
         mock_async_anthropic.messages.create.assert_called_once()
@@ -133,16 +194,12 @@ class TestAnthropicClientGenerateResponse:
         self, anthropic_client, mock_async_anthropic
     ):
         """Test response generation when getting text response instead of tool use."""
-        # Setup mock response with text content
         content_item = MagicMock()
         content_item.type = 'text'
         content_item.text = '{"test_field": "extracted_value"}'
 
-        mock_response = MagicMock()
-        mock_response.content = [content_item]
-        mock_async_anthropic.messages.create.return_value = mock_response
+        mock_async_anthropic.messages.create.return_value = _make_response([content_item])
 
-        # Call method
         messages = [
             Message(role='system', content='System message'),
             Message(role='user', content='User message'),
@@ -151,9 +208,69 @@ class TestAnthropicClientGenerateResponse:
             messages=messages, response_model=ResponseModel
         )
 
-        # Assertions
         assert isinstance(result, dict)
         assert result['test_field'] == 'extracted_value'
+
+    @pytest.mark.asyncio
+    async def test_auto_caching_enabled(self, anthropic_client, mock_async_anthropic):
+        """Test that top-level cache_control is passed for auto caching."""
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'value'}
+
+        mock_async_anthropic.messages.create.return_value = _make_response([content_item])
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await anthropic_client.generate_response(messages=messages, response_model=ResponseModel)
+
+        call_kwargs = mock_async_anthropic.messages.create.call_args
+        # Top-level cache_control should be passed for auto caching
+        cache_control_arg = call_kwargs.kwargs.get('cache_control')
+        assert cache_control_arg == {'type': 'ephemeral'}
+
+        # System message should be a plain string (not structured content blocks)
+        system_arg = call_kwargs.kwargs.get('system')
+        assert isinstance(system_arg, str)
+        assert system_arg == 'System message'
+
+        # Tools should NOT have block-level cache_control
+        tools_arg = call_kwargs.kwargs.get('tools')
+        assert 'cache_control' not in tools_arg[-1]
+
+    @pytest.mark.asyncio
+    async def test_cache_tokens_tracked(self, anthropic_client, mock_async_anthropic):
+        """Test that cache creation and read tokens are tracked."""
+        content_item = MagicMock()
+        content_item.type = 'tool_use'
+        content_item.input = {'test_field': 'value'}
+
+        usage = _make_usage(
+            input_tokens=50,
+            output_tokens=30,
+            cache_creation_input_tokens=500,
+            cache_read_input_tokens=0,
+        )
+        mock_async_anthropic.messages.create.return_value = _make_response(
+            [content_item], usage=usage
+        )
+
+        messages = [
+            Message(role='system', content='System message'),
+            Message(role='user', content='User message'),
+        ]
+        await anthropic_client.generate_response(
+            messages=messages,
+            response_model=ResponseModel,
+            prompt_name='test_prompt',
+        )
+
+        tracker_usage = anthropic_client.token_tracker.get_usage()
+        assert 'test_prompt' in tracker_usage
+        assert tracker_usage['test_prompt'].total_cache_creation_tokens == 500
+        assert tracker_usage['test_prompt'].total_cache_read_tokens == 0
 
     @pytest.mark.asyncio
     async def test_rate_limit_error(self, anthropic_client, mock_async_anthropic):
@@ -224,7 +341,6 @@ class TestAnthropicClientGenerateResponse:
     @pytest.mark.asyncio
     async def test_validation_error_retry(self, anthropic_client, mock_async_anthropic):
         """Test retry behavior on validation error."""
-        # First call returns invalid data, second call returns valid data
         content_item1 = MagicMock()
         content_item1.type = 'tool_use'
         content_item1.input = {'wrong_field': 'wrong_value'}
@@ -233,16 +349,11 @@ class TestAnthropicClientGenerateResponse:
         content_item2.type = 'tool_use'
         content_item2.input = {'test_field': 'correct_value'}
 
-        # Setup mock to return different responses on consecutive calls
-        mock_response1 = MagicMock()
-        mock_response1.content = [content_item1]
+        mock_async_anthropic.messages.create.side_effect = [
+            _make_response([content_item1]),
+            _make_response([content_item2]),
+        ]
 
-        mock_response2 = MagicMock()
-        mock_response2.content = [content_item2]
-
-        mock_async_anthropic.messages.create.side_effect = [mock_response1, mock_response2]
-
-        # Call method
         messages = [Message(role='user', content='Test message')]
         result = await anthropic_client.generate_response(messages, response_model=ResponseModel)
 
