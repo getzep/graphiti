@@ -96,7 +96,10 @@ async def initialize_graphiti(settings: ZepEnvDep):
         user=settings.neo4j_user,
         password=settings.neo4j_password,
     )
-    await client.build_indices_and_constraints()
+    try:
+        await client.build_indices_and_constraints()
+    finally:
+        await client.close()
 
 
 def get_fact_result_from_edge(edge: EntityEdge):
