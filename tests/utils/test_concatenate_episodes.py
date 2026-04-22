@@ -25,9 +25,9 @@ class TestConcatenateEpisodes:
             _make_episode('Third', datetime(2025, 1, 1, 10, 10, 0, tzinfo=timezone.utc)),
         ]
         result = concatenate_episodes(eps)
-        assert '[Episode 1] (timestamp: 2025-01-01T10:00:00+00:00)\nFirst' in result
-        assert '[Episode 2] (timestamp: 2025-01-01T10:05:00+00:00)\nSecond' in result
-        assert '[Episode 3] (timestamp: 2025-01-01T10:10:00+00:00)\nThird' in result
+        assert '[Episode 0] (timestamp: 2025-01-01T10:00:00+00:00)\nFirst' in result
+        assert '[Episode 1] (timestamp: 2025-01-01T10:05:00+00:00)\nSecond' in result
+        assert '[Episode 2] (timestamp: 2025-01-01T10:10:00+00:00)\nThird' in result
 
     def test_multiple_episodes_separated_by_blank_line(self):
         ts = datetime(2025, 6, 15, 8, 0, 0, tzinfo=timezone.utc)
@@ -35,7 +35,7 @@ class TestConcatenateEpisodes:
         result = concatenate_episodes(eps)
         ts_str = ts.isoformat()
         assert result == (
-            f'[Episode 1] (timestamp: {ts_str})\nA\n\n[Episode 2] (timestamp: {ts_str})\nB'
+            f'[Episode 0] (timestamp: {ts_str})\nA\n\n[Episode 1] (timestamp: {ts_str})\nB'
         )
 
     def test_single_episode_no_header(self):

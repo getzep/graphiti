@@ -69,7 +69,7 @@ def concatenate_episodes(episodes: list[EpisodicNode]) -> str:
     if len(episodes) == 1:
         return episodes[0].content
     parts: list[str] = []
-    for i, ep in enumerate(episodes, start=1):
+    for i, ep in enumerate(episodes):
         timestamp = ep.valid_at.isoformat() if ep.valid_at else 'unknown'
         parts.append(f'[Episode {i}] (timestamp: {timestamp})\n{ep.content}')
     return '\n\n'.join(parts)

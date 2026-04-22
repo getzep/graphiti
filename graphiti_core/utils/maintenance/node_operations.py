@@ -104,10 +104,10 @@ async def extract_nodes(
     if len(episodes) > 1:
         episode_attribution = (
             '\n7. **Episode Attribution**: The content contains multiple episodes labeled '
-            '[Episode 1], [Episode 2], etc. Each episode header includes a timestamp indicating '
+            '[Episode 0], [Episode 1], etc. Each episode header includes a timestamp indicating '
             'when that episode occurred. For each extracted entity, set `episode_indices` '
-            'to the list of episode numbers where that entity is mentioned. '
-            'An entity appearing in Episodes 1 and 3 should have `episode_indices: [1, 3]`.'
+            'to the 0-based list of episode numbers where that entity is mentioned. '
+            'An entity appearing in Episodes 0 and 2 should have `episode_indices: [0, 2]`.'
         )
 
     # Build base context
@@ -320,9 +320,9 @@ def _create_entity_nodes(
         )
         extracted_nodes.append(new_node)
 
-        # Map node to 0-indexed episode positions (LLM returns 1-indexed).
+        # Map node to 0-indexed episode positions (LLM returns 0-indexed).
         # Clamp to valid range; fall back to all episodes if empty.
-        indices = [i - 1 for i in extracted_entity.episode_indices if 1 <= i <= len(episodes)]
+        indices = [i for i in extracted_entity.episode_indices if 0 <= i < len(episodes)]
         if not indices:
             indices = list(range(len(episodes)))
         node_episode_index_map[new_node.uuid] = indices
