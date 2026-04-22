@@ -36,7 +36,7 @@ from graphiti_core.nodes import CommunityNode, EntityNode, EpisodicNode
 from graphiti_core.prompts import prompt_library
 from graphiti_core.prompts.dedupe_edges import EdgeDuplicate
 from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
-from graphiti_core.prompts.extract_edges import ExtractedEdges
+from graphiti_core.prompts.extract_edges import EdgeTimestamps, ExtractedEdges
 from graphiti_core.search.search import search
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
@@ -171,12 +171,12 @@ async def extract_edges(
     if len(episodes) > 1:
         episode_attribution = (
             '\n8. **Episode Attribution**: The CURRENT_MESSAGE contains multiple episodes labeled '
-            '[Episode 1], [Episode 2], etc. Each episode header includes a timestamp indicating '
+            '[Episode 0], [Episode 1], etc. Each episode header includes a timestamp indicating '
             'when that episode occurred. Use the per-episode timestamp to resolve relative time '
             'mentions within each episode rather than relying solely on REFERENCE_TIME. '
             'For each extracted fact, set `episode_indices` '
-            'to the list of episode numbers that the fact was derived from. '
-            'A fact sourced from Episodes 1 and 2 should have `episode_indices: [1, 2]`.'
+            'to the 0-based list of episode numbers that the fact was derived from. '
+            'A fact sourced from Episodes 0 and 1 should have `episode_indices: [0, 1]`.'
         )
 
     # Prepare context for LLM
@@ -286,12 +286,12 @@ async def extract_edges(
             except ValueError as e:
                 logger.warning(f'WARNING: Error parsing invalid_at date: {e}. Input: {invalid_at}')
 
-        # Map episode_indices (1-indexed) to episode UUIDs.
+        # Map episode_indices (0-indexed) to episode UUIDs.
         # Clamp indices to valid range and fall back to all episodes if empty.
         edge_episode_uuids = []
         for idx in edge_data.episode_indices:
-            if 1 <= idx <= len(episodes):
-                edge_episode_uuids.append(episodes[idx - 1].uuid)
+            if 0 <= idx < len(episodes):
+                edge_episode_uuids.append(episodes[idx].uuid)
         if not edge_episode_uuids:
             edge_episode_uuids = [ep.uuid for ep in episodes]
 
@@ -306,8 +306,8 @@ async def extract_edges(
             valid_at=valid_at_datetime,
             invalid_at=invalid_at_datetime,
             reference_time=(
-                episodes[edge_data.episode_indices[0] - 1].valid_at
-                if edge_data.episode_indices and 1 <= edge_data.episode_indices[0] <= len(episodes)
+                episodes[edge_data.episode_indices[0]].valid_at
+                if edge_data.episode_indices and 0 <= edge_data.episode_indices[0] < len(episodes)
                 else primary_episode.valid_at
             ),
         )
@@ -572,6 +572,53 @@ def resolve_edge_contradictions(
     return invalidated_edges
 
 
+async def _extract_edge_timestamps(
+    llm_client: LLMClient,
+    edge: EntityEdge,
+    episode: EpisodicNode | None,
+) -> None:
+    """Extract valid_at / invalid_at timestamps for an edge via a lightweight LLM call.
+
+    Modifies the edge in place. Skips if the edge already has timestamps set
+    (e.g., from the extraction prompt in the separate-extraction path) or if
+    no reference time is available.
+    """
+    if edge.valid_at is not None or edge.invalid_at is not None:
+        return
+
+    if episode is None or episode.valid_at is None:
+        return
+
+    context = {
+        'fact': edge.fact,
+        'reference_time': episode.valid_at.isoformat(),
+    }
+    try:
+        llm_response = await llm_client.generate_response(
+            prompt_library.extract_edges.extract_timestamps(context),
+            response_model=EdgeTimestamps,
+            model_size=ModelSize.small,
+            prompt_name='extract_edges.extract_timestamps',
+        )
+        timestamps = EdgeTimestamps(**llm_response)
+        if timestamps.valid_at:
+            try:
+                edge.valid_at = ensure_utc(
+                    datetime.fromisoformat(timestamps.valid_at.replace('Z', '+00:00'))
+                )
+            except ValueError:
+                logger.debug(f'Error parsing valid_at: {timestamps.valid_at}')
+        if timestamps.invalid_at:
+            try:
+                edge.invalid_at = ensure_utc(
+                    datetime.fromisoformat(timestamps.invalid_at.replace('Z', '+00:00'))
+                )
+            except ValueError:
+                logger.debug(f'Error parsing invalid_at: {timestamps.invalid_at}')
+    except Exception:
+        logger.warning('Failed to extract timestamps for edge %s', edge.uuid, exc_info=True)
+
+
 async def resolve_extracted_edge(
     llm_client: LLMClient,
     extracted_edge: EntityEdge,
@@ -603,7 +650,7 @@ async def resolve_extracted_edge(
         The resolved edge, any duplicates, and edges to invalidate.
     """
     if len(related_edges) == 0 and len(existing_edges) == 0:
-        # Still extract custom attributes even when no dedup/invalidation is needed
+        # Still extract custom attributes and timestamps even when no dedup needed
         edge_model = edge_type_candidates.get(extracted_edge.name) if edge_type_candidates else None
         if edge_model is not None and len(edge_model.model_fields) != 0:
             edge_attributes_context = {
@@ -618,6 +665,8 @@ async def resolve_extracted_edge(
                 prompt_name='extract_edges.extract_attributes',
             )
             extracted_edge.attributes = edge_attributes_response
+
+        await _extract_edge_timestamps(llm_client, extracted_edge, episode)
 
         return extracted_edge, [], []
 
@@ -735,6 +784,10 @@ async def resolve_extracted_edge(
         resolved_edge.attributes = edge_attributes_response
     else:
         resolved_edge.attributes = {}
+
+    # Extract timestamps for new edges (duplicated edges retain their existing timestamps)
+    if resolved_edge.uuid == extracted_edge.uuid:
+        await _extract_edge_timestamps(llm_client, resolved_edge, episode)
 
     end = time()
     logger.debug(

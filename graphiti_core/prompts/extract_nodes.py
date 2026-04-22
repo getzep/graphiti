@@ -32,9 +32,9 @@ class ExtractedEntity(BaseModel):
         'Must be one of the provided entity_type_id integers.',
     )
     episode_indices: list[int] = Field(
-        default_factory=lambda: [1],
-        description='List of episode numbers (1-indexed) this entity was extracted from. '
-        'When processing a single episode, this should be [1].',
+        default_factory=lambda: [0],
+        description='List of episode numbers (0-indexed) this entity was extracted from. '
+        'When processing a single episode, this should be [0].',
     )
 
 
