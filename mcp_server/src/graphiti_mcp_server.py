@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -326,6 +327,7 @@ async def add_memory(
     source: str = 'text',
     source_description: str = '',
     uuid: str | None = None,
+    reference_time: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
@@ -345,6 +347,8 @@ async def add_memory(
                                - 'message': For conversation-style content
         source_description (str, optional): Description of the source
         uuid (str, optional): Optional UUID for the episode
+        reference_time (str, optional): ISO 8601 timestamp for the episode (e.g. "2024-01-15T12:00:00Z").
+                                       Sets the temporal reference point for extracted facts. Defaults to current UTC time.
 
     Examples:
         # Adding plain text content
@@ -384,6 +388,14 @@ async def add_memory(
                 logger.warning(f"Unknown source type '{source}', using 'text' as default")
                 episode_type = EpisodeType.text
 
+        # Parse reference_time if provided
+        parsed_reference_time = None
+        if reference_time:
+            try:
+                parsed_reference_time = datetime.fromisoformat(reference_time.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Invalid reference_time '{reference_time}': {e}. Using current time.")
+
         # Submit to queue service for async processing
         await queue_service.add_episode(
             group_id=effective_group_id,
@@ -393,6 +405,7 @@ async def add_memory(
             episode_type=episode_type,
             entity_types=graphiti_service.entity_types,
             uuid=uuid or None,  # Ensure None is passed if uuid is None
+            reference_time=parsed_reference_time,
         )
 
         return SuccessResponse(
