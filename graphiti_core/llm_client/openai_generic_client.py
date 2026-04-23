@@ -128,6 +128,8 @@ class OpenAIGenericClient(LLMClient):
                 response_format=response_format,  # type: ignore[arg-type]
             )
             result = response.choices[0].message.content or ''
+            if result.startswith('```'):
+                result = result.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
             return json.loads(result)
         except openai.RateLimitError as e:
             raise RateLimitError from e
