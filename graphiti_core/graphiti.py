@@ -1435,7 +1435,10 @@ class Graphiti:
 
     @handle_multiple_group_ids
     async def build_communities(
-        self, group_ids: list[str] | None = None, driver: GraphDriver | None = None
+        self,
+        group_ids: list[str] | None = None,
+        driver: GraphDriver | None = None,
+        sample_size: int | None = None,
     ) -> tuple[list[CommunityNode], list[CommunityEdge]]:
         """
         Use a community clustering algorithm to find communities of nodes. Create community nodes summarising
@@ -1443,6 +1446,13 @@ class Graphiti:
         ----------
         group_ids : list[str] | None
             Optional. Create communities only for the listed group_ids. If blank the entire graph will be used.
+        sample_size : int | None
+            Optional. If set, each community's LLM summary is built from only
+            the top-K most representative members (highest in-community
+            weighted degree, then longest summary). Dramatically reduces LLM
+            cost on large graphs — without sampling, summary cost grows with
+            total node count; with sampling it grows with the number of
+            communities. Recommended for graphs >10k nodes.
         """
         if driver is None:
             driver = self.clients.driver
@@ -1451,7 +1461,7 @@ class Graphiti:
         await remove_communities(driver)
 
         community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids
+            driver, self.llm_client, group_ids, sample_size=sample_size
         )
 
         await semaphore_gather(
