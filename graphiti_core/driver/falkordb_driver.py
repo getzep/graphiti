@@ -65,7 +65,7 @@ from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeO
 from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
-from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices, get_vector_indices
 from graphiti_core.helpers import validate_group_ids
 from graphiti_core.utils.datetime_utils import convert_datetimes_to_strings
 
@@ -303,6 +303,15 @@ class FalkorDriver(GraphDriver):
         index_queries = get_range_indices(self.provider) + get_fulltext_indices(self.provider)
         for query in index_queries:
             await self.execute_query(query)
+
+        # Create vector indices (ignore errors if they already exist)
+        vector_queries = get_vector_indices(self.provider)
+        for query in vector_queries:
+            try:
+                await self.execute_query(query)
+            except Exception:
+                # Vector index may already exist
+                pass
 
     def clone(self, database: str) -> 'GraphDriver':
         """
