@@ -90,6 +90,12 @@ class OpenAIProviderConfig(BaseModel):
     api_key: str | None = None
     api_url: str = 'https://api.openai.com/v1'
     organization_id: str | None = None
+    # When True, route through `OpenAIGenericClient` (chat.completions + json_object)
+    # instead of `OpenAIClient` (responses.parse / structured outputs API). Required
+    # for OpenAI-compatible endpoints that don't implement the Responses API — e.g.
+    # llama.cpp, Ollama, LiteLLM, vLLM-without-structured-outputs. Default False
+    # preserves the existing real-OpenAI behaviour.
+    use_chat_completions: bool = False
 
 
 class AzureOpenAIProviderConfig(BaseModel):
