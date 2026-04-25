@@ -1,9 +1,40 @@
 """Formatting utilities for Graphiti MCP Server."""
 
+from datetime import datetime
 from typing import Any
 
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
+
+try:
+    # neo4j.time.DateTime / Date / Time are returned untyped by the driver
+    # for some load paths (notably the fact/edge search). Pydantic's
+    # `model_dump(mode='json')` doesn't know how to serialize them, which
+    # surfaces in MCP as: "Unable to serialize unknown type:
+    # <class 'neo4j.time.DateTime'>".
+    from neo4j.time import Date as _Neo4jDate
+    from neo4j.time import DateTime as _Neo4jDateTime
+except ImportError:  # neo4j isn't always available in non-bolt deployments
+    _Neo4jDate = None  # type: ignore
+    _Neo4jDateTime = None  # type: ignore
+
+
+def _coerce_edge_datetimes(edge: EntityEdge) -> None:
+    """In-place: convert any neo4j.time.{DateTime,Date} on an edge to
+    native datetime / date so Pydantic can serialize them."""
+    if _Neo4jDateTime is None:
+        return
+    for field in ('created_at', 'valid_at', 'invalid_at', 'expired_at'):
+        v = getattr(edge, field, None)
+        if v is None:
+            continue
+        if isinstance(v, _Neo4jDateTime):
+            setattr(edge, field, v.to_native())
+        elif _Neo4jDate is not None and isinstance(v, _Neo4jDate):
+            # Date → datetime at midnight UTC; consistent with Pydantic
+            # field types which expect datetime, not date.
+            native = v.to_native()
+            setattr(edge, field, datetime(native.year, native.month, native.day))
 
 
 def format_node_result(node: EntityNode) -> dict[str, Any]:
@@ -40,6 +71,7 @@ def format_fact_result(edge: EntityEdge) -> dict[str, Any]:
     Returns:
         A dictionary representation of the edge with serialized dates and excluded embeddings
     """
+    _coerce_edge_datetimes(edge)
     result = edge.model_dump(
         mode='json',
         exclude={
