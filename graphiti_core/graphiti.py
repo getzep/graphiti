@@ -1049,10 +1049,15 @@ class Graphiti:
                 )
 
                 # Get or create episode
-                episode = (
-                    await EpisodicNode.get_by_uuid(self.driver, uuid)
-                    if uuid is not None
-                    else EpisodicNode(
+                episode = None
+                if uuid is not None:
+                    try:
+                        episode = await EpisodicNode.get_by_uuid(self.driver, uuid)
+                    except NodeNotFoundError:
+                        pass
+                if episode is None:
+                    episode = EpisodicNode(
+                        uuid=uuid or str(uuid4()),
                         name=name,
                         group_id=group_id,
                         labels=[],
@@ -1062,7 +1067,6 @@ class Graphiti:
                         created_at=now,
                         valid_at=reference_time,
                     )
-                )
 
                 # Create default edge type map
                 edge_type_map_default = (
