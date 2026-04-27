@@ -67,9 +67,9 @@ async def extract_nodes_and_edges(
     excluded_entity_types : list[str] | None
         Entity types to exclude from extraction.
     edge_type_map : dict | None
-        Mapping of edge type signatures (unused in combined prompt but kept for API compat).
+        Mapping of (source_type, target_type) tuples to lists of edge type names.
     edge_types : dict | None
-        Custom edge type definitions (unused in combined prompt but kept for API compat).
+        Custom edge type definitions (Pydantic models keyed by type name).
     custom_extraction_instructions : str | None
         Additional extraction instructions.
 
@@ -82,22 +82,32 @@ async def extract_nodes_and_edges(
     episodes = episode if isinstance(episode, list) else [episode]
     primary_episode = episodes[0]
 
-    if edge_types:
-        logger.debug(
-            'Combined extraction does not use custom edge types; %d edge type(s) will be ignored',
-            len(edge_types),
-        )
-    if edge_type_map:
-        logger.debug(
-            'Combined extraction does not use edge_type_map; %d mapping(s) will be ignored',
-            len(edge_type_map),
-        )
-
     start = time()
     llm_client = clients.llm_client
 
     # Build entity types context
     entity_types_context = _build_entity_types_context(entity_types)
+
+    # Build edge types context (same format as separate extraction path)
+    edge_types_context: list[dict] = []
+    if edge_types and edge_type_map:
+        edge_type_signatures_map: dict[str, list] = {}
+        for signature, type_names in edge_type_map.items():
+            for type_name in type_names:
+                if type_name not in edge_type_signatures_map:
+                    edge_type_signatures_map[type_name] = []
+                edge_type_signatures_map[type_name].append(signature)
+
+        edge_types_context = [
+            {
+                'fact_type_name': type_name,
+                'fact_type_signatures': edge_type_signatures_map.get(
+                    type_name, [('Entity', 'Entity')]
+                ),
+                'fact_type_description': type_model.__doc__,
+            }
+            for type_name, type_model in edge_types.items()
+        ]
 
     # Build context for the combined prompt
     context = {
@@ -111,6 +121,7 @@ async def extract_nodes_and_edges(
         ],
         'custom_extraction_instructions': custom_extraction_instructions or '',
         'entity_types': entity_types_context,
+        'edge_types': edge_types_context,
     }
 
     # Single LLM call for combined extraction

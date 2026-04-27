@@ -73,6 +73,21 @@ class Versions(TypedDict):
     extract_message: PromptFunction
 
 
+def _build_edge_types_section(edge_types: list[dict] | None) -> str:
+    """Build the optional FACT TYPES section for the combined prompt."""
+    if not edge_types:
+        return ''
+    return f"""
+<FACT TYPES>
+{to_prompt_json(edge_types)}
+</FACT TYPES>
+RELATION TYPE RULES:
+- When a relationship matches a FACT TYPE, use that fact_type_name as the relation_type.
+- If no FACT TYPE fits, derive a relation_type in SCREAMING_SNAKE_CASE
+  (e.g., WORKS_AT, LIVES_IN, IS_FRIENDS_WITH).
+"""
+
+
 def extract_message(context: dict[str, Any]) -> list[Message]:
     sys_prompt = (
         'You are an expert knowledge graph extraction specialist for an AI agent memory system. '
@@ -131,7 +146,7 @@ FACT RULES:
 <ENTITY TYPES>
 {context['entity_types']}
 </ENTITY TYPES>
-
+{_build_edge_types_section(context.get('edge_types'))}
 <PREVIOUS MESSAGES>
 {to_prompt_json([ep for ep in context['previous_episodes']])}
 </PREVIOUS MESSAGES>
