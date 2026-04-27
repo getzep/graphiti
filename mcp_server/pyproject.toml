@@ -9,7 +9,7 @@ dependencies = [
     "openai>=1.91.0",
     "graphiti-core[falkordb]>=0.28.2",
     "pydantic-settings>=2.0.0",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.3",
     "typing-extensions>=4.0.0",
 ]
 
