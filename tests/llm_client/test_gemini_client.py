@@ -478,5 +478,59 @@ class TestGeminiClientGenerateResponse:
             )
 
 
+class TestGeminiClientMarkdownStripping:
+    """Tests for stripping markdown code blocks from Gemini responses."""
+
+    @pytest.mark.asyncio
+    async def test_structured_output_with_json_markdown_block(
+        self, gemini_client, mock_gemini_client
+    ):
+        """Test that JSON wrapped in ```json ... ``` is parsed correctly."""
+        mock_response = MagicMock()
+        mock_response.text = '```json\n{"test_field": "hello", "optional_field": 1}\n```'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        result = await gemini_client.generate_response(messages, response_model=ResponseModel)
+
+        assert result['test_field'] == 'hello'
+        assert result['optional_field'] == 1
+
+    @pytest.mark.asyncio
+    async def test_structured_output_with_plain_markdown_block(
+        self, gemini_client, mock_gemini_client
+    ):
+        """Test that JSON wrapped in plain ``` ... ``` is parsed correctly."""
+        mock_response = MagicMock()
+        mock_response.text = '```\n{"test_field": "world"}\n```'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        result = await gemini_client.generate_response(messages, response_model=ResponseModel)
+
+        assert result['test_field'] == 'world'
+
+    @pytest.mark.asyncio
+    async def test_structured_output_without_markdown_block_unchanged(
+        self, gemini_client, mock_gemini_client
+    ):
+        """Test that plain JSON (no markdown wrapper) still parses correctly."""
+        mock_response = MagicMock()
+        mock_response.text = '{"test_field": "plain", "optional_field": 99}'
+        mock_response.candidates = []
+        mock_response.prompt_feedback = None
+        mock_gemini_client.aio.models.generate_content.return_value = mock_response
+
+        messages = [Message(role='user', content='Test message')]
+        result = await gemini_client.generate_response(messages, response_model=ResponseModel)
+
+        assert result['test_field'] == 'plain'
+        assert result['optional_field'] == 99
+
+
 if __name__ == '__main__':
     pytest.main(['-v', 'test_gemini_client.py'])
