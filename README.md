@@ -664,6 +664,95 @@ Telemetry is automatically disabled during test runs (when `pytest` is detected)
   functionality
 - The anonymous ID is stored locally and is not tied to any personal information
 
+## Frequently Asked Questions (FAQ)
+
+### General Questions
+
+**Q: What is Graphiti?**  
+A: Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs, Graphiti tracks how facts change over time, maintains provenance to source data, and supports both prescribed and learned ontology.
+
+**Q: How is Graphiti different from traditional RAG?**  
+A: Traditional RAG retrieves flat document chunks. Graphiti builds a structured, temporal graph that:
+- Tracks when facts become true and when they're superseded
+- Maintains full provenance back to source episodes
+- Supports hybrid retrieval (semantic + keyword + graph traversal)
+- Updates incrementally without batch recomputation
+
+**Q: What's the difference between Graphiti and Zep?**  
+A: Graphiti is the open-source temporal context graph engine. Zep is a managed platform built on Graphiti that provides:
+- Multi-tenant context graph infrastructure
+- Built-in user/thread management
+- Dashboard, SDKs, and developer tools
+- Enterprise features (SLAs, support, security)
+
+Choose Graphiti for flexibility and self-hosting. Choose Zep for turnkey production infrastructure.
+
+**Q: Which database backends does Graphiti support?**  
+A: Graphiti supports multiple graph database backends:
+- Neo4j
+- FalkorDB
+- Kuzu
+- Amazon Neptune Database
+- Amazon Neptune Analytics
+
+### Installation & Setup
+
+**Q: What Python version is required?**  
+A: Graphiti requires Python 3.10 or higher.
+
+**Q: How do I install Graphiti?**  
+A: 
+```bash
+pip install graphiti-core
+```
+
+For the latest development version:
+```bash
+pip install git+https://github.com/getzep/graphiti.git
+```
+
+**Q: Can I disable telemetry?**  
+A: Yes, telemetry is opt-out. Set the environment variable:
+```bash
+export GRAPHITI_TELEMETRY_ENABLED=false
+```
+
+### Troubleshooting
+
+**Graph not updating after adding episodes**
+- Ensure you've called `build_graph()` or `update_graph()` after adding episodes
+- Check that your LLM and embedder configurations are correct
+- Verify the database connection is active
+
+**Query returning empty results**
+- Confirm episodes were successfully ingested (check logs)
+- Verify your query matches the entity/relationship types in your graph
+- Try a broader semantic search before narrowing with graph traversal
+
+**Import errors**
+- Ensure all dependencies are installed: `pip install -r requirements.txt`
+- Check Python version >= 3.10
+- For optional features, install extras: `pip install graphiti-core[neo4j]`
+
+**Database connection issues**
+- Verify connection string format and credentials
+- Check that the database server is running and accessible
+- For Neo4j: ensure the Bolt port (default 7687) is open
+- Review database logs for connection errors
+
+**Slow query performance**
+- Ensure appropriate indexes exist on frequently queried properties
+- Consider limiting graph traversal depth
+- Check embedder model performance (some models are slower than others)
+- For large graphs, verify database has sufficient memory
+
+### Getting More Help
+
+- 📚 **Documentation**: [GitHub Wiki](https://github.com/getzep/graphiti/wiki)
+- 📄 **Paper**: [arXiv:2501.13956](https://arxiv.org/abs/2501.13956)
+- 💬 **Discord**: [Join Zep Discord](https://discord.com/invite/W8Kw6bsgXQ) → #Graphiti channel
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/getzep/graphiti/issues)
+
 ## Contributing
 
 We encourage and appreciate all forms of contributions, whether it's code, documentation, addressing GitHub Issues, or
