@@ -93,6 +93,17 @@ def _sanitize(query: str) -> str:
     return ' '.join(sanitized.split())
 
 
+def _escape_redisearch_value(value: str) -> str:
+    """Escape RediSearch special characters in a field value."""
+    special_chars = r',.<>{}[]"' + r"':;!@#$%^&*()-+=~?|/\\"
+    escaped = []
+    for ch in value:
+        if ch in special_chars:
+            escaped.append('\\')
+        escaped.append(ch)
+    return ''.join(escaped)
+
+
 def _build_falkor_fulltext_query(
     query: str,
     group_ids: list[str] | None = None,
@@ -102,7 +113,7 @@ def _build_falkor_fulltext_query(
     if group_ids is None or len(group_ids) == 0:
         group_filter = ''
     else:
-        escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+        escaped_group_ids = [_escape_redisearch_value(gid) for gid in group_ids]
         group_values = '|'.join(escaped_group_ids)
         group_filter = f'(@group_id:{group_values})'
 
