@@ -83,6 +83,7 @@ _SEPARATOR_MAP = str.maketrans(
         '|': ' ',
         '/': ' ',
         '\\': ' ',
+        '`': ' ',
     }
 )
 
@@ -111,6 +112,12 @@ def _build_falkor_fulltext_query(
     # Remove stopwords and empty tokens
     query_words = sanitized_query.split()
     filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+
+    # If all tokens were stopwords or the query was empty/punctuation-only, return ''
+    # so callers skip the search rather than issue a malformed "(@group_id:…) ()" query.
+    if not filtered_words:
+        return ''
+
     sanitized_query = ' | '.join(filtered_words)
 
     if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
