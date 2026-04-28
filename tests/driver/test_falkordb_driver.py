@@ -362,6 +362,55 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(True) is True
 
 
+class TestFalkorDriverFulltextQuery:
+    """Tests for FalkorDriver.build_fulltext_query and _build_falkor_fulltext_query."""
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def setup_method(self):
+        with patch('graphiti_core.driver.falkordb_driver.FalkorDB'):
+            self.driver = FalkorDriver()
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_backtick_tokens_are_stripped(self):
+        """Backtick-quoted tokens (e.g. `add_episode`) must not reach RediSearch."""
+        result = self.driver.build_fulltext_query('`add_episode`')
+        # backtick stripped → token is "add_episode" → underscore survives, no raw backtick
+        assert '`' not in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_stopword_only_query_returns_empty(self):
+        """A query whose every token is a stopword must return '' to prevent malformed queries."""
+        # "the" and "a" are common stopwords in the FalkorDB STOPWORDS list
+        result = self.driver.build_fulltext_query('the a')
+        assert result == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_punctuation_only_query_returns_empty(self):
+        """A query consisting entirely of separator characters must return ''."""
+        result = self.driver.build_fulltext_query('---')
+        assert result == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_backtick_only_query_returns_empty(self):
+        """A query that is only backticks must return '' after sanitization."""
+        result = self.driver.build_fulltext_query('``')
+        assert result == ''
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_normal_query_unchanged(self):
+        """A regular query should still produce a valid non-empty result."""
+        result = self.driver.build_fulltext_query('graphiti knowledge graph')
+        assert result != ''
+        assert '(' in result and ')' in result
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_backtick_mixed_with_normal_tokens(self):
+        """Backticks around a token should be stripped but the token itself kept."""
+        result = self.driver.build_fulltext_query('`add_episode` function')
+        assert result != ''
+        assert '`' not in result
+
+
 # Simple integration test
 class TestFalkorDriverIntegration:
     """Simple integration test for FalkorDB driver."""
