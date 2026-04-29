@@ -90,52 +90,56 @@ async def get_community_clusters(
     return community_clusters
 
 
-def label_propagation(projection: dict[str, list[Neighbor]]) -> list[list[str]]:
-    # Implement the label propagation community detection algorithm.
-    # 1. Start with each node being assigned its own community
-    # 2. Each node will take on the community of the plurality of its neighbors
-    # 3. Ties are broken by going to the largest community
-    # 4. Continue until no communities change during propagation
+def label_propagation(
+    projection: dict[str, list[Neighbor]], max_iterations: int = 100
+) -> list[list[str]]:
+    """Cluster nodes via the asynchronous label propagation algorithm.
 
-    community_map = {uuid: i for i, uuid in enumerate(projection.keys())}
+    Each node iteratively adopts the most-weighted community label among
+    its neighbours. Updates are applied in place (asynchronous LPA), so
+    later nodes within the same iteration see earlier nodes' fresh
+    labels. This avoids the oscillation that synchronous LPA exhibits on
+    bipartite or weight-symmetric graphs, where reading from a snapshot
+    and writing to a parallel map can flip-flop between two states
+    indefinitely. ``max_iterations`` is a defensive upper bound that
+    guarantees termination on any input.
 
-    while True:
+    Ties between candidate communities of equal total weight are broken
+    deterministically by the smallest community ID, so two runs over the
+    same input produce the same clustering.
+    """
+    community_map: dict[str, int] = {uuid: i for i, uuid in enumerate(projection.keys())}
+
+    for _ in range(max_iterations):
         no_change = True
-        new_community_map: dict[str, int] = {}
 
         for uuid, neighbors in projection.items():
-            curr_community = community_map[uuid]
-
             community_candidates: dict[int, int] = defaultdict(int)
             for neighbor in neighbors:
                 community_candidates[community_map[neighbor.node_uuid]] += neighbor.edge_count
-            community_lst = [
-                (count, community) for community, count in community_candidates.items()
-            ]
 
-            community_lst.sort(reverse=True)
-            candidate_rank, community_candidate = community_lst[0] if community_lst else (0, -1)
-            if community_candidate != -1 and candidate_rank > 1:
-                new_community = community_candidate
-            else:
-                new_community = max(community_candidate, curr_community)
+            if not community_candidates:
+                # A node with no neighbours has no candidate community to
+                # adopt; leave it in its initial singleton community.
+                continue
 
-            new_community_map[uuid] = new_community
+            new_community = min(
+                community_candidates.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[0]
 
-            if new_community != curr_community:
+            if new_community != community_map[uuid]:
+                community_map[uuid] = new_community
                 no_change = False
 
         if no_change:
             break
 
-        community_map = new_community_map
-
-    community_cluster_map = defaultdict(list)
+    community_cluster_map: dict[int, list[str]] = defaultdict(list)
     for uuid, community in community_map.items():
         community_cluster_map[community].append(uuid)
 
-    clusters = [cluster for cluster in community_cluster_map.values()]
-    return clusters
+    return list(community_cluster_map.values())
 
 
 async def summarize_pair(llm_client: LLMClient, summary_pair: tuple[str, str]) -> str:
