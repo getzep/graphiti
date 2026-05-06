@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from typing import Any
 
 from graphiti_core.driver.driver import GraphProvider
@@ -108,9 +109,16 @@ def _build_falkor_fulltext_query(
 
     sanitized_query = _sanitize(query)
 
-    # Remove stopwords and empty tokens
+    # Remove stopwords, one-character noise tokens, and cap OR-term count.
+    # Long RedisSearch OR queries can become pathological on FalkorDB during
+    # dedup/search, even before graph traversal work begins.
     query_words = sanitized_query.split()
-    filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+    filtered_words = [
+        word for word in query_words if word and len(word) > 1 and word.lower() not in STOPWORDS
+    ]
+    max_terms = int(os.environ.get('FALKORDB_FULLTEXT_MAX_TERMS', '6'))
+    if max_terms > 0:
+        filtered_words = filtered_words[:max_terms]
     sanitized_query = ' | '.join(filtered_words)
 
     if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
@@ -293,29 +301,74 @@ class FalkorSearchOperations(SearchOperations):
             filter_queries.append('e.group_id IN $group_ids')
             filter_params['group_ids'] = group_ids
 
-        filter_query = ''
-        if filter_queries:
-            filter_query = ' WHERE ' + (' AND '.join(filter_queries))
+        endpoint_filter_queries = [
+            filter_query
+            for filter_query in filter_queries
+            if filter_query.startswith('n:') or ' m:' in filter_query
+        ]
+        edge_filter_queries = [
+            filter_query
+            for filter_query in filter_queries
+            if filter_query not in endpoint_filter_queries
+        ]
 
-        cypher = (
-            get_relationships_query(
-                'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
+        edge_filter_query = ''
+        if edge_filter_queries:
+            edge_filter_query = ' WHERE ' + (' AND '.join(edge_filter_queries))
+
+        endpoint_filter_query = ''
+        if endpoint_filter_queries:
+            endpoint_filter_query = ' WHERE ' + (' AND '.join(endpoint_filter_queries))
+
+        if search_filter.node_labels is None:
+            cypher = (
+                get_relationships_query(
+                    'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
+                )
+                + """
+                YIELD relationship AS e, score
+                """
+                + edge_filter_query
+                + """
+                WITH e, score
+                ORDER BY score DESC
+                LIMIT $limit
+                RETURN
+                    e.uuid AS uuid,
+                    e.source_node_uuid AS source_node_uuid,
+                    e.target_node_uuid AS target_node_uuid,
+                    e.group_id AS group_id,
+                    e.created_at AS created_at,
+                    e.name AS name,
+                    e.fact AS fact,
+                    e.episodes AS episodes,
+                    e.expired_at AS expired_at,
+                    e.valid_at AS valid_at,
+                    e.invalid_at AS invalid_at,
+                    properties(e) AS attributes
+                """
             )
-            + """
-            YIELD relationship AS rel, score
-            MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
-            """
-            + filter_query
-            + """
-            WITH e, score, n, m
-            RETURN
-            """
-            + get_entity_edge_return_query(GraphProvider.FALKORDB)
-            + """
-            ORDER BY score DESC
-            LIMIT $limit
-            """
-        )
+        else:
+            cypher = (
+                get_relationships_query(
+                    'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
+                )
+                + """
+                YIELD relationship AS rel, score
+                """
+                + edge_filter_query.replace('e.', 'rel.')
+                + """
+                WITH rel, score
+                ORDER BY score DESC
+                LIMIT $limit
+                MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+                """
+                + endpoint_filter_query
+                + """
+                RETURN
+                """
+                + get_entity_edge_return_query(GraphProvider.FALKORDB)
+            )
 
         records, _, _ = await executor.execute_query(
             cypher,
@@ -454,7 +507,7 @@ class FalkorSearchOperations(SearchOperations):
         filter_params: dict[str, Any] = {}
         group_filter_query = ''
         if group_ids is not None:
-            group_filter_query += '\nAND e.group_id IN $group_ids'
+            group_filter_query = 'WHERE e.group_id IN $group_ids'
             filter_params['group_ids'] = group_ids
 
         cypher = (
@@ -462,19 +515,16 @@ class FalkorSearchOperations(SearchOperations):
                 'episode_content', '$query', limit=limit, provider=GraphProvider.FALKORDB
             )
             + """
-            YIELD node AS episode, score
-            MATCH (e:Episodic)
-            WHERE e.uuid = episode.uuid
+            YIELD node AS e, score
             """
             + group_filter_query
             + """
+            WITH e, score
+            ORDER BY score DESC
+            LIMIT $limit
             RETURN
             """
             + EPISODIC_NODE_RETURN
-            + """
-            ORDER BY score DESC
-            LIMIT $limit
-            """
         )
 
         records, _, _ = await executor.execute_query(
