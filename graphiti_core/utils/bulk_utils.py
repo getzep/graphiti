@@ -108,7 +108,9 @@ class RawEpisode(BaseModel):
 
 
 async def retrieve_previous_episodes_bulk(
-    driver: GraphDriver, episodes: list[EpisodicNode]
+    driver: GraphDriver,
+    episodes: list[EpisodicNode],
+    max_coroutines: int | None = None,
 ) -> list[tuple[EpisodicNode, list[EpisodicNode]]]:
     previous_episodes_list = await semaphore_gather(
         *[
@@ -116,7 +118,8 @@ async def retrieve_previous_episodes_bulk(
                 driver, episode.valid_at, last_n=EPISODE_WINDOW_LEN, group_ids=[episode.group_id]
             )
             for episode in episodes
-        ]
+        ],
+        max_coroutines=max_coroutines,
     )
     episode_tuples: list[tuple[EpisodicNode, list[EpisodicNode]]] = [
         (episode, previous_episodes_list[i]) for i, episode in enumerate(episodes)
@@ -319,7 +322,8 @@ async def _extract_nodes_and_edges_bulk_combined(
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     nodes_bulk = [nodes for nodes, _, _ in results]
@@ -348,7 +352,8 @@ async def _extract_nodes_and_edges_bulk_separate(
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for episode, previous_episodes in episode_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
     extracted_nodes_bulk = [nodes for nodes, _ in extracted_results]
 
@@ -365,7 +370,8 @@ async def _extract_nodes_and_edges_bulk_separate(
                 custom_extraction_instructions=custom_extraction_instructions,
             )
             for i, (episode, previous_episodes) in enumerate(episode_tuples)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     return extracted_nodes_bulk, extracted_edges_bulk
@@ -396,7 +402,8 @@ async def dedupe_nodes_bulk(
                 entity_types,
             )
             for i, nodes in enumerate(extracted_nodes)
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     episode_resolutions: list[tuple[str, list[EntityNode]]] = []
@@ -499,7 +506,8 @@ async def dedupe_edges_bulk(
 
     # generate embeddings
     await semaphore_gather(
-        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges]
+        *[create_entity_edge_embeddings(embedder, edges) for edges in extracted_edges],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # Find similar results
@@ -553,7 +561,8 @@ async def dedupe_edges_bulk(
                 edge_types,
             )
             for episode, edge, candidates in dedupe_tuples
-        ]
+        ],
+        max_coroutines=getattr(clients, 'max_coroutines', None),
     )
 
     # For now we won't track edge invalidation
