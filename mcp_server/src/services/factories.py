@@ -19,6 +19,15 @@ from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
+# OpenAIGenericClient uses /chat/completions (compatible with Gemini, Ollama, etc.)
+# instead of /responses (OpenAI-only)
+try:
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    HAS_OPENAI_GENERIC = True
+except ImportError:
+    HAS_OPENAI_GENERIC = False
+
 # Try to import additional providers if available
 try:
     from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
@@ -119,13 +128,32 @@ class LLMClientFactory:
                 # Use the same model for both main and small model slots
                 small_model = config.model
 
+                # Detect custom (non-OpenAI) endpoints like Gemini, Ollama, vLLM
+                custom_url = config.providers.openai.api_url
+                is_custom_endpoint = (
+                    custom_url
+                    and 'api.openai.com' not in custom_url
+                )
+
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+
+                # Use OpenAIGenericClient for non-OpenAI endpoints (Gemini, Ollama, etc.)
+                # because OpenAIClient uses the /responses API for structured outputs,
+                # which only works with api.openai.com. OpenAIGenericClient uses
+                # /chat/completions with response_format instead, which is compatible
+                # with all OpenAI-compatible endpoints.
+                if is_custom_endpoint and HAS_OPENAI_GENERIC:
+                    logger.info(
+                        f'Using OpenAIGenericClient for custom endpoint: {custom_url}'
+                    )
+                    return OpenAIGenericClient(config=llm_config)
 
                 # Check if this is a reasoning model (o1, o3, gpt-5 family)
                 reasoning_prefixes = ('o1', 'o3', 'gpt-5')
