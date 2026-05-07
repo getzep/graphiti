@@ -1240,9 +1240,10 @@ class Graphiti:
         overwhelm system resources. Consider implementing rate limiting or chunking for
         very large batches of episodes.
 
-        Important: This method does not perform edge invalidation or date extraction steps.
-        If these operations are required, use the `add_episode` method instead for each
-        individual episode.
+        Edge invalidation and date extraction (``valid_at`` / ``invalid_at``) are
+        performed in the bulk path as well: edges flow through ``extract_edges`` and
+        ``resolve_extracted_edges`` just like in ``add_episode``, and any invalidated
+        edges are persisted alongside the newly resolved ones.
         """
         with self.tracer.start_span('add_episode_bulk') as bulk_span:
             bulk_span.add_attributes({'episode.count': len(bulk_episodes)})
