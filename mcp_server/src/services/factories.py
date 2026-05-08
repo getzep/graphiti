@@ -94,6 +94,26 @@ def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
     return api_key
 
 
+def _build_graphiti_llm_config(
+    *,
+    api_key: str,
+    model: str,
+    max_tokens: int,
+    temperature: float | None,
+    base_url: str | None = None,
+) -> GraphitiLLMConfig:
+    kwargs = {
+        'api_key': api_key,
+        'model': model,
+        'max_tokens': max_tokens,
+    }
+    if temperature is not None:
+        kwargs['temperature'] = temperature
+    if base_url is not None:
+        kwargs['base_url'] = base_url
+    return GraphitiLLMConfig(**kwargs)
+
+
 class LLMClientFactory:
     """Factory for creating LLM clients based on configuration."""
 
@@ -199,7 +219,7 @@ class LLMClientFactory:
                 api_key = config.providers.anthropic.api_key
                 _validate_api_key('Anthropic', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     model=config.model,
                     temperature=config.temperature,
@@ -216,7 +236,7 @@ class LLMClientFactory:
                 api_key = config.providers.gemini.api_key
                 _validate_api_key('Gemini', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     model=config.model,
                     temperature=config.temperature,
@@ -233,7 +253,7 @@ class LLMClientFactory:
                 api_key = config.providers.groq.api_key
                 _validate_api_key('Groq', api_key, logger)
 
-                llm_config = GraphitiLLMConfig(
+                llm_config = _build_graphiti_llm_config(
                     api_key=api_key,
                     base_url=config.providers.groq.api_url,
                     model=config.model,
