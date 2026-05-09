@@ -52,6 +52,10 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-group dev
 
+# Install anthropic for Claude support (not in default deps)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install anthropic>=0.49.0
+
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
 
