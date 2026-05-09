@@ -10,7 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 class QueueService:
-    """Service for managing sequential episode processing queues by group_id."""
+    """Service for managing sequential episode processing queues by group_id.
+
+    Note: This implementation uses an in-memory queue (asyncio.Queue) which does not
+    persist across service restarts. Messages queued but not yet processed will be lost
+    if the service crashes or restarts. For production deployments requiring durability,
+    consider using a persistent message broker (e.g., Redis Streams, RabbitMQ).
+    """
 
     def __init__(self):
         """Initialize the queue service."""
@@ -20,6 +26,11 @@ class QueueService:
         self._queue_workers: dict[str, bool] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
+        # FIX: Store task references to prevent garbage collection
+        # See: https://docs.python.org/3/library/asyncio-task.html#creating-tasks
+        # "Important: Save a reference to the result of this function,
+        # to avoid a task disappearing mid-execution."
+        self._worker_tasks: dict[str, asyncio.Task] = {}
 
     async def add_episode_task(
         self, group_id: str, process_func: Callable[[], Awaitable[None]]
@@ -42,7 +53,15 @@ class QueueService:
 
         # Start a worker for this queue if one isn't already running
         if not self._queue_workers.get(group_id, False):
-            asyncio.create_task(self._process_episode_queue(group_id))
+            # FIX: Store task reference to prevent garbage collection
+            task = asyncio.create_task(self._process_episode_queue(group_id))
+            self._worker_tasks[group_id] = task
+
+            # Cleanup callback when task completes
+            def on_done(t: asyncio.Task, gid: str = group_id) -> None:
+                self._worker_tasks.pop(gid, None)
+
+            task.add_done_callback(on_done)
 
         return self._episode_queues[group_id].qsize()
 
