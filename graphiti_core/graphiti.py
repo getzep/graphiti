@@ -1452,7 +1452,10 @@ class Graphiti:
         await remove_communities(driver)
 
         community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids
+            driver,
+            self.llm_client,
+            group_ids,
+            max_coroutines=self.max_coroutines,
         )
 
         await semaphore_gather(
