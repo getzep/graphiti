@@ -125,6 +125,13 @@ class GroqProviderConfig(BaseModel):
     api_url: str = 'https://api.groq.com/openai/v1'
 
 
+class NovitaProviderConfig(BaseModel):
+    """Novita AI provider configuration."""
+
+    api_key: str | None = None
+    api_url: str = 'https://api.novita.ai/openai'
+
+
 class VoyageProviderConfig(BaseModel):
     """Voyage AI provider configuration."""
 
@@ -141,6 +148,7 @@ class LLMProvidersConfig(BaseModel):
     anthropic: AnthropicProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     groq: GroqProviderConfig | None = None
+    novita: NovitaProviderConfig | None = None
 
 
 class LLMConfig(BaseModel):
@@ -162,6 +170,7 @@ class EmbedderProvidersConfig(BaseModel):
     azure_openai: AzureOpenAIProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     voyage: VoyageProviderConfig | None = None
+    novita: NovitaProviderConfig | None = None
 
 
 class EmbedderConfig(BaseModel):

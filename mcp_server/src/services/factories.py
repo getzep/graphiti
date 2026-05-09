@@ -42,6 +42,13 @@ except ImportError:
     HAS_VOYAGE_EMBEDDER = False
 
 try:
+    from graphiti_core.embedder.novita import NovitaEmbedder
+
+    HAS_NOVITA_EMBEDDER = True
+except ImportError:
+    HAS_NOVITA_EMBEDDER = False
+
+try:
     from graphiti_core.llm_client.azure_openai_client import AzureOpenAILLMClient
 
     HAS_AZURE_LLM = True
@@ -68,6 +75,13 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+
+try:
+    from graphiti_core.llm_client.novita_client import NovitaClient
+
+    HAS_NOVITA = True
+except ImportError:
+    HAS_NOVITA = False
 
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
@@ -242,6 +256,24 @@ class LLMClientFactory:
                 )
                 return GroqClient(config=llm_config)
 
+            case 'novita':
+                if not HAS_NOVITA:
+                    raise ValueError('Novita client not available in current graphiti-core version')
+                if not config.providers.novita:
+                    raise ValueError('Novita provider configuration not found')
+
+                api_key = config.providers.novita.api_key
+                _validate_api_key('Novita', api_key, logger)
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    base_url=config.providers.novita.api_url,
+                    model=config.model,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                return NovitaClient(config=llm_config)
+
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
 
@@ -353,6 +385,27 @@ class EmbedderFactory:
                     embedding_dim=config.dimensions or 1024,
                 )
                 return VoyageAIEmbedder(config=voyage_config)
+
+            case 'novita':
+                if not HAS_NOVITA_EMBEDDER:
+                    raise ValueError(
+                        'Novita embedder not available in current graphiti-core version'
+                    )
+                if not config.providers.novita:
+                    raise ValueError('Novita provider configuration not found')
+
+                api_key = config.providers.novita.api_key
+                _validate_api_key('Novita Embedder', api_key, logger)
+
+                from graphiti_core.embedder.novita import NovitaEmbedderConfig
+
+                novita_config = NovitaEmbedderConfig(
+                    api_key=api_key,
+                    base_url=config.providers.novita.api_url,
+                    embedding_model=config.model or 'qwen/qwen3-embedding-0.6b',
+                    embedding_dim=config.dimensions or 1024,
+                )
+                return NovitaEmbedder(config=novita_config)
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')

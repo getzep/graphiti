@@ -17,13 +17,15 @@ limitations under the License.
 from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
+from .novita_client import NovitaClient
 from .openai_client import OpenAIClient
 from .token_tracker import TokenUsage, TokenUsageTracker
 
 __all__ = [
     'LLMClient',
-    'OpenAIClient',
     'LLMConfig',
+    'NovitaClient',
+    'OpenAIClient',
     'RateLimitError',
     'TokenUsage',
     'TokenUsageTracker',
