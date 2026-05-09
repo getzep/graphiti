@@ -201,6 +201,7 @@ class LLMClientFactory:
 
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.anthropic.api_url,
                     model=config.model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
@@ -270,6 +271,7 @@ class EmbedderFactory:
 
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     embedding_model=config.model,
                     base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
                     embedding_dim=config.dimensions,  # Support custom embedding dimensions
