@@ -153,6 +153,8 @@ def test_cli_override():
     class Args:
         config = Path('config.yaml')
         transport = 'stdio'
+        host = '127.0.0.1'
+        port = 8080
         llm_provider = 'anthropic'
         model = 'claude-3-sonnet'
         temperature = 0.5
@@ -167,6 +169,8 @@ def test_cli_override():
 
     print('✓ CLI overrides applied successfully')
     print(f'  - Transport: {config.server.transport}')
+    print(f'  - Host: {config.server.host}')
+    print(f'  - Port: {config.server.port}')
     print(f'  - LLM provider: {config.llm.provider}')
     print(f'  - LLM model: {config.llm.model}')
     print(f'  - Temperature: {config.llm.temperature}')
