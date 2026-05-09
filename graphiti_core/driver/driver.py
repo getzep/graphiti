@@ -132,6 +132,14 @@ class GraphDriver(QueryExecutor, ABC):
         """Clone the driver with a different database or graph name."""
         return self
 
+    async def ensure_database_initialized(self) -> None:
+        """Ensure indices and constraints exist for the current database.
+
+        FalkorDB overrides this to track per-graph initialization.
+        Other backends are no-ops since they share a single database.
+        """
+        pass
+
     def build_fulltext_query(
         self, query: str, group_ids: list[str] | None = None, max_query_length: int = 128
     ) -> str:

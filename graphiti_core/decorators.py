@@ -50,7 +50,6 @@ def handle_multiple_group_ids(func: F) -> F:
             and hasattr(self.clients, 'driver')
             and self.clients.driver.provider == GraphProvider.FALKORDB
             and group_ids
-            and len(group_ids) > 1
         ):
             # Execute for each group_id concurrently
             driver = self.clients.driver
@@ -61,10 +60,13 @@ def handle_multiple_group_ids(func: F) -> F:
                 if group_ids_pos is not None and len(args) > group_ids_pos:
                     filtered_args.pop(group_ids_pos)
 
+                cloned = driver.clone(database=gid)
+                await cloned.ensure_database_initialized()
+
                 return await func(
                     self,
                     *filtered_args,
-                    **{**kwargs, 'group_ids': [gid], 'driver': driver.clone(database=gid)},
+                    **{**kwargs, 'group_ids': [gid], 'driver': cloned},
                 )
 
             results = await semaphore_gather(
@@ -93,6 +95,34 @@ def handle_multiple_group_ids(func: F) -> F:
                 return results
 
         # Normal execution
+        return await func(self, *args, **kwargs)
+
+    return wrapper  # type: ignore
+
+
+def handle_single_group_id(func: F) -> F:
+    """
+    Decorator for FalkorDB write methods that need to scope to a single group_id.
+    Injects a cloned driver targeted at the group's graph instead of mutating self.driver.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        group_id = kwargs.get('group_id')
+        if group_id is None:
+            pos = get_parameter_position(func, 'group_id')
+            if pos is not None and len(args) > pos - 1:
+                group_id = args[pos - 1]  # adjust for self
+        if (
+            group_id
+            and hasattr(self, 'clients')
+            and hasattr(self.clients, 'driver')
+            and self.clients.driver.provider == GraphProvider.FALKORDB
+            and group_id != self.clients.driver._database
+        ):
+            cloned = self.clients.driver.clone(database=group_id)
+            await cloned.ensure_database_initialized()
+            kwargs['driver'] = cloned
         return await func(self, *args, **kwargs)
 
     return wrapper  # type: ignore

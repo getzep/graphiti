@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import asyncio
+import copy
 import datetime
 import logging
 from typing import TYPE_CHECKING, Any
@@ -158,12 +159,16 @@ class FalkorDriver(GraphDriver):
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
 
+        # Track which databases have had indices built (shared across clones via shallow copy)
+        self._initialized_databases: set[str] = set()
+
         # Schedule the indices and constraints to be built
         try:
             # Try to get the current event loop
             loop = asyncio.get_running_loop()
             # Schedule the build_indices_and_constraints to run
             loop.create_task(self.build_indices_and_constraints())
+            self._initialized_databases.add(self._database)
         except RuntimeError:
             # No event loop running, this will be handled later
             pass
@@ -307,17 +312,24 @@ class FalkorDriver(GraphDriver):
     def clone(self, database: str) -> 'GraphDriver':
         """
         Returns a shallow copy of this driver with a different default database.
-        Reuses the same connection (e.g. FalkorDB, Neo4j).
+        Reuses the same connection and all operation objects without running __init__.
+        The _initialized_databases set is shared across all clones via shallow copy.
         """
         if database == self._database:
-            cloned = self
-        elif database == self.default_group_id:
-            cloned = FalkorDriver(falkor_db=self.client)
-        else:
-            # Create a new instance of FalkorDriver with the same connection but a different database
-            cloned = FalkorDriver(falkor_db=self.client, database=database)
-
+            return self
+        cloned = copy.copy(self)
+        cloned._database = database
         return cloned
+
+    async def ensure_database_initialized(self) -> None:
+        """Ensure indices and constraints exist for the current database.
+
+        Uses _initialized_databases (shared across all clones via shallow copy)
+        to ensure each group's graph gets indices built exactly once.
+        """
+        if self._database not in self._initialized_databases:
+            self._initialized_databases.add(self._database)
+            await self.build_indices_and_constraints()
 
     async def health_check(self) -> None:
         """Check FalkorDB connectivity by running a simple query."""

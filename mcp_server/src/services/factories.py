@@ -116,11 +116,17 @@ class LLMClientFactory:
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
-                # Use the same model for both main and small model slots
-                small_model = config.model
+                small_model = config.small_model or config.model
+
+                # Only pass base_url when it differs from the OpenAI default so that
+                # custom endpoints (e.g. LiteLLM, Ollama) are respected.
+                base_url = config.providers.openai.api_url
+                if base_url == 'https://api.openai.com/v1':
+                    base_url = None
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=base_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
