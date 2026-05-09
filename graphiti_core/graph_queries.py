@@ -5,6 +5,8 @@ This module provides database-agnostic query generation for Neo4j and FalkorDB,
 supporting index creation, fulltext search, and bulk operations.
 """
 
+import re
+
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
@@ -173,3 +175,24 @@ def get_relationships_query(name: str, limit: int, provider: GraphProvider) -> s
         return f"CALL QUERY_FTS_INDEX('{label}', '{name}', cast($query AS STRING), TOP := $limit)"
 
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
+
+
+_NEO4J_INDEX_NAME_RE = re.compile(
+    r'CREATE\s+(?:FULLTEXT\s+)?INDEX\s+(\S+)\s+IF\s+NOT\s+EXISTS',
+    re.IGNORECASE,
+)
+
+
+def get_neo4j_expected_index_names() -> set[str]:
+    """Extract index names from Neo4j CREATE INDEX queries.
+
+    Returns the set of index names that Neo4j is expected to have, derived
+    directly from the queries in get_range_indices and get_fulltext_indices.
+    """
+    queries = get_range_indices(GraphProvider.NEO4J) + get_fulltext_indices(GraphProvider.NEO4J)
+    names: set[str] = set()
+    for q in queries:
+        m = _NEO4J_INDEX_NAME_RE.search(q)
+        if m:
+            names.add(m.group(1))
+    return names
