@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from functools import partial
 
@@ -8,6 +9,35 @@ from graphiti_core.utils.maintenance.graph_data_operations import clear_data  # 
 
 from graph_service.dto import AddEntityNodeRequest, AddMessagesRequest, Message, Result
 from graph_service.zep_graphiti import ZepGraphitiDep
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
+BASE_BACKOFF = 5  # seconds
+
+# Errors that are permanent — retrying the same data won't help, skip immediately
+PERMANENT_ERRORS = (
+    IndexError,   # list index out of range in entity resolution
+    KeyError,     # UUID not found in graph result set
+    ValueError,   # data format / schema issues
+)
+
+# Error type names for permanent HTTP errors (provider-specific subclasses)
+PERMANENT_ERROR_NAMES = {
+    'BadRequestError',           # HTTP 400
+    'NotFoundError',             # HTTP 404
+    'UnprocessableEntityError',
+}
+
+
+def is_permanent(e: Exception) -> bool:
+    if isinstance(e, PERMANENT_ERRORS):
+        return True
+    if type(e).__name__ in PERMANENT_ERROR_NAMES:
+        return True
+    if hasattr(e, 'status_code') and e.status_code == 400:
+        return True
+    return False
 
 
 class AsyncWorker:
@@ -20,7 +50,42 @@ class AsyncWorker:
             try:
                 print(f'Got a job: (size of remaining queue: {self.queue.qsize()})')
                 job = await self.queue.get()
-                await job()
+                for attempt in range(MAX_RETRIES):
+                    try:
+                        await job()
+                        break  # success — move to next job
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        err_name = type(e).__name__
+
+                        # Permanent errors: skip immediately, no point retrying
+                        if is_permanent(e):
+                            print(f'[worker] permanent error ({err_name}), skipping: {e}')
+                            logger.error('Job skipped (permanent error): %s', e, exc_info=True)
+                            break
+
+                        # Transient errors: retry with exponential backoff
+                        if attempt < MAX_RETRIES - 1:
+                            wait = BASE_BACKOFF * (2 ** attempt)  # 5, 10, 20, 40s
+                            print(
+                                f'[worker] attempt {attempt + 1}/{MAX_RETRIES} failed '
+                                f'({err_name}), retry in {wait}s: {e}'
+                            )
+                            logger.warning(
+                                'Job attempt %d/%d failed, retrying in %ds: %s',
+                                attempt + 1, MAX_RETRIES, wait, e,
+                            )
+                            await asyncio.sleep(wait)
+                        else:
+                            print(
+                                f'[worker] job failed after {MAX_RETRIES} attempts '
+                                f'({err_name}), skipping: {e}'
+                            )
+                            logger.error(
+                                'Job failed after %d attempts, skipping: %s',
+                                MAX_RETRIES, e, exc_info=True,
+                            )
             except asyncio.CancelledError:
                 break
 

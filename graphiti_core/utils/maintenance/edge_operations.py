@@ -453,6 +453,25 @@ async def resolve_extracted_edges(
         for node in missing_nodes:
             uuid_entity_map[node.uuid] = node
 
+    # Filter out edges with phantom UUID references that could not be resolved from the database.
+    # This guards against LLM inconsistency between the node-extraction and edge-extraction steps,
+    # where edges may reference UUIDs of nodes that were never created in the current batch.
+    # Such edges cannot be persisted regardless, so dropping them is safe. Related: #1171
+    phantom_indices = [
+        i for i, e in enumerate(extracted_edges)
+        if e.source_node_uuid not in uuid_entity_map or e.target_node_uuid not in uuid_entity_map
+    ]
+    if phantom_indices:
+        logger.warning(
+            'Dropping %d edge(s) with phantom UUID references '
+            '(source or target node not found in current batch or database)',
+            len(phantom_indices),
+        )
+        valid_indices = [i for i in range(len(extracted_edges)) if i not in set(phantom_indices)]
+        extracted_edges = [extracted_edges[i] for i in valid_indices]
+        related_edges_lists = [related_edges_lists[i] for i in valid_indices]
+        edge_invalidation_candidates = [edge_invalidation_candidates[i] for i in valid_indices]
+
     # Determine which edge types are relevant for each edge based on node signatures.
     # `edge_types_lst` stores the subset of custom edge definitions whose
     # node signature matches each extracted edge.
