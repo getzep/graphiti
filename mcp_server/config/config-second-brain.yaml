@@ -1,0 +1,54 @@
+# Second Brain Graphiti MCP Server Configuration
+
+server:
+  transport: "http"
+  host: "0.0.0.0"
+  port: 8000
+
+llm:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  max_tokens: 4096
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+
+embedder:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  dimensions: 1536
+
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+
+database:
+  provider: "falkordb"
+  providers:
+    falkordb:
+      uri: ${FALKORDB_URI:redis://localhost:6379}
+      password: ${FALKORDB_PASSWORD:}
+      database: ${FALKORDB_DATABASE:second_brain}
+
+graphiti:
+  group_id: ${GRAPHITI_GROUP_ID:second-brain}
+  episode_id_prefix: ${EPISODE_ID_PREFIX:}
+  user_id: ${USER_ID:chris}
+  entity_types:
+    - name: "Project"
+      description: "A project, program, client engagement, or initiative"
+    - name: "Person"
+      description: "A person — stakeholder, collaborator, contact, team member"
+    - name: "Organization"
+      description: "A company, agency, lab, partner org, or vendor"
+    - name: "Decision"
+      description: "A significant choice with rationale and impact"
+    - name: "Topic"
+      description: "A theme or subject that spans multiple projects"
+    - name: "Deliverable"
+      description: "A specific output — report, presentation, tool, workshop, strategy document"
+    - name: "Event"
+      description: "A time-bound activity — meeting, workshop, call, conference"
