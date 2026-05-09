@@ -1982,7 +1982,41 @@ async def test_episode_mentions_reranker(graph_driver, mock_embedder):
     uuid_to_name = {entity_node_1.uuid: entity_node_1.name, entity_node_2.uuid: entity_node_2.name}
     names = [uuid_to_name[uuid] for uuid in reranked_uuids]
     assert names == [entity_node_1.name, entity_node_2.name]
-    assert np.allclose(reranked_scores, [1.0, float('inf')])
+    assert np.allclose(reranked_scores, [1.0, 0])
+
+    # Add a second episodic node mentioning entity_node_1 so it has 2 mentions vs 1 for entity_node_2
+    episodic_node_2 = EpisodicNode(
+        name='test_episodic_2',
+        content='test_content_2',
+        created_at=datetime.now(),
+        valid_at=datetime.now(),
+        group_id=group_id,
+        source=EpisodeType.message,
+        source_description='Description about Bob',
+    )
+    episodic_edge_2 = EpisodicEdge(
+        source_node_uuid=episodic_node_2.uuid,
+        target_node_uuid=entity_node_1.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    episodic_edge_3 = EpisodicEdge(
+        source_node_uuid=episodic_node_2.uuid,
+        target_node_uuid=entity_node_2.uuid,
+        created_at=datetime.now(),
+        group_id=group_id,
+    )
+    await episodic_node_2.save(graph_driver)
+    await episodic_edge_2.save(graph_driver)
+    await episodic_edge_3.save(graph_driver)
+
+    reranked_uuids, reranked_scores = await episode_mentions_reranker(
+        graph_driver,
+        [[entity_node_1.uuid, entity_node_2.uuid]],
+    )
+    names = [uuid_to_name[uuid] for uuid in reranked_uuids]
+    assert names == [entity_node_1.name, entity_node_2.name]
+    assert np.allclose(reranked_scores, [2.0, 1.0])
 
 
 @pytest.mark.asyncio
