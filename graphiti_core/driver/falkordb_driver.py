@@ -403,9 +403,12 @@ class FalkorDriver(GraphDriver):
         if group_ids is None or len(group_ids) == 0:
             group_filter = ''
         else:
-            # Escape group_ids with quotes to prevent RediSearch syntax errors
-            # with reserved words like "main" or special characters like hyphens
-            escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+            # Escape RediSearch special characters (hyphens, etc.) in group_ids
+            from graphiti_core.driver.falkordb.operations.search_ops import (
+                _escape_redisearch_value,
+            )
+
+            escaped_group_ids = [_escape_redisearch_value(gid) for gid in group_ids]
             group_values = '|'.join(escaped_group_ids)
             group_filter = f'(@group_id:{group_values})'
 
