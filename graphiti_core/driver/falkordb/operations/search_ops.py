@@ -415,7 +415,7 @@ class FalkorSearchOperations(SearchOperations):
             UNWIND $bfs_origin_node_uuids AS origin_uuid
             MATCH path = (origin {{uuid: origin_uuid}})-[:RELATES_TO|MENTIONS*1..{max_depth}]->(:Entity)
             UNWIND relationships(path) AS rel
-            MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]-(m:Entity)
+            MATCH (n:Entity)-[e:RELATES_TO {{uuid: rel.uuid}}]->(m:Entity)
             """
             + filter_query
             + """

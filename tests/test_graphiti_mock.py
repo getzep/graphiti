@@ -1257,9 +1257,8 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
         search_filters,
         group_ids=[group_id],
     )
-    edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
-    assert len(edges_deduplicated) == 1
-    assert edges_deduplicated == {'test_entity_1 relates to test_entity_2'}
+    assert len(edges) == 1, f'Expected 1 edge (no duplicates), got {len(edges)}'
+    assert edges[0].fact == 'test_entity_1 relates to test_entity_2'
 
     edges = await edge_bfs_search(
         graph_driver,
@@ -1268,9 +1267,8 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
         search_filters,
         group_ids=[group_id],
     )
-    edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
-    assert len(edges_deduplicated) == 2
-    assert edges_deduplicated == {
+    assert len(edges) == 2, f'Expected 2 edges (no duplicates), got {len(edges)}'
+    assert {e.fact for e in edges} == {
         'test_entity_1 relates to test_entity_2',
         'test_entity_2 relates to test_entity_3',
     }
@@ -1284,9 +1282,8 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
         search_filters,
         group_ids=[group_id],
     )
-    edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
-    assert len(edges_deduplicated) == 1
-    assert edges_deduplicated == {'test_entity_1 relates to test_entity_2'}
+    assert len(edges) == 1, f'Expected 1 edge (no duplicates), got {len(edges)}'
+    assert edges[0].fact == 'test_entity_1 relates to test_entity_2'
 
     edges = await edge_bfs_search(
         graph_driver,
@@ -1295,12 +1292,16 @@ async def test_edge_bfs_search(graph_driver, mock_embedder):
         search_filters,
         group_ids=[group_id],
     )
-    edges_deduplicated = set({edge.uuid: edge.fact for edge in edges}.values())
-    assert len(edges_deduplicated) == 2
-    assert edges_deduplicated == {
+    assert len(edges) == 2, f'Expected 2 edges (no duplicates), got {len(edges)}'
+    assert {e.fact for e in edges} == {
         'test_entity_1 relates to test_entity_2',
         'test_entity_2 relates to test_entity_3',
     }
+    # Verify source/target directionality is preserved (regression guard for undirected match bug)
+    edge_map = {e.fact: e for e in edges}
+    e1 = edge_map['test_entity_1 relates to test_entity_2']
+    assert e1.source_node_uuid == entity_node_1.uuid
+    assert e1.target_node_uuid == entity_node_2.uuid
 
 
 @pytest.mark.asyncio
