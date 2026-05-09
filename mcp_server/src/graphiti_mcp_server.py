@@ -14,6 +14,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
+from graphiti_core.helpers import normalize_group_ids
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
@@ -407,7 +408,7 @@ async def add_memory(
 @mcp.tool()
 async def search_nodes(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_nodes: int = 10,
     entity_types: list[str] | None = None,
 ) -> NodeSearchResponse | ErrorResponse:
@@ -415,7 +416,8 @@ async def search_nodes(
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID or list of group IDs to filter results.
+                   Can be a string (single group ID) or list of strings.
         max_nodes: Maximum number of nodes to return (default: 10)
         entity_types: Optional list of entity type names to filter by
     """
@@ -427,10 +429,13 @@ async def search_nodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Normalize group_ids parameter (handles str, list[str], or None)
+        normalized_group_ids = normalize_group_ids(group_ids)
+        
+        # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids
-            if group_ids is not None
+            normalized_group_ids
+            if normalized_group_ids is not None
             else [config.graphiti.group_id]
             if config.graphiti.group_id
             else []
@@ -487,7 +492,7 @@ async def search_nodes(
 @mcp.tool()
 async def search_memory_facts(
     query: str,
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_facts: int = 10,
     center_node_uuid: str | None = None,
 ) -> FactSearchResponse | ErrorResponse:
@@ -495,7 +500,8 @@ async def search_memory_facts(
 
     Args:
         query: The search query
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID or list of group IDs to filter results.
+                   Can be a string (single group ID) or list of strings.
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
@@ -511,10 +517,13 @@ async def search_memory_facts(
 
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Normalize group_ids parameter (handles str, list[str], or None)
+        normalized_group_ids = normalize_group_ids(group_ids)
+        
+        # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids
-            if group_ids is not None
+            normalized_group_ids
+            if normalized_group_ids is not None
             else [config.graphiti.group_id]
             if config.graphiti.group_id
             else []
@@ -619,13 +628,14 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
 
 @mcp.tool()
 async def get_episodes(
-    group_ids: list[str] | None = None,
+    group_ids: str | list[str] | None = None,
     max_episodes: int = 10,
 ) -> EpisodeSearchResponse | ErrorResponse:
     """Get episodes from the graph memory.
 
     Args:
-        group_ids: Optional list of group IDs to filter results
+        group_ids: Optional group ID or list of group IDs to filter results.
+                   Can be a string (single group ID) or list of strings.
         max_episodes: Maximum number of episodes to return (default: 10)
     """
     global graphiti_service
@@ -636,10 +646,13 @@ async def get_episodes(
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Normalize group_ids parameter (handles str, list[str], or None)
+        normalized_group_ids = normalize_group_ids(group_ids)
+        
+        # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids
-            if group_ids is not None
+            normalized_group_ids
+            if normalized_group_ids is not None
             else [config.graphiti.group_id]
             if config.graphiti.group_id
             else []
@@ -686,11 +699,13 @@ async def get_episodes(
 
 
 @mcp.tool()
-async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | ErrorResponse:
+async def clear_graph(group_ids: str | list[str] | None = None) -> SuccessResponse | ErrorResponse:
     """Clear all data from the graph for specified group IDs.
 
     Args:
-        group_ids: Optional list of group IDs to clear. If not provided, clears the default group.
+        group_ids: Optional group ID or list of group IDs to clear.
+                   Can be a string (single group ID) or list of strings.
+                   If not provided, clears the default group.
     """
     global graphiti_service
 
@@ -700,9 +715,12 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
     try:
         client = await graphiti_service.get_client()
 
-        # Use the provided group_ids or fall back to the default from config if none provided
+        # Normalize group_ids parameter (handles str, list[str], or None)
+        normalized_group_ids = normalize_group_ids(group_ids)
+        
+        # Use the normalized group_ids or fall back to the default from config if none provided
         effective_group_ids = (
-            group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
+            normalized_group_ids or [config.graphiti.group_id] if config.graphiti.group_id else []
         )
 
         if not effective_group_ids:
