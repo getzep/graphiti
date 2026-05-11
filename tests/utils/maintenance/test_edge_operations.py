@@ -9,6 +9,7 @@ from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode, EpisodicNode
 from graphiti_core.search.search_config import SearchResults
 from graphiti_core.utils.maintenance.edge_operations import (
+    extract_edges,
     resolve_extracted_edge,
     resolve_extracted_edges,
 )
@@ -557,3 +558,146 @@ def test_edge_type_signatures_map_single_signature_still_works():
         assert 'fact_type_signatures' in ctx
         assert isinstance(ctx['fact_type_signatures'], list)
         assert len(ctx['fact_type_signatures']) == 1
+
+
+@pytest.mark.asyncio
+async def test_extract_edges_drops_self_edges(monkeypatch):
+    """Self-edges (source == target) are dropped during extraction."""
+    from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
+    from graphiti_core.prompts.extract_edges import ExtractedEdges
+
+    alice = EntityNode(
+        uuid='alice_uuid',
+        name='Alice',
+        group_id='group_1',
+        labels=['Person'],
+    )
+    bob = EntityNode(
+        uuid='bob_uuid',
+        name='Bob',
+        group_id='group_1',
+        labels=['Person'],
+    )
+
+    # LLM returns one valid edge and one self-edge
+    llm_response = ExtractedEdges(
+        edges=[
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Bob',
+                relation_type='CONGRATULATED',
+                fact='Alice congratulated Bob',
+                valid_at=None,
+                invalid_at=None,
+            ),
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Alice',
+                relation_type='FEELS_HAPPY',
+                fact='Alice feels happy',
+                valid_at=None,
+                invalid_at=None,
+            ),
+        ]
+    ).model_dump()
+
+    mock_llm = MagicMock()
+    mock_llm.generate_response = AsyncMock(return_value=llm_response)
+
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=mock_llm,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+
+    episode = EpisodicNode(
+        uuid='ep_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice congratulated Bob. Alice feels happy.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    edges = await extract_edges(
+        clients,
+        episode,
+        [alice, bob],
+        [],
+        {},
+        group_id='group_1',
+    )
+
+    # Only the Alice -> Bob edge survives; the Alice -> Alice self-edge is dropped
+    assert len(edges) == 1
+    assert edges[0].source_node_uuid == 'alice_uuid'
+    assert edges[0].target_node_uuid == 'bob_uuid'
+    assert edges[0].name == 'CONGRATULATED'
+
+
+@pytest.mark.asyncio
+async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(monkeypatch):
+    """Edges between different nodes that happen to share a name are NOT self-edges."""
+    from graphiti_core.prompts.extract_edges import Edge as ExtractedEdge
+    from graphiti_core.prompts.extract_edges import ExtractedEdges
+
+    alice = EntityNode(
+        uuid='alice_uuid',
+        name='Alice',
+        group_id='group_1',
+        labels=['Person'],
+    )
+    paris = EntityNode(
+        uuid='paris_uuid',
+        name='Paris',
+        group_id='group_1',
+        labels=['City'],
+    )
+
+    llm_response = ExtractedEdges(
+        edges=[
+            ExtractedEdge(
+                source_entity_name='Alice',
+                target_entity_name='Paris',
+                relation_type='LIVES_IN',
+                fact='Alice lives in Paris',
+                valid_at=None,
+                invalid_at=None,
+            ),
+        ]
+    ).model_dump()
+
+    mock_llm = MagicMock()
+    mock_llm.generate_response = AsyncMock(return_value=llm_response)
+
+    clients = SimpleNamespace(
+        driver=MagicMock(),
+        llm_client=mock_llm,
+        embedder=MagicMock(),
+        cross_encoder=MagicMock(),
+    )
+
+    episode = EpisodicNode(
+        uuid='ep_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Alice lives in Paris.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    edges = await extract_edges(
+        clients,
+        episode,
+        [alice, paris],
+        [],
+        {},
+        group_id='group_1',
+    )
+
+    assert len(edges) == 1
+    assert edges[0].source_node_uuid == 'alice_uuid'
+    assert edges[0].target_node_uuid == 'paris_uuid'

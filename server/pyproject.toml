@@ -9,9 +9,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
-    "graphiti-core>=0.28.1",
+    "graphiti-core>=0.28.2",
     "pydantic-settings>=2.4.0",
-    "uvicorn>=0.30.6",
+    "uvicorn>=0.44.0",
     "httpx>=0.28.1",
 ]
 
@@ -19,8 +19,8 @@ dependencies = [
 dev = [
     "pydantic>=2.8.2",
     "pyright>=1.1.380",
-    "pytest>=8.3.2",
-    "python-dotenv>=1.0.1",
+    "pytest>=9.0.3",
+    "python-dotenv>=1.2.2",
     "pytest-asyncio>=0.24.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.6.2",

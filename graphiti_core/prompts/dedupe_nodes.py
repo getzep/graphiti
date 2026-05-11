@@ -28,9 +28,9 @@ class NodeDuplicate(BaseModel):
         ...,
         description='Name of the entity. Should be the most complete and descriptive name of the entity. Do not include any JSON formatting in the Entity name such as {}.',
     )
-    duplicate_name: str = Field(
+    duplicate_candidate_id: int = Field(
         ...,
-        description='Name of the duplicate entity from EXISTING ENTITIES. If no duplicate entity is found, use an empty string.',
+        description='candidate_id of the matching EXISTING ENTITY, or -1 if no duplicate exists.',
     )
 
 
@@ -54,55 +54,62 @@ def node(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that determines whether or not a NEW ENTITY is a duplicate of any EXISTING ENTITIES.',
+            content='You are an entity deduplication assistant. '
+            'NEVER fabricate entity names or mark distinct entities as duplicates.',
         ),
         Message(
             role='user',
             content=f"""
-        <PREVIOUS MESSAGES>
-        {to_prompt_json([ep for ep in context['previous_episodes']])}
-        </PREVIOUS MESSAGES>
-        <CURRENT MESSAGE>
-        {context['episode_content']}
-        </CURRENT MESSAGE>
-        <NEW ENTITY>
-        {to_prompt_json(context['extracted_node'])}
-        </NEW ENTITY>
-        <ENTITY TYPE DESCRIPTION>
-        {to_prompt_json(context['entity_type_description'])}
-        </ENTITY TYPE DESCRIPTION>
+<PREVIOUS MESSAGES>
+{to_prompt_json(context['previous_episodes'])}
+</PREVIOUS MESSAGES>
 
-        <EXISTING ENTITIES>
-        {to_prompt_json(context['existing_nodes'])}
-        </EXISTING ENTITIES>
-        
-        Given the above EXISTING ENTITIES and their attributes, MESSAGE, and PREVIOUS MESSAGES; Determine if the NEW ENTITY extracted from the conversation
-        is a duplicate entity of one of the EXISTING ENTITIES.
-        
-        Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
-        Semantic Equivalence: if a descriptive label in existing_entities clearly refers to a named entity in context, treat them as duplicates.
+<CURRENT MESSAGE>
+{context['episode_content']}
+</CURRENT MESSAGE>
 
-        Do NOT mark entities as duplicates if:
-        - They are related but distinct.
-        - They have similar names or purposes but refer to separate instances or concepts.
+<NEW ENTITY>
+{to_prompt_json(context['extracted_node'])}
+</NEW ENTITY>
 
-         TASK:
-         1. Compare the NEW ENTITY against each entity in EXISTING ENTITIES.
-         2. If it refers to the same real-world object or concept, identify the matching entity by name.
+<ENTITY TYPE DESCRIPTION>
+{to_prompt_json(context['entity_type_description'])}
+</ENTITY TYPE DESCRIPTION>
 
-        Respond with a JSON object containing an "entity_resolutions" array with a single entry:
-        {{
-            "entity_resolutions": [
-                {{
-                    "id": integer id from NEW ENTITY,
-                    "name": the best full name for the entity,
-                    "duplicate_name": the name of the matching entity from EXISTING ENTITIES, or empty string if none
-                }}
-            ]
-        }}
+<EXISTING ENTITIES>
+{to_prompt_json(context['existing_nodes'])}
+</EXISTING ENTITIES>
 
-        Only use names that appear in EXISTING ENTITIES, and return empty string when unsure.
-        """,
+Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+Semantic Equivalence: if a descriptive label in EXISTING ENTITIES clearly refers to a named entity in context, treat them as duplicates.
+
+NEVER mark entities as duplicates if:
+- They are related but distinct.
+- They have similar names or purposes but refer to separate instances or concepts.
+
+Task:
+1. Compare the NEW ENTITY against each EXISTING ENTITY (identified by `candidate_id`).
+2. If it refers to the same real-world object or concept, return the `candidate_id` of that match.
+3. Return `duplicate_candidate_id = -1` when there is no match or you are unsure.
+
+<EXAMPLE>
+NEW ENTITY: "Sam" (Person)
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}}]
+Result: duplicate_candidate_id = 0 (same person referenced in conversation)
+
+NEW ENTITY: "NYC"
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}}, {{"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}}]
+Result: duplicate_candidate_id = 0 (same location, abbreviated name)
+
+NEW ENTITY: "Java" (programming language)
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}}]
+Result: duplicate_candidate_id = -1 (same name but distinct real-world things)
+
+NEW ENTITY: "Marco's car"
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}}]
+Result: duplicate_candidate_id = 0 (synonym — "car" and "vehicle" refer to the same thing, same possessor)
+</EXAMPLE>
+""",
         ),
     ]
 
@@ -111,67 +118,63 @@ def nodes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates'
-            ' of existing entities.',
+            content='You are an entity deduplication assistant. '
+            'NEVER fabricate entity names or mark distinct entities as duplicates.',
         ),
         Message(
             role='user',
             content=f"""
-        <PREVIOUS MESSAGES>
-        {to_prompt_json([ep for ep in context['previous_episodes']])}
-        </PREVIOUS MESSAGES>
-        <CURRENT MESSAGE>
-        {context['episode_content']}
-        </CURRENT MESSAGE>
+<PREVIOUS MESSAGES>
+{to_prompt_json(context['previous_episodes'])}
+</PREVIOUS MESSAGES>
 
+<CURRENT MESSAGE>
+{context['episode_content']}
+</CURRENT MESSAGE>
 
-        Each of the following ENTITIES were extracted from the CURRENT MESSAGE.
-        Each entity in ENTITIES is represented as a JSON object with the following structure:
-        {{
-            id: integer id of the entity,
-            name: "name of the entity",
-            entity_type: ["Entity", "<optional additional label>", ...],
-            entity_type_description: "Description of what the entity type represents"
-        }}
+<ENTITIES>
+{to_prompt_json(context['extracted_nodes'])}
+</ENTITIES>
 
-        <ENTITIES>
-        {to_prompt_json(context['extracted_nodes'])}
-        </ENTITIES>
+<EXISTING ENTITIES>
+{to_prompt_json(context['existing_nodes'])}
+</EXISTING ENTITIES>
 
-        <EXISTING ENTITIES>
-        {to_prompt_json(context['existing_nodes'])}
-        </EXISTING ENTITIES>
+Each of the above ENTITIES was extracted from the CURRENT MESSAGE.
+For each entity, determine if it is a duplicate of any EXISTING ENTITY.
+Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
 
-        Each entry in EXISTING ENTITIES is an object with the following structure:
-        {{
-            name: "name of the candidate entity",
-            entity_types: ["Entity", "<optional additional label>", ...],
-            ...<additional attributes such as summaries or metadata>
-        }}
+NEVER mark entities as duplicates if:
+- They are related but distinct.
+- They have similar names or purposes but refer to separate instances or concepts.
 
-        For each of the above ENTITIES, determine if the entity is a duplicate of any of the EXISTING ENTITIES.
+Task:
+ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
+Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions with IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip or add IDs.
 
-        Entities should only be considered duplicates if they refer to the *same real-world object or concept*.
+For every entity, provide:
+- `id`: integer id from ENTITIES
+- `name`: the best full name for the entity (preserve the original name unless a duplicate has a more complete name)
+- `duplicate_candidate_id`: the `candidate_id` of the EXISTING ENTITY that is the best duplicate match, or -1 if there is no duplicate
 
-        Do NOT mark entities as duplicates if:
-        - They are related but distinct.
-        - They have similar names or purposes but refer to separate instances or concepts.
+<EXAMPLE>
+ENTITY: "Sam" (Person)
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Sam", "entity_types": ["Person"], "summary": "Sam enjoys hiking and photography"}}]
+Result: duplicate_candidate_id = 0 (same person referenced in conversation)
 
-        Task:
-        ENTITIES contains {len(context['extracted_nodes'])} entities with IDs 0 through {len(context['extracted_nodes']) - 1}.
-        Your response MUST include EXACTLY {len(context['extracted_nodes'])} resolutions with IDs 0 through {len(context['extracted_nodes']) - 1}. Do not skip or add IDs.
+ENTITY: "NYC"
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "New York City", "entity_types": ["Location"]}}, {{"candidate_id": 1, "name": "New York Knicks", "entity_types": ["Organization"]}}]
+Result: duplicate_candidate_id = 0 (same location, abbreviated name)
 
-        For every entity, return an object with the following keys:
-        {{
-            "id": integer id from ENTITIES,
-            "name": the best full name for the entity (preserve the original name unless a duplicate has a more complete name),
-            "duplicate_name": the name of the EXISTING ENTITY that is the best duplicate match, or empty string if there is no duplicate
-        }}
+ENTITY: "Java" (programming language)
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Java", "entity_types": ["Location"], "summary": "An island in Indonesia"}}]
+Result: duplicate_candidate_id = -1 (same name but distinct real-world things)
 
-        - Only use names that appear in EXISTING ENTITIES.
-        - Use empty string if there is no duplicate.
-        - Never fabricate entity names.
-        """,
+ENTITY: "Marco's car"
+EXISTING ENTITIES: [{{"candidate_id": 0, "name": "Marco's vehicle", "entity_types": ["Entity"], "summary": "Marco drives a red sedan."}}]
+Result: duplicate_candidate_id = 0 (synonym — "car" and "vehicle" refer to the same thing, same possessor)
+</EXAMPLE>
+""",
         ),
     ]
 
@@ -180,35 +183,41 @@ def node_list(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a helpful assistant that de-duplicates nodes from node lists.',
+            content='You are an entity deduplication assistant that groups duplicate nodes by UUID.',
         ),
         Message(
             role='user',
             content=f"""
-        Given the following context, deduplicate a list of nodes:
+Given the following context, deduplicate a list of nodes:
 
-        Nodes:
-        {to_prompt_json(context['nodes'])}
+<NODES>
+{to_prompt_json(context['nodes'])}
+</NODES>
 
-        Task:
-        1. Group nodes together such that all duplicate nodes are in the same list of uuids
-        2. All duplicate uuids should be grouped together in the same list
-        3. Also return a new summary that synthesizes the summary into a new short summary
+Task:
+1. Group nodes together such that all duplicate nodes are in the same list of uuids.
+2. All duplicate uuids should be grouped together in the same list.
+3. Also return a new summary that synthesizes the summaries into a new short summary.
 
-        Guidelines:
-        1. Each uuid from the list of nodes should appear EXACTLY once in your response
-        2. If a node has no duplicates, it should appear in the response in a list of only one uuid
+Guidelines:
+1. Each uuid from the list of nodes should appear EXACTLY once in your response.
+2. If a node has no duplicates, it should appear in the response in a list of only one uuid.
 
-        Respond with a JSON object in the following format:
-        {{
-            "nodes": [
-                {{
-                    "uuids": ["5d643020624c42fa9de13f97b1b3fa39", "node that is a duplicate of 5d643020624c42fa9de13f97b1b3fa39"],
-                    "summary": "Brief summary of the node summaries that appear in the list of names."
-                }}
-            ]
-        }}
-        """,
+<EXAMPLE>
+Input nodes:
+[
+  {{"uuid": "a1", "name": "NYC", "summary": "New York City"}},
+  {{"uuid": "b2", "name": "New York City", "summary": "The city of New York"}},
+  {{"uuid": "c3", "name": "Los Angeles", "summary": "City in California"}}
+]
+
+Result:
+[
+  {{"uuids": ["a1", "b2"], "summary": "New York City, also known as NYC"}},
+  {{"uuids": ["c3"], "summary": "City in California"}}
+]
+</EXAMPLE>
+""",
         ),
     ]
 

@@ -18,23 +18,23 @@ import asyncio
 import logging
 import os
 import sys
+import tempfile
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from redislite.async_falkordb_client import AsyncFalkorDB
 from transcript_parser import parse_podcast_messages
 
 from graphiti_core import Graphiti
+from graphiti_core.driver.falkordb_driver import FalkorDriver
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.nodes import EpisodeType
+from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 from graphiti_core.utils.bulk_utils import RawEpisode
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 
 load_dotenv()
-
-neo4j_uri = os.environ.get('NEO4J_URI') or 'bolt://localhost:7687'
-neo4j_user = os.environ.get('NEO4J_USER') or 'neo4j'
-neo4j_password = os.environ.get('NEO4J_PASSWORD') or 'password'
 
 
 def setup_logging():
@@ -91,11 +91,16 @@ async def main(use_bulk: bool = False):
     llm_config = LLMConfig(model='gpt-4.1-mini', small_model='gpt-4.1-nano')
     llm_client = OpenAIClient(config=llm_config)
 
-    client = Graphiti(neo4j_uri, neo4j_user, neo4j_password, llm_client=llm_client)
+    # Use embedded FalkorDB (falkordblite) so the runner needs no external DB
+    falkor_db_path = os.path.join(tempfile.gettempdir(), 'podcast_runner_falkordb.db')
+    falkor_db = AsyncFalkorDB(dbfilename=falkor_db_path)
+    falkor_driver = FalkorDriver(falkor_db=falkor_db)
+
+    client = Graphiti(graph_driver=falkor_driver, llm_client=llm_client)
     await clear_data(client.driver)
     await client.build_indices_and_constraints()
     messages = parse_podcast_messages()
-    group_id = str(uuid4())
+    group_id = uuid4().hex
 
     raw_episodes: list[RawEpisode] = []
     for i, message in enumerate(messages[3:14]):
@@ -158,6 +163,31 @@ async def main(use_bulk: bool = False):
     # Print token usage summary sorted by prompt type
     print('\n\nIngestion complete. Token usage by prompt type:')
     client.token_tracker.print_summary(sort_by='prompt_name')
+
+    # Exercise search against the populated graph
+    print('\n\nRunning search queries against the graph:')
+    queries = [
+        'Who is the president of Fordham University?',
+        'What is the Freakonomics podcast about?',
+        'Tania Tetlow',
+    ]
+    for query in queries:
+        print(f'\nQuery: {query}')
+        edge_results = await client.search(query, group_ids=[group_id], num_results=5)
+        if not edge_results:
+            print('  (no edge results)')
+        for edge in edge_results:
+            print(f'  - [{edge.name}] {edge.fact}')
+
+        node_results = await client.search_(
+            query,
+            group_ids=[group_id],
+            config=NODE_HYBRID_SEARCH_RRF.model_copy(update={'limit': 5}),
+        )
+        if not node_results.nodes:
+            print('  (no node results)')
+        for node in node_results.nodes:
+            print(f'  * {node.name} ({", ".join(node.labels)})')
 
 
 asyncio.run(main(False))
