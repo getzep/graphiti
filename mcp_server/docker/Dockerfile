@@ -49,8 +49,10 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     uv lock
 
 # Install Python dependencies (exclude dev dependency group)
+# Include optional provider extras so the image matches the providers
+# advertised by the MCP server configuration and docs.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev
+    uv sync --no-group dev --extra providers --extra azure
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
