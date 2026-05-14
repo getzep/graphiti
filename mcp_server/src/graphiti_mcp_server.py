@@ -171,13 +171,15 @@ API keys are provided for any language model operations.
 """
 
 # Configure transport security for DNS rebinding protection.
-# FastMCP auto-enables this for localhost. When MCP_HOSTNAME is set, add it to the
-# allowed hosts so non-localhost connections (e.g. from LAN clients) are accepted.
-_mcp_hostname = os.environ.get('MCP_HOSTNAME', '')
-if _mcp_hostname:
+# FastMCP auto-enables this for localhost. When MCP_HOSTNAMES is set (comma-separated),
+# add each entry to the allowed hosts so non-localhost connections (e.g. from LAN
+# clients or alternative DNS names) are accepted.
+_mcp_hostnames = [h.strip() for h in os.environ.get('MCP_HOSTNAMES', '').split(',') if h.strip()]
+if _mcp_hostnames:
     _transport_security: TransportSecuritySettings | None = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[f'{_mcp_hostname}:*', '127.0.0.1:*', 'localhost:*', '[::1]:*'],
+        allowed_hosts=[f'{h}:*' for h in _mcp_hostnames]
+        + ['127.0.0.1:*', 'localhost:*', '[::1]:*'],
     )
 else:
     _transport_security = None  # Use FastMCP defaults
