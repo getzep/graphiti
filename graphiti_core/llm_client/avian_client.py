@@ -27,14 +27,17 @@ from pydantic import BaseModel
 
 from ..prompts.models import Message
 from .client import LLMClient, get_extraction_language_instruction
-from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
+from .config import (
+    AVIAN_BASE_URL,
+    AVIAN_DEFAULT_MODEL,
+    AVIAN_DEFAULT_SMALL_MODEL,
+    DEFAULT_MAX_TOKENS,
+    LLMConfig,
+    ModelSize,
+)
 from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
-
-AVIAN_BASE_URL = 'https://api.avian.io/v1'
-DEFAULT_MODEL = 'deepseek/deepseek-v3.2'
-DEFAULT_SMALL_MODEL = 'deepseek/deepseek-v3.2'
 
 
 class AvianClient(LLMClient):
@@ -83,8 +86,8 @@ class AvianClient(LLMClient):
             config = LLMConfig(
                 api_key=os.environ.get('AVIAN_API_KEY'),
                 base_url=AVIAN_BASE_URL,
-                model=DEFAULT_MODEL,
-                small_model=DEFAULT_SMALL_MODEL,
+                model=AVIAN_DEFAULT_MODEL,
+                small_model=AVIAN_DEFAULT_SMALL_MODEL,
             )
         elif config.base_url is None:
             config.base_url = AVIAN_BASE_URL
@@ -129,7 +132,7 @@ class AvianClient(LLMClient):
                     },
                 }
 
-            model = self.model or DEFAULT_MODEL
+            model = self.model or AVIAN_DEFAULT_MODEL
             if model_size == ModelSize.small and self.small_model:
                 model = self.small_model
 

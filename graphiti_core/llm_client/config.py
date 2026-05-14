@@ -19,6 +19,11 @@ from enum import Enum
 DEFAULT_MAX_TOKENS = 16384
 DEFAULT_TEMPERATURE = 1
 
+# Avian provider defaults
+AVIAN_BASE_URL = 'https://api.avian.io/v1'
+AVIAN_DEFAULT_MODEL = 'deepseek/deepseek-v3.2'
+AVIAN_DEFAULT_SMALL_MODEL = 'deepseek/deepseek-v3.2'
+
 
 class ModelSize(Enum):
     small = 'small'

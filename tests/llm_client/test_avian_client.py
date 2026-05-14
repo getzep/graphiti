@@ -24,8 +24,8 @@ import openai
 import pytest
 from pydantic import BaseModel
 
-from graphiti_core.llm_client.avian_client import AVIAN_BASE_URL, AvianClient
-from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.avian_client import AvianClient
+from graphiti_core.llm_client.config import AVIAN_BASE_URL, LLMConfig
 from graphiti_core.llm_client.errors import RateLimitError
 from graphiti_core.prompts.models import Message
 
