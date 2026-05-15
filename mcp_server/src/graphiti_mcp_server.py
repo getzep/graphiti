@@ -860,19 +860,26 @@ async def initialize_server() -> ServerConfig:
     logger.info(f'  - Transport: {config.server.transport}')
 
     # Log graphiti-core version
+    graphiti_version = 'unknown'
     try:
         import graphiti_core
 
         graphiti_version = getattr(graphiti_core, '__version__', 'unknown')
-        logger.info(f'  - Graphiti Core: {graphiti_version}')
     except Exception:
-        # Check for Docker-stored version file
+        pass
+    if graphiti_version == 'unknown':
+        # `graphiti_core.__version__` falls back to 'unknown' when the package
+        # metadata is unavailable (e.g. Docker images that copy the source
+        # tree without `pip install`-ing it). Fall back to the version file
+        # baked into the image so the logged value stays accurate in that
+        # deployment mode.
         version_file = Path('/app/.graphiti-core-version')
         if version_file.exists():
-            graphiti_version = version_file.read_text().strip()
-            logger.info(f'  - Graphiti Core: {graphiti_version}')
-        else:
-            logger.info('  - Graphiti Core: version unavailable')
+            graphiti_version = version_file.read_text().strip() or 'unknown'
+    if graphiti_version == 'unknown':
+        logger.info('  - Graphiti Core: version unavailable')
+    else:
+        logger.info(f'  - Graphiti Core: {graphiti_version}')
 
     # Handle graph destruction if requested
     if hasattr(config, 'destroy_graph') and config.destroy_graph:
