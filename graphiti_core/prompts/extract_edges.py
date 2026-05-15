@@ -168,9 +168,11 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 # DATETIME RULES
 
 - Use ISO 8601 with "Z" suffix (UTC) (e.g., 2025-04-30T00:00:00Z).
-- If the fact is ongoing (present tense), set `valid_at` to the timestamp of the episode the fact originates from. If no per-episode timestamp is available, use REFERENCE_TIME.
-- If a change/termination is expressed, set `invalid_at` to the relevant timestamp.
-- Leave both fields `null` if no explicit or resolvable time is stated.
+- `valid_at` MUST always be set. Resolution order:
+  1. An explicit or resolvable date in the source text (resolved against the originating episode's timestamp, or REFERENCE_TIME if no per-episode timestamp).
+  2. If the text contains no explicit/resolvable date, fall back to the originating episode's per-episode timestamp, or REFERENCE_TIME if no per-episode timestamp is available.
+- `invalid_at`: set when the text explicitly states the fact ended or was superseded; otherwise leave `null`.
+- NEVER use today's date, the current date, "now", or any inferred "current" time as `valid_at` or `invalid_at`. REFERENCE_TIME is the ONLY acceptable default — do not substitute your own notion of the present.
 - If only a date is mentioned (no time), assume 00:00:00.
 - If only a year is mentioned, use January 1st at 00:00:00.
         """,
@@ -226,9 +228,9 @@ def extract_timestamps(context: dict[str, Any]) -> list[Message]:
 
 Rules:
 - Resolve relative expressions ("last week", "2 years ago", "yesterday") using REFERENCE TIME.
-- If the fact is ongoing (present tense), set valid_at to REFERENCE TIME.
-- If a change or end is expressed, set invalid_at to the relevant time.
-- Leave both null if no time is stated or resolvable.
+- `valid_at` MUST always be set. If no explicit/resolvable time is stated in the fact, set `valid_at` to REFERENCE TIME.
+- If a change or end is expressed, set `invalid_at` to the relevant time; otherwise leave `invalid_at` null.
+- NEVER use today's date, the current date, "now", or any inferred "current" time. REFERENCE TIME is the ONLY acceptable default — do not substitute your own notion of the present.
 - If only a date is mentioned (no time), assume 00:00:00.
 - Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).
 - Do NOT hallucinate or infer dates from unrelated events.
@@ -258,9 +260,9 @@ became true (valid_at) and when it stopped being true (invalid_at).
 
 Rules:
 - Resolve relative expressions ("last week", "2 years ago", "yesterday") using each fact's REFERENCE TIME.
-- If the fact is ongoing (present tense), set valid_at to its REFERENCE TIME.
-- If a change or end is expressed, set invalid_at to the relevant time.
-- Leave both null if no time is stated or resolvable.
+- `valid_at` MUST always be set for each fact. If no explicit/resolvable time is stated in the fact, set `valid_at` to its REFERENCE TIME.
+- If a change or end is expressed, set `invalid_at` to the relevant time; otherwise leave `invalid_at` null.
+- NEVER use today's date, the current date, "now", or any inferred "current" time. Each fact's REFERENCE TIME is the ONLY acceptable default — do not substitute your own notion of the present.
 - If only a date is mentioned (no time), assume 00:00:00.
 - Use ISO 8601 with Z suffix (e.g., 2025-04-30T00:00:00Z).
 - Do NOT hallucinate or infer dates from unrelated events.
