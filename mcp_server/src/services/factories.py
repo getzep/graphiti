@@ -17,6 +17,7 @@ except ImportError:
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
@@ -119,13 +120,27 @@ class LLMClientFactory:
                 # Use the same model for both main and small model slots
                 small_model = config.model
 
+                # Forward `api_url` so non-OpenAI endpoints (LiteLLM, vLLM, Azure-via-
+                # generic-shim, etc.) reach the configured server. Without this the
+                # underlying AsyncOpenAI client falls back to https://api.openai.com/v1
+                # and any non-OpenAI api_key produces a 401.
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=config.providers.openai.api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
+
+                # `OpenAIGenericClient` uses chat.completions + response_format json_object,
+                # which OpenAI-compatible servers (llama.cpp, Ollama, vLLM without
+                # structured-outputs, LiteLLM) actually implement. The default
+                # `OpenAIClient` calls responses.parse / structured outputs, which only
+                # real OpenAI + a small handful of providers implement. Opt in via the
+                # `use_chat_completions` provider flag.
+                if config.providers.openai.use_chat_completions:
+                    return OpenAIGenericClient(config=llm_config)
 
                 # Check if this is a reasoning model (o1, o3, gpt-5 family)
                 reasoning_prefixes = ('o1', 'o3', 'gpt-5')
