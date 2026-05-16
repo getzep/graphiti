@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
@@ -187,6 +188,16 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create cross_encoder reusing the LLM client to avoid requiring OPENAI_API_KEY
+            cross_encoder = None
+            if llm_client is not None:
+                try:
+                    # Pass the underlying AsyncOpenAI/AsyncAzureOpenAI client directly
+                    inner_client = getattr(llm_client, 'client', None)
+                    cross_encoder = OpenAIRerankerClient(client=inner_client or llm_client)
+                except Exception as e:
+                    logger.warning(f'Failed to create cross_encoder client: {e}')
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -226,6 +237,7 @@ class GraphitiService:
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
@@ -236,6 +248,7 @@ class GraphitiService:
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
