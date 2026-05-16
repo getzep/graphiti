@@ -58,9 +58,23 @@ def test_fulltext_query_rejects_invalid_group_ids():
         fulltext_query('test', ['bad"group'], driver)
 
 
+def test_fulltext_query_groups_multiple_group_ids():
+    driver = SimpleNamespace(provider=GraphProvider.NEO4J, fulltext_syntax='')
+
+    query = fulltext_query('alice bob', ['group-a', 'group-b'], driver)
+
+    assert query == '(group_id:"group-a" OR group_id:"group-b") AND (alice bob)'
+
+
 def test_build_neo4j_fulltext_query_rejects_invalid_group_ids():
     with pytest.raises(GroupIdValidationError, match='must contain only alphanumeric'):
         _build_neo4j_fulltext_query('test', ['bad"group'])
+
+
+def test_build_neo4j_fulltext_query_groups_multiple_group_ids():
+    query = _build_neo4j_fulltext_query('alice bob', ['group-a', 'group-b'])
+
+    assert query == '(group_id:"group-a" OR group_id:"group-b") AND (alice bob)'
 
 
 def test_falkordb_fulltext_query_rejects_invalid_group_ids():
