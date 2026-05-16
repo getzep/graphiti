@@ -26,7 +26,7 @@ lint:
 
 # Run tests
 test:
-	DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) -m "not integration"
+	DISABLE_FALKORDB=1 DISABLE_KUZU=1 DISABLE_NEPTUNE=1 $(PYTEST) tests/ -m "not integration"
 
 # Run format, lint, and test
 check: format lint test
