@@ -18,6 +18,7 @@ from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -147,6 +148,7 @@ API keys are provided for any language model operations.
 mcp = FastMCP(
     'Graphiti Agent Memory',
     instructions=GRAPHITI_MCP_INSTRUCTIONS,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 # Global services
@@ -224,6 +226,33 @@ class GraphitiService:
 
                     self.client = Graphiti(
                         graph_driver=falkor_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif self.config.database.provider.lower() == 'kuzu':
+                    from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+                    kuzu_driver = KuzuDriver(db=db_config['db_path'])
+                    kuzu_driver._database = ''
+
+                    import kuzu as kuzu_mod
+                    from graphiti_core.graph_queries import get_fulltext_indices
+                    fts_conn = kuzu_mod.Connection(kuzu_driver.db)
+                    for stmt in ['INSTALL FTS', 'LOAD EXTENSION FTS']:
+                        try:
+                            fts_conn.execute(stmt + ';')
+                        except RuntimeError:
+                            pass
+                    for idx_query in get_fulltext_indices(kuzu_driver.provider):
+                        try:
+                            fts_conn.execute(idx_query)
+                        except RuntimeError:
+                            pass
+                    fts_conn.close()
+
+                    self.client = Graphiti(
+                        graph_driver=kuzu_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
                         max_coroutines=self.semaphore_limit,
@@ -806,7 +835,7 @@ async def initialize_server() -> ServerConfig:
     )
     parser.add_argument(
         '--database-provider',
-        choices=['neo4j', 'falkordb'],
+        choices=['neo4j', 'falkordb', 'kuzu'],
         help='Database provider to use',
     )
 

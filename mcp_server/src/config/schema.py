@@ -191,11 +191,18 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class KuzuProviderConfig(BaseModel):
+    """Kuzu provider configuration."""
+
+    db_path: str = "/tmp/graphiti.kuzu"
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    kuzu: KuzuProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):
