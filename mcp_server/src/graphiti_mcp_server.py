@@ -326,6 +326,7 @@ async def add_memory(
     source: str = 'text',
     source_description: str = '',
     uuid: str | None = None,
+    custom_extraction_instructions: str | None = None,
 ) -> SuccessResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
@@ -345,6 +346,8 @@ async def add_memory(
                                - 'message': For conversation-style content
         source_description (str, optional): Description of the source
         uuid (str, optional): Optional UUID for the episode
+        custom_extraction_instructions (str, optional): Optional extraction instructions passed
+            through to Graphiti for entity/edge extraction behavior.
 
     Examples:
         # Adding plain text content
@@ -393,6 +396,7 @@ async def add_memory(
             episode_type=episode_type,
             entity_types=graphiti_service.entity_types,
             uuid=uuid or None,  # Ensure None is passed if uuid is None
+            custom_extraction_instructions=custom_extraction_instructions,
         )
 
         return SuccessResponse(

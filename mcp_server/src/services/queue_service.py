@@ -107,6 +107,7 @@ class QueueService:
         episode_type: Any,
         entity_types: Any,
         uuid: str | None,
+        custom_extraction_instructions: str | None = None,
     ) -> int:
         """Add an episode for processing.
 
@@ -118,6 +119,8 @@ class QueueService:
             episode_type: Type of the episode
             entity_types: Entity types for extraction
             uuid: Episode UUID
+            custom_extraction_instructions: Optional extraction instructions passed through
+                to Graphiti extraction prompts.
 
         Returns:
             The position in the queue
@@ -140,6 +143,7 @@ class QueueService:
                     reference_time=datetime.now(timezone.utc),
                     entity_types=entity_types,
                     uuid=uuid,
+                    custom_extraction_instructions=custom_extraction_instructions,
                 )
 
                 logger.info(f'Successfully processed episode {uuid} for group {group_id}')
