@@ -259,6 +259,49 @@ async def add_nodes_and_edges_bulk_tx(
             entity_edges=edges,
         )
 
+    # Sync bulk-written data to AOSS for Neptune full-text search
+    if driver.provider == GraphProvider.NEPTUNE:
+        if episodes:
+            driver.save_to_aoss(
+                'episode_content',
+                [
+                    {
+                        'uuid': e['uuid'],
+                        'content': e.get('content', ''),
+                        'source': e.get('source', ''),
+                        'source_description': e.get('source_description', ''),
+                        'group_id': e.get('group_id', ''),
+                    }
+                    for e in episodes
+                ],
+            )
+        if nodes:
+            driver.save_to_aoss(
+                'node_name_and_summary',
+                [
+                    {
+                        'uuid': n['uuid'],
+                        'name': n['name'],
+                        'summary': n.get('summary', ''),
+                        'group_id': n.get('group_id', ''),
+                    }
+                    for n in nodes
+                ],
+            )
+        if edges:
+            driver.save_to_aoss(
+                'edge_name_and_fact',
+                [
+                    {
+                        'uuid': e['uuid'],
+                        'name': e['name'],
+                        'fact': e.get('fact', ''),
+                        'group_id': e.get('group_id', ''),
+                    }
+                    for e in edges
+                ],
+            )
+
 
 async def extract_nodes_and_edges_bulk(
     clients: GraphitiClients,
