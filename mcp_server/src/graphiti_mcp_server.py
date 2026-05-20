@@ -14,7 +14,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
-from graphiti_core.nodes import EpisodeType, EpisodicNode
+from graphiti_core.nodes import EpisodeType
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.maintenance.graph_data_operations import clear_data
 from mcp.server.fastmcp import FastMCP
@@ -579,10 +579,8 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     try:
         client = await graphiti_service.get_client()
 
-        # Get the episodic node by UUID
-        episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
-        # Delete the node using its delete method
-        await episodic_node.delete(client.driver)
+        # Cascades to edges sourced from this episode and any orphaned entities.
+        await client.remove_episode(uuid)
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
