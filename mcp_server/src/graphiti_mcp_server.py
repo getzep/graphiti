@@ -721,6 +721,77 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 
 
 @mcp.tool()
+async def forget_memory(
+    query: str,
+    group_ids: list[str] | None = None,
+    max_deletions: int = 10,
+) -> SuccessResponse | ErrorResponse:
+    """Forget information from the graph memory by searching for matching nodes and deleting them.
+
+    This performs a semantic search for the query, then deletes the matching entity nodes
+    (which cascades to remove their connected edges). Use this to selectively remove
+    knowledge from the graph without wiping everything.
+
+    Args:
+        query: Natural language description of what to forget (e.g. "Acme Corp")
+        group_ids: Optional list of group IDs to scope the forget_memory operation
+        max_deletions: Maximum number of nodes to delete (default: 10, max: 100)
+    """
+    global graphiti_service
+
+    if graphiti_service is None:
+        return ErrorResponse(error='Graphiti service not initialized')
+
+    try:
+        if max_deletions < 1 or max_deletions > 100:
+            return ErrorResponse(error='max_deletions must be between 1 and 100')
+
+        client = await graphiti_service.get_client()
+
+        effective_group_ids = (
+            group_ids
+            if group_ids is not None
+            else [config.graphiti.group_id]
+            if config.graphiti.group_id
+            else []
+        )
+
+        from graphiti_core.search.search_config_recipes import COMBINED_HYBRID_SEARCH_RRF
+
+        results = await client.search_(
+            query=query,
+            config=COMBINED_HYBRID_SEARCH_RRF,
+            group_ids=effective_group_ids,
+        )
+
+        deleted_node_uuids: list[str] = []
+        deleted_edge_uuids: list[str] = []
+
+        for node in results.nodes[:max_deletions]:
+            await node.delete(client.driver)
+            deleted_node_uuids.append(node.uuid)
+
+        for edge in results.edges:
+            if (
+                edge.source_node_uuid not in deleted_node_uuids
+                and edge.target_node_uuid not in deleted_node_uuids
+            ):
+                await edge.delete(client.driver)
+                deleted_edge_uuids.append(edge.uuid)
+
+        return SuccessResponse(
+            message=(
+                f'Forgot {len(deleted_node_uuids)} node(s) and '
+                f'{len(deleted_edge_uuids)} edge(s) matching "{query}"'
+            )
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f'Error in forget_memory operation: {error_msg}')
+        return ErrorResponse(error=f'Error in forget_memory operation: {error_msg}')
+
+
+@mcp.tool()
 async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and database connection."""
     global graphiti_service
