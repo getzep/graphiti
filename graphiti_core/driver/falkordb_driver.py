@@ -379,6 +379,7 @@ class FalkorDriver(GraphDriver):
                 '|': ' ',
                 '/': ' ',
                 '\\': ' ',
+                '`': ' ',
             }
         )
         sanitized = query.translate(separator_map)
@@ -414,6 +415,12 @@ class FalkorDriver(GraphDriver):
         # Remove stopwords and empty tokens from the sanitized query
         query_words = sanitized_query.split()
         filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
+
+        # If all tokens were stopwords or the query was empty/punctuation-only, return ''
+        # so callers skip the search rather than issue a malformed "(@group_id:…) ()" query.
+        if not filtered_words:
+            return ''
+
         sanitized_query = ' | '.join(filtered_words)
 
         # If the query is too long return no query
