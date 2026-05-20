@@ -74,6 +74,19 @@ def test_falkordb_fulltext_query_rejects_invalid_group_ids():
         FalkorDriver.build_fulltext_query(driver, 'test', ['bad"group'])
 
 
+def test_falkordb_fulltext_query_sanitizes_group_ids_for_redisearch():
+    # Import inside the test so collection still works when FalkorDB extras are unavailable.
+    from graphiti_core.driver.falkordb.operations.search_ops import _build_falkor_fulltext_query
+
+    query = _build_falkor_fulltext_query(
+        'test',
+        ['00000000-0000-0000-0000-000000000001'],
+    )
+
+    assert '@group_id:"00000000 0000 0000 0000 000000000001"' in query
+    assert '00000000-0000-0000-0000-000000000001' not in query
+
+
 @pytest.mark.asyncio
 async def test_shared_search_rejects_invalid_group_ids():
     clients = SimpleNamespace(

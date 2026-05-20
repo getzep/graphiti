@@ -102,7 +102,7 @@ def _build_falkor_fulltext_query(
     if group_ids is None or len(group_ids) == 0:
         group_filter = ''
     else:
-        escaped_group_ids = [f'"{gid}"' for gid in group_ids]
+        escaped_group_ids = [f'"{_sanitize(gid)}"' for gid in group_ids]
         group_values = '|'.join(escaped_group_ids)
         group_filter = f'(@group_id:{group_values})'
 
