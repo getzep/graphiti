@@ -42,6 +42,7 @@ from graphiti_core.search.search_config import SearchResults
 from graphiti_core.search.search_config_recipes import EDGE_HYBRID_SEARCH_RRF
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.utils.datetime_utils import ensure_utc, utc_now
+from graphiti_core.utils.maintenance.attribute_utils import apply_capped_attributes
 from graphiti_core.utils.maintenance.dedup_helpers import _normalize_string_exact
 from graphiti_core.utils.text_utils import concatenate_episodes
 
@@ -663,8 +664,18 @@ async def resolve_extracted_edge(
                 response_model=edge_model,  # type: ignore
                 model_size=ModelSize.small,
                 prompt_name='extract_edges.extract_attributes',
+                attribute_extraction=True,
             )
-            extracted_edge.attributes = edge_attributes_response
+            merged, _ = apply_capped_attributes(
+                edge_attributes_response,
+                edge_model,
+                extracted_edge.attributes,
+                merge_mode='replace',
+                prompt_name='extract_edges.extract_attributes',
+                entity_uuid=extracted_edge.uuid,
+                group_id=extracted_edge.group_id,
+            )
+            extracted_edge.attributes = merged
 
         await _extract_edge_timestamps(llm_client, extracted_edge, episode)
 
@@ -779,10 +790,22 @@ async def resolve_extracted_edge(
             response_model=edge_model,  # type: ignore
             model_size=ModelSize.small,
             prompt_name='extract_edges.extract_attributes',
+            attribute_extraction=True,
         )
 
-        resolved_edge.attributes = edge_attributes_response
+        merged, _ = apply_capped_attributes(
+            edge_attributes_response,
+            edge_model,
+            resolved_edge.attributes,
+            merge_mode='replace',
+            prompt_name='extract_edges.extract_attributes',
+            entity_uuid=resolved_edge.uuid,
+            group_id=resolved_edge.group_id,
+        )
+        resolved_edge.attributes = merged
     else:
+        # No matching edge schema → no structured attributes apply; clear any stale
+        # attributes left from a prior schema. Intentionally not merged.
         resolved_edge.attributes = {}
 
     # Extract timestamps for new edges (duplicated edges retain their existing timestamps)

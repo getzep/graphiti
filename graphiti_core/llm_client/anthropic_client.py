@@ -349,6 +349,8 @@ class AnthropicClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
         """
         Generate a response from the LLM.
@@ -357,6 +359,9 @@ class AnthropicClient(LLMClient):
             messages: List of message objects to send to the LLM.
             response_model: Optional Pydantic model to use for structured output.
             max_tokens: Maximum number of tokens to generate.
+            attribute_extraction: When True, prepends the shared attribute-extraction
+                framing to the system message so the strict "field descriptions are not
+                values" instruction reaches the model on Anthropic's native tool-use path.
 
         Returns:
             Dictionary containing the structured response from the LLM.
@@ -366,6 +371,7 @@ class AnthropicClient(LLMClient):
             RefusalError: If the LLM refuses to respond.
             Exception: If an error occurs during the generation process.
         """
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
 

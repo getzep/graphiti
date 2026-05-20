@@ -701,3 +701,73 @@ async def test_extract_edges_keeps_valid_edges_with_same_name_different_nodes(mo
     assert len(edges) == 1
     assert edges[0].source_node_uuid == 'alice_uuid'
     assert edges[0].target_node_uuid == 'paris_uuid'
+
+
+class _EmploymentEdge(BaseModel):
+    """Edge attribute schema mirroring a customer's EMPLOYMENT relation."""
+
+    title: str | None = None
+    is_current: str | None = None
+
+
+@pytest.mark.asyncio
+async def test_resolve_extracted_edge_overcap_attribute_preserves_prior(monkeypatch):
+    """End-to-end: when the LLM bleeds meta-reasoning into one attribute, the
+    cap drops that field and the merge logic falls back to the prior on-edge
+    value — without affecting fields the LLM legitimately updated."""
+    from graphiti_core.utils.maintenance import edge_operations as edge_ops
+
+    # Avoid the timestamps LLM call that follows attribute extraction.
+    monkeypatch.setattr(edge_ops, '_extract_edge_timestamps', AsyncMock(return_value=None))
+
+    # The LLM returns a clean update for `title` but bleeds 9 KB of meta-reasoning into
+    # `is_current` — the kind of failure the customer reported.
+    bleed = (
+        'true (implied by context, but no new information explicitly stated. '
+        'I should ideally remove it or set it to null. However, the instruction '
+        'is to preserve existing values...) '
+    ) * 30
+    llm_client = MagicMock()
+    llm_client.generate_response = AsyncMock(
+        return_value={'title': 'Senior Engineer', 'is_current': bleed}
+    )
+
+    extracted_edge = EntityEdge(
+        source_node_uuid='person_uuid',
+        target_node_uuid='company_uuid',
+        name='EMPLOYMENT',
+        group_id='group_1',
+        fact='Sam was promoted to Senior Engineer at Northwind',
+        episodes=[],
+        created_at=datetime.now(timezone.utc),
+        valid_at=None,
+        invalid_at=None,
+        attributes={'title': 'Engineer', 'is_current': 'true'},
+    )
+
+    episode = EpisodicNode(
+        uuid='episode_uuid',
+        name='Episode',
+        group_id='group_1',
+        source='message',
+        source_description='desc',
+        content='Sam was promoted to Senior Engineer.',
+        valid_at=datetime.now(timezone.utc),
+    )
+
+    resolved, dupes, invalidated = await resolve_extracted_edge(
+        llm_client,
+        extracted_edge,
+        related_edges=[],
+        existing_edges=[],
+        episode=episode,
+        edge_type_candidates={'EMPLOYMENT': _EmploymentEdge},
+    )
+
+    # Title should reflect the legitimate LLM update.
+    assert resolved.attributes['title'] == 'Senior Engineer'
+    # is_current was bleed-dropped, so the prior value must be preserved (not the
+    # 9 KB rant, not None, not absent).
+    assert resolved.attributes['is_current'] == 'true'
+    assert dupes == []
+    assert invalidated == []

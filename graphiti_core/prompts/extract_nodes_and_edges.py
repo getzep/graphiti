@@ -143,6 +143,23 @@ FACT RULES:
 7. Do not emit redundant facts across episodes. But if a later episode adds new
    details (brand, count, location), extract the more detailed version as a new fact.
 
+OUTPUT DISCIPLINE:
+- Entity `name` is a literal mention from CURRENT MESSAGES, ≤5 words. NEVER use a full
+  sentence, action item, goal statement, or quoted aspiration as a name.
+  BAD: "Establish a firm training/onboarding program",
+       "Secure competitive advantage through IP",
+       "Decide whether to expand into Europe next quarter".
+  GOOD (terse-name fallback for the same source content): "training program",
+       "competitive advantage", "European expansion" — extract the topical noun
+       phrase, not the full proposition. Multi-word topic names like "watercolor
+       painting" or "VR gaming" remain valid (see ENTITY RULE 4).
+- The `fact` field is one self-contained sentence. NEVER include reasoning, hedging
+  ("appears to", "implies", "suggests"), parenthetical commentary, or schema-description text.
+- `relation_type` is SCREAMING_SNAKE_CASE letters/underscores only. NEVER spaces,
+  punctuation, or sentences.
+- Output ONLY the JSON specified by the response schema. No preamble, no trailing notes,
+  no explanation of choices.
+
 <ENTITY TYPES>
 {context['entity_types']}
 </ENTITY TYPES>
