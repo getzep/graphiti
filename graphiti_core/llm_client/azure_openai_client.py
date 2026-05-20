@@ -127,19 +127,36 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
 
         return await self.client.chat.completions.create(**request_kwargs)
 
-    def _handle_structured_response(self, response: Any) -> dict[str, Any]:
+    def _handle_structured_response(self, response: Any) -> tuple[dict[str, Any], int, int]:
         """Handle structured response parsing for both reasoning and non-reasoning models.
 
         For reasoning models (responses.parse): uses response.output_text
         For regular models (beta.chat.completions.parse): uses response.choices[0].message.parsed
+
+        Returns:
+            tuple: (parsed_response, input_tokens, output_tokens)
         """
+        # Extract token usage. Two response shapes carry usage on different attributes:
+        #   - chat.completions.parse: usage.prompt_tokens / usage.completion_tokens
+        #   - responses.parse:        usage.input_tokens  / usage.output_tokens
+        input_tokens = 0
+        output_tokens = 0
+        usage = getattr(response, 'usage', None)
+        if usage is not None:
+            input_tokens = (
+                getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0) or 0
+            )
+            output_tokens = (
+                getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0) or 0
+            )
+
         # Check if this is a ParsedChatCompletion (from beta.chat.completions.parse)
         if hasattr(response, 'choices') and response.choices:
             # Standard ParsedChatCompletion format
             message = response.choices[0].message
             if hasattr(message, 'parsed') and message.parsed:
                 # The parsed object is already a Pydantic model, convert to dict
-                return message.parsed.model_dump()
+                return message.parsed.model_dump(), input_tokens, output_tokens
             elif hasattr(message, 'refusal') and message.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
@@ -150,7 +167,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             # Reasoning model response format (responses.parse)
             response_object = response.output_text
             if response_object:
-                return json.loads(response_object)
+                return json.loads(response_object), input_tokens, output_tokens
             elif hasattr(response, 'refusal') and response.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 
