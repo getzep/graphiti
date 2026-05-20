@@ -1416,9 +1416,7 @@ class Graphiti:
                         # episode window rather than the time this run started.
                         valid_ats = [ep.valid_at for ep in episodes if ep.valid_at is not None]
                         saga_created_at = min(valid_ats) if valid_ats else now
-                        saga_node = await self._get_or_create_saga(
-                            saga, group_id, saga_created_at
-                        )
+                        saga_node = await self._get_or_create_saga(saga, group_id, saga_created_at)
                     else:
                         saga_node = saga
 
