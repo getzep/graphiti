@@ -182,20 +182,46 @@ def extract_attributes(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a fact attribute extraction specialist. NEVER hallucinate or infer values not explicitly stated.',
+            content=(
+                'You are a fact attribute extraction specialist. '
+                'You ONLY emit attribute values that are explicitly stated in the FACT or '
+                'already present in EXISTING ATTRIBUTES. You output strictly the JSON specified '
+                'by the response schema — no reasoning, no explanation, no commentary in any field.'
+            ),
         ),
         Message(
             role='user',
-            content=f"""
-Given the following FACT, its REFERENCE TIME, and any EXISTING ATTRIBUTES, extract or update
-attributes based on the information explicitly stated in the fact. Use the provided attribute
-descriptions to understand how each attribute should be determined.
+            content=f"""\
+Given the following FACT, its REFERENCE TIME, and any EXISTING ATTRIBUTES, update the attributes.
 
-Guidelines:
-1. NEVER hallucinate or infer attribute values — only use values explicitly stated in the FACT.
-2. Only use information stated in the FACT to set attribute values.
-3. Use REFERENCE TIME to resolve any relative temporal expressions in the fact.
-4. Preserve existing attribute values unless the fact explicitly provides new information.
+HARD RULES — violating any of these is a failure:
+
+1. Each attribute value MUST be one of:
+   (a) a clean value copied or directly normalized from the FACT,
+   (b) the existing value already in EXISTING ATTRIBUTES (preserved unchanged), or
+   (c) null / omitted, when neither (a) nor (b) applies.
+
+2. NEVER write reasoning, justification, or commentary into any field. Specifically:
+   - NEVER include parenthetical explanations like "(implied by ...)", "(Context: ...)",
+     "(not explicitly stated ...)", "(based on ...)".
+   - NEVER include first-person or deliberative phrases like "I should...", "However...",
+     "Sticking to...", "Since no...", "the instruction is to...", "must be kept...".
+   - NEVER list alternatives or candidates inside one field ("X, or Y, or maybe Z").
+   - NEVER explain why a value is null. If unknown, set the field to null and stop.
+
+3. Each attribute schema description tells you the FORMAT a real value should take. The
+   description text is NEVER itself a value. NEVER copy schema description text into the field.
+
+4. The literal strings "null", "N/A", "Not specified", "unknown", "none", "not provided",
+   or any sentence describing absence are NOT valid values. If no value is supported by
+   the FACT, set the field to null (or omit it) — do not write a sentence.
+
+5. Each attribute value must be a short, well-formed instance of the type the field
+   describes. If you cannot produce a clean value of that type from the FACT, the field is null.
+
+6. Use REFERENCE TIME to resolve any relative temporal expressions in the fact.
+
+7. Preserve existing attribute values unless the FACT explicitly provides a new value.
 
 <FACT>
 {context['fact']}

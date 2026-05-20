@@ -216,8 +216,16 @@ class BaseOpenAIClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
-        """Generate a response with retry logic and error handling."""
+        """Generate a response with retry logic and error handling.
+
+        When ``attribute_extraction`` is True, prepend the shared attribute-extraction
+        framing to the system message so the strict "field descriptions are not values"
+        instruction reaches the model on this provider's native-structured-output path.
+        """
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
 

@@ -143,7 +143,10 @@ class OpenAIGenericClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         group_id: str | None = None,
         prompt_name: str | None = None,
+        *,
+        attribute_extraction: bool = False,
     ) -> dict[str, typing.Any]:
+        self._apply_attribute_extraction_preamble(messages, attribute_extraction)
         if max_tokens is None:
             max_tokens = self.max_tokens
 
