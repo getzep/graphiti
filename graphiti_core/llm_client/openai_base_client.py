@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import typing
 from abc import abstractmethod
@@ -25,6 +24,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from ..prompts.models import Message
+from ..utils.json_utils import safe_json_loads
 from .client import LLMClient, get_extraction_language_instruction
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
@@ -129,7 +129,7 @@ class BaseOpenAIClient(LLMClient):
             output_tokens = getattr(response.usage, 'output_tokens', 0) or 0
 
         if response_object:
-            return json.loads(response_object), input_tokens, output_tokens
+            return safe_json_loads(response_object), input_tokens, output_tokens
         elif hasattr(response, 'refusal') and response.refusal:
             raise RefusalError(response.refusal)
         else:
@@ -150,7 +150,7 @@ class BaseOpenAIClient(LLMClient):
             input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
             output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
 
-        return json.loads(result), input_tokens, output_tokens
+        return safe_json_loads(result), input_tokens, output_tokens
 
     async def _generate_response(
         self,

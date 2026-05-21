@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 from typing import Any, ClassVar
 
@@ -22,6 +21,7 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from ..utils.json_utils import safe_json_loads
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import BaseOpenAIClient
 
@@ -150,7 +150,7 @@ class AzureOpenAILLMClient(BaseOpenAIClient):
             # Reasoning model response format (responses.parse)
             response_object = response.output_text
             if response_object:
-                return json.loads(response_object)
+                return safe_json_loads(response_object)
             elif hasattr(response, 'refusal') and response.refusal:
                 from graphiti_core.llm_client.errors import RefusalError
 

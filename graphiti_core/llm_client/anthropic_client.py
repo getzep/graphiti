@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import os
 import typing
@@ -24,6 +23,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ValidationError
 
 from ..prompts.models import Message
+from ..utils.json_utils import safe_json_loads
 from .client import LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
@@ -168,7 +168,7 @@ class AnthropicClient(LLMClient):
             json_end = text.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
                 json_str = text[json_start:json_end]
-                return json.loads(json_str)
+                return safe_json_loads(json_str)
             else:
                 raise ValueError(f'Could not extract JSON from model response: {text}')
         except (JSONDecodeError, ValueError) as e:
@@ -308,7 +308,7 @@ class AnthropicClient(LLMClient):
                     if isinstance(content_item.input, dict):
                         tool_args: dict[str, typing.Any] = content_item.input
                     else:
-                        tool_args = json.loads(str(content_item.input))
+                        tool_args = safe_json_loads(str(content_item.input))
                     return tool_args, input_tokens, output_tokens
 
             # If we didn't get a proper tool_use response, try to extract from text
