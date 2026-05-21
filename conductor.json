@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "setup": "./conductor-setup.sh",
+    "run": "make test"
+  },
+  "runScriptMode": "nonconcurrent"
+}
