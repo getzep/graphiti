@@ -1,0 +1,187 @@
+name: Upstream Drift Monitor
+
+# Reports how far the Tagers fork has drifted from upstream getzep/graphiti.
+# Fires weekly + on demand. Fails the run (= email notification) and opens or
+# updates a sticky issue when drift exceeds thresholds.
+#
+# Thresholds:
+#   DRIFT_BEHIND_MAX  — fail if upstream has more than this many commits we lack
+#   DRIFT_DAYS_MAX    — fail if the merge-base with upstream is older than this
+#
+# Update the dispatch input defaults below when the fork branch rolls forward
+# (e.g. after E7-rebase to v0.29.0).
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"  # Mondays 07:17 UTC
+  workflow_dispatch:
+    inputs:
+      fork_branch:
+        description: "Fork branch to track"
+        required: false
+        default: "tagers-v0.28.2"
+      upstream_branch:
+        description: "Upstream branch to compare against"
+        required: false
+        default: "main"
+
+env:
+  DRIFT_BEHIND_MAX: "50"
+  DRIFT_DAYS_MAX: "60"
+  UPSTREAM_REPO: "getzep/graphiti"
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      FORK_BRANCH: ${{ github.event.inputs.fork_branch || 'tagers-v0.28.2' }}
+      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'main' }}
+    steps:
+      - name: Checkout fork (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.FORK_BRANCH }}
+
+      - name: Add upstream remote and fetch
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream --depth=200 --tags
+
+      - name: Compute drift
+        id: drift
+        run: |
+          set -euo pipefail
+          FORK_REF="HEAD"
+          UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
+
+          AHEAD=$(git rev-list --count "${UPSTREAM_REF}..${FORK_REF}")
+          BEHIND=$(git rev-list --count "${FORK_REF}..${UPSTREAM_REF}")
+
+          BASE=$(git merge-base "${FORK_REF}" "${UPSTREAM_REF}")
+          BASE_TS=$(git log -1 --format=%ct "${BASE}")
+          NOW_TS=$(date +%s)
+          DAYS=$(( (NOW_TS - BASE_TS) / 86400 ))
+
+          BASE_DATE=$(git log -1 --format=%ci "${BASE}")
+          UPSTREAM_HEAD_DATE=$(git log -1 --format=%ci "${UPSTREAM_REF}")
+          UPSTREAM_HEAD_SHA=$(git rev-parse --short "${UPSTREAM_REF}")
+          FORK_HEAD_SHA=$(git rev-parse --short HEAD)
+
+          {
+            echo "ahead=${AHEAD}"
+            echo "behind=${BEHIND}"
+            echo "days=${DAYS}"
+            echo "base_date=${BASE_DATE}"
+            echo "upstream_head_date=${UPSTREAM_HEAD_DATE}"
+            echo "upstream_head_sha=${UPSTREAM_HEAD_SHA}"
+            echo "fork_head_sha=${FORK_HEAD_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Upstream drift report"
+            echo ""
+            echo "- Fork branch:     \`${FORK_BRANCH}\` @ ${FORK_HEAD_SHA}"
+            echo "- Upstream ref:    \`${UPSTREAM_REF}\` @ ${UPSTREAM_HEAD_SHA} (${UPSTREAM_HEAD_DATE})"
+            echo "- Ahead:           **${AHEAD}** commits"
+            echo "- Behind:          **${BEHIND}** commits (threshold: ${DRIFT_BEHIND_MAX})"
+            echo "- Days since sync: **${DAYS}** (threshold: ${DRIFT_DAYS_MAX})"
+            echo "- Merge base:      ${BASE_DATE}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update sticky issue
+        id: sticky
+        uses: actions/github-script@v7
+        env:
+          AHEAD: ${{ steps.drift.outputs.ahead }}
+          BEHIND: ${{ steps.drift.outputs.behind }}
+          DAYS: ${{ steps.drift.outputs.days }}
+          BASE_DATE: ${{ steps.drift.outputs.base_date }}
+          UPSTREAM_HEAD_DATE: ${{ steps.drift.outputs.upstream_head_date }}
+          UPSTREAM_HEAD_SHA: ${{ steps.drift.outputs.upstream_head_sha }}
+        with:
+          script: |
+            const ahead = Number(process.env.AHEAD);
+            const behind = Number(process.env.BEHIND);
+            const days = Number(process.env.DAYS);
+            const baseDate = process.env.BASE_DATE;
+            const headDate = process.env.UPSTREAM_HEAD_DATE;
+            const headSha = process.env.UPSTREAM_HEAD_SHA;
+            const upstreamRef = process.env.UPSTREAM_BRANCH;
+            const forkRef = process.env.FORK_BRANCH;
+            const behindMax = Number(process.env.DRIFT_BEHIND_MAX);
+            const daysMax = Number(process.env.DRIFT_DAYS_MAX);
+            const overBehind = behind > behindMax;
+            const overDays = days > daysMax;
+            const breach = overBehind || overDays;
+
+            const title = `[drift] fork is ${behind} commits behind upstream/${upstreamRef}`;
+            const labels = ['upstream-drift'];
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              `Automated report from \`upstream-drift.yml\` (workflow run #${context.runNumber}).`,
+              ``,
+              `| Metric | Value | Threshold |`,
+              `| --- | --- | --- |`,
+              `| Behind | ${behind} | ${behindMax} |`,
+              `| Days since merge-base | ${days} | ${daysMax} |`,
+              `| Ahead (own patches) | ${ahead} | — |`,
+              ``,
+              `- Fork branch: \`${forkRef}\``,
+              `- Upstream ref: \`upstream/${upstreamRef}\` @ ${headSha} (${headDate})`,
+              `- Merge base date: ${baseDate}`,
+              ``,
+              breach
+                ? ':warning: **One or more thresholds breached.** Schedule an upstream rebase.'
+                : ':white_check_mark: All thresholds within budget. No action needed.',
+              ``,
+              `_Workflow:_ ${runUrl}`,
+            ].join('\n');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              labels: labels.join(','),
+              state: 'open',
+              per_page: 50,
+            });
+
+            if (existing.length > 0) {
+              const issue = existing[0];
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issue.number,
+                title,
+                body,
+              });
+              core.notice(`Updated sticky issue #${issue.number}`);
+              core.setOutput('issue', String(issue.number));
+            } else {
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                labels,
+              });
+              core.notice(`Created sticky issue #${created.data.number}`);
+              core.setOutput('issue', String(created.data.number));
+            }
+
+            core.setOutput('breach', breach ? 'true' : 'false');
+
+      - name: Fail if drift exceeds threshold
+        if: steps.sticky.outputs.breach == 'true'
+        run: |
+          echo "Drift thresholds breached. See sticky issue and workflow summary." >&2
+          exit 1
