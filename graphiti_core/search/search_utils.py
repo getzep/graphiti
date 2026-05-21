@@ -201,8 +201,8 @@ async def edge_fulltext_search(
         return []
 
     match_query = """
-    YIELD relationship AS rel, score
-    MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+    YIELD relationship AS e, score
+    WITH e, score, startNode(e) AS n, endNode(e) AS m
     """
     if driver.provider == GraphProvider.KUZU:
         match_query = """
