@@ -62,7 +62,7 @@ async def test_structured_completion_strips_reasoning_for_unsupported_models():
     client = AzureOpenAILLMClient(
         azure_client=dummy_client,
         config=LLMConfig(),
-        reasoning='minimal',
+        reasoning='low',
         verbosity='low',
     )
 
@@ -72,7 +72,7 @@ async def test_structured_completion_strips_reasoning_for_unsupported_models():
         temperature=0.4,
         max_tokens=64,
         response_model=DummyResponseModel,
-        reasoning='minimal',
+        reasoning='low',
         verbosity='low',
     )
 
@@ -96,7 +96,7 @@ async def test_reasoning_fields_forwarded_for_supported_models():
     client = AzureOpenAILLMClient(
         azure_client=dummy_client,
         config=LLMConfig(),
-        reasoning='intense',
+        reasoning='high',
         verbosity='high',
     )
 
@@ -106,13 +106,13 @@ async def test_reasoning_fields_forwarded_for_supported_models():
         temperature=0.7,
         max_tokens=128,
         response_model=DummyResponseModel,
-        reasoning='intense',
+        reasoning='high',
         verbosity='high',
     )
 
     call_args = dummy_client.responses.parse_calls[0]
     assert 'temperature' not in call_args
-    assert call_args['reasoning'] == {'effort': 'intense'}
+    assert call_args['reasoning'] == {'effort': 'high'}
     assert call_args['text'] == {'verbosity': 'high'}
 
     await client._create_completion(
@@ -124,3 +124,43 @@ async def test_reasoning_fields_forwarded_for_supported_models():
 
     create_args = dummy_client.chat.completions.create_calls[0]
     assert 'temperature' not in create_args
+
+
+@pytest.mark.parametrize('invalid_reasoning', ['invalid', '', 'NONE'])
+def test_invalid_reasoning_raises_error(invalid_reasoning):
+    with pytest.raises(ValueError, match='Invalid reasoning value'):
+        AzureOpenAILLMClient(
+            azure_client=DummyAzureClient(),
+            config=LLMConfig(),
+            reasoning=invalid_reasoning,
+        )
+
+
+@pytest.mark.parametrize('invalid_verbosity', ['minimal', 'invalid', '', 'LOW'])
+def test_invalid_verbosity_raises_error(invalid_verbosity):
+    with pytest.raises(ValueError, match='Invalid verbosity value'):
+        AzureOpenAILLMClient(
+            azure_client=DummyAzureClient(),
+            config=LLMConfig(),
+            verbosity=invalid_verbosity,
+        )
+
+
+@pytest.mark.parametrize('valid_reasoning', [None, 'none', 'low', 'medium', 'high', 'xhigh'])
+def test_valid_reasoning_accepted(valid_reasoning):
+    client = AzureOpenAILLMClient(
+        azure_client=DummyAzureClient(),
+        config=LLMConfig(),
+        reasoning=valid_reasoning,
+    )
+    assert client.reasoning == valid_reasoning
+
+
+@pytest.mark.parametrize('valid_verbosity', [None, 'low', 'medium', 'high'])
+def test_valid_verbosity_accepted(valid_verbosity):
+    client = AzureOpenAILLMClient(
+        azure_client=DummyAzureClient(),
+        config=LLMConfig(),
+        verbosity=valid_verbosity,
+    )
+    assert client.verbosity == valid_verbosity
