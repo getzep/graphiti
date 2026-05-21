@@ -70,6 +70,27 @@ embedder:
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
 
+cross_encoder:
+  # Reranker used for hybrid search result re-ordering. If this section is
+  # omitted, graphiti-core silently falls back to OpenAIRerankerClient, which
+  # requires OPENAI_API_KEY even when llm.provider and embedder.provider are
+  # set to non-OpenAI vendors.
+  #
+  # Options:
+  #   - openai (default): uses OpenAI chat completions for scoring
+  #   - gemini:           uses Gemini for scoring
+  #   - bge:              runs BAAI/bge-reranker-v2-m3 locally via
+  #                       sentence-transformers (no API key, downloads ~2GB
+  #                       on first run, GPU-accelerated if available)
+  provider: "openai"
+  # model: null  # leave unset to use the provider's default
+  providers:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+
 database:
   provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
 

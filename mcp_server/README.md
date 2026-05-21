@@ -23,6 +23,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
+- **Configurable Reranker**: OpenAI, Gemini, or local BGE (BAAI/bge-reranker-v2-m3) via sentence-transformers — pick a reranker that matches your LLM/embedder stack instead of being forced onto OpenAI
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
@@ -170,6 +171,21 @@ llm:
 database:
   provider: "falkordb"  # Default. Options: "falkordb", "neo4j"
 ```
+
+### Reranker Configuration
+
+Graphiti uses a cross-encoder reranker to re-order results during hybrid search. By default `graphiti-core` instantiates `OpenAIRerankerClient`, which requires `OPENAI_API_KEY` even when your LLM and embedder are configured for a different vendor. To avoid that hidden dependency, configure the reranker explicitly:
+
+```yaml
+cross_encoder:
+  provider: "bge"   # Options: openai (default), gemini, bge
+```
+
+- **openai**: Uses OpenAI chat completions for scoring. Requires `OPENAI_API_KEY`.
+- **gemini**: Uses Gemini for scoring. Requires `GOOGLE_API_KEY`.
+- **bge**: Runs `BAAI/bge-reranker-v2-m3` locally via `sentence-transformers`. No API key. Downloads ~2 GB on first run; GPU-accelerated if a CUDA device is available.
+
+Provider-specific keys live under `cross_encoder.providers.<name>` (see `config/config.yaml`).
 
 ### Using Ollama for Local LLM
 
