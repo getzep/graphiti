@@ -1,6 +1,7 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
 from config.schema import (
+    CrossEncoderConfig,
     DatabaseConfig,
     EmbedderConfig,
     LLMConfig,
@@ -68,6 +69,23 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+
+try:
+    from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
+
+    HAS_BGE_RERANKER = True
+except ImportError:
+    HAS_BGE_RERANKER = False
+
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
+from graphiti_core.cross_encoder.client import CrossEncoderClient
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 
 
 def _validate_api_key(provider_name: str, api_key: str | None, logger) -> str:
@@ -356,6 +374,62 @@ class EmbedderFactory:
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating Cross-encoder (reranker) clients based on configuration."""
+
+    @staticmethod
+    def create(config: CrossEncoderConfig) -> CrossEncoderClient:
+        """Create a Cross-encoder client based on the configured provider."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'openai':
+                openai_cfg = config.providers.openai
+                if not openai_cfg:
+                    raise ValueError('OpenAI cross-encoder provider configuration not found')
+                api_key = _validate_api_key('OpenAI Reranker', openai_cfg.api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(api_key=api_key, base_url=openai_cfg.api_url)
+                if config.model:
+                    llm_config.model = config.model
+                return OpenAIRerankerClient(config=llm_config)
+
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    raise ValueError(
+                        'Gemini reranker not available in current graphiti-core version'
+                    )
+                gemini_cfg = config.providers.gemini
+                if not gemini_cfg:
+                    raise ValueError('Gemini cross-encoder provider configuration not found')
+                api_key = _validate_api_key('Gemini Reranker', gemini_cfg.api_key, logger)
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                llm_config = CoreLLMConfig(api_key=api_key)
+                if config.model:
+                    llm_config.model = config.model
+                return GeminiRerankerClient(config=llm_config)
+
+            case 'bge':
+                if not HAS_BGE_RERANKER:
+                    raise ValueError(
+                        'BGE reranker not available — install sentence-transformers '
+                        '(uv sync --extra sentence-transformers or pip install graphiti-core[sentence-transformers])'
+                    )
+                logger.info('Creating BGE local reranker (BAAI/bge-reranker-v2-m3)')
+                return BGERerankerClient()
+
+            case _:
+                raise ValueError(f'Unsupported Cross-encoder provider: {provider}')
 
 
 class DatabaseDriverFactory:

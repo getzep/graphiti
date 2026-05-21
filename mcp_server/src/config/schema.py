@@ -173,6 +173,24 @@ class EmbedderConfig(BaseModel):
     providers: EmbedderProvidersConfig = Field(default_factory=EmbedderProvidersConfig)
 
 
+class CrossEncoderProvidersConfig(BaseModel):
+    """Cross-encoder (reranker) providers configuration."""
+
+    openai: OpenAIProviderConfig | None = None
+    gemini: GeminiProviderConfig | None = None
+
+
+class CrossEncoderConfig(BaseModel):
+    """Cross-encoder (reranker) configuration."""
+
+    provider: str = Field(
+        default='openai',
+        description='Reranker provider: openai, gemini, or bge (local sentence-transformers)',
+    )
+    model: str | None = Field(default=None, description='Model name (provider-specific default if unset)')
+    providers: CrossEncoderProvidersConfig = Field(default_factory=CrossEncoderProvidersConfig)
+
+
 class Neo4jProviderConfig(BaseModel):
     """Neo4j provider configuration."""
 
@@ -232,6 +250,7 @@ class GraphitiConfig(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    cross_encoder: CrossEncoderConfig = Field(default_factory=CrossEncoderConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     graphiti: GraphitiAppConfig = Field(default_factory=GraphitiAppConfig)
 
