@@ -420,6 +420,15 @@ class FalkorDriver(GraphDriver):
         if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
             return ''
 
+        # If every token was a stopword (or input was empty), the sanitized
+        # query is now the empty string. Emitting "(@group_id:...) ()" causes
+        # RediSearch to return a syntax error, which breaks any search whose
+        # subject happens to be an all-stopword phrase (e.g. an entity named
+        # "will send the" or a fact like "the one"). Return either an empty
+        # string (no filter at all) or just the group filter on its own.
+        if not sanitized_query:
+            return group_filter
+
         full_query = group_filter + ' (' + sanitized_query + ')'
 
         return full_query
