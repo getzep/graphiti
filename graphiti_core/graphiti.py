@@ -178,8 +178,13 @@ class Graphiti:
             An instance of GraphDriver for database operations.
             If not provided, a default Neo4jDriver will be initialized.
         max_coroutines : int | None, optional
-            The maximum number of concurrent operations allowed. Overrides SEMAPHORE_LIMIT set in the environment.
-            If not set, the Graphiti default is used.
+            The maximum number of concurrent operations allowed across the Graphiti
+            ingestion and search paths. When set, this value is propagated to all
+            internal `semaphore_gather` calls via `GraphitiClients.max_coroutines`,
+            making this the recommended way to tune concurrency on a per-instance
+            basis. If not set, the value falls back to the `SEMAPHORE_LIMIT`
+            environment variable (if defined) or the built-in default
+            (`DEFAULT_SEMAPHORE_LIMIT`).
         tracer : Tracer | None, optional
             An OpenTelemetry tracer instance for distributed tracing. If not provided, tracing is disabled (no-op).
         trace_span_prefix : str, optional
@@ -238,6 +243,7 @@ class Graphiti:
             embedder=self.embedder,
             cross_encoder=self.cross_encoder,
             tracer=self.tracer,
+            max_coroutines=self.max_coroutines,
         )
 
         # Initialize namespace API (graphiti.nodes.entity.save(), etc.)
@@ -849,7 +855,8 @@ class Graphiti:
                     entity_types,
                 )
                 for episode, previous_episodes in episode_context
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         resolved_nodes: list[EntityNode] = []
@@ -882,7 +889,8 @@ class Graphiti:
                     entity_types,
                 )
                 for episode, previous_episodes in episode_context
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         final_hydrated_nodes = [node for nodes in hydrated_nodes_results for node in nodes]
@@ -910,7 +918,8 @@ class Graphiti:
                     edge_type_map,
                 )
                 for episode in episodes
-            ]
+            ],
+            max_coroutines=self.max_coroutines,
         )
 
         resolved_edges: list[EntityEdge] = []
@@ -1343,7 +1352,9 @@ class Graphiti:
                 )
 
                 # Get previous episode context for each episode
-                episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
+                episode_context = await retrieve_previous_episodes_bulk(
+                    self.driver, episodes, max_coroutines=self.max_coroutines
+                )
 
                 # Extract and dedupe nodes and edges
                 (
@@ -1504,7 +1515,7 @@ class Graphiti:
         await remove_communities(driver)
 
         community_nodes, community_edges = await build_communities(
-            driver, self.llm_client, group_ids
+            driver, self.llm_client, group_ids, max_coroutines=self.max_coroutines
         )
 
         await semaphore_gather(
