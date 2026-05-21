@@ -1,0 +1,8 @@
+{
+    "scripts": {
+        "setup": "./conductor-setup.sh",
+        "run": "cd server && uv run uvicorn graph_service.main:app --reload --port $CONDUCTOR_PORT",
+        "run-mcp": "cd mcp_server && uv run python graphiti_mcp_server.py --transport sse --use-custom-entities"
+    },
+    "runScriptMode": "nonconcurrent"
+}
