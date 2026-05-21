@@ -1,0 +1,74 @@
+# Smithery Configuration for Graphiti MCP Server
+# Graphiti is a temporally-aware knowledge graph framework for AI agents
+# Docker Hub: zepai/knowledge-graph-mcp
+
+runtime: "container"
+
+startCommand:
+  type: "http"
+
+  configSchema:
+    type: "object"
+    required: ["openai_api_key"]
+    properties:
+      # LLM Provider (required)
+      openai_api_key:
+        type: "string"
+        title: "OpenAI API Key"
+        description: "OpenAI API key for LLM and embeddings"
+
+      # Optional: LLM Configuration
+      llm_model:
+        type: "string"
+        title: "LLM Model"
+        description: "Model name to use"
+        default: "gpt-5-mini"
+
+      # Optional: Advanced LLM Settings
+      llm_provider:
+        type: "string"
+        title: "LLM Provider"
+        description: "LLM provider to use"
+        default: "openai"
+        enum: ["openai", "anthropic", "gemini"]
+
+      # Optional: Alternative Provider Keys
+      anthropic_api_key:
+        type: "string"
+        title: "Anthropic API Key"
+        description: "Anthropic API key for Claude models (if using Anthropic provider)"
+
+      google_api_key:
+        type: "string"
+        title: "Google API Key"
+        description: "Google API key for Gemini models (if using Gemini provider)"
+
+      # Optional: Graphiti Configuration
+      graphiti_group_id:
+        type: "string"
+        title: "Group ID"
+        description: "Namespace for organizing graph data"
+        default: "main"
+
+      # Optional: Performance Tuning
+      semaphore_limit:
+        type: "integer"
+        title: "Concurrency Limit"
+        description: "Concurrent episode processing limit (adjust based on LLM rate limits)"
+        default: 10
+        minimum: 1
+        maximum: 50
+
+  exampleConfig:
+    openai_api_key: "sk-proj-..."
+    llm_model: "gpt-5-mini"
+    graphiti_group_id: "main"
+    semaphore_limit: 10
+
+build:
+  dockerfile: "docker/Dockerfile"
+  dockerBuildPath: "."
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MCP_SERVER_HOST: "0.0.0.0"
