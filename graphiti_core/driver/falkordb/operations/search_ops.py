@@ -98,14 +98,14 @@ def _build_falkor_fulltext_query(
     group_ids: list[str] | None = None,
     max_query_length: int = MAX_QUERY_LENGTH,
 ) -> str:
-    """Build a fulltext query string for FalkorDB using RedisSearch syntax."""
-    if group_ids is None or len(group_ids) == 0:
-        group_filter = ''
-    else:
-        escaped_group_ids = [f'"{gid}"' for gid in group_ids]
-        group_values = '|'.join(escaped_group_ids)
-        group_filter = f'(@group_id:{group_values})'
+    """Build a fulltext query string for FalkorDB.
 
+    NOTE: group_id filtering is intentionally NOT included in the fulltext
+    query. RediSearch treats hyphens as NOT operators even inside double
+    quotes, which breaks group_ids with hyphens. This is safe because all
+    callers already apply a Cypher-level ``WHERE e.group_id IN $group_ids``
+    filter. See: https://github.com/getzep/graphiti/issues/1269
+    """
     sanitized_query = _sanitize(query)
 
     # Remove stopwords and empty tokens
@@ -113,11 +113,10 @@ def _build_falkor_fulltext_query(
     filtered_words = [word for word in query_words if word and word.lower() not in STOPWORDS]
     sanitized_query = ' | '.join(filtered_words)
 
-    if len(sanitized_query.split(' ')) + len(group_ids or '') >= max_query_length:
+    if len(sanitized_query.split(' ')) >= max_query_length:
         return ''
 
-    full_query = group_filter + ' (' + sanitized_query + ')'
-    return full_query
+    return sanitized_query
 
 
 class FalkorSearchOperations(SearchOperations):
@@ -297,12 +296,20 @@ class FalkorSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
+        # PR #1507 fix: hoist LIMIT before per-row MATCH to avoid FalkorDB timeout
+        # When fulltext returns hundreds of candidates, per-row MATCH dominates cost
+        # Apply ×4 buffer so post-MATCH WHERE filters still fill $limit
+        limit_with_buffer = limit * 4
+
         cypher = (
             get_relationships_query(
                 'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
             )
             + """
             YIELD relationship AS rel, score
+            WITH rel, score
+            ORDER BY score DESC
+            LIMIT $limit_with_buffer
             MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
             """
             + filter_query
@@ -321,6 +328,7 @@ class FalkorSearchOperations(SearchOperations):
             cypher,
             query=fuzzy_query,
             limit=limit,
+            limit_with_buffer=limit_with_buffer,
             **filter_params,
         )
 
