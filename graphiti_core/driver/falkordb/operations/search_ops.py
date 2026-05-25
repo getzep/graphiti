@@ -297,12 +297,21 @@ class FalkorSearchOperations(SearchOperations):
         if filter_queries:
             filter_query = ' WHERE ' + (' AND '.join(filter_queries))
 
+        # FalkorDB's db.idx.fulltext.queryRelationships does not accept a {limit}
+        # option (unlike Neo4j's procedure). Without an early LIMIT the per-row
+        # MATCH below runs once per fulltext hit — for broad-tokened queries that
+        # can exceed FalkorDB's default 1s query timeout. Apply a sort+limit between
+        # YIELD and MATCH, with a 4x buffer so the post-MATCH WHERE (which can
+        # filter on n/m via node-label filters) still has room to fill $limit.
         cypher = (
             get_relationships_query(
                 'edge_name_and_fact', limit=limit, provider=GraphProvider.FALKORDB
             )
             + """
             YIELD relationship AS rel, score
+            WITH rel, score
+            ORDER BY score DESC
+            LIMIT $limit_with_buffer
             MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
             """
             + filter_query
@@ -321,6 +330,7 @@ class FalkorSearchOperations(SearchOperations):
             cypher,
             query=fuzzy_query,
             limit=limit,
+            limit_with_buffer=limit * 4,
             **filter_params,
         )
 
