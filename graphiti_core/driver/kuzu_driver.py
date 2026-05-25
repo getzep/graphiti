@@ -44,6 +44,7 @@ from graphiti_core.driver.operations.has_episode_edge_ops import HasEpisodeEdgeO
 from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdgeOperations
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
+from graphiti_core.graph_queries import get_fulltext_indices, get_range_indices
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,11 @@ class KuzuDriver(GraphDriver):
         max_concurrent_queries: int = 1,
     ):
         super().__init__()
+        # GraphDriver declares ``_database: str`` typed but with no default;
+        # Graphiti.add_episode and add_episode_bulk both read
+        # ``self.driver._database``. Empty string mirrors
+        # ``default_group_id: str = ''`` on the base class. See #1258.
+        self._database = ''
         self.db = kuzu.Database(db)
 
         self.setup_schema()
@@ -243,10 +249,30 @@ class KuzuDriver(GraphDriver):
         pass
 
     async def build_indices_and_constraints(self, delete_existing: bool = False):
-        # Kuzu doesn't support dynamic index creation like Neo4j or FalkorDB
-        # Schema and indices are created during setup_schema()
-        # This method is required by the abstract base class but is a no-op for Kuzu
-        pass
+        # ``setup_schema`` creates the *tables*; FTS indices are a separate pass
+        # via ``CALL CREATE_FTS_INDEX``. ``Graphiti.build_indices_and_constraints``
+        # calls into this method (not graph_ops directly), so this is the entry
+        # point that must produce the FTS indices — otherwise subsequent
+        # ``CALL QUERY_FTS_INDEX`` raises ``Table X doesn't have an index Y``.
+        #
+        # We can't delegate to ``self._graph_ops.build_indices_and_constraints``
+        # because (a) Kuzu has no ``CREATE_FTS_INDEX IF NOT EXISTS`` and raises
+        # ``Index <name> already exists`` on a second call, and (b) graph_ops
+        # uses ``semaphore_gather`` with no idempotency. So we iterate
+        # sequentially and treat ``delete_existing=False`` as "ensure indices
+        # exist", swallowing the specific "already exists" error class.
+        # See #1258.
+        queries = get_range_indices(GraphProvider.KUZU) + get_fulltext_indices(
+            GraphProvider.KUZU
+        )
+        for query in queries:
+            try:
+                await self.execute_query(query)
+            except Exception as e:  # noqa: BLE001 — narrowed on message below
+                if 'already exists' in str(e) and not delete_existing:
+                    logger.debug('Index already exists, skipping: %s', query[:80])
+                    continue
+                raise
 
     def setup_schema(self):
         conn = kuzu.Connection(self.db)
