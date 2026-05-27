@@ -22,7 +22,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Graph Maintenance**: Clear the graph and rebuild indices
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
 - **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
-- **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
+- **Multiple Embedding Providers**: Support for OpenAI, Azure OpenAI, Voyage, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
 - **Queue-based Processing**: Asynchronous episode processing with configurable concurrency limits
@@ -179,12 +179,19 @@ To use Ollama with the MCP server, configure it as an OpenAI-compatible endpoint
 llm:
   provider: "openai"
   model: "gpt-oss:120b"  # or your preferred Ollama model
-  api_base: "http://localhost:11434/v1"
-  api_key: "ollama"  # dummy key required
+  providers:
+    openai:
+      api_key: "ollama"  # dummy key required
+      api_url: "http://localhost:11434/v1"
 
 embedder:
-  provider: "sentence_transformers"  # recommended for local setup
-  model: "all-MiniLM-L6-v2"
+  provider: "openai"  # Ollama serves embeddings on the same OpenAI-compatible API
+  model: "nomic-embed-text"  # or another Ollama embedding model
+  dimensions: 768  # set to match your embedding model
+  providers:
+    openai:
+      api_key: "ollama"
+      api_url: "http://localhost:11434/v1"
 ```
 
 Make sure Ollama is running locally with: `ollama serve`
