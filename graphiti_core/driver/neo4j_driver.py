@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Coroutine
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from neo4j import AsyncGraphDatabase, EagerResult
@@ -87,15 +88,14 @@ class Neo4jDriver(GraphDriver):
         self._next_episode_edge_ops = Neo4jNextEpisodeEdgeOperations()
         self._search_ops = Neo4jSearchOperations()
         self._graph_ops = Neo4jGraphMaintenanceOperations()
+        self._indices_task: asyncio.Task | None = None
 
         # Schedule the indices and constraints to be built
-        import asyncio
-
         try:
             # Try to get the current event loop
             loop = asyncio.get_running_loop()
             # Schedule the build_indices_and_constraints to run
-            loop.create_task(self.build_indices_and_constraints())
+            self._indices_task = loop.create_task(self.build_indices_and_constraints())
         except RuntimeError:
             # No event loop running, this will be handled later
             pass
@@ -181,6 +181,14 @@ class Neo4jDriver(GraphDriver):
         return self.client.session(database=_database)  # type: ignore
 
     async def close(self) -> None:
+        if self._indices_task is not None:
+            if self._indices_task.done():
+                with suppress(asyncio.CancelledError, Exception):
+                    self._indices_task.exception()
+            else:
+                self._indices_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._indices_task
         return await self.client.close()
 
     def delete_all_indexes(self) -> Coroutine:

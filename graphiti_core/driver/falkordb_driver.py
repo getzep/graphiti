@@ -17,6 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -157,13 +158,14 @@ class FalkorDriver(GraphDriver):
         self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
         self._search_ops = FalkorSearchOperations()
         self._graph_ops = FalkorGraphMaintenanceOperations()
+        self._indices_task: asyncio.Task | None = None
 
         # Schedule the indices and constraints to be built
         try:
             # Try to get the current event loop
             loop = asyncio.get_running_loop()
             # Schedule the build_indices_and_constraints to run
-            loop.create_task(self.build_indices_and_constraints())
+            self._indices_task = loop.create_task(self.build_indices_and_constraints())
         except RuntimeError:
             # No event loop running, this will be handled later
             pass
@@ -258,6 +260,15 @@ class FalkorDriver(GraphDriver):
 
     async def close(self) -> None:
         """Close the driver connection."""
+        if self._indices_task is not None:
+            if self._indices_task.done():
+                with suppress(asyncio.CancelledError, Exception):
+                    self._indices_task.exception()
+            else:
+                self._indices_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._indices_task
+
         if hasattr(self.client, 'aclose'):
             await self.client.aclose()  # type: ignore[reportUnknownMemberType]
         elif hasattr(self.client.connection, 'aclose'):
