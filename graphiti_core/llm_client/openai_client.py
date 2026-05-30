@@ -24,6 +24,20 @@ from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
 
 
+def _is_reasoning_model(model: str) -> bool:
+    """Return True for OpenAI reasoning models (o1/o3/gpt-5 family) that accept
+    the `reasoning.effort` parameter.
+
+    Chat-tuned and search variants (e.g. ``gpt-5-chat-latest``,
+    ``gpt-5-search-api``) match the ``gpt-5`` prefix but are NOT reasoning
+    models — they reject ``reasoning.effort`` and must route through the normal
+    completion path without it. See issue #902.
+    """
+    if '-chat' in model or '-search' in model:
+        return False
+    return model.startswith(('gpt-5', 'o1', 'o3'))
+
+
 class OpenAIClient(BaseOpenAIClient):
     """
     OpenAIClient is a client class for interacting with OpenAI's language models.
@@ -73,10 +87,9 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a structured completion using OpenAI's beta parse API."""
-        # Reasoning models (gpt-5 family) don't support temperature
-        is_reasoning_model = (
-            model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
-        )
+        # Reasoning models (o1/o3/gpt-5, excluding chat/search variants) don't
+        # support temperature and require the reasoning.effort param; see _is_reasoning_model.
+        is_reasoning_model = _is_reasoning_model(model)
 
         request_kwargs = {
             'model': model,
@@ -111,10 +124,9 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        # Reasoning models (gpt-5 family) don't support temperature
-        is_reasoning_model = (
-            model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
-        )
+        # Reasoning models (o1/o3/gpt-5, excluding chat/search variants) don't
+        # support temperature and require the reasoning.effort param; see _is_reasoning_model.
+        is_reasoning_model = _is_reasoning_model(model)
 
         return await self.client.chat.completions.create(
             model=model,
