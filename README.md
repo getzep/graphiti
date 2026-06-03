@@ -576,7 +576,8 @@ Ensure Ollama is running (`ollama serve`) and that you have pulled the models yo
 ## Using Graphiti with MiniMax
 
 Graphiti supports [MiniMax](https://www.minimaxi.com/) models for LLM inference via MiniMax's OpenAI-compatible API.
-MiniMax offers the MiniMax-M2.5 model with a 204K context window, suitable for knowledge graph tasks.
+MiniMax offers the MiniMax-M3 model with a 512K context window (and up to 128K output, with image input support),
+suitable for knowledge graph tasks.
 
 Since MiniMax uses an OpenAI-compatible API, no additional dependencies are required beyond the base `graphiti-core`
 installation.
@@ -594,8 +595,8 @@ graphiti = Graphiti(
     llm_client=MiniMaxClient(
         config=LLMConfig(
             api_key="<your-minimax-api-key>",
-            model="MiniMax-M2.5",
-            small_model="MiniMax-M2.5-highspeed",
+            model="MiniMax-M3",
+            small_model="MiniMax-M2.7-highspeed",
         )
     ),
 )
@@ -606,9 +607,9 @@ graphiti = Graphiti(
 **Key Points:**
 
 - Set the `MINIMAX_API_KEY` environment variable or pass it directly via `LLMConfig`
-- Available models: `MiniMax-M2.5` (full capability) and `MiniMax-M2.5-highspeed` (optimized for speed)
+- Available models: `MiniMax-M3` (default, full capability), `MiniMax-M2.7` (previous generation), and `MiniMax-M2.7-highspeed` (optimized for speed)
 - MiniMax requires temperature in the range (0.0, 1.0]; a temperature of 0 is automatically adjusted
-- The MiniMax-M2.5 model supports structured output (JSON mode), making it compatible with Graphiti's entity extraction
+- The MiniMax-M3 model supports structured output (JSON mode), making it compatible with Graphiti's entity extraction
 
 ## Documentation
 

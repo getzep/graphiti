@@ -31,9 +31,16 @@ from .errors import RateLimitError, RefusalError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = 'MiniMax-M2.5'
-DEFAULT_SMALL_MODEL = 'MiniMax-M2.5-highspeed'
+DEFAULT_MODEL = 'MiniMax-M3'
+DEFAULT_SMALL_MODEL = 'MiniMax-M2.7-highspeed'
 DEFAULT_BASE_URL = 'https://api.minimax.io/v1'
+
+# Available MiniMax models (M3 is the current default; M2.7 retained for compatibility)
+AVAILABLE_MODELS: list[str] = [
+    'MiniMax-M3',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+]
 
 
 class MiniMaxClient(LLMClient):
@@ -44,8 +51,9 @@ class MiniMaxClient(LLMClient):
     with MiniMax's base URL and model names.
 
     Available models:
-        - MiniMax-M2.5: Full capability model with 204K context window
-        - MiniMax-M2.5-highspeed: Fast model optimized for speed
+        - MiniMax-M3: Latest default model with 512K context window and image input support
+        - MiniMax-M2.7: Previous generation model
+        - MiniMax-M2.7-highspeed: Previous generation low-latency model
 
     Note:
         MiniMax requires temperature to be in the range (0.0, 1.0].
