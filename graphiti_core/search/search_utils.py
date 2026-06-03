@@ -209,6 +209,19 @@ async def edge_fulltext_search(
         YIELD node, score
         MATCH (n:Entity)-[:RELATES_TO]->(e:RelatesToNode_ {uuid: node.uuid})-[:RELATES_TO]->(m:Entity)
         """
+    elif driver.provider == GraphProvider.FALKORDB:
+        # FalkorDB's db.idx.fulltext.queryRelationships does not accept a {limit}
+        # option (unlike Neo4j's procedure). Without an early LIMIT the per-row
+        # MATCH below runs once per fulltext hit — for broad-tokened queries that
+        # can exceed FalkorDB's query timeout. Sort+limit between YIELD and MATCH,
+        # with a 4x buffer so the post-MATCH WHERE still has room to fill $limit.
+        match_query = """
+        YIELD relationship AS rel, score
+        WITH rel, score
+        ORDER BY score DESC
+        LIMIT $limit_with_buffer
+        MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+        """
 
     filter_queries, filter_params = edge_search_filter_query_constructor(
         search_filter, driver.provider
@@ -284,12 +297,17 @@ async def edge_fulltext_search(
             """
         )
 
+        extra_params = {}
+        if driver.provider == GraphProvider.FALKORDB:
+            extra_params['limit_with_buffer'] = limit * 4
+
         records, _, _ = await driver.execute_query(
             query,
             query=fuzzy_query,
             limit=limit,
             routing_='r',
             **filter_params,
+            **extra_params,
         )
 
     edges = [get_entity_edge_from_record(record, driver.provider) for record in records]
