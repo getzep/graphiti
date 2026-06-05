@@ -187,6 +187,11 @@ def test_lucene_sanitize():
             '\\This has every escape character \\+ \\- \\&\\& \\|\\| \\! \\( \\) \\{ \\} \\[ \\] \\^ \\" \\~ \\* \\? \\: \\\\ \\/',
         ),
         ('this has no escape characters', 'this has no escape characters'),
+        ('', ''),
+        ('++--', '\\+\\+\\-\\-'),
+        ('OR AND NOT', '\\O\\R \\A\\N\\D \\N\\O\\T'),
+        ('hello OR world', 'hello \\O\\R world'),
+        ('café', 'café'),
     ]
 
     for query, assert_result in queries:
