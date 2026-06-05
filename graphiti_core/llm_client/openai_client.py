@@ -90,8 +90,11 @@ class OpenAIClient(BaseOpenAIClient):
             request_kwargs['temperature'] = temperature_value
 
         # Only include reasoning and verbosity parameters for reasoning models
+        # Map legacy reasoning effort values to current OpenAI API values
+        _REASONING_MAP = {'minimal': 'low', 'default': 'medium', 'maximum': 'high'}
         if is_reasoning_model and reasoning is not None:
-            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
+            effort = _REASONING_MAP.get(reasoning, reasoning)
+            request_kwargs['reasoning'] = {'effort': effort}  # type: ignore
 
         if is_reasoning_model and verbosity is not None:
             request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
@@ -116,10 +119,17 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
+        # gpt-5 family requires max_completion_tokens instead of max_tokens
+        token_kwargs = (
+            {'max_completion_tokens': max_tokens}
+            if is_reasoning_model
+            else {'max_tokens': max_tokens}
+        )
+
         return await self.client.chat.completions.create(
             model=model,
             messages=messages,
             temperature=temperature if not is_reasoning_model else None,
-            max_tokens=max_tokens,
             response_format={'type': 'json_object'},
+            **token_kwargs,
         )

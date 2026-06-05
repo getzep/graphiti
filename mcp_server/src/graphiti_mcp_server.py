@@ -185,7 +185,12 @@ class GraphitiService:
             try:
                 embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
-                logger.warning(f'Failed to create embedder client: {e}')
+                logger.error(f'Failed to create embedder client: {e}')
+                raise RuntimeError(
+                    f'Embedder initialization failed: {e}. '
+                    f'Search functionality requires a working embedder. '
+                    f'Check your embedder configuration and API keys.'
+                ) from e
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -210,36 +215,56 @@ class GraphitiService:
             self.entity_types = custom_types
 
             # Initialize Graphiti client with appropriate driver
-            try:
-                if self.config.database.provider.lower() == 'falkordb':
-                    # For FalkorDB, create a FalkorDriver instance directly
-                    from graphiti_core.driver.falkordb_driver import FalkorDriver
+            # Retry with backoff -- FalkorDB may not be up yet after a system restart
+            import asyncio as _asyncio
+            max_retries = 5
+            retry_delay = 2  # seconds, doubles each attempt
+            last_error = None
 
-                    falkor_driver = FalkorDriver(
-                        host=db_config['host'],
-                        port=db_config['port'],
-                        password=db_config['password'],
-                        database=db_config['database'],
-                    )
+            for attempt in range(max_retries):
+                try:
+                    if self.config.database.provider.lower() == 'falkordb':
+                        # For FalkorDB, create a FalkorDriver instance directly
+                        from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-                    self.client = Graphiti(
-                        graph_driver=falkor_driver,
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
-                else:
-                    # For Neo4j (default), use the original approach
-                    self.client = Graphiti(
-                        uri=db_config['uri'],
-                        user=db_config['user'],
-                        password=db_config['password'],
-                        llm_client=llm_client,
-                        embedder=embedder_client,
-                        max_coroutines=self.semaphore_limit,
-                    )
-            except Exception as db_error:
-                # Check for connection errors
+                        falkor_driver = FalkorDriver(
+                            host=db_config['host'],
+                            port=db_config['port'],
+                            password=db_config['password'],
+                            database=db_config['database'],
+                        )
+
+                        self.client = Graphiti(
+                            graph_driver=falkor_driver,
+                            llm_client=llm_client,
+                            embedder=embedder_client,
+                            max_coroutines=self.semaphore_limit,
+                        )
+                    else:
+                        # For Neo4j (default), use the original approach
+                        self.client = Graphiti(
+                            uri=db_config['uri'],
+                            user=db_config['user'],
+                            password=db_config['password'],
+                            llm_client=llm_client,
+                            embedder=embedder_client,
+                            max_coroutines=self.semaphore_limit,
+                        )
+                    last_error = None
+                    break  # Connected successfully
+                except Exception as e:
+                    last_error = e
+                    error_msg = str(e).lower()
+                    if 'connection refused' in error_msg or 'could not connect' in error_msg:
+                        if attempt < max_retries - 1:
+                            wait = retry_delay * (2 ** attempt)
+                            logger.warning(f'Database not ready (attempt {attempt + 1}/{max_retries}), retrying in {wait}s...')
+                            await _asyncio.sleep(wait)
+                            continue
+                    raise  # Non-connection error, don't retry
+
+            if last_error is not None:
+                db_error = last_error
                 error_msg = str(db_error).lower()
                 if 'connection refused' in error_msg or 'could not connect' in error_msg:
                     db_provider = self.config.database.provider
@@ -304,6 +329,22 @@ class GraphitiService:
 
             logger.info(f'Using database: {self.config.database.provider}')
             logger.info(f'Using group_id: {self.config.graphiti.group_id}')
+
+            # Verify search pipeline works end-to-end
+            if embedder_client:
+                try:
+                    test_vector = await embedder_client.create(input_data=['health check'])
+                    if test_vector and len(test_vector) > 0:
+                        logger.info(
+                            f'Search health check passed: embedder returned {len(test_vector)}-dim vector'
+                        )
+                    else:
+                        logger.warning(
+                            'Search health check: embedder returned empty vector. '
+                            'Search results may be incomplete.'
+                        )
+                except Exception as e:
+                    logger.warning(f'Search health check failed: {e}. Search may not work correctly.')
 
         except Exception as e:
             logger.error(f'Failed to initialize Graphiti client: {e}')
@@ -441,6 +482,13 @@ async def search_nodes(
             node_labels=entity_types,
         )
 
+        # Verify embedder is available for hybrid search
+        if client.embedder is None:
+            return ErrorResponse(
+                error='Search unavailable: embedder not initialized. '
+                'Restart the server and check embedder configuration.'
+            )
+
         # Use the search_ method with node search config
         from graphiti_core.search.search_config_recipes import NODE_HYBRID_SEARCH_RRF
 
@@ -519,6 +567,13 @@ async def search_memory_facts(
             if config.graphiti.group_id
             else []
         )
+
+        # Verify embedder is available for search
+        if client.embedder is None:
+            return ErrorResponse(
+                error='Search unavailable: embedder not initialized. '
+                'Restart the server and check embedder configuration.'
+            )
 
         relevant_edges = await client.search(
             group_ids=effective_group_ids,
