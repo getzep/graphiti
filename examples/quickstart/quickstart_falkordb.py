@@ -75,6 +75,12 @@ async def main():
     falkor_driver = FalkorDriver(
         host=falkor_host, port=falkor_port, username=falkor_username, password=falkor_password
     )
+    
+    # Or use embedded FalkorDB Lite (requires Python 3.12+ and falkordblite package)
+    # from redislite.async_falkordb_client import AsyncFalkorDB
+    # falkordb_client = AsyncFalkorDB(dbfilename='/tmp/graphiti_quickstart.db')
+    # falkor_driver = FalkorDriver(falkor_db=falkordb_client)
+    
     graphiti = Graphiti(graph_driver=falkor_driver)
 
     try:
