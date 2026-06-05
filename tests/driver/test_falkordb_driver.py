@@ -22,6 +22,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from graphiti_core.driver.driver import GraphProvider
+from graphiti_core.driver.falkordb.operations.search_ops import (
+    FalkorSearchOperations,
+    _build_falkor_fulltext_query,
+)
+from graphiti_core.search.search_filters import SearchFilters
 
 try:
     from graphiti_core.driver.falkordb_driver import FalkorDriver, FalkorDriverSession
@@ -69,6 +74,12 @@ class TestFalkorDriver:
     def test_provider(self):
         """Test driver provider identification."""
         assert self.driver.provider == GraphProvider.FALKORDB
+
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    def test_search_interface_uses_falkor_search_operations(self):
+        """Test search_utils dispatches FalkorDB searches to provider-specific operations."""
+        assert self.driver.search_interface is self.driver.search_ops
+        assert isinstance(self.driver.search_interface, FalkorSearchOperations)
 
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
     def test_get_graph_with_name(self):
@@ -399,6 +410,87 @@ class TestDatetimeConversion:
         assert convert_datetimes_to_strings(123) == 123
         assert convert_datetimes_to_strings(None) is None
         assert convert_datetimes_to_strings(True) is True
+
+
+class TestFalkorSearchOperations:
+    """Test FalkorDB search query generation."""
+
+    def test_fulltext_query_caps_terms_by_default(self, monkeypatch):
+        monkeypatch.delenv('FALKORDB_FULLTEXT_MAX_TERMS', raising=False)
+
+        query = _build_falkor_fulltext_query('a alpha beta gamma delta epsilon zeta eta theta iota')
+
+        assert query == ' (alpha | beta | gamma | delta | epsilon | zeta)'
+
+    def test_fulltext_query_cap_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv('FALKORDB_FULLTEXT_MAX_TERMS', '0')
+
+        query = _build_falkor_fulltext_query('alpha beta gamma delta epsilon zeta eta')
+
+        assert query == ' (alpha | beta | gamma | delta | epsilon | zeta | eta)'
+
+    @pytest.mark.asyncio
+    async def test_edge_fulltext_search_uses_edge_properties_without_node_label_filter(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock(return_value=([], None, None))
+
+        await FalkorSearchOperations().edge_fulltext_search(
+            executor,
+            'alpha beta',
+            SearchFilters(edge_types=['related_to']),
+            group_ids=['group'],
+            limit=5,
+        )
+
+        cypher = executor.execute_query.call_args.args[0]
+        assert 'YIELD relationship AS e, score' in cypher
+        assert 'MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)' not in cypher
+        assert 'e.source_node_uuid AS source_node_uuid' in cypher
+        assert 'e.target_node_uuid AS target_node_uuid' in cypher
+        assert cypher.index('e.name in $edge_types') < cypher.index('ORDER BY score DESC')
+        assert cypher.index('ORDER BY score DESC') < cypher.index('RETURN')
+
+    @pytest.mark.asyncio
+    async def test_edge_fulltext_search_limits_before_endpoint_match_for_node_label_filter(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock(return_value=([], None, None))
+
+        await FalkorSearchOperations().edge_fulltext_search(
+            executor,
+            'alpha beta',
+            SearchFilters(edge_types=['related_to'], node_labels=['Person']),
+            group_ids=['group'],
+            limit=5,
+        )
+
+        cypher = executor.execute_query.call_args.args[0]
+        assert 'YIELD relationship AS rel, score' in cypher
+        assert 'rel.name in $edge_types' in cypher
+        assert 'n:Person AND m:Person' in cypher
+        assert cypher.index('rel.name in $edge_types') < cypher.index('ORDER BY score DESC')
+        assert cypher.index('LIMIT $limit') < cypher.index(
+            'MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)'
+        )
+
+    @pytest.mark.asyncio
+    async def test_episode_fulltext_search_filters_and_limits_without_rebinding_node(self):
+        executor = MagicMock()
+        executor.execute_query = AsyncMock(return_value=([], None, None))
+
+        await FalkorSearchOperations().episode_fulltext_search(
+            executor,
+            'alpha beta',
+            SearchFilters(),
+            group_ids=['group'],
+            limit=5,
+        )
+
+        cypher = executor.execute_query.call_args.args[0]
+        assert 'YIELD node AS e, score' in cypher
+        assert 'MATCH (e:Episodic)' not in cypher
+        assert 'WHERE e.group_id IN $group_ids' in cypher
+        assert cypher.index('WHERE e.group_id IN $group_ids') < cypher.index('ORDER BY score DESC')
+        assert cypher.index('ORDER BY score DESC') < cypher.index('RETURN')
 
 
 # Simple integration test

@@ -17,7 +17,7 @@ limitations under the License.
 import asyncio
 import datetime
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from falkordb import Graph as FalkorGraph
@@ -170,6 +170,7 @@ class FalkorDriver(GraphDriver):
         self._has_episode_edge_ops = FalkorHasEpisodeEdgeOperations()
         self._next_episode_edge_ops = FalkorNextEpisodeEdgeOperations()
         self._search_ops = FalkorSearchOperations()
+        self.search_interface = cast(Any, self._search_ops)
         self._graph_ops = FalkorGraphMaintenanceOperations()
 
         # Schedule the indices and constraints to be built
