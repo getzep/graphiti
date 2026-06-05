@@ -187,6 +187,7 @@ class FalkorDBProviderConfig(BaseModel):
     """FalkorDB provider configuration."""
 
     uri: str = 'redis://localhost:6379'
+    username: str | None = None
     password: str | None = None
     database: str = 'default_db'
 

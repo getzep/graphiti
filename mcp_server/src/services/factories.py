@@ -463,17 +463,20 @@ class DatabaseDriverFactory:
                 from urllib.parse import urlparse
 
                 uri = os.environ.get('FALKORDB_URI', falkor_config.uri)
+                username = os.environ.get('FALKORDB_USERNAME')
                 password = os.environ.get('FALKORDB_PASSWORD', falkor_config.password)
 
                 # Parse the URI to extract host and port
                 parsed = urlparse(uri)
                 host = parsed.hostname or 'localhost'
                 port = parsed.port or 6379
+                username = username or parsed.username or falkor_config.username
 
                 return {
                     'driver': 'falkordb',
                     'host': host,
                     'port': port,
+                    'username': username,
                     'password': password,
                     'database': falkor_config.database,
                 }
