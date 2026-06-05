@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import os
 import unittest
 from datetime import datetime, timezone
@@ -216,13 +217,41 @@ class TestFalkorDriver:
             # hasattr(self.client, 'aclose') returns False
             # hasattr(self.client.connection, 'aclose') returns False
             # hasattr(self.client.connection, 'close') returns True
-            mock_hasattr.side_effect = lambda obj, attr: (
-                attr == 'close' and obj is mock_connection
-            )
+            mock_hasattr.side_effect = lambda obj, attr: attr == 'close' and obj is mock_connection
 
             await self.driver.close()
 
         mock_connection.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
+    async def test_close_cancels_pending_indices_task(self):
+        """Test driver close cancels the constructor-scheduled index build task."""
+        started = asyncio.Event()
+        mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
+
+        async def build_indices_and_constraints(self, delete_existing: bool = False):
+            started.set()
+            await asyncio.Event().wait()
+
+        with (
+            patch('graphiti_core.driver.falkordb_driver.FalkorDB', return_value=mock_client),
+            patch.object(
+                FalkorDriver,
+                'build_indices_and_constraints',
+                build_indices_and_constraints,
+            ),
+        ):
+            driver = FalkorDriver()
+            assert driver._indices_task is not None
+            await asyncio.wait_for(started.wait(), timeout=1)
+
+            task = driver._indices_task
+            await driver.close()
+
+        assert task.cancelled()
+        mock_client.aclose.assert_awaited_once()
 
     @pytest.mark.asyncio
     @unittest.skipIf(not HAS_FALKORDB, 'FalkorDB is not installed')
